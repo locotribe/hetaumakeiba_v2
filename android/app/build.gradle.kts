@@ -9,6 +9,8 @@ android {
     namespace = "com.example.hetaumakeiba_v2"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+    compileSdkVersion 33
+    ndkVersion = "27.0.12077973"  // 追加
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
