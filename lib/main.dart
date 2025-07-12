@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
+import 'dart:convert';
 
 void main() {
   runApp(const MyApp());
@@ -64,7 +65,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     final prettyJson = parsedResult != null
-        ? const JsonEncoder.withIndent('  ').convert(parsedResult)
+        ? JsonEncoder.withIndent('  ').convert(parsedResult)
         : 'QRコードを読み取ってください';
 
     return Scaffold(
@@ -100,7 +101,7 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     final List<InlineSpan> spans = [];
-    final json = const JsonEncoder.withIndent('  ').convert(data);
+    final json = JsonEncoder.withIndent('  ').convert(data);
     final lines = json.split('\n');
 
     for (final line in lines) {

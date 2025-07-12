@@ -10,12 +10,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations: # <--- 修正点: flutter_localizations パッケージを別途指定
+    sdk: flutter         # <--- 修正点: flutter_localizations も sdk: flutter が必要
   mobile_scanner: ^3.5.0
   sqflite: ^2.3.0
   path_provider: ^2.1.1
   http: ^1.2.0
   html: ^0.15.0
-  url_launcher: ^6.3.0  # 追加
+  url_launcher: ^6.3.0
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
