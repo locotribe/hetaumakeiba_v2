@@ -4,7 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
-import 'dart:convert';
+import 'package:hetaumakeiba_v2/screens/result_page.dart'; // ResultPageをインポート
 
 void main() {
   runApp(const MyApp());
@@ -56,18 +56,15 @@ class _MyHomePageState extends State<MyHomePage> {
       MaterialPageRoute(builder: (_) => const QRScannerPage()),
     );
     if (result != null) {
-      setState(() {
-        parsedResult = result;
-      });
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ResultPage(parsedResult: result)),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final prettyJson = parsedResult != null
-        ? JsonEncoder.withIndent('  ').convert(parsedResult)
-        : 'QRコードを読み取ってください';
-
     return Scaffold(
       appBar: AppBar(title: const Text("馬券QRリーダー")),
       body: Padding(
@@ -81,9 +78,7 @@ class _MyHomePageState extends State<MyHomePage> {
             const SizedBox(height: 16),
             Expanded(
               child: SingleChildScrollView(
-                child: SelectableText.rich(
-                  TextSpan(children: _buildTextSpans(parsedResult, prettyJson)),
-                ),
+                child: const SizedBox(), // JSON表示を削除
               ),
             ),
           ],
@@ -96,33 +91,6 @@ class _MyHomePageState extends State<MyHomePage> {
       Map<String, dynamic>? data,
       String fallbackText,
       ) {
-    if (data == null) {
-      return [TextSpan(text: fallbackText)];
-    }
-
-    final List<InlineSpan> spans = [];
-    final json = JsonEncoder.withIndent('  ').convert(data);
-    final lines = json.split('\n');
-
-    for (final line in lines) {
-      final urlMatch = RegExp(r'"URL"\s*:\s*"([^"]+)"').firstMatch(line);
-      if (urlMatch != null) {
-        final url = urlMatch.group(1)!;
-        spans.add(
-          TextSpan(
-            text: '$line\n',
-            style: const TextStyle(color: Colors.blue),
-            recognizer: TapGestureRecognizer()
-              ..onTap = () {
-                launchUrl(Uri.parse(url));
-              },
-          ),
-        );
-      } else {
-        spans.add(TextSpan(text: '$line\n'));
-      }
-    }
-
-    return spans;
+    return [TextSpan(text: fallbackText)]; // 不要なロジックを無効化
   }
 }

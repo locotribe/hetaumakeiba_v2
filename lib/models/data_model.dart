@@ -27,7 +27,7 @@ class Ticket {
       round: map['回'] as int,
       day: map['日'] as int,
       race: map['レース'] as int,
-      betType: map['券種'] as String,
+      betType: map['方式'] as String,
       purchaseDetails: (map['購入内容'] as List).cast<Map<String, dynamic>>(),
       url: map['URL'] as String,
     );
@@ -39,7 +39,7 @@ class Ticket {
     '回': round,
     '日': day,
     'レース': race,
-    '券種': betType,
+    '方式': betType,
     '購入内容': purchaseDetails,
     'URL': url,
   };

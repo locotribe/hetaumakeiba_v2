@@ -79,7 +79,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
   ].map((n) => n.toString().padLeft(2, '0')).join();
   d["URL"] = "https://db.netkeiba.com/race/20$suffix";
   String typeCode = itr.next();
-  d["券種"] = typeDict[typeCode];
+  d["方式"] = typeDict[typeCode];
 
   itr.next();
 
