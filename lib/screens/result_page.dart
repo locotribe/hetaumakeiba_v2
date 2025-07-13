@@ -27,18 +27,6 @@ class ResultPage extends StatelessWidget {
       }
     }
 
-    // 表示順を定義
-    final List<String> displayOrder = [
-      '開催場所・レース', // 新しい結合項目
-      '開催日時', // 新しい結合項目
-      '方式',
-      '購入内容',
-    ];
-
-    // 合計金額を含めるためのキーをリストに追加
-    final List<String> allDisplayKeys = List.from(displayOrder)..add('合計金額');
-
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('解析結果'),
@@ -50,7 +38,7 @@ class ResultPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '解析結果',
+              '読み込んだ馬券',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -80,282 +68,81 @@ class ResultPage extends StatelessWidget {
                     color: Colors.red,
                   ),
                 )
-                    : ListView.builder(
-                  shrinkWrap: true,
-                  physics: NeverScrollableScrollPhysics(),
-                  itemCount: allDisplayKeys.length,
-                  itemBuilder: (context, index) {
-                    final String displayKey = allDisplayKeys[index];
+                    : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 開催日時
+                    if (parsedResult!.containsKey('年') && parsedResult!.containsKey('回') && parsedResult!.containsKey('日'))
+                      Text(
+                        '${parsedResult!['年']}年${parsedResult!['回']}回${parsedResult!['日']}日',
+                        style: TextStyle(color: Colors.black54, fontSize: 16),
+                      ),
+                    const SizedBox(height: 4),
+                    // 開催場所・レース
+                    if (parsedResult!.containsKey('開催場') && parsedResult!.containsKey('レース'))
+                      Text(
+                        '${parsedResult!['開催場']}${parsedResult!['レース']}レース',
+                        style: TextStyle(color: Colors.black54, fontSize: 16),
+                      ),
+                    const SizedBox(height: 8),
+                    // 式別 + 方式（またはながし種類）の表示ロジック
+                    if (parsedResult!.containsKey('購入内容') && parsedResult!.containsKey('方式'))
+                      Builder(builder: (context) {
+                        final List<Map<String, dynamic>> purchaseDetails = (parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
+                        String betType = parsedResult!['方式'] ?? '';
+                        String shikibetsu = '';
+                        if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
+                          shikibetsu = purchaseDetails[0]['式別'];
+                        }
 
-                    // '開催場所・レース' の結合表示
-                    if (displayKey == '開催場所・レース') {
-                      final String kaisaijo = parsedResult!['開催場'] ?? '';
-                      final String race = parsedResult!['レース'] != null ? parsedResult!['レース'].toString() : '';
-                      if (kaisaijo.isNotEmpty && race.isNotEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  '開催場所・レース:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  '$kaisaijo${race}レース', // 例: 京都11レース
-                                  style: TextStyle(color: Colors.black54),
-                                ),
-                              ),
-                            ],
-                          ),
+                        String displayString = shikibetsu;
+
+                        // 「応援馬券」の場合は「応援馬券 単勝+複勝」と表示
+                        if (betType == '応援馬券') {
+                          displayString = '応援馬券 単勝+複勝';
+                        } else if (betType == 'ながし') {
+                          // ながしの場合のみ、購入内容のながし種類を式別の後に表示
+                          if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
+                            displayString += ' ${purchaseDetails[0]['ながし']}';
+                          } else {
+                            displayString += ' ながし'; // ながし種類が取得できない場合
+                          }
+                        } else {
+                          // その他の方式
+                          displayString += ' $betType';
+                        }
+
+                        return Text(
+                          displayString,
+                          style: TextStyle(color: Colors.black54, fontSize: 16),
                         );
-                      } else {
-                        return const SizedBox.shrink();
-                      }
-                    }
-
-                    // '開催日時' の結合表示
-                    if (displayKey == '開催日時') {
-                      final String year = parsedResult!['年'] != null ? parsedResult!['年'].toString() : '';
-                      final String kai = parsedResult!['回'] != null ? parsedResult!['回'].toString() : '';
-                      final String nichi = parsedResult!['日'] != null ? parsedResult!['日'].toString() : '';
-                      if (year.isNotEmpty && kai.isNotEmpty && nichi.isNotEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  '開催日時:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  '${year}年${kai}回${nichi}日', // 例: 2025年1回1日
-                                  style: TextStyle(color: Colors.black54),
-                                ),
-                              ),
-                            ],
+                      }),
+                    const SizedBox(height: 8),
+                    // 購入内容
+                    if (parsedResult!.containsKey('購入内容'))
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '購入内容:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                              fontSize: 16,
+                            ),
                           ),
-                        );
-                      } else {
-                        return const SizedBox.shrink();
-                      }
-                    }
-
-                    // 合計金額の表示
-                    if (displayKey == '合計金額') {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: 100,
-                              child: Text(
-                                '合計金額:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: _buildPurchaseDetails(parsedResult!['購入内容'], parsedResult!['方式']),
                             ),
-                            Expanded(
-                              child: Text(
-                                '$totalAmount円',
-                                style: TextStyle(
-                                  color: Colors.black54,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    // その他の項目は既存のロジックで表示
-                    final key = displayKey; // displayKeyが実際のキーとして機能
-                    final value = parsedResult![key];
-                    final isUrl = key == 'URL' && value is String;
-
-                    final String betType = parsedResult!['方式'] ?? ''; // 方式は別途取得
-
-                    if (key == '方式') {
-                      String displayValue = value.toString();
-                      if (displayValue == '応援馬券') {
-                        displayValue = '単勝+複勝';
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: 100,
-                              child: Text(
-                                '$key:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                displayValue,
-                                style: TextStyle(color: Colors.black54),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (key == '購入内容') {
-                      List<Map<String, dynamic>> purchaseDetails = (value as List).cast<Map<String, dynamic>>();
-
-                      // '応援馬券'の場合の特殊な表示ルール
-                      if (betType == '応援馬券' && purchaseDetails.length >= 2) {
-                        final firstDetail = purchaseDetails[0];
-                        String umanban = (firstDetail['馬番'] ?? []).toString().replaceAll('[', '').replaceAll(']', '');
-                        String kingakuValue = firstDetail['購入金額'] != null ? firstDetail['購入金額'].toString() : '';
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SizedBox(
-                                    width: 100,
-                                    child: Text(
-                                      '$key:',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SizedBox(width: 100),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '馬番 $umanban 各${kingakuValue}円',
-                                          style: TextStyle(color: Colors.black54),
-                                        ),
-                                        Text(
-                                          '単勝 ${kingakuValue}円',
-                                          style: TextStyle(color: Colors.black54),
-                                        ),
-                                        Text(
-                                          '複勝 ${kingakuValue}円',
-                                          style: TextStyle(color: Colors.black54),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
                           ),
-                        );
-                      } else {
-                        // 他の方式の場合の既存ロジック
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SizedBox(
-                                    width: 100,
-                                    child: Text(
-                                      '$key:',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SizedBox(width: 100),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: purchaseDetails.map((detail) {
-                                        String shikibetsu = detail['式別'] ?? '';
-                                        String umanban = (detail['馬番'] ?? []).toString().replaceAll('[', '').replaceAll(']', '');
-                                        String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : '';
-                                        String jiku = (detail['軸'] is List) ? '軸:${(detail['軸'] as List).map((e) => e.toString()).join(',')}' : (detail['軸'] != null ? '軸:${detail['軸']}' : '');
-                                        String aite = (detail['相手'] is List) ? '相手:${(detail['相手'] as List).map((e) => e.toString()).join(',')}' : '';
-                                        String kingakuDisplay = detail['購入金額'] != null ? '${detail['購入金額']}円' : '';
-
-                                        String combinationText;
-
-                                        if (detail.containsKey('ながし')) {
-                                          combinationText = '式別 $shikibetsu$nagashi';
-                                          if (jiku.isNotEmpty) combinationText += ' $jiku';
-                                          if (aite.isNotEmpty) combinationText += ' $aite';
-                                        } else if (detail.containsKey('馬番') && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
-                                          List<List<int>> formationHorseNumbers = (detail['馬番'] as List).cast<List<int>>();
-                                          combinationText = '式別 $shikibetsu';
-                                          for (int i = 0; i < formationHorseNumbers.length; i++) {
-                                            combinationText += ' ${formationHorseNumbers[i].join(',')}';
-                                          }
-                                        } else {
-                                          combinationText = '式別 $shikibetsu 馬番 $umanban';
-                                        }
-
-                                        String uraDisplay = (detail['ウラ'] != null) ? ' ウラ:${detail['ウラ']}' : '';
-
-                                        return Text(
-                                          '$combinationText 金額 $kingakuDisplay$uraDisplay',
-                                          style: TextStyle(color: Colors.black54),
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-                    }
-
-                    // URLなどのその他の項目（もし表示したいものがあれば）
-                    // 現在はdisplayOrderで定義された項目のみが表示されるため、このブロックは基本的には実行されません
-                    // もしURLを表示したい場合は、displayOrderに'URL'を追加し、parsedResultにもURLが含まれている必要があります
-                    return Padding(
+                        ],
+                      ),
+                    const SizedBox(height: 8),
+                    // 合計金額
+                    Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4.0),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,34 +150,28 @@ class ResultPage extends StatelessWidget {
                           SizedBox(
                             width: 100,
                             child: Text(
-                              '$key:',
+                              '合計金額:',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.black87,
+                                fontSize: 16,
                               ),
                             ),
                           ),
                           Expanded(
-                            child: isUrl
-                                ? SelectableText.rich(
-                              TextSpan(
-                                text: value,
-                                style: TextStyle(color: Colors.blue),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    launchUrl(Uri.parse(value));
-                                  },
+                            child: Text(
+                              '$totalAmount円',
+                              style: TextStyle(
+                                color: Colors.black54,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
                               ),
-                            )
-                                : Text(
-                              value.toString(),
-                              style: TextStyle(color: Colors.black54),
                             ),
                           ),
                         ],
                       ),
-                    );
-                  },
+                    ),
+                  ],
                 )),
               ),
             ),
@@ -423,5 +204,65 @@ class ResultPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildPurchaseDetails(dynamic purchaseData, String betType) {
+    List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
+
+    if (betType == '応援馬券' && purchaseDetails.length >= 2) {
+      final firstDetail = purchaseDetails[0];
+      String umanban = (firstDetail['馬番'] ?? []).toString().replaceAll('[', '').replaceAll(']', '');
+      String kingakuValue = firstDetail['購入金額'] != null ? firstDetail['購入金額'].toString() : '';
+
+      return [
+        Text(
+          '馬番 $umanban 各${kingakuValue}円',
+          style: TextStyle(color: Colors.black54),
+        ),
+        Text(
+          '単勝 ${kingakuValue}円',
+          style: TextStyle(color: Colors.black54),
+        ),
+        Text(
+          '複勝 ${kingakuValue}円',
+          style: TextStyle(color: Colors.black54),
+        ),
+      ];
+    } else {
+      return purchaseDetails.map((detail) {
+        String shikibetsu = detail['式別'] ?? '';
+        String umanban = (detail['馬番'] ?? []).toString().replaceAll('[', '').replaceAll(']', '');
+        String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : '';
+        String jiku = (detail['軸'] is List) ? '軸:${(detail['軸'] as List).map((e) => e.toString()).join(',')}' : (detail['軸'] != null ? '軸:${detail['軸']}' : '');
+        String aite = (detail['相手'] is List) ? '相手:${(detail['相手'] as List).map((e) => e.toString()).join(',')}' : '';
+        String kingakuDisplay = detail['購入金額'] != null ? '${detail['購入金額']}円' : '';
+
+        String combinationText;
+
+        if (detail.containsKey('ながし')) {
+          combinationText = '式別 $shikibetsu$nagashi';
+          if (jiku.isNotEmpty) combinationText += ' $jiku';
+          if (aite.isNotEmpty) combinationText += ' $aite';
+        } else if (detail.containsKey('馬番') && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
+          List<List<int>> formationHorseNumbers = (detail['馬番'] as List).cast<List<int>>();
+          combinationText = '式別 $shikibetsu';
+          for (int i = 0; i < formationHorseNumbers.length; i++) {
+            combinationText += ' ${formationHorseNumbers[i].join(',')}_';
+          }
+          if (combinationText.endsWith('_')) {
+            combinationText = combinationText.substring(0, combinationText.length - 1);
+          }
+        } else {
+          combinationText = '式別 $shikibetsu 馬番 $umanban';
+        }
+
+        String uraDisplay = (detail['ウラ'] != null) ? ' ウラ:${detail['ウラ']}' : '';
+
+        return Text(
+          '$combinationText 金額 $kingakuDisplay$uraDisplay',
+          style: TextStyle(color: Colors.black54),
+        );
+      }).toList();
+    }
   }
 }
