@@ -1,4 +1,3 @@
-// lib/screens/result_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -71,24 +70,22 @@ class ResultPage extends StatelessWidget {
                     : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 開催日時
                     if (parsedResult!.containsKey('年') && parsedResult!.containsKey('回') && parsedResult!.containsKey('日'))
                       Text(
                         '${parsedResult!['年']}年${parsedResult!['回']}回${parsedResult!['日']}日',
                         style: TextStyle(color: Colors.black54, fontSize: 16),
                       ),
                     const SizedBox(height: 4),
-                    // 開催場所・レース
                     if (parsedResult!.containsKey('開催場') && parsedResult!.containsKey('レース'))
                       Text(
                         '${parsedResult!['開催場']}${parsedResult!['レース']}レース',
                         style: TextStyle(color: Colors.black54, fontSize: 16),
                       ),
                     const SizedBox(height: 8),
-                    // 式別 + 方式（またはながし種類）の表示ロジック
                     if (parsedResult!.containsKey('購入内容') && parsedResult!.containsKey('方式'))
                       Builder(builder: (context) {
-                        final List<Map<String, dynamic>> purchaseDetails = (parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
+                        final List<Map<String, dynamic>> purchaseDetails =
+                        (parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
                         String betType = parsedResult!['方式'] ?? '';
                         String shikibetsu = '';
                         if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
@@ -97,18 +94,15 @@ class ResultPage extends StatelessWidget {
 
                         String displayString = shikibetsu;
 
-                        // 「応援馬券」の場合は「応援馬券 単勝+複勝」と表示
                         if (betType == '応援馬券') {
                           displayString = '応援馬券 単勝+複勝';
                         } else if (betType == 'ながし') {
-                          // ながしの場合のみ、購入内容のながし種類を式別の後に表示
                           if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
                             displayString += ' ${purchaseDetails[0]['ながし']}';
                           } else {
-                            displayString += ' ながし'; // ながし種類が取得できない場合
+                            displayString += ' ながし';
                           }
                         } else {
-                          // その他の方式
                           displayString += ' $betType';
                         }
 
@@ -118,7 +112,6 @@ class ResultPage extends StatelessWidget {
                         );
                       }),
                     const SizedBox(height: 8),
-                    // 購入内容
                     if (parsedResult!.containsKey('購入内容'))
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,7 +134,6 @@ class ResultPage extends StatelessWidget {
                         ],
                       ),
                     const SizedBox(height: 8),
-                    // 合計金額
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4.0),
                       child: Row(
@@ -233,17 +225,39 @@ class ResultPage extends StatelessWidget {
         String shikibetsu = detail['式別'] ?? '';
         String umanban = (detail['馬番'] ?? []).toString().replaceAll('[', '').replaceAll(']', '');
         String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : '';
-        String jiku = (detail['軸'] is List) ? '軸:${(detail['軸'] as List).map((e) => e.toString()).join(',')}' : (detail['軸'] != null ? '軸:${detail['軸']}' : '');
+        String jiku = (detail['軸'] is List)
+            ? '軸:${(detail['軸'] as List).map((e) => e.toString()).join(',')}'
+            : (detail['軸'] != null ? '軸:${detail['軸']}' : '');
         String aite = (detail['相手'] is List) ? '相手:${(detail['相手'] as List).map((e) => e.toString()).join(',')}' : '';
         String kingakuDisplay = detail['購入金額'] != null ? '${detail['購入金額']}円' : '';
+        String uraDisplay = (detail['ウラ'] != null) ? ' ウラ:${detail['ウラ']}' : '';
 
         String combinationText;
 
-        if (detail.containsKey('ながし')) {
+        if (detail['式別'] == '3連単' &&
+            detail['馬番'] is List &&
+            (detail['馬番'] as List).isNotEmpty &&
+            (detail['馬番'] as List)[0] is List) {
+          combinationText = '式別 $shikibetsu$nagashi';
+          final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
+          if (horseGroups.length >= 1) {
+            jiku = '1着: ${horseGroups[0].join(',')}';
+          }
+          if (horseGroups.length >= 2) {
+            aite = '2着: ${horseGroups[1].join(',')}';
+          }
+          if (horseGroups.length >= 3) {
+            aite += ' / 3着: ${horseGroups[2].join(',')}';
+          }
+          combinationText += ' $jiku $aite';
+        } else if (detail.containsKey('ながし')) {
           combinationText = '式別 $shikibetsu$nagashi';
           if (jiku.isNotEmpty) combinationText += ' $jiku';
           if (aite.isNotEmpty) combinationText += ' $aite';
-        } else if (detail.containsKey('馬番') && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
+        } else if (detail.containsKey('馬番') &&
+            detail['馬番'] is List &&
+            (detail['馬番'] as List).isNotEmpty &&
+            (detail['馬番'] as List)[0] is List) {
           List<List<int>> formationHorseNumbers = (detail['馬番'] as List).cast<List<int>>();
           combinationText = '式別 $shikibetsu';
           for (int i = 0; i < formationHorseNumbers.length; i++) {
@@ -255,8 +269,6 @@ class ResultPage extends StatelessWidget {
         } else {
           combinationText = '式別 $shikibetsu 馬番 $umanban';
         }
-
-        String uraDisplay = (detail['ウラ'] != null) ? ' ウラ:${detail['ウラ']}' : '';
 
         return Text(
           '$combinationText 金額 $kingakuDisplay$uraDisplay',
