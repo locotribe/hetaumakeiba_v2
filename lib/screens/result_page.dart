@@ -16,6 +16,17 @@ class ResultPage extends StatelessWidget {
         ? JsonEncoder.withIndent('  ').convert(parsedResult)
         : 'QRコードの読み取りに失敗しました';
 
+    // 合計金額を計算
+    int totalAmount = 0;
+    if (parsedResult != null && parsedResult!.containsKey('購入内容')) {
+      List<Map<String, dynamic>> purchaseDetails = (parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
+      for (var detail in purchaseDetails) {
+        if (detail.containsKey('購入金額')) {
+          totalAmount += (detail['購入金額'] as int);
+        }
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('解析結果'),
@@ -60,87 +71,211 @@ class ResultPage extends StatelessWidget {
                     : ListView.builder(
                   shrinkWrap: true,
                   physics: NeverScrollableScrollPhysics(),
-                  itemCount: parsedResult!.keys.length,
+                  itemCount: parsedResult!.keys.length + 1, // 合計金額の行を追加
                   itemBuilder: (context, index) {
+                    // 合計金額の行はリストの最後に追加
+                    if (index == parsedResult!.keys.length) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 100,
+                              child: Text(
+                                '合計金額:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '$totalAmount円',
+                                style: TextStyle(
+                                  color: Colors.black54,
+                                  fontWeight: FontWeight.bold, // 合計金額を目立たせる
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
                     final key = parsedResult!.keys.elementAt(index);
                     final value = parsedResult![key];
                     final isUrl = key == 'URL' && value is String;
+
+                    // parsedResultから方式を取得
+                    final String betType = parsedResult!['方式'] ?? '';
 
                     // 指定された7項目のみ表示（「開催所」を「開催場」に修正）
                     if (!['開催場', '年', '回', '日', 'レース', '方式', '購入内容'].contains(key)) {
                       return const SizedBox.shrink(); // 指定外は非表示
                     }
 
-                    if (key == '購入内容') {
-                      // '購入内容'のカスタム表示
-                      List<Map<String, dynamic>> purchaseDetails = (value as List).cast<Map<String, dynamic>>();
+                    if (key == '方式') {
+                      String displayValue = value.toString();
+                      if (displayValue == '応援馬券') {
+                        displayValue = '単勝+複勝';
+                      }
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Column(
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // "購入内容:" ラベルの表示
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(
-                                  width: 100, // 他のキーと幅を合わせる
-                                  child: Text(
-                                    '$key:',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
+                            SizedBox(
+                              width: 100,
+                              child: Text(
+                                '$key:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
                                 ),
-                              ],
+                              ),
                             ),
-                            // 購入内容の詳細をインデントして表示
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(width: 100), // 他の値と揃えるためにインデント
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: purchaseDetails.map((detail) {
-                                      String shikibetsu = detail['式別'] ?? '';
-                                      String umanban = (detail['馬番'] ?? []).toString().replaceAll('[', '').replaceAll(']', '');
-                                      String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : '';
-                                      String jiku = (detail['軸'] is List) ? '軸:${(detail['軸'] as List).map((e) => e.toString()).join(',')}' : (detail['軸'] != null ? '軸:${detail['軸']}' : '');
-                                      String aite = (detail['相手'] is List) ? '相手:${(detail['相手'] as List).map((e) => e.toString()).join(',')}' : '';
-                                      String kingaku = detail['購入金額'] != null ? '${detail['購入金額']}円' : '';
-                                      String ura = detail['ウラ'] != null ? ' ウラ:${detail['ウラ']}' : '';
-                                      String combinationText;
-
-                                      if (detail.containsKey('ながし')) {
-                                        combinationText = '式別 $shikibetsu$nagashi';
-                                        if (jiku.isNotEmpty) combinationText += ' $jiku';
-                                        if (aite.isNotEmpty) combinationText += ' $aite';
-                                      } else if (detail.containsKey('馬番') && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
-                                        // フォーメーションの場合の処理
-                                        List<List<int>> formationHorseNumbers = (detail['馬番'] as List).cast<List<int>>();
-                                        combinationText = '式別 $shikibetsu';
-                                        for (int i = 0; i < formationHorseNumbers.length; i++) {
-                                          combinationText += ' ${formationHorseNumbers[i].join(',')}';
-                                        }
-                                      }
-                                      else {
-                                        combinationText = '式別 $shikibetsu 馬番 $umanban';
-                                      }
-
-                                      return Text(
-                                        '$combinationText 金額 $kingaku$ura',
-                                        style: TextStyle(color: Colors.black54),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-                              ],
+                            Expanded(
+                              child: Text(
+                                displayValue,
+                                style: TextStyle(color: Colors.black54),
+                              ),
                             ),
                           ],
                         ),
                       );
+                    }
+
+                    if (key == '購入内容') {
+                      List<Map<String, dynamic>> purchaseDetails = (value as List).cast<Map<String, dynamic>>();
+
+                      // '応援馬券'の場合の特殊な表示ルール
+                      if (betType == '応援馬券' && purchaseDetails.length >= 2) {
+                        // 単勝と複勝の購入内容から情報を取得
+                        final firstDetail = purchaseDetails[0]; // 単勝または複勝のどちらでも金額は同じなので一つを参照
+                        String umanban = (firstDetail['馬番'] ?? []).toString().replaceAll('[', '').replaceAll(']', '');
+                        String kingakuValue = firstDetail['購入金額'] != null ? firstDetail['購入金額'].toString() : '';
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 100,
+                                    child: Text(
+                                      '$key:',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(width: 100), // 他の値と揃えるためにインデント
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '馬番 $umanban 各${kingakuValue}円',
+                                          style: TextStyle(color: Colors.black54),
+                                        ),
+                                        Text(
+                                          '単勝 ${kingakuValue}円',
+                                          style: TextStyle(color: Colors.black54),
+                                        ),
+                                        Text(
+                                          '複勝 ${kingakuValue}円',
+                                          style: TextStyle(color: Colors.black54),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      } else {
+                        // 他の方式の場合の既存ロジック
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // "購入内容:" ラベルの表示
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 100, // 他のキーと幅を合わせる
+                                    child: Text(
+                                      '$key:',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              // 購入内容の詳細をインデントして表示
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(width: 100), // 他の値と揃えるためにインデント
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: purchaseDetails.map((detail) {
+                                        String shikibetsu = detail['式別'] ?? '';
+                                        String umanban = (detail['馬番'] ?? []).toString().replaceAll('[', '').replaceAll(']', '');
+                                        String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : '';
+                                        String jiku = (detail['軸'] is List) ? '軸:${(detail['軸'] as List).map((e) => e.toString()).join(',')}' : (detail['軸'] != null ? '軸:${detail['軸']}' : '');
+                                        String aite = (detail['相手'] is List) ? '相手:${(detail['相手'] as List).map((e) => e.toString()).join(',')}' : '';
+                                        String kingakuDisplay = detail['購入金額'] != null ? '${detail['購入金額']}円' : '';
+
+                                        String combinationText;
+
+                                        if (detail.containsKey('ながし')) {
+                                          combinationText = '式別 $shikibetsu$nagashi';
+                                          if (jiku.isNotEmpty) combinationText += ' $jiku';
+                                          if (aite.isNotEmpty) combinationText += ' $aite';
+                                        } else if (detail.containsKey('馬番') && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
+                                          // フォーメーションの場合の処理
+                                          List<List<int>> formationHorseNumbers = (detail['馬番'] as List).cast<List<int>>();
+                                          combinationText = '式別 $shikibetsu';
+                                          for (int i = 0; i < formationHorseNumbers.length; i++) {
+                                            combinationText += ' ${formationHorseNumbers[i].join(',')}';
+                                          }
+                                        } else {
+                                          combinationText = '式別 $shikibetsu 馬番 $umanban';
+                                        }
+
+                                        String uraDisplay = (detail['ウラ'] != null) ? ' ウラ:${detail['ウラ']}' : '';
+
+                                        return Text(
+                                          '$combinationText 金額 $kingakuDisplay$uraDisplay',
+                                          style: TextStyle(color: Colors.black54),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }
                     }
 
                     return Padding(
