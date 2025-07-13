@@ -66,18 +66,30 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
     }
   }
 
-  d["年"] = int.parse(itr.next() + itr.next());
+  // 年をyyyy形式に変換
+  int yyYear = int.parse(itr.next() + itr.next());
+  int currentYear = DateTime.now().year;
+  int century = (currentYear ~/ 100) * 100; // 現在の世紀の始まり (例: 2000)
+  int yyyyYear = century + yyYear;
+  // もしyyYearが現在の年よりもかなり大きい場合（例: 2090年のQRコードを2025年に読み込むなど）、
+  // 100年前と仮定することも考えられるが、ここではシンプルに現在の世紀に属すると仮定
+  if (yyyyYear > currentYear + 10) { // 例: 現在が2025年でyyyyYearが2090の場合
+    yyyyYear -= 100;
+  }
+  d["年"] = yyyyYear;
+
+
   d["回"] = int.parse(itr.next() + itr.next());
   d["日"] = int.parse(itr.next() + itr.next());
   d["レース"] = int.parse(itr.next() + itr.next());
   String suffix = [
-    d["年"],
+    (d["年"] as int).toString(), // yyyy形式の年を使用
     racecourseCode,
-    d["回"],
-    d["日"],
-    d["レース"],
-  ].map((n) => n.toString().padLeft(2, '0')).join();
-  d["URL"] = "https://db.netkeiba.com/race/20$suffix";
+    (d["回"] as int).toString().padLeft(2, '0'),
+    (d["日"] as int).toString().padLeft(2, '0'),
+    (d["レース"] as int).toString().padLeft(2, '0'),
+  ].join();
+  d["URL"] = "https://db.netkeiba.com/race/$suffix"; // URLもyyyy形式に修正
   String typeCode = itr.next();
   d["方式"] = typeDict[typeCode];
 
