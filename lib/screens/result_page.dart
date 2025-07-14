@@ -240,6 +240,9 @@ class ResultPage extends StatelessWidget {
   List<Widget> _buildPurchaseDetails(dynamic purchaseData, String betType) {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
 
+    // Define a consistent width for labels to align content
+    const double labelWidth = 80.0;
+
     if (betType == '応援馬券' && purchaseDetails.length >= 2) {
       final firstDetail = purchaseDetails[0];
       List<int> umanbanList = (firstDetail['馬番'] as List).cast<int>();
@@ -249,7 +252,14 @@ class ResultPage extends StatelessWidget {
         Row( // Keep '馬番' on the same line as the start of horse numbers
           crossAxisAlignment: CrossAxisAlignment.start, // Align to top
           children: [
-            Text('馬番 ', style: TextStyle(color: Colors.black54)),
+            SizedBox(
+              width: labelWidth,
+              child: Text(
+                '馬番', // Colon removed
+                style: TextStyle(color: Colors.black54),
+                textAlign: TextAlign.end, // Align text to the end of the SizedBox
+              ),
+            ),
             Expanded( // Allow horse numbers to take available space and wrap
               child: Wrap(
                 spacing: 4.0, // horizontal space between items
@@ -277,7 +287,7 @@ class ResultPage extends StatelessWidget {
     } else {
       return purchaseDetails.map((detail) {
         String shikibetsu = detail['式別'] ?? '';
-        String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : '';
+        String nagashi = detail['ながし'] != null ? ' ${detail['ながashi']}' : '';
         int? kingaku = detail['購入金額']; // null許容int型で取得
         String kingakuDisplay = kingaku != null ? '${kingaku}円' : '';
         String uraDisplay = (detail['ウラ'] != null) ? 'ウラ: ${detail['ウラ']}' : '';
@@ -364,7 +374,14 @@ class ResultPage extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('1着: ', style: TextStyle(color: Colors.black54)),
+                  SizedBox(
+                    width: labelWidth,
+                    child: Text(
+                      '1着', // Colon removed
+                      style: TextStyle(color: Colors.black54),
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
                   Expanded(
                     child: Wrap(
                       spacing: 4.0,
@@ -382,7 +399,14 @@ class ResultPage extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('2着: ', style: TextStyle(color: Colors.black54)),
+                  SizedBox(
+                    width: labelWidth,
+                    child: Text(
+                      '2着', // Colon removed
+                      style: TextStyle(color: Colors.black54),
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
                   Expanded(
                     child: Wrap(
                       spacing: 4.0,
@@ -400,7 +424,14 @@ class ResultPage extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('3着: ', style: TextStyle(color: Colors.black54)),
+                  SizedBox(
+                    width: labelWidth,
+                    child: Text(
+                      '3着', // Colon removed
+                      style: TextStyle(color: Colors.black54),
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
                   Expanded(
                     child: Wrap(
                       spacing: 4.0,
@@ -413,27 +444,35 @@ class ResultPage extends StatelessWidget {
             ));
           }
         } else if (detail.containsKey('ながし')) {
-          if (detail.containsKey('軸') && detail['軸'] is List) {
+          if (detail.containsKey('軸')) { // Changed from `detail['軸'] is List` to `detail.containsKey('軸')`
+            List<int> axisHorses;
+            if (detail['軸'] is List) {
+              axisHorses = (detail['軸'] as List).cast<int>();
+            } else {
+              axisHorses = [(detail['軸'] as int)]; // Convert single int to list
+            }
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('軸: ', style: TextStyle(color: Colors.black54)),
+                  SizedBox(
+                    width: labelWidth,
+                    child: Text(
+                      '軸', // Colon removed
+                      style: TextStyle(color: Colors.black54),
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
                   Expanded(
                     child: Wrap(
                       spacing: 4.0,
                       runSpacing: 4.0,
-                      children: _buildHorseNumberWidgets((detail['軸'] as List).cast<int>()),
+                      children: _buildHorseNumberWidgets(axisHorses),
                     ),
                   ),
                 ],
               ),
-            ));
-          } else if (detail.containsKey('軸') && detail['軸'] != null) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Text('軸: ${detail['軸']}', style: TextStyle(color: Colors.black54)),
             ));
           }
           if (detail.containsKey('相手') && detail['相手'] is List) {
@@ -442,7 +481,14 @@ class ResultPage extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('相手: ', style: TextStyle(color: Colors.black54)),
+                  SizedBox(
+                    width: labelWidth,
+                    child: Text(
+                      '相手', // Colon removed
+                      style: TextStyle(color: Colors.black54),
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
                   Expanded(
                     child: Wrap(
                       spacing: 4.0,
@@ -466,7 +512,14 @@ class ResultPage extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${i + 1}組: ', style: TextStyle(color: Colors.black54)),
+                  SizedBox(
+                    width: labelWidth,
+                    child: Text(
+                      '${i + 1}組', // Colon removed
+                      style: TextStyle(color: Colors.black54),
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
                   Expanded(
                     child: Wrap(
                       spacing: 4.0,
@@ -484,7 +537,14 @@ class ResultPage extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('馬番: ', style: TextStyle(color: Colors.black54)),
+                SizedBox(
+                  width: labelWidth,
+                  child: Text(
+                    '馬番', // Colon removed
+                    style: TextStyle(color: Colors.black54),
+                    textAlign: TextAlign.end,
+                  ),
+                ),
                 Expanded(
                   child: Wrap(
                     spacing: 4.0,
