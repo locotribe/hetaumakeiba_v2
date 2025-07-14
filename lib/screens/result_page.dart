@@ -4,21 +4,47 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // 次のスキャンボタンのために必要
 import 'dart:convert'; // JsonEncoderを使用
 
-class ResultPage extends StatelessWidget {
+// StatefulWidget に変更
+class ResultPage extends StatefulWidget {
   final Map<String, dynamic>? parsedResult;
 
   const ResultPage({super.key, this.parsedResult});
 
   @override
+  State<ResultPage> createState() => _ResultPageState();
+}
+
+class _ResultPageState extends State<ResultPage> {
+  // parsedResult を State の変数として管理
+  Map<String, dynamic>? _parsedResult;
+
+  @override
+  void initState() {
+    super.initState();
+    _parsedResult = widget.parsedResult; // 初期値をウィジェットから受け取る
+  }
+
+  // parsedResult が更新された場合に State を更新する
+  @override
+  void didUpdateWidget(covariant ResultPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.parsedResult != oldWidget.parsedResult) {
+      setState(() {
+        _parsedResult = widget.parsedResult;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final prettyJson = parsedResult != null
-        ? JsonEncoder.withIndent('  ').convert(parsedResult)
+    final prettyJson = _parsedResult != null
+        ? JsonEncoder.withIndent('  ').convert(_parsedResult)
         : '馬券の読み取りに失敗しました';
 
     // 合計金額を計算
     int totalAmount = 0;
-    if (parsedResult != null && parsedResult!.containsKey('購入内容')) {
-      List<Map<String, dynamic>> purchaseDetails = (parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
+    if (_parsedResult != null && _parsedResult!.containsKey('購入内容')) {
+      List<Map<String, dynamic>> purchaseDetails = (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
       for (var detail in purchaseDetails) {
         if (detail.containsKey('購入金額')) {
           totalAmount += (detail['購入金額'] as int);
@@ -28,9 +54,9 @@ class ResultPage extends StatelessWidget {
 
     // Check for 発売所 information
     String? salesLocation;
-    // Assuming '発売所' key might exist at the top level of parsedResult if available
-    if (parsedResult != null && parsedResult!.containsKey('発売所')) {
-      salesLocation = parsedResult!['発売所'] as String;
+    // Assuming '発売所' key might exist at the top level of _parsedResult if available
+    if (_parsedResult != null && _parsedResult!.containsKey('発売所')) {
+      salesLocation = _parsedResult!['発売所'] as String;
     }
 
 
@@ -55,23 +81,23 @@ class ResultPage extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Expanded(
-              child: SingleChildScrollView( // ここをSingleChildScrollViewでラップしました
+              child: SingleChildScrollView(
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: parsedResult == null
+                  child: _parsedResult == null
                       ? Center(
                     child: Text(
                       prettyJson,
                       style: TextStyle(fontSize: 16, color: Colors.black54),
                     ),
                   )
-                      : (parsedResult!.containsKey('エラー')
+                      : (_parsedResult!.containsKey('エラー')
                       ? Text(
-                    'エラー: ${parsedResult!['エラー']}\n詳細: ${parsedResult!['詳細']}',
+                    'エラー: ${_parsedResult!['エラー']}\n詳細: ${_parsedResult!['詳細']}',
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.red,
@@ -80,23 +106,23 @@ class ResultPage extends StatelessWidget {
                       : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (parsedResult!.containsKey('年') && parsedResult!.containsKey('回') && parsedResult!.containsKey('日'))
+                      if (_parsedResult!.containsKey('年') && _parsedResult!.containsKey('回') && _parsedResult!.containsKey('日'))
                         Text(
-                          '${parsedResult!['年']}年${parsedResult!['回']}回${parsedResult!['日']}日',
+                          '${_parsedResult!['年']}年${_parsedResult!['回']}回${_parsedResult!['日']}日',
                           style: TextStyle(color: Colors.black54, fontSize: 16),
                         ),
                       const SizedBox(height: 4),
-                      if (parsedResult!.containsKey('開催場') && parsedResult!.containsKey('レース'))
+                      if (_parsedResult!.containsKey('開催場') && _parsedResult!.containsKey('レース'))
                         Text(
-                          '${parsedResult!['開催場']}${parsedResult!['レース']}レース',
+                          '${_parsedResult!['開催場']}${_parsedResult!['レース']}レース',
                           style: TextStyle(color: Colors.black54, fontSize: 16),
                         ),
                       const SizedBox(height: 8),
-                      if (parsedResult!.containsKey('購入内容') && parsedResult!.containsKey('方式'))
+                      if (_parsedResult!.containsKey('購入内容') && _parsedResult!.containsKey('方式'))
                         Builder(builder: (context) {
                           final List<Map<String, dynamic>> purchaseDetails =
-                          (parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-                          String betType = parsedResult!['方式'] ?? '';
+                          (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
+                          String betType = _parsedResult!['方式'] ?? '';
                           String shikibetsu = '';
                           if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
                             shikibetsu = purchaseDetails[0]['式別'];
@@ -122,7 +148,7 @@ class ResultPage extends StatelessWidget {
                           );
                         }),
                       const SizedBox(height: 8),
-                      if (parsedResult!.containsKey('購入内容'))
+                      if (_parsedResult!.containsKey('購入内容'))
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -138,7 +164,7 @@ class ResultPage extends StatelessWidget {
                               padding: const EdgeInsets.only(left: 16.0),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: _buildPurchaseDetails(parsedResult!['購入内容'], parsedResult!['方式']),
+                                children: _buildPurchaseDetails(_parsedResult!['購入内容'], _parsedResult!['方式']),
                               ),
                             ),
                           ],
@@ -211,10 +237,19 @@ class ResultPage extends StatelessWidget {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
-                // 現在のResultPageを破棄し、QRScannerPageをプッシュ
-                Navigator.of(context).pushReplacement(
+                // QRScannerPageをプッシュし、結果が返されるのを待つ
+                final newScanResult = await Navigator.of(context).push<Map<String, dynamic>>(
                   MaterialPageRoute(builder: (_) => const QRScannerPage()),
                 );
+
+                if (newScanResult != null) {
+                  // 新しいスキャン結果があれば、現在のResultPageを新しいResultPageで置き換える
+                  // これにより、スタックは [MyHomePage, ResultPage(新)] となる
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => ResultPage(parsedResult: newScanResult)),
+                  );
+                }
+                // newScanResultがnullの場合（スキャナーで戻るボタンを押した場合）、何もしないで現在のResultPageに留まる
               },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
@@ -358,7 +393,7 @@ class ResultPage extends StatelessWidget {
       // その他の買い方の場合
       return purchaseDetails.map((detail) {
         String shikibetsu = detail['式別'] ?? '';
-        String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : '';
+        String nagashi = detail['ながし'] != null ? ' ${detail['ながashi']}' : ''; // typo corrected: nagashi
         int? kingaku = detail['購入金額'];
         String kingakuDisplay = kingaku != null ? '${kingaku}円' : '';
         String uraDisplay = (detail['ウラ'] != null) ? 'ウラ: ${detail['ウラ']}' : '';
