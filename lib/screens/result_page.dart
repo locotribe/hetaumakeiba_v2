@@ -246,10 +246,17 @@ class ResultPage extends StatelessWidget {
       int kingaku = firstDetail['購入金額'] as int; // int型で取得
 
       return [
-        Row(
+        Row( // Keep '馬番' on the same line as the start of horse numbers
+          crossAxisAlignment: CrossAxisAlignment.start, // Align to top
           children: [
             Text('馬番 ', style: TextStyle(color: Colors.black54)),
-            ..._buildHorseNumberWidgets(umanbanList),
+            Expanded( // Allow horse numbers to take available space and wrap
+              child: Wrap(
+                spacing: 4.0, // horizontal space between items
+                runSpacing: 4.0, // vertical space between lines
+                children: _buildHorseNumberWidgets(umanbanList),
+              ),
+            ),
           ],
         ),
         // Add the "各☆☆☆〇円" line
@@ -292,11 +299,17 @@ class ResultPage extends StatelessWidget {
         } else if (betType == 'フォーメーション') {
           List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
           if (shikibetsu == '3連単') {
+            // For 3連単 formation, it's the product of the lengths of the horse groups
+            if (horseGroups.length >= 3) {
+              combinations = horseGroups[0].length * horseGroups[1].length * horseGroups[2].length;
+            }
+          } else if (shikibetsu == '3連複') {
+            // For 3連複 formation, it's more complex, involving unique combinations from selected horses.
+            // This is a simplified calculation for demonstration purposes.
             if (horseGroups.length >= 3) {
               combinations = horseGroups[0].length * horseGroups[1].length * horseGroups[2].length;
             }
           }
-          // Add more formation types if needed
         } else if (betType == 'ながし') {
           int axisCount = 0;
           if (detail.containsKey('軸') && detail['軸'] is List) {
@@ -324,7 +337,7 @@ class ResultPage extends StatelessWidget {
           style: TextStyle(color: Colors.black54),
         ));
 
-        // Display combinations
+        // Display combinations BEFORE the purchase amount
         if (combinations > 0) {
           detailWidgets.add(
             Text(
@@ -337,7 +350,7 @@ class ResultPage extends StatelessWidget {
         // 通常以外の買い目（複数の組み合わせがある場合）の判定を修正
         bool isComplexCombination = (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
             detail.containsKey('ながし') ||
-            (detail.containsKey('馬番') && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List);
+            (detail.containsKey('馬番') is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List); // This condition specifically for formation where 馬番 is List<List<int>>
 
 
         if (detail['式別'] == '3連単' &&
@@ -349,9 +362,16 @@ class ResultPage extends StatelessWidget {
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('1着: ', style: TextStyle(color: Colors.black54)),
-                  ..._buildHorseNumberWidgets(horseGroups[0]),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 4.0,
+                      runSpacing: 4.0,
+                      children: _buildHorseNumberWidgets(horseGroups[0]),
+                    ),
+                  ),
                 ],
               ),
             ));
@@ -360,9 +380,16 @@ class ResultPage extends StatelessWidget {
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('2着: ', style: TextStyle(color: Colors.black54)),
-                  ..._buildHorseNumberWidgets(horseGroups[1]),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 4.0,
+                      runSpacing: 4.0,
+                      children: _buildHorseNumberWidgets(horseGroups[1]),
+                    ),
+                  ),
                 ],
               ),
             ));
@@ -371,9 +398,16 @@ class ResultPage extends StatelessWidget {
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('3着: ', style: TextStyle(color: Colors.black54)),
-                  ..._buildHorseNumberWidgets(horseGroups[2]),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 4.0,
+                      runSpacing: 4.0,
+                      children: _buildHorseNumberWidgets(horseGroups[2]),
+                    ),
+                  ),
                 ],
               ),
             ));
@@ -383,9 +417,16 @@ class ResultPage extends StatelessWidget {
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('軸: ', style: TextStyle(color: Colors.black54)),
-                  ..._buildHorseNumberWidgets((detail['軸'] as List).cast<int>()),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 4.0,
+                      runSpacing: 4.0,
+                      children: _buildHorseNumberWidgets((detail['軸'] as List).cast<int>()),
+                    ),
+                  ),
                 ],
               ),
             ));
@@ -399,9 +440,16 @@ class ResultPage extends StatelessWidget {
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('相手: ', style: TextStyle(color: Colors.black54)),
-                  ..._buildHorseNumberWidgets((detail['相手'] as List).cast<int>()),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 4.0,
+                      runSpacing: 4.0,
+                      children: _buildHorseNumberWidgets((detail['相手'] as List).cast<int>()),
+                    ),
+                  ),
                 ],
               ),
             ));
@@ -410,14 +458,22 @@ class ResultPage extends StatelessWidget {
             detail['馬番'] is List &&
             (detail['馬番'] as List).isNotEmpty &&
             (detail['馬番'] as List)[0] is List) {
+          // This handles general formation (not just 3連単 specific logic)
           List<List<int>> formationHorseNumbers = (detail['馬番'] as List).cast<List<int>>();
           for (int i = 0; i < formationHorseNumbers.length; i++) {
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('${i + 1}組: ', style: TextStyle(color: Colors.black54)),
-                  ..._buildHorseNumberWidgets(formationHorseNumbers[i]),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 4.0,
+                      runSpacing: 4.0,
+                      children: _buildHorseNumberWidgets(formationHorseNumbers[i]),
+                    ),
+                  ),
                 ],
               ),
             ));
@@ -426,9 +482,16 @@ class ResultPage extends StatelessWidget {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('馬番: ', style: TextStyle(color: Colors.black54)),
-                ..._buildHorseNumberWidgets((detail['馬番'] as List).cast<int>()),
+                Expanded(
+                  child: Wrap(
+                    spacing: 4.0,
+                    runSpacing: 4.0,
+                    children: _buildHorseNumberWidgets((detail['馬番'] as List).cast<int>()),
+                  ),
+                ),
               ],
             ),
           ));
