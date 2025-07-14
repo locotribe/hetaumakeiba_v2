@@ -208,29 +208,44 @@ class ResultPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      final result = await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const QRScannerPage()),
-                      );
-                      if (result != null) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ResultPage(parsedResult: result),
-                          ),
-                        );
-                      }
-                    },
-                    child: const Text('次の馬券を登録'),
-                  ),
-                ),
-              ],
+            // 新しい「次の馬券を登録」ボタン
+            ElevatedButton(
+              onPressed: () async {
+                // QRScannerPageをプッシュし、結果が返ってきたらResultPageを置き換える
+                final newScanResult = await Navigator.of(context).push<Map<String, dynamic>>(
+                  MaterialPageRoute(builder: (_) => const QRScannerPage()),
+                );
+
+                if (newScanResult != null) {
+                  // 新しいスキャン結果があれば、現在のResultPageを新しいResultPageで置き換える
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => ResultPage(parsedResult: newScanResult)),
+                  );
+                }
+                // newScanResultがnullの場合（スキャナーで戻るボタンを押した場合）、何もしないで現在のResultPageに留まる
+              },
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                textStyle: const TextStyle(fontSize: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('次の馬券を登録'),
+            ),
+            const SizedBox(height: 10), // ボタン間のスペース
+
+            // 元のボタンを「トップ画面に戻る」に変更
+            ElevatedButton(
+              onPressed: () {
+                // 現在のResultPageをポップして、その下の画面（MyHomePage）に戻る
+                Navigator.of(context).pop();
+              },
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                textStyle: const TextStyle(fontSize: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                backgroundColor: Colors.grey, // 差別化のために色を変更
+              ),
+              child: const Text('トップ画面に戻る'),
             ),
           ],
         ),

@@ -5,10 +5,12 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'dart:ui' as ui;
+import 'dart:ui' as ui; // CustomPainterでRect.fromLTWHを正確に使うために必要
 
 // 新しく作成したカスタム背景ウィジェットをインポート
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
+// Font Awesome Iconsのインポートは削除しました
+// dart:math のインポートも削除しました
 
 class QRScannerPage extends StatefulWidget {
   const QRScannerPage({super.key});
@@ -43,13 +45,33 @@ class _QRScannerPageState extends State<QRScannerPage> {
       return;
     }
 
-    // 複数のバーコードが同時に検出される可能性があるため、ループで処理
     for (final barcode in capture.barcodes) {
       final rawValue = barcode.rawValue;
       if (rawValue == null || rawValue.isEmpty) continue;
-
-      // すでにリストに含まれている場合はスキップ（同じ断片を複数回追加しないため）
       if (_qrResults.contains(rawValue)) continue;
+
+      // DEBUG: rawValue を出力
+      print('DEBUG: rawValue from scanner: $rawValue');
+
+      // _qrResults に追加する前に重複チェックを行う (rawValue単体でのチェック)
+      final bool existsSingle = await _dbHelper.qrCodeExists(rawValue); // rawValue単体でのチェック
+      if (existsSingle) {
+        print('DEBUG: Duplicate single QR code detected (rawValue): $rawValue');
+        setState(() {
+          _isShowingDuplicateMessage = true;
+        });
+        _scannerController.stop();
+
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() {
+              _isShowingDuplicateMessage = false;
+            });
+            _scannerController.start();
+          }
+        });
+        return; // 重複したQRコードはこれ以上処理しない
+      }
 
       setState(() {
         _qrResults.add(rawValue);
@@ -61,7 +83,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
         String secondPart = _qrResults[1];
 
         // データベースに保存されている形式に合わせてQRコードを結合
-        // _processTwoQRs内の結合ロジックをここでも適用
         String combinedQrCode;
         int count1 = _countSequence(firstPart);
         int count2 = _countSequence(secondPart);
@@ -75,10 +96,10 @@ class _QRScannerPageState extends State<QRScannerPage> {
         // DEBUG: 重複チェックに使用する結合済みQRコードを出力
         print('DEBUG: Combined QR string for duplicate check: $combinedQrCode');
 
-        final bool exists = await _dbHelper.qrCodeExists(combinedQrCode); // 結合済み文字列でチェック
-        if (exists) {
+        final bool existsCombined = await _dbHelper.qrCodeExists(combinedQrCode); // 結合済み文字列でチェック
+        if (existsCombined) {
           // 重複が見つかった場合
-          print('DEBUG: Duplicate QR code detected: $combinedQrCode'); // デバッグ用
+          print('DEBUG: Duplicate QR code detected (combined): $combinedQrCode');
           setState(() {
             _isShowingDuplicateMessage = true;
             _qrResults.clear(); // 検出された断片をクリアして、次のスキャンに備える
@@ -87,7 +108,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
           // 2秒後にメッセージを消してスキャナーを再開
           Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) { // ウィジェットがまだマウントされているか確認
+            if (mounted) {
               setState(() {
                 _isShowingDuplicateMessage = false;
               });
@@ -127,7 +148,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
           timestamp: DateTime.now(),
         );
         // DEBUG: 保存されるQRコードを出力
-        print('DEBUG: QR code to be saved: ${qrDataToSave.qrCode}');
+        print('DEBUG: 馬券データが保存されました: ${qrDataToSave.qrCode}');
         await _dbHelper.insertQrData(qrDataToSave);
         print('馬券データが保存されました: ${qrDataToSave.qrCode}');
       }
@@ -140,7 +161,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
             timestamp: DateTime.now(),
           );
           // DEBUG: 保存されるQRコードを出力
-          print('DEBUG: QR code to be saved (alt): ${qrDataToSave.qrCode}');
+          print('DEBUG: 馬券データが保存されました (alt): ${qrDataToSave.qrCode}');
           await _dbHelper.insertQrData(qrDataToSave);
           print('馬券データが保存されました: ${qrDataToSave.qrCode}');
         }
@@ -159,6 +180,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
         title: const Text('馬券スキャナー'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        // flexibleSpace のアイコン表示部分は削除しました
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -265,6 +287,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
                     ),
                   ),
                 ),
+
+              // フッターのアイコン表示部分は削除しました
             ],
           );
         },

@@ -7,11 +7,10 @@ import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/result_page.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart'; // この行を追加しました！
 
 // CustomBackgroundウィジェットをインポート
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-// parse.dart をインポート
-import 'package:hetaumakeiba_v2/logic/parse.dart'; // この行を追加しました！
 
 void main() {
   runApp(const MyApp());
@@ -74,12 +73,14 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _openQRScanner() async {
+    // QRScannerPageから結果が返されるのを待つ
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(builder: (_) => const QRScannerPage()),
     );
+    // 結果がnullでなければResultPageへ遷移
     if (result != null) {
-      await _loadQrData();
-      Navigator.push(
+      await _loadQrData(); // 新しいQRコードが保存された可能性があるのでデータを再読み込み
+      Navigator.push( // ResultPageを新しいルートとしてプッシュ
         context,
         MaterialPageRoute(builder: (_) => ResultPage(parsedResult: result)),
       );
@@ -203,8 +204,7 @@ class _MyHomePageState extends State<MyHomePage> {
                               onPressed: () => _deleteQrData(qrData.id!),
                             ),
                             onTap: () async {
-                              // parseHorseracingTicketQr 関数を呼び出す際に、
-                              // その関数が定義されているファイル (logic/parse.dart) をインポートする必要がある
+                              // ここで parseHorseracingTicketQr を呼び出すために import が必要でした
                               final result = parseHorseracingTicketQr(qrData.qrCode);
                               Navigator.push(
                                 context,
