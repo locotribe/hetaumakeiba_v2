@@ -1,7 +1,8 @@
-// lib/db/database_helper.dart
+// lib/db/database_helper.dart の修正点
+
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:hetaumakeiba_v2/models/qr_data_model.dart'; // 新しく作成したモデルをインポート
+import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -54,7 +55,19 @@ class DatabaseHelper {
     });
   }
 
-  // 全データの削除
+  // ==== ここから追加/修正 ====
+  // 特定のIDのデータを削除
+  Future<int> deleteQrData(int id) async {
+    final db = await database;
+    return await db.delete(
+      'qr_codes',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+  // ==== ここまで追加/修正 ====
+
+  // 全データの削除 (既存のメソッド)
   Future<int> deleteAllQrData() async {
     final db = await database;
     return await db.delete('qr_codes');
