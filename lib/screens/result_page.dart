@@ -252,6 +252,12 @@ class ResultPage extends StatelessWidget {
             ..._buildHorseNumberWidgets(umanbanList),
           ],
         ),
+        // Add the "各☆☆☆〇円" line
+        Text(
+          '各${_getStars(kingaku)}${kingaku}円',
+          style: TextStyle(color: Colors.black54),
+        ),
+        // Restore the original "単勝" and "複勝" lines
         Text(
           '単勝 ${_getStars(kingaku)}${kingaku}円', // ☆を付与
           style: TextStyle(color: Colors.black54),
