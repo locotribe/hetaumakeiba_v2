@@ -90,8 +90,7 @@ class ResultPage extends StatelessWidget {
                           '${parsedResult!['開催場']}${parsedResult!['レース']}レース',
                           style: TextStyle(color: Colors.black54, fontSize: 16),
                         ),
-                      // 方式や式別などの表示行は元のまま残す (ユーザーの最新の意図に基づく)
-                      const SizedBox(height: 8), // このSizedBoxは残し、他の要素との間隔を保つ
+                      const SizedBox(height: 8),
                       if (parsedResult!.containsKey('購入内容') && parsedResult!.containsKey('方式'))
                         Builder(builder: (context) {
                           final List<Map<String, dynamic>> purchaseDetails =
@@ -121,7 +120,7 @@ class ResultPage extends StatelessWidget {
                             style: TextStyle(color: Colors.black54, fontSize: 16),
                           );
                         }),
-                      const SizedBox(height: 8), // このSizedBoxは残し、他の要素との間隔を保つ
+                      const SizedBox(height: 8),
                       if (parsedResult!.containsKey('購入内容'))
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,7 +151,7 @@ class ResultPage extends StatelessWidget {
                             SizedBox(
                               width: 100,
                               child: Text(
-                                '合計金額', // Colon removed as per user request
+                                '合計金額',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Colors.black87,
@@ -182,7 +181,7 @@ class ResultPage extends StatelessWidget {
                               SizedBox(
                                 width: 100,
                                 child: Text(
-                                  '発売所', // Colon removed for consistency, assuming user wants no colons for new labels
+                                  '発売所',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.black87,
@@ -255,34 +254,64 @@ class ResultPage extends StatelessWidget {
     return ''; // 3桁未満の場合は☆なし
   }
 
-  List<Widget> _buildHorseNumberWidgets(List<int> horseNumbers) {
+  // 馬番と馬番の間に表示する記号を返すヘルパーメソッド
+  String _getHorseNumberSymbol(String shikibetsu, String betType) {
+    // 方式が「通常」の場合のみ記号を適用
+    if (betType == '通常') {
+      if (shikibetsu == '馬単' || shikibetsu == '3連単') {
+        return '→';
+      } else if (shikibetsu == '馬連' || shikibetsu == '3連複' || shikibetsu == '枠連') {
+        return '-';
+      } else if (shikibetsu == 'ワイド') {
+        return '◆';
+      }
+    }
+    // その他の方式（ボックス、ながし、フォーメーション、応援馬券）や、
+    // 「通常」でも記号が不要な式別（単勝、複勝）は空文字を返す
+    return '';
+  }
+
+
+  // 馬番のリストを記号を挟んで表示するウィジェットのリストを生成するヘルパーメソッド
+  List<Widget> _buildHorseNumberDisplay(List<int> horseNumbers, {String symbol = ''}) {
+    List<Widget> widgets = [];
     const double fixedWidth = 30.0; // 例: 2桁の数字が収まる程度の幅に調整してください
 
-    return horseNumbers.map((number) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2.0),
-      child: Container(
-        width: fixedWidth, // 幅を固定
-        alignment: Alignment.center, // 数字を中央寄せ
-        padding: const EdgeInsets.symmetric(vertical: 2.0), // 垂直方向のパディングを調整
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.black54),
-          borderRadius: BorderRadius.circular(4.0),
+    for (int i = 0; i < horseNumbers.length; i++) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2.0),
+          child: Container(
+            width: fixedWidth, // 幅を固定
+            alignment: Alignment.center, // 数字を中央寄せ
+            padding: const EdgeInsets.symmetric(vertical: 2.0), // 垂直方向のパディングを調整
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.black54),
+              borderRadius: BorderRadius.circular(4.0),
+            ),
+            child: Text(
+              horseNumbers[i].toString(),
+              style: TextStyle(color: Colors.black54),
+            ),
+          ),
         ),
-        child: Text(
-          number.toString(),
-          style: TextStyle(color: Colors.black54),
-        ),
-      ),
-    )).toList();
+      );
+      // 最後の馬番の後には記号を追加しない
+      if (symbol.isNotEmpty && i < horseNumbers.length - 1) {
+        widgets.add(
+          Text(symbol, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+        );
+      }
+    }
+    return widgets;
   }
 
   List<Widget> _buildPurchaseDetails(dynamic purchaseData, String betType) {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
 
-    // Define a consistent width for labels to align content
     const double labelWidth = 80.0;
 
-    // Handle '応援馬券' separately as it has a fixed structure
+    // '応援馬券'の処理は、他の複雑なロジックと分離して、購入内容のトップで処理
     if (betType == '応援馬券' && purchaseDetails.length >= 2) {
       final firstDetail = purchaseDetails[0];
       List<int> umanbanList = (firstDetail['馬番'] as List).cast<int>();
@@ -301,10 +330,8 @@ class ResultPage extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: Wrap(
-                spacing: 4.0,
-                runSpacing: 4.0,
-                children: _buildHorseNumberWidgets(umanbanList),
+              child: Wrap( // Wrap widget to handle overflow
+                children: [..._buildHorseNumberDisplay(umanbanList, symbol: '')], // 応援馬券は記号なし
               ),
             ),
           ],
@@ -323,10 +350,10 @@ class ResultPage extends StatelessWidget {
         ),
       ];
     } else {
-      // For other betting types, map each detail
+      // その他の買い方の場合
       return purchaseDetails.map((detail) {
         String shikibetsu = detail['式別'] ?? '';
-        String nagashi = detail['ながし'] != null ? ' ${detail['ながashi']}' : ''; // Corrected typo
+        String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : '';
         int? kingaku = detail['購入金額'];
         String kingakuDisplay = kingaku != null ? '${kingaku}円' : '';
         String uraDisplay = (detail['ウラ'] != null) ? 'ウラ: ${detail['ウラ']}' : '';
@@ -334,7 +361,7 @@ class ResultPage extends StatelessWidget {
         List<Widget> detailWidgets = [];
         int combinations = 0;
 
-        // Combination calculation logic (unchanged from previous iterations)
+        // 組み合わせ数の計算ロジック（変更なし）
         if (betType == 'ボックス') {
           List<int> horseNumbers = (detail['馬番'] as List).cast<int>();
           int n = horseNumbers.length;
@@ -371,11 +398,11 @@ class ResultPage extends StatelessWidget {
           combinations = axisCount * opponentCount;
         }
 
-        // Determine if it's a complex combination for '各組' prefix and new line amount display
+        // 「各組」プレフィックスと金額の改行表示を制御する複雑な組み合わせの判定
         bool isComplexCombinationForPrefix =
             (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
                 detail.containsKey('ながし') ||
-                (betType == 'ボックス'); // 'ボックス' is now considered complex for prefix and new line amount
+                (betType == 'ボックス'); // ボックスは「各組」プレフィックスを使用し、金額は改行で表示
 
         String prefixForAmount = '';
         if (kingaku != null) {
@@ -389,7 +416,7 @@ class ResultPage extends StatelessWidget {
         if (combinations > 0) {
           detailWidgets.add(
             Text(
-              '組合せ数 $combinations', // No colon
+              '組合せ数 $combinations',
               style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
             ),
           );
@@ -408,7 +435,7 @@ class ResultPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(width: labelWidth, child: Text('1着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets(horseGroups[0]))),
+                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')])), // フォーメーションは記号なし
                 ],
               ),
             ));
@@ -420,7 +447,7 @@ class ResultPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(width: labelWidth, child: Text('2着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets(horseGroups[1]))),
+                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')])), // フォーメーションは記号なし
                 ],
               ),
             ));
@@ -432,7 +459,7 @@ class ResultPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(width: labelWidth, child: Text('3着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets(horseGroups[2]))),
+                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[2], symbol: '')])), // フォーメーションは記号なし
                 ],
               ),
             ));
@@ -447,7 +474,7 @@ class ResultPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(width: labelWidth, child: Text('軸', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets(axisHorses))),
+                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(axisHorses, symbol: '')])), // ながしは記号なし
                 ],
               ),
             ));
@@ -459,7 +486,7 @@ class ResultPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(width: labelWidth, child: Text('相手', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets((detail['相手'] as List).cast<int>()))),
+                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay((detail['相手'] as List).cast<int>(), symbol: '')])), // ながしは記号なし
                 ],
               ),
             ));
@@ -474,19 +501,20 @@ class ResultPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(width: labelWidth, child: Text('${i + 1}組', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets(formationHorseNumbers[i]))),
+                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(formationHorseNumbers[i], symbol: '')])), // フォーメーションは記号なし
                 ],
               ),
             ));
           }
         } else if (detail.containsKey('馬番') && detail['馬番'] is List) {
           // This block covers '通常の買い方' (amount inline) AND 'ボックス' (amount on new line)
+          String currentSymbol = _getHorseNumberSymbol(shikibetsu, betType); // 馬番間の記号を取得
+
           if (!isComplexCombinationForPrefix) { // This condition identifies '通常の買い方'
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
+                crossAxisAlignment: CrossAxisAlignment.start, // Changed from baseline to start
                 children: [
                   SizedBox(
                     width: labelWidth,
@@ -497,22 +525,16 @@ class ResultPage extends StatelessWidget {
                     ),
                   ),
                   Expanded(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min, // Allow the internal Row to shrink wrap its content
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
+                    child: Wrap( // Use Wrap here to handle wrapping for horse numbers and amount
+                      spacing: 4.0, // Space between items in the wrap
+                      runSpacing: 4.0, // Space between lines of wrapped items
                       children: [
-                        Wrap(
-                          spacing: 4.0,
-                          runSpacing: 4.0,
-                          children: _buildHorseNumberWidgets((detail['馬番'] as List).cast<int>()),
-                        ),
+                        // Spread the horse number widgets generated by _buildHorseNumberDisplay
+                        ..._buildHorseNumberDisplay((detail['馬番'] as List).cast<int>(), symbol: currentSymbol),
                         if (kingaku != null)
-                          Flexible( // Allow text to take space but wrap if necessary
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 8.0), // Space after horse numbers
-                              child: Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54)),
-                            ),
+                          Text( // Amount text, now directly in Wrap
+                            '$prefixForAmount$kingakuDisplay',
+                            style: TextStyle(color: Colors.black54),
                           ),
                       ],
                     ),
@@ -520,8 +542,8 @@ class ResultPage extends StatelessWidget {
                 ],
               ),
             ));
-            amountHandledInline = true; // Mark amount as handled inline
-          } else { // This else block handles 'ボックス' (which is complex, but has single list of 馬番)
+            amountHandledInline = true; // Mark amount as handled within the Wrap
+          } else { // This else block handles 'ボックス'
             // For Box, display horse numbers, but amount will be added on a new line below
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
@@ -537,10 +559,8 @@ class ResultPage extends StatelessWidget {
                     ),
                   ),
                   Expanded(
-                    child: Wrap(
-                      spacing: 4.0,
-                      runSpacing: 4.0,
-                      children: _buildHorseNumberWidgets((detail['馬番'] as List).cast<int>()),
+                    child: Wrap( // Using Wrap here for consistent _buildHorseNumberDisplay usage
+                      children: [..._buildHorseNumberDisplay((detail['馬番'] as List).cast<int>(), symbol: '')], // ボックスは記号なし
                     ),
                   ),
                 ],
