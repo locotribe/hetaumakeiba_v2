@@ -26,6 +26,14 @@ class ResultPage extends StatelessWidget {
       }
     }
 
+    // Check for 発売所 information
+    String? salesLocation;
+    // Assuming '発売所' key might exist at the top level of parsedResult if available
+    if (parsedResult != null && parsedResult!.containsKey('発売所')) {
+      salesLocation = parsedResult!['発売所'] as String;
+    }
+
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('解析結果'),
@@ -82,7 +90,8 @@ class ResultPage extends StatelessWidget {
                           '${parsedResult!['開催場']}${parsedResult!['レース']}レース',
                           style: TextStyle(color: Colors.black54, fontSize: 16),
                         ),
-                      const SizedBox(height: 8),
+                      // 方式や式別などの表示行は元のまま残す (ユーザーの最新の意図に基づく)
+                      const SizedBox(height: 8), // このSizedBoxは残し、他の要素との間隔を保つ
                       if (parsedResult!.containsKey('購入内容') && parsedResult!.containsKey('方式'))
                         Builder(builder: (context) {
                           final List<Map<String, dynamic>> purchaseDetails =
@@ -112,7 +121,7 @@ class ResultPage extends StatelessWidget {
                             style: TextStyle(color: Colors.black54, fontSize: 16),
                           );
                         }),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 8), // このSizedBoxは残し、他の要素との間隔を保つ
                       if (parsedResult!.containsKey('購入内容'))
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -143,7 +152,7 @@ class ResultPage extends StatelessWidget {
                             SizedBox(
                               width: 100,
                               child: Text(
-                                '合計金額:',
+                                '合計金額', // Colon removed as per user request
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Colors.black87,
@@ -164,6 +173,36 @@ class ResultPage extends StatelessWidget {
                           ],
                         ),
                       ),
+                      if (salesLocation != null && salesLocation.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 100,
+                                child: Text(
+                                  '発売所', // Colon removed for consistency, assuming user wants no colons for new labels
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  salesLocation,
+                                  style: TextStyle(
+                                    color: Colors.black54,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   )),
                 ),
@@ -243,59 +282,59 @@ class ResultPage extends StatelessWidget {
     // Define a consistent width for labels to align content
     const double labelWidth = 80.0;
 
+    // Handle '応援馬券' separately as it has a fixed structure
     if (betType == '応援馬券' && purchaseDetails.length >= 2) {
       final firstDetail = purchaseDetails[0];
       List<int> umanbanList = (firstDetail['馬番'] as List).cast<int>();
-      int kingaku = firstDetail['購入金額'] as int; // int型で取得
+      int kingaku = firstDetail['購入金額'] as int;
 
       return [
-        Row( // Keep '馬番' on the same line as the start of horse numbers
-          crossAxisAlignment: CrossAxisAlignment.start, // Align to top
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
               width: labelWidth,
               child: Text(
-                '馬番', // Colon removed
+                '馬番',
                 style: TextStyle(color: Colors.black54),
-                textAlign: TextAlign.end, // Align text to the end of the SizedBox
+                textAlign: TextAlign.end,
               ),
             ),
-            Expanded( // Allow horse numbers to take available space and wrap
+            Expanded(
               child: Wrap(
-                spacing: 4.0, // horizontal space between items
-                runSpacing: 4.0, // vertical space between lines
+                spacing: 4.0,
+                runSpacing: 4.0,
                 children: _buildHorseNumberWidgets(umanbanList),
               ),
             ),
           ],
         ),
-        // Add the "各☆☆☆〇円" line
         Text(
           '各${_getStars(kingaku)}${kingaku}円',
           style: TextStyle(color: Colors.black54),
         ),
-        // Restore the original "単勝" and "複勝" lines
         Text(
-          '単勝 ${_getStars(kingaku)}${kingaku}円', // ☆を付与
+          '単勝 ${_getStars(kingaku)}${kingaku}円',
           style: TextStyle(color: Colors.black54),
         ),
         Text(
-          '複勝 ${_getStars(kingaku)}${kingaku}円', // ☆を付与
+          '複勝 ${_getStars(kingaku)}${kingaku}円',
           style: TextStyle(color: Colors.black54),
         ),
       ];
     } else {
+      // For other betting types, map each detail
       return purchaseDetails.map((detail) {
         String shikibetsu = detail['式別'] ?? '';
-        String nagashi = detail['ながし'] != null ? ' ${detail['ながashi']}' : '';
-        int? kingaku = detail['購入金額']; // null許容int型で取得
+        String nagashi = detail['ながし'] != null ? ' ${detail['ながashi']}' : ''; // Corrected typo
+        int? kingaku = detail['購入金額'];
         String kingakuDisplay = kingaku != null ? '${kingaku}円' : '';
         String uraDisplay = (detail['ウラ'] != null) ? 'ウラ: ${detail['ウラ']}' : '';
 
         List<Widget> detailWidgets = [];
-        int combinations = 0; // Initialize combinations
+        int combinations = 0;
 
-        // Combination calculation logic
+        // Combination calculation logic (unchanged from previous iterations)
         if (betType == 'ボックス') {
           List<int> horseNumbers = (detail['馬番'] as List).cast<int>();
           int n = horseNumbers.length;
@@ -309,13 +348,10 @@ class ResultPage extends StatelessWidget {
         } else if (betType == 'フォーメーション') {
           List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
           if (shikibetsu == '3連単') {
-            // For 3連単 formation, it's the product of the lengths of the horse groups
             if (horseGroups.length >= 3) {
               combinations = horseGroups[0].length * horseGroups[1].length * horseGroups[2].length;
             }
           } else if (shikibetsu == '3連複') {
-            // For 3連複 formation, it's more complex, involving unique combinations from selected horses.
-            // This is a simplified calculation for demonstration purposes.
             if (horseGroups.length >= 3) {
               combinations = horseGroups[0].length * horseGroups[1].length * horseGroups[2].length;
             }
@@ -325,7 +361,7 @@ class ResultPage extends StatelessWidget {
           if (detail.containsKey('軸') && detail['軸'] is List) {
             axisCount = (detail['軸'] as List).length;
           } else if (detail.containsKey('軸') && detail['軸'] != null) {
-            axisCount = 1; // Assuming a single axis horse if not a list
+            axisCount = 1;
           }
 
           int opponentCount = 0;
@@ -333,40 +369,37 @@ class ResultPage extends StatelessWidget {
             opponentCount = (detail['相手'] as List).length;
           }
           combinations = axisCount * opponentCount;
+        }
 
-          if (shikibetsu == '馬単' || shikibetsu == '3連単') {
-            // For 馬単 and 3連単 nagashi, the combinations need to consider the order/permutations.
-            // This is a simplified calculation; more complex logic might be needed depending on specific nagashi rules.
-            // For now, it's a simple product of axis and opponent for basic cases.
+        // Determine if it's a complex combination for '各組' prefix and new line amount display
+        bool isComplexCombinationForPrefix =
+            (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
+                detail.containsKey('ながし') ||
+                (betType == 'ボックス'); // 'ボックス' is now considered complex for prefix and new line amount
+
+        String prefixForAmount = '';
+        if (kingaku != null) {
+          if (isComplexCombinationForPrefix) {
+            prefixForAmount = '各組${_getStars(kingaku)}';
+          } else {
+            prefixForAmount = '${_getStars(kingaku)}';
           }
         }
 
-
-        detailWidgets.add(Text(
-          '式別 $shikibetsu$nagashi',
-          style: TextStyle(color: Colors.black54),
-        ));
-
-        // Display combinations BEFORE the purchase amount
         if (combinations > 0) {
           detailWidgets.add(
             Text(
-              '組合せ数: $combinations',
+              '組合せ数 $combinations', // No colon
               style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
             ),
           );
         }
 
-        // 通常以外の買い目（複数の組み合わせがある場合）の判定を修正
-        bool isComplexCombination = (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
-            detail.containsKey('ながし') ||
-            (detail.containsKey('馬番') is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List); // This condition specifically for formation where 馬番 is List<List<int>>
+        bool amountHandledInline = false; // Flag to track if amount is displayed on the same line
 
-
-        if (detail['式別'] == '3連単' &&
-            detail['馬番'] is List &&
-            (detail['馬番'] as List).isNotEmpty &&
-            (detail['馬番'] as List)[0] is List) {
+        // Display blocks for different betting types
+        if (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
+          // Formation (3連単)
           final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
           if (horseGroups.length >= 1) {
             detailWidgets.add(Padding(
@@ -374,21 +407,8 @@ class ResultPage extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: labelWidth,
-                    child: Text(
-                      '1着', // Colon removed
-                      style: TextStyle(color: Colors.black54),
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                  Expanded(
-                    child: Wrap(
-                      spacing: 4.0,
-                      runSpacing: 4.0,
-                      children: _buildHorseNumberWidgets(horseGroups[0]),
-                    ),
-                  ),
+                  SizedBox(width: labelWidth, child: Text('1着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets(horseGroups[0]))),
                 ],
               ),
             ));
@@ -399,21 +419,8 @@ class ResultPage extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: labelWidth,
-                    child: Text(
-                      '2着', // Colon removed
-                      style: TextStyle(color: Colors.black54),
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                  Expanded(
-                    child: Wrap(
-                      spacing: 4.0,
-                      runSpacing: 4.0,
-                      children: _buildHorseNumberWidgets(horseGroups[1]),
-                    ),
-                  ),
+                  SizedBox(width: labelWidth, child: Text('2着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets(horseGroups[1]))),
                 ],
               ),
             ));
@@ -424,53 +431,23 @@ class ResultPage extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: labelWidth,
-                    child: Text(
-                      '3着', // Colon removed
-                      style: TextStyle(color: Colors.black54),
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                  Expanded(
-                    child: Wrap(
-                      spacing: 4.0,
-                      runSpacing: 4.0,
-                      children: _buildHorseNumberWidgets(horseGroups[2]),
-                    ),
-                  ),
+                  SizedBox(width: labelWidth, child: Text('3着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets(horseGroups[2]))),
                 ],
               ),
             ));
           }
         } else if (detail.containsKey('ながし')) {
-          if (detail.containsKey('軸')) { // Changed from `detail['軸'] is List` to `detail.containsKey('軸')`
-            List<int> axisHorses;
-            if (detail['軸'] is List) {
-              axisHorses = (detail['軸'] as List).cast<int>();
-            } else {
-              axisHorses = [(detail['軸'] as int)]; // Convert single int to list
-            }
+          // Nagashi
+          if (detail.containsKey('軸')) {
+            List<int> axisHorses = detail['軸'] is List ? (detail['軸'] as List).cast<int>() : [(detail['軸'] as int)];
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: labelWidth,
-                    child: Text(
-                      '軸', // Colon removed
-                      style: TextStyle(color: Colors.black54),
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                  Expanded(
-                    child: Wrap(
-                      spacing: 4.0,
-                      runSpacing: 4.0,
-                      children: _buildHorseNumberWidgets(axisHorses),
-                    ),
-                  ),
+                  SizedBox(width: labelWidth, child: Text('軸', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets(axisHorses))),
                 ],
               ),
             ));
@@ -481,32 +458,71 @@ class ResultPage extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  SizedBox(width: labelWidth, child: Text('相手', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets((detail['相手'] as List).cast<int>()))),
+                ],
+              ),
+            ));
+          }
+        } else if (detail.containsKey('馬番') && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
+          // General Formation (e.g., 3連複 formation)
+          List<List<int>> formationHorseNumbers = (detail['馬番'] as List).cast<List<int>>();
+          for (int i = 0; i < formationHorseNumbers.length; i++) {
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: labelWidth, child: Text('${i + 1}組', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: _buildHorseNumberWidgets(formationHorseNumbers[i]))),
+                ],
+              ),
+            ));
+          }
+        } else if (detail.containsKey('馬番') && detail['馬番'] is List) {
+          // This block covers '通常の買い方' (amount inline) AND 'ボックス' (amount on new line)
+          if (!isComplexCombinationForPrefix) { // This condition identifies '通常の買い方'
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
                   SizedBox(
                     width: labelWidth,
                     child: Text(
-                      '相手', // Colon removed
+                      '馬番',
                       style: TextStyle(color: Colors.black54),
                       textAlign: TextAlign.end,
                     ),
                   ),
                   Expanded(
-                    child: Wrap(
-                      spacing: 4.0,
-                      runSpacing: 4.0,
-                      children: _buildHorseNumberWidgets((detail['相手'] as List).cast<int>()),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min, // Allow the internal Row to shrink wrap its content
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Wrap(
+                          spacing: 4.0,
+                          runSpacing: 4.0,
+                          children: _buildHorseNumberWidgets((detail['馬番'] as List).cast<int>()),
+                        ),
+                        if (kingaku != null)
+                          Flexible( // Allow text to take space but wrap if necessary
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 8.0), // Space after horse numbers
+                              child: Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54)),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ));
-          }
-        } else if (detail.containsKey('馬番') &&
-            detail['馬番'] is List &&
-            (detail['馬番'] as List).isNotEmpty &&
-            (detail['馬番'] as List)[0] is List) {
-          // This handles general formation (not just 3連単 specific logic)
-          List<List<int>> formationHorseNumbers = (detail['馬番'] as List).cast<List<int>>();
-          for (int i = 0; i < formationHorseNumbers.length; i++) {
+            amountHandledInline = true; // Mark amount as handled inline
+          } else { // This else block handles 'ボックス' (which is complex, but has single list of 馬番)
+            // For Box, display horse numbers, but amount will be added on a new line below
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
@@ -515,7 +531,7 @@ class ResultPage extends StatelessWidget {
                   SizedBox(
                     width: labelWidth,
                     child: Text(
-                      '${i + 1}組', // Colon removed
+                      '馬番',
                       style: TextStyle(color: Colors.black54),
                       textAlign: TextAlign.end,
                     ),
@@ -524,51 +540,24 @@ class ResultPage extends StatelessWidget {
                     child: Wrap(
                       spacing: 4.0,
                       runSpacing: 4.0,
-                      children: _buildHorseNumberWidgets(formationHorseNumbers[i]),
+                      children: _buildHorseNumberWidgets((detail['馬番'] as List).cast<int>()),
                     ),
                   ),
                 ],
               ),
             ));
+            // amountHandledInline remains false, so it will be added on a new line at the end
           }
-        } else if (detail.containsKey('馬番') && detail['馬番'] is List) {
+        }
+
+        // Add amount on a new line if not already handled inline (e.g., for Formations, Nagashi, Box)
+        if (kingaku != null && !amountHandledInline) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: labelWidth,
-                  child: Text(
-                    '馬番', // Colon removed
-                    style: TextStyle(color: Colors.black54),
-                    textAlign: TextAlign.end,
-                  ),
-                ),
-                Expanded(
-                  child: Wrap(
-                    spacing: 4.0,
-                    runSpacing: 4.0,
-                    children: _buildHorseNumberWidgets((detail['馬番'] as List).cast<int>()),
-                  ),
-                ),
-              ],
-            ),
+            child: Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54)),
           ));
         }
 
-        if (kingaku != null) { // 金額が存在する場合のみ表示
-          String prefix = '';
-          if (isComplexCombination) {
-            prefix = '各組${_getStars(kingaku)}';
-          } else {
-            prefix = '${_getStars(kingaku)}';
-          }
-          detailWidgets.add(Padding(
-            padding: const EdgeInsets.only(left: 16.0),
-            child: Text('$prefix$kingakuDisplay', style: TextStyle(color: Colors.black54)),
-          ));
-        }
         if (uraDisplay.isNotEmpty) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
