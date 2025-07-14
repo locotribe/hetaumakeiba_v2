@@ -7,6 +7,9 @@ import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'dart:ui' as ui; // CustomPainterでRect.fromLTWHを正確に使うために必要
 
+// 新しく作成したカスタム背景ウィジェットをインポート
+import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
+
 class QRScannerPage extends StatefulWidget {
   const QRScannerPage({super.key});
 
@@ -93,9 +96,9 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Scaffoldの背景色を設定
+    // Scaffoldの背景色設定はCustomBackgroundウィジェット内で行うため、ここでは削除します。
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F1F3), // 全体の背景色
+      // backgroundColor: const Color.fromRGBO(231, 234, 234, 1.0), // この行を削除しました
       appBar: AppBar(
         title: const Text('QRコードスキャナー'),
         backgroundColor: Colors.transparent, // AppBarの背景を透明に
@@ -125,11 +128,11 @@ class _QRScannerPageState extends State<QRScannerPage> {
             children: [
               // --- 背景のストライプと特定領域の塗りつぶし ---
               Positioned.fill(
-                child: CustomPaint(
-                  painter: BackgroundPainter(
-                    stripeColor: const Color(0x99CBEAD8), // 半透明60%のストライプ (0x99 = 0.6の透過度)
-                    fillColor: const Color(0xFFADEBE6), // 左から20%-30%の領域を塗る色
-                  ),
+                // BackgroundPainterをCustomBackgroundウィジェットに置き換え
+                child: CustomBackground(
+                  overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0), // 全体の背景色
+                  stripeColor: const Color.fromRGBO(219, 234, 234, 0.6), // R:219 G:234 B:234, 60%半透明
+                  fillColor: const Color.fromRGBO(172, 234, 231, 1.0), // R:172 G:234 B:231
                 ),
               ),
 
@@ -150,7 +153,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
                 ),
               ),
 
-              // --- 中央の半透明角丸四角、テキスト (白いラインは削除) ---
+              // --- 中央の半透明角丸四角、テキスト ---
               // カメラ領域の上に重ねるために、Positionedでカメラと同じ位置に配置
               Positioned(
                 top: cameraTopOffset,
@@ -166,7 +169,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
                         // 半透明30%の角丸四角
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.3),
+                            color: const Color.fromRGBO(255, 255, 255, 0.3), // White with 30% opacity
                             borderRadius: BorderRadius.circular(16.0), // 角丸
                           ),
                         ),
@@ -187,19 +190,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
                   ),
                 ),
               ),
-
-              // --- 下部の読み取り状況表示 ---
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Container(
-                  color: Colors.black.withOpacity(0.6), // 以前のまま
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    '${_qrResults.length} / 2 個のQRコードを読み取りました',
-                    style: const TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                ),
-              ),
+              // --- 下部の読み取り状況表示は削除済み ---
             ],
           );
         },
@@ -208,36 +199,4 @@ class _QRScannerPageState extends State<QRScannerPage> {
   }
 }
 
-// --- CornerLinesPainterクラスは不要になったため削除 ---
-
-// --- BackgroundPainterクラス (変更なし) ---
-class BackgroundPainter extends CustomPainter {
-  final Color stripeColor;
-  final Color fillColor;
-
-  BackgroundPainter({required this.stripeColor, required this.fillColor});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // 縦ストライプの描画
-    final stripePaint = Paint()..color = stripeColor;
-    const double stripeWidth = 2.0; // ストライプの幅
-    const double stripeSpacing = 10.0; // ストライプの間隔 (stripeWidth + space)
-
-    for (double x = 0; x < size.width; x += stripeSpacing) {
-      canvas.drawRect(Rect.fromLTWH(x, 0, stripeWidth, size.height), stripePaint);
-    }
-
-    // 左から20%〜30%の領域を塗る
-    final fillPaint = Paint()..color = fillColor;
-    final double startX = size.width * 0.20;
-    final double endX = size.width * 0.30;
-    canvas.drawRect(Rect.fromLTWH(startX, 0, endX - startX, size.height), fillPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return oldDelegate is BackgroundPainter &&
-        (oldDelegate.stripeColor != stripeColor || oldDelegate.fillColor != fillColor);
-  }
-}
+// --- BackgroundPainterクラスはlib/widgets/custom_background.dartに移動したため、ここから削除しました ---
