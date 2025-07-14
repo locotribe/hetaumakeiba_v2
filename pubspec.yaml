@@ -12,7 +12,7 @@ dependencies:
     sdk: flutter
   flutter_localizations: # <--- 修正点: flutter_localizations パッケージを別途指定
     sdk: flutter         # <--- 修正点: flutter_localizations も sdk: flutter が必要
-  mobile_scanner: ^3.5.0
+  mobile_scanner: ^7.0.1
   sqflite: ^2.3.0
   path_provider: ^2.1.1
   http: ^1.2.0

@@ -163,7 +163,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   ElevatedButton(
                     onPressed: _openQRScanner,
-                    child: const Text("QRコード読み取り"),
+                    child: const Text("馬券読み取り"),
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
@@ -172,12 +172,12 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: const Text("全データを削除", style: TextStyle(color: Colors.white)),
                   ),
                   const SizedBox(height: 16),
-                  const Text('保存されたQRコードデータ:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  const Text('保存された馬券:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                   Expanded(
                     child: _qrDataList.isEmpty
                         ? const Center(
                       child: Text(
-                        'まだ読み込まれたQRコードはありません。',
+                        'まだ読み込まれた馬券はありません。',
                         style: TextStyle(color: Colors.black54),
                       ),
                     )

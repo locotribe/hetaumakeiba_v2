@@ -1,4 +1,4 @@
-// lib/db/database_helper.dart の修正点
+// lib/db/database_helper.dart
 
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -24,7 +24,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 1, // バージョンを1のまま維持
       onCreate: _onCreate,
     );
   }
@@ -55,7 +55,6 @@ class DatabaseHelper {
     });
   }
 
-  // ==== ここから追加/修正 ====
   // 特定のIDのデータを削除
   Future<int> deleteQrData(int id) async {
     final db = await database;
@@ -65,11 +64,24 @@ class DatabaseHelper {
       whereArgs: [id],
     );
   }
-  // ==== ここまで追加/修正 ====
 
-  // 全データの削除 (既存のメソッド)
+  // 全データの削除
   Future<int> deleteAllQrData() async {
     final db = await database;
     return await db.delete('qr_codes');
   }
+
+  // ==== ここから新しいメソッドの追加 ====
+  /// 指定されたQRコードがデータベースに存在するかどうかを確認します。
+  Future<bool> qrCodeExists(String qrCode) async {
+    final db = await database;
+    final List<Map<String, dynamic>> result = await db.query(
+      'qr_codes',
+      where: 'qr_code = ?',
+      whereArgs: [qrCode],
+      limit: 1, // 1件見つかれば十分
+    );
+    return result.isNotEmpty;
+  }
+// ==== ここまで新しいメソッドの追加 ====
 }

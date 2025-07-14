@@ -13,7 +13,7 @@ class ResultPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final prettyJson = parsedResult != null
         ? JsonEncoder.withIndent('  ').convert(parsedResult)
-        : 'QRコードの読み取りに失敗しました';
+        : '馬券の読み取りに失敗しました';
 
     // 合計金額を計算
     int totalAmount = 0;
