@@ -5,12 +5,10 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'dart:ui' as ui; // CustomPainterでRect.fromLTWHを正確に使うために必要
+import 'dart:ui' as ui;
 
-// 新しく作成したカスタム背景ウィジェットをインポート
+// CustomBackgroundウィジェットをインポート
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-// Font Awesome Iconsのインポートは削除しました
-// dart:math のインポートも削除しました
 
 class QRScannerPage extends StatefulWidget {
   const QRScannerPage({super.key});
@@ -170,6 +168,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
       }
     }
 
+    // 解析結果をResultPageに渡すためにポップ
     Navigator.of(context).pop(parsedData);
   }
 
@@ -178,9 +177,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('馬券スキャナー'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        // flexibleSpace のアイコン表示部分は削除しました
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -287,42 +285,10 @@ class _QRScannerPageState extends State<QRScannerPage> {
                     ),
                   ),
                 ),
-
-              // フッターのアイコン表示部分は削除しました
             ],
           );
         },
       ),
     );
-  }
-}
-
-// BackgroundPainterクラス (変更なし)
-class BackgroundPainter extends CustomPainter {
-  final Color stripeColor;
-  final Color fillColor;
-
-  BackgroundPainter({required this.stripeColor, required this.fillColor});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final stripePaint = Paint()..color = stripeColor;
-    const double stripeWidth = 2.0;
-    const double stripeSpacing = 10.0;
-
-    for (double x = 0; x < size.width; x += stripeSpacing) {
-      canvas.drawRect(Rect.fromLTWH(x, 0, stripeWidth, size.height), stripePaint);
-    }
-
-    final fillPaint = Paint()..color = fillColor;
-    final double startX = size.width * 0.20;
-    final double endX = size.width * 0.30;
-    canvas.drawRect(Rect.fromLTWH(startX, 0, endX - startX, size.height), fillPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return oldDelegate is BackgroundPainter &&
-        (oldDelegate.stripeColor != stripeColor || oldDelegate.fillColor != fillColor);
   }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
+import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // 次のスキャンボタンのために必要
 import 'dart:convert'; // JsonEncoderを使用
 
 class ResultPage extends StatelessWidget {
@@ -38,6 +38,7 @@ class ResultPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('解析結果'),
         backgroundColor: Colors.green,
+        // ここに標準の戻るボタンが自動的に表示される
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -208,36 +209,25 @@ class ResultPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            // 新しい「次の馬券を登録」ボタン
             ElevatedButton(
               onPressed: () async {
-                // QRScannerPageをプッシュし、結果が返ってきたらResultPageを置き換える
-                final newScanResult = await Navigator.of(context).push<Map<String, dynamic>>(
+                // 現在のResultPageを破棄し、QRScannerPageをプッシュ
+                Navigator.of(context).pushReplacement(
                   MaterialPageRoute(builder: (_) => const QRScannerPage()),
                 );
-
-                if (newScanResult != null) {
-                  // 新しいスキャン結果があれば、現在のResultPageを新しいResultPageで置き換える
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => ResultPage(parsedResult: newScanResult)),
-                  );
-                }
-                // newScanResultがnullの場合（スキャナーで戻るボタンを押した場合）、何もしないで現在のResultPageに留まる
               },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                 textStyle: const TextStyle(fontSize: 18),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              child: const Text('次の馬券を登録'),
+              child: const Text('次の馬券を読み込む'),
             ),
             const SizedBox(height: 10), // ボタン間のスペース
-
-            // 元のボタンを「トップ画面に戻る」に変更
             ElevatedButton(
               onPressed: () {
-                // 現在のResultPageをポップして、その下の画面（MyHomePage）に戻る
-                Navigator.of(context).pop();
+                // ナビゲーションスタックをクリアしてトップ画面に戻る
+                Navigator.of(context).popUntil((route) => route.isFirst);
               },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
