@@ -61,48 +61,64 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   int _selectedIndex = 0; // 現在選択されているタブのインデックス
 
+  // 各タブのNavigatorに割り当てるGlobalKey
+  final List<GlobalKey<NavigatorState>> _navigatorKeys = [
+    GlobalKey<NavigatorState>(), // For Home tab
+    GlobalKey<NavigatorState>(), // For Saved tab
+    GlobalKey<NavigatorState>(), // For Scan tab
+  ];
+
   // 各タブに対応するウィジェットのリスト
   // それぞれのタブが独自のナビゲーションスタックを持つようにNavigatorでラップ
-  static final List<Widget> _widgetOptions = <Widget>[
-    // ホームタブ
-    Navigator(
-      onGenerateRoute: (settings) {
-        return MaterialPageRoute(builder: (context) => const HomePage());
-      },
-    ),
-    // 保存済みタブ
-    Navigator(
-      onGenerateRoute: (settings) {
-        Widget page;
-        if (settings.name == '/detail') {
-          final qrData = settings.arguments as QrData;
-          page = SavedTicketDetailPage(qrData: qrData);
-        } else {
-          page = const SavedTicketsListPage();
-        }
-        return MaterialPageRoute(builder: (context) => page);
-      },
-    ),
-    // スキャンタブ
-    Navigator(
-      onGenerateRoute: (settings) {
-        Widget page;
-        if (settings.name == '/camera_scanner') {
-          final args = settings.arguments as Map<String, dynamic>?;
-          page = QRScannerPage(scanMethod: args?['scanMethod'] ?? 'camera');
-        } else if (settings.name == '/gallery_scanner') {
-          final args = settings.arguments as Map<String, dynamic>?;
-          page = GalleryQrScannerPage(scanMethod: args?['scanMethod'] ?? 'gallery');
-        } else if (settings.name == '/result') {
-          final args = settings.arguments as Map<String, dynamic>?;
-          page = ResultPage(parsedResult: args);
-        } else {
-          page = const ScanSelectionPage();
-        }
-        return MaterialPageRoute(builder: (context) => page);
-      },
-    ),
-  ];
+  late final List<Widget> _widgetOptions; // late を使用してinitStateで初期化
+
+  @override
+  void initState() {
+    super.initState();
+    _widgetOptions = <Widget>[
+      // ホームタブ
+      Navigator(
+        key: _navigatorKeys[0], // Keyを割り当て
+        onGenerateRoute: (settings) {
+          return MaterialPageRoute(builder: (context) => const HomePage());
+        },
+      ),
+      // 保存済みタブ
+      Navigator(
+        key: _navigatorKeys[1], // Keyを割り当て
+        onGenerateRoute: (settings) {
+          Widget page;
+          if (settings.name == '/detail') {
+            final qrData = settings.arguments as QrData;
+            page = SavedTicketDetailPage(qrData: qrData);
+          } else {
+            page = const SavedTicketsListPage();
+          }
+          return MaterialPageRoute(builder: (context) => page);
+        },
+      ),
+      // スキャンタブ
+      Navigator(
+        key: _navigatorKeys[2], // Keyを割り当て
+        onGenerateRoute: (settings) {
+          Widget page;
+          if (settings.name == '/camera_scanner') {
+            final args = settings.arguments as Map<String, dynamic>?;
+            page = QRScannerPage(scanMethod: args?['scanMethod'] ?? 'camera');
+          } else if (settings.name == '/gallery_scanner') {
+            final args = settings.arguments as Map<String, dynamic>?;
+            page = GalleryQrScannerPage(scanMethod: args?['scanMethod'] ?? 'gallery');
+          } else if (settings.name == '/result') {
+            final args = settings.arguments as Map<String, dynamic>?;
+            page = ResultPage(parsedResult: args);
+          } else {
+            page = const ScanSelectionPage();
+          }
+          return MaterialPageRoute(builder: (context) => page);
+        },
+      ),
+    ];
+  }
 
   // 各タブのタイトル
   static const List<String> _appBarTitles = <String>[
@@ -125,16 +141,16 @@ class _MyHomePageState extends State<MyHomePage> {
         title: Text(_appBarTitles[_selectedIndex]), // 選択されたタブに応じてタイトルを変更
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
-        // 各タブのルートにいる場合のみ戻るボタンを表示
-        leading: _selectedIndex == 0 || _selectedIndex == 1 && Navigator.of(context).canPop() || _selectedIndex == 2 && Navigator.of(context).canPop()
+        // 現在のタブのNavigatorがpopできる場合のみ戻るボタンを表示
+        leading: _navigatorKeys[_selectedIndex].currentState?.canPop() == true
             ? IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
             // 現在のタブのNavigatorでpopを試みる
-            Navigator.of(context).pop();
+            _navigatorKeys[_selectedIndex].currentState?.pop();
           },
         )
-            : null,
+            : null, // popできない場合は戻るボタンを表示しない
       ),
       body: IndexedStack(
         index: _selectedIndex,
