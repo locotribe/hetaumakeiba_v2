@@ -32,14 +32,13 @@ class _ScanSelectionPageState extends State<ScanSelectionPage> {
               ElevatedButton(
                 onPressed: () async {
                   // カメラで馬券をスキャンするページへ遷移し、結果を待つ
-                  final result = await Navigator.push<Map<String, dynamic>>(
-                    context,
-                    MaterialPageRoute(builder: (_) => const QRScannerPage()),
+                  // スキャン方法を示す文字列 'camera' を渡す
+                  final result = await Navigator.of(context, rootNavigator: false).push<Map<String, dynamic>>( // rootNavigator: false を追加
+                    MaterialPageRoute(builder: (_) => const QRScannerPage(scanMethod: 'camera')),
                   );
                   // スキャン結果があればResultPageへ遷移
                   if (result != null) {
-                    Navigator.push(
-                      context,
+                    Navigator.of(context, rootNavigator: false).pushReplacement( // rootNavigator: false を追加
                       MaterialPageRoute(builder: (_) => ResultPage(parsedResult: result)),
                     );
                   }
@@ -55,14 +54,13 @@ class _ScanSelectionPageState extends State<ScanSelectionPage> {
               ElevatedButton(
                 onPressed: () async {
                   // ギャラリーから馬券を読み込むページへ遷移し、結果を待つ
-                  final result = await Navigator.push<Map<String, dynamic>>(
-                    context,
-                    MaterialPageRoute(builder: (_) => const GalleryQrScannerPage()),
+                  // スキャン方法を示す文字列 'gallery' を渡す
+                  final result = await Navigator.of(context, rootNavigator: false).push<Map<String, dynamic>>( // rootNavigator: false を追加
+                    MaterialPageRoute(builder: (_) => const GalleryQrScannerPage(scanMethod: 'gallery')),
                   );
                   // スキャン結果があればResultPageへ遷移
                   if (result != null) {
-                    Navigator.push(
-                      context,
+                    Navigator.of(context, rootNavigator: false).pushReplacement( // rootNavigator: false を追加
                       MaterialPageRoute(builder: (_) => ResultPage(parsedResult: result)),
                     );
                   }

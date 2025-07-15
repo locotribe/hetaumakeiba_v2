@@ -151,8 +151,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                           ),
                           onTap: () async {
                             // ResultPageではなくSavedTicketDetailPageに遷移するように変更
-                            Navigator.push(
-                              context,
+                            // rootNavigator: false を追加して現在のタブのNavigatorを使用
+                            Navigator.of(context, rootNavigator: false).push(
                               MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: qrData)),
                             );
                           },

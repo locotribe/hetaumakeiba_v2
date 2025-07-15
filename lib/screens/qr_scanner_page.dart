@@ -11,7 +11,9 @@ import 'dart:ui' as ui;
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 
 class QRScannerPage extends StatefulWidget {
-  const QRScannerPage({super.key});
+  final String scanMethod; // スキャン方法を受け取るためのプロパティ
+
+  const QRScannerPage({super.key, this.scanMethod = 'unknown'}); // デフォルト値を設定
 
   @override
   State<QRScannerPage> createState() => _QRScannerPageState();
@@ -168,127 +170,124 @@ class _QRScannerPageState extends State<QRScannerPage> {
       }
     }
 
-    // 解析結果をResultPageに渡すためにポップ
-    Navigator.of(context).pop(parsedData);
+    // 解析結果とスキャン方法をResultPageに渡すためにポップ
+    Navigator.of(context).pop({
+      'parsedData': parsedData,
+      'scanMethod': widget.scanMethod, // スキャン方法を結果に含める
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('馬券スキャナー'),
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final screenHeight = constraints.maxHeight;
-          final screenWidth = constraints.maxWidth;
+    // ScaffoldとAppBarを削除し、直接コンテンツを返すように変更
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenHeight = constraints.maxHeight;
+        final screenWidth = constraints.maxWidth;
 
-          final cameraHeight = screenHeight * 0.7;
-          final cameraWidth = cameraHeight * (16 / 9);
+        final cameraHeight = screenHeight * 0.7;
+        final cameraWidth = cameraHeight * (16 / 9);
 
-          final actualCameraWidth = (cameraWidth > screenWidth) ? screenWidth : cameraWidth;
-          final actualCameraHeight = actualCameraWidth * (9 / 16);
+        final actualCameraWidth = (cameraWidth > screenWidth) ? screenWidth : cameraWidth;
+        final actualCameraHeight = actualCameraWidth * (9 / 16);
 
-          final cameraTopOffset = screenHeight * 0.3;
+        final cameraTopOffset = screenHeight * 0.3;
 
-          final scanAreaSize = actualCameraWidth * 0.8;
+        final scanAreaSize = actualCameraWidth * 0.8;
 
-          return Stack(
-            children: [
-              // 背景のストライプと特定領域の塗りつぶし
-              Positioned.fill(
-                child: CustomBackground(
-                  overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-                  stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
-                  fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
-                ),
+        return Stack(
+          children: [
+            // 背景のストライプと特定領域の塗りつぶし
+            Positioned.fill(
+              child: CustomBackground(
+                overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
+                stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
+                fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
               ),
+            ),
 
-              // カメラプレビュー (16:9で上から30%に配置)
-              Positioned(
-                top: cameraTopOffset,
-                left: (screenWidth - actualCameraWidth) / 2,
-                width: actualCameraWidth,
-                height: actualCameraHeight,
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: ClipRect(
-                    child: MobileScanner(
-                      controller: _scannerController,
-                      onDetect: _onDetect,
-                    ),
+            // カメラプレビュー (16:9で上から30%に配置)
+            Positioned(
+              top: cameraTopOffset,
+              left: (screenWidth - actualCameraWidth) / 2,
+              width: actualCameraWidth,
+              height: actualCameraHeight,
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: ClipRect(
+                  child: MobileScanner(
+                    controller: _scannerController,
+                    onDetect: _onDetect,
                   ),
                 ),
               ),
+            ),
 
-              // 中央の半透明角丸四角、テキスト
-              Positioned(
-                top: cameraTopOffset,
-                left: (screenWidth - actualCameraWidth) / 2,
-                width: actualCameraWidth,
-                height: actualCameraHeight,
-                child: Center(
-                  child: SizedBox(
-                    width: scanAreaSize,
-                    height: scanAreaSize,
-                    child: Stack(
-                      children: [
-                        // 半透明30%の角丸四角
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color.fromRGBO(255, 255, 255, 0.3),
-                            borderRadius: BorderRadius.circular(16.0),
-                          ),
-                        ),
-                        // 中央のテキスト
-                        const Center(
-                          child: Text(
-                            '馬券を読み込んでください',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // 重複メッセージ表示UI
-              if (_isShowingDuplicateMessage)
-                Positioned.fill(
-                  child: Container(
-                    color: Colors.black.withOpacity(0.6),
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(20.0),
+            // 中央の半透明角丸四角、テキスト
+            Positioned(
+              top: cameraTopOffset,
+              left: (screenWidth - actualCameraWidth) / 2,
+              width: actualCameraWidth,
+              height: actualCameraHeight,
+              child: Center(
+                child: SizedBox(
+                  width: scanAreaSize,
+                  height: scanAreaSize,
+                  child: Stack(
+                    children: [
+                      // 半透明30%の角丸四角
+                      Container(
                         decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(10.0),
+                          color: const Color.fromRGBO(255, 255, 255, 0.3),
+                          borderRadius: BorderRadius.circular(16.0),
                         ),
-                        child: const Text(
-                          'この馬券はすでに読み込みました',
+                      ),
+                      // 中央のテキスト
+                      const Center(
+                        child: Text(
+                          '馬券を読み込んでください',
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 20,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                           textAlign: TextAlign.center,
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // 重複メッセージ表示UI
+            if (_isShowingDuplicateMessage)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withOpacity(0.6),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(20.0),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(10.0),
+                      ),
+                      child: const Text(
+                        'この馬券はすでに読み込みました',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
                 ),
-            ],
-          );
-        },
-      ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
