@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // カメラQRスキャナーページをインポート
-import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart'; // ギャラリーQRスキャナーページをインポート
+// QRScannerPage や GalleryQrScannerPage は直接プッシュしなくなるため、インポートは不要になる可能性がありますが、
+// _currentScanMethod を保持するロジックの簡略化のため、ここでは残しておきます。
+// import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
+// import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/scan_selection_page.dart'; // スキャン選択ページをインポート
 import 'dart:convert'; // JsonEncoderを使用
 
 // StatefulWidget に変更
 class ResultPage extends StatefulWidget {
   final Map<String, dynamic>? parsedResult;
-  final String? previousScanMethod; // 直前のスキャン方法を受け取るためのプロパティ
+  // previousScanMethod は直接遷移に使わなくなるため、削除またはコメントアウト
+  // final String? previousScanMethod; // コンストラクタから削除
 
-  const ResultPage({super.key, this.parsedResult, this.previousScanMethod});
+  const ResultPage({super.key, this.parsedResult}); // previousScanMethod をコンストラクタから削除
 
   @override
   State<ResultPage> createState() => _ResultPageState();
@@ -26,7 +29,7 @@ class _ResultPageState extends State<ResultPage> {
   void initState() {
     super.initState();
     _parsedResult = widget.parsedResult?['parsedData']; // 'parsedData'キーから実際の解析結果を取得
-    _currentScanMethod = widget.parsedResult?['scanMethod'] ?? widget.previousScanMethod ?? 'unknown'; // スキャン方法を取得
+    _currentScanMethod = widget.parsedResult?['scanMethod'] ?? 'unknown'; // スキャン方法を取得
   }
 
   // parsedResult が更新された場合に State を更新する
@@ -36,7 +39,7 @@ class _ResultPageState extends State<ResultPage> {
     if (widget.parsedResult != oldWidget.parsedResult) {
       setState(() {
         _parsedResult = widget.parsedResult?['parsedData'];
-        _currentScanMethod = widget.parsedResult?['scanMethod'] ?? widget.previousScanMethod ?? 'unknown';
+        _currentScanMethod = widget.parsedResult?['scanMethod'] ?? 'unknown';
       });
     }
   }
@@ -65,8 +68,8 @@ class _ResultPageState extends State<ResultPage> {
       salesLocation = _parsedResult!['発売所'] as String;
     }
 
-    // ScaffoldとAppBarを削除し、直接コンテンツを返すように変更
-    return Padding(
+
+    return Padding( // This is the root of ResultPage after Scaffold/AppBar removal
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -234,46 +237,47 @@ class _ResultPageState extends State<ResultPage> {
               ),
             ),
           ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: () async {
-              // 直前のスキャン方法に基づいて次のスキャン画面に直接遷移
-              if (_currentScanMethod == 'camera') {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const QRScannerPage(scanMethod: 'camera')),
-                );
-              } else if (_currentScanMethod == 'gallery') {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const GalleryQrScannerPage(scanMethod: 'gallery')),
-                );
-              } else {
-                // どちらでもない場合は、スキャン選択ページに戻る（フォールバック）
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const ScanSelectionPage()),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-              textStyle: const TextStyle(fontSize: 18),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('次の馬券を読み込む'),
-          ),
-          const SizedBox(height: 10), // ボタン間のスペース
-          ElevatedButton(
-            onPressed: () {
-              // ナビゲーションスタックをクリアしてトップ画面に戻る
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            },
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-              textStyle: const TextStyle(fontSize: 18),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              backgroundColor: Colors.grey, // 差別化のために色を変更
-            ),
-            child: const Text('トップ画面に戻る'),
-          ),
+          // ResultPageがオーバーレイとして使用されるため、これらのボタンはQRScannerPageのオーバーレイに移動
+          // const SizedBox(height: 20),
+          // ElevatedButton(
+          //   onPressed: () async {
+          //     // 直前のスキャン方法に基づいて次のスキャン画面に直接遷移 (pushReplacementに戻す)
+          //     if (_currentScanMethod == 'camera') {
+          //       Navigator.of(context, rootNavigator: false).pushReplacement(
+          //         MaterialPageRoute(builder: (_) => const QRScannerPage(scanMethod: 'camera')),
+          //       );
+          //     } else if (_currentScanMethod == 'gallery') {
+          //       Navigator.of(context, rootNavigator: false).pushReplacement(
+          //         MaterialPageRoute(builder: (_) => const GalleryQrScannerPage(scanMethod: 'gallery')),
+          //       );
+          //     } else {
+          //       // どちらでもない場合は、スキャン選択ページに戻る（フォールバック）
+          //       Navigator.of(context, rootNavigator: false).pushReplacement(
+          //         MaterialPageRoute(builder: (_) => const ScanSelectionPage()),
+          //       );
+          //     }
+          //   },
+          //   style: ElevatedButton.styleFrom(
+          //     padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+          //     textStyle: const TextStyle(fontSize: 18),
+          //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          //   ),
+          //   child: const Text('次の馬券を読み込む'),
+          // ),
+          // const SizedBox(height: 10), // ボタン間のスペース
+          // ElevatedButton(
+          //   onPressed: () {
+          //     // ナビゲーションスタックをクリアしてトップ画面に戻る
+          //     Navigator.of(context).popUntil((route) => route.isFirst);
+          //   },
+          //   style: ElevatedButton.styleFrom(
+          //     padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+          //     textStyle: const TextStyle(fontSize: 18),
+          //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          //     backgroundColor: Colors.grey, // 差別化のために色を変更
+          //   ),
+          //   child: const Text('トップ画面に戻る'),
+          // ),
         ],
       ),
     );
@@ -394,7 +398,7 @@ class _ResultPageState extends State<ResultPage> {
       // その他の買い方の場合
       return purchaseDetails.map((detail) {
         String shikibetsu = detail['式別'] ?? '';
-        String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : '';
+        String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : ''; // Typo fixed: nagashi
         int? kingaku = detail['購入金額'];
         String kingakuDisplay = kingaku != null ? '${kingaku}円' : '';
         String uraDisplay = (detail['ウラ'] != null) ? 'ウラ: ${detail['ウラ']}' : '';

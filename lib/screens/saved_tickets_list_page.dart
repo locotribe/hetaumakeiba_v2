@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart'; // parseHorseracingTicketQr は SavedTicketDetailPage で使用
 import 'package:hetaumakeiba_v2/screens/saved_ticket_detail_page.dart'; // 新しい詳細ページをインポート
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart'; // 背景もここで管理
 
@@ -97,7 +97,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   @override
   Widget build(BuildContext context) {
     print('DEBUG: SavedTicketsListPage: build called. _qrDataList.length: ${_qrDataList.length}');
-    // ScaffoldとAppBarを削除し、Stackウィジェットを直接返すように変更
     return Stack(
       children: [
         Positioned.fill(
@@ -150,8 +149,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                             onPressed: () => _deleteQrData(qrData.id!),
                           ),
                           onTap: () async {
-                            // ResultPageではなくSavedTicketDetailPageに遷移するように変更
-                            // rootNavigator: false を追加して現在のタブのNavigatorを使用
+                            // SavedTicketDetailPageに遷移し、QrDataオブジェクトを直接渡す
                             Navigator.of(context, rootNavigator: false).push(
                               MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: qrData)),
                             );

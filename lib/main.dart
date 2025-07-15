@@ -7,7 +7,7 @@ import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart'; // 保存
 import 'package:hetaumakeiba_v2/screens/scan_selection_page.dart'; // スキャン選択画面
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // カメラQRスキャナーページ
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart'; // ギャラリーQRスキャナーページ
-import 'package:hetaumakeiba_v2/screens/result_page.dart'; // 解析結果ページ
+// import 'package:hetaumakeiba_v2/screens/result_page.dart'; // 解析結果ページ (オーバーレイとして使用されるため、ここではインポート不要)
 import 'package:hetaumakeiba_v2/screens/saved_ticket_detail_page.dart'; // 保存済み馬券詳細ページ
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart'; // QrDataモデル
 
@@ -68,8 +68,10 @@ class _MyHomePageState extends State<MyHomePage> {
     GlobalKey<NavigatorState>(), // For Scan tab
   ];
 
+  // SavedTicketsListPageState にアクセスするためのGlobalKey
+  final GlobalKey<SavedTicketsListPageState> _savedTicketsListKey = GlobalKey<SavedTicketsListPageState>();
+
   // 各タブに対応するウィジェットのリスト
-  // それぞれのタブが独自のナビゲーションスタックを持つようにNavigatorでラップ
   late final List<Widget> _widgetOptions; // late を使用してinitStateで初期化
 
   @override
@@ -92,7 +94,7 @@ class _MyHomePageState extends State<MyHomePage> {
             final qrData = settings.arguments as QrData;
             page = SavedTicketDetailPage(qrData: qrData);
           } else {
-            page = const SavedTicketsListPage();
+            page = SavedTicketsListPage(key: _savedTicketsListKey); // Keyを割り当て
           }
           return MaterialPageRoute(builder: (context) => page);
         },
@@ -104,15 +106,18 @@ class _MyHomePageState extends State<MyHomePage> {
           Widget page;
           if (settings.name == '/camera_scanner') {
             final args = settings.arguments as Map<String, dynamic>?;
-            page = QRScannerPage(scanMethod: args?['scanMethod'] ?? 'camera');
+            page = QRScannerPage(
+              scanMethod: args?['scanMethod'] ?? 'camera',
+              savedListKey: _savedTicketsListKey, // Keyを渡す
+            );
           } else if (settings.name == '/gallery_scanner') {
             final args = settings.arguments as Map<String, dynamic>?;
-            page = GalleryQrScannerPage(scanMethod: args?['scanMethod'] ?? 'gallery');
-          } else if (settings.name == '/result') {
-            final args = settings.arguments as Map<String, dynamic>?;
-            page = ResultPage(parsedResult: args);
+            page = GalleryQrScannerPage(
+              scanMethod: args?['scanMethod'] ?? 'gallery',
+              savedListKey: _savedTicketsListKey, // Keyを渡す
+            );
           } else {
-            page = const ScanSelectionPage();
+            page = ScanSelectionPage(savedListKey: _savedTicketsListKey); // Keyを渡す
           }
           return MaterialPageRoute(builder: (context) => page);
         },
@@ -129,6 +134,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
   // BottomNavigationBarのアイテムがタップされたときの処理
   void _onItemTapped(int index) {
+    // スキャンタブに切り替える際に、そのタブのナビゲーションスタックをリセット
+    if (index == 2 && _selectedIndex != 2) { // スキャンタブへの切り替え時のみ
+      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+    }
+    // 保存済みタブに切り替える際に、データをリロード
+    if (index == 1 && _selectedIndex != 1) { // 保存済みタブへの切り替え時のみ
+      _savedTicketsListKey.currentState?.loadData();
+    }
     setState(() {
       _selectedIndex = index;
     });

@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart'; // 背景ウィジェットをインポート
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // カメラQRスキャナーページをインポート
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart'; // ギャラリーQRスキャナーページをインポート
-import 'package:hetaumakeiba_v2/screens/result_page.dart'; // 解析結果ページをインポート
+import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart'; // SavedTicketsListPageState のキーのためにインポート
 
 class ScanSelectionPage extends StatefulWidget {
-  const ScanSelectionPage({super.key});
+  final GlobalKey<SavedTicketsListPageState> savedListKey; // Keyを受け取る
+
+  const ScanSelectionPage({super.key, required this.savedListKey}); // コンストラクタに追加
 
   @override
   State<ScanSelectionPage> createState() => _ScanSelectionPageState();
@@ -31,17 +33,14 @@ class _ScanSelectionPageState extends State<ScanSelectionPage> {
             children: [
               ElevatedButton(
                 onPressed: () async {
-                  // カメラで馬券をスキャンするページへ遷移し、結果を待つ
-                  // スキャン方法を示す文字列 'camera' を渡す
-                  final result = await Navigator.of(context, rootNavigator: false).push<Map<String, dynamic>>( // rootNavigator: false を追加
-                    MaterialPageRoute(builder: (_) => const QRScannerPage(scanMethod: 'camera')),
+                  // カメラで馬券をスキャンするページへ遷移
+                  // スキャン方法と savedListKey を渡す
+                  Navigator.of(context, rootNavigator: false).push(
+                    MaterialPageRoute(builder: (_) => QRScannerPage(
+                      scanMethod: 'camera',
+                      savedListKey: widget.savedListKey, // Keyを渡す
+                    )),
                   );
-                  // スキャン結果があればResultPageへ遷移
-                  if (result != null) {
-                    Navigator.of(context, rootNavigator: false).pushReplacement( // rootNavigator: false を追加
-                      MaterialPageRoute(builder: (_) => ResultPage(parsedResult: result)),
-                    );
-                  }
                 },
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15), // パディング
@@ -53,17 +52,14 @@ class _ScanSelectionPageState extends State<ScanSelectionPage> {
               const SizedBox(height: 20), // ボタン間のスペース
               ElevatedButton(
                 onPressed: () async {
-                  // ギャラリーから馬券を読み込むページへ遷移し、結果を待つ
-                  // スキャン方法を示す文字列 'gallery' を渡す
-                  final result = await Navigator.of(context, rootNavigator: false).push<Map<String, dynamic>>( // rootNavigator: false を追加
-                    MaterialPageRoute(builder: (_) => const GalleryQrScannerPage(scanMethod: 'gallery')),
+                  // ギャラリーから馬券を読み込むページへ遷移
+                  // スキャン方法と savedListKey を渡す
+                  Navigator.of(context, rootNavigator: false).push(
+                    MaterialPageRoute(builder: (_) => GalleryQrScannerPage(
+                      scanMethod: 'gallery',
+                      savedListKey: widget.savedListKey, // Keyを渡す
+                    )),
                   );
-                  // スキャン結果があればResultPageへ遷移
-                  if (result != null) {
-                    Navigator.of(context, rootNavigator: false).pushReplacement( // rootNavigator: false を追加
-                      MaterialPageRoute(builder: (_) => ResultPage(parsedResult: result)),
-                    );
-                  }
                 },
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15), // パディング
