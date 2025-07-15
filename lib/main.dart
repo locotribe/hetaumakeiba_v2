@@ -1,11 +1,10 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
-import 'package:hetaumakeiba_v2/screens/result_page.dart';
-// SavedTicketsListPage のインポートパスを更新
-import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
-
+// 各画面をインポート
+import 'package:hetaumakeiba_v2/screens/home_page.dart'; // 新規作成したホーム画面
+import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart'; // 保存済みリスト画面
+import 'package:hetaumakeiba_v2/screens/scan_selection_page.dart'; // スキャン選択画面
 
 void main() {
   runApp(const MyApp());
@@ -49,78 +48,66 @@ class MyApp extends StatelessWidget {
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key});
+
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  // BottomNavigationBar関連のコードを削除
+  int _selectedIndex = 0; // 現在選択されているタブのインデックス
+
+  // 各タブに対応するウィジェットのリスト
+  // ここで各画面のインスタンスを作成します
+  static final List<Widget> _widgetOptions = <Widget>[
+    const HomePage(), // ホーム画面
+    const SavedTicketsListPage(), // 保存済みリスト画面
+    const ScanSelectionPage(), // スキャン選択画面
+  ];
+
+  // 各タブのタイトル
+  static const List<String> _appBarTitles = <String>[
+    '馬券QRリーダー', // ホーム
+    '保存された馬券', // 保存済み
+    'スキャン選択', // スキャン
+  ];
+
+  // BottomNavigationBarのアイテムがタップされたときの処理
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("馬券QRリーダー"),
+        title: Text(_appBarTitles[_selectedIndex]), // 選択されたタブに応じてタイトルを変更
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ElevatedButton(
-              onPressed: () async {
-                // QRScannerPageへ遷移
-                final result = await Navigator.of(context).push<Map<String, dynamic>>(
-                  MaterialPageRoute(builder: (_) => const QRScannerPage()),
-                );
-                // スキャン結果があればResultPageへ遷移
-                if (result != null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => ResultPage(parsedResult: result)),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                textStyle: const TextStyle(fontSize: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: const Text('馬券を読み込む'),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // 保存した馬券リスト画面へ遷移
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SavedTicketsListPage()),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                textStyle: const TextStyle(fontSize: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                backgroundColor: Colors.blue, // 色を差別化
-              ),
-              child: const Text('保存した馬券を見る'),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('ギャラリーからの読み込み機能はまだ利用できません。')),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                textStyle: const TextStyle(fontSize: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                backgroundColor: Colors.blueGrey, // 色を差別化
-              ),
-              child: const Text('ギャラリーから読み込む (未実装)'),
-            ),
-          ],
-        ),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _widgetOptions, // 選択されたタブのウィジェットを表示
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home), // ホームアイコン
+            label: 'ホーム',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.list_alt), // 保存済みリストのアイコン
+            label: '保存済み',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.qr_code_scanner), // スキャンのアイコン
+            label: 'スキャン',
+          ),
+        ],
+        currentIndex: _selectedIndex, // 現在選択されているインデックス
+        selectedItemColor: Theme.of(context).primaryColor, // 選択されたアイテムの色
+        onTap: _onItemTapped, // タップ時の処理
       ),
     );
   }

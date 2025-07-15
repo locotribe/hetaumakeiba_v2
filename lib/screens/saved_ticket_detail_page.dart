@@ -1,46 +1,43 @@
+// lib/screens/saved_ticket_detail_page.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // 次のスキャンボタンのために必要
-import 'package:hetaumakeiba_v2/screens/scan_selection_page.dart'; // 新しいスキャン選択ページをインポート
+import 'package:hetaumakeiba_v2/models/qr_data_model.dart'; // QrDataモデルをインポート
+import 'package:hetaumakeiba_v2/logic/parse.dart'; // 解析ロジックをインポート
 import 'dart:convert'; // JsonEncoderを使用
+import 'package:hetaumakeiba_v2/widgets/custom_background.dart'; // 背景ウィジェットをインポート
 
-// StatefulWidget に変更
-class ResultPage extends StatefulWidget {
-  final Map<String, dynamic>? parsedResult;
+class SavedTicketDetailPage extends StatefulWidget {
+  final QrData qrData; // 表示するQrDataオブジェクトを受け取る
 
-  const ResultPage({super.key, this.parsedResult});
+  const SavedTicketDetailPage({super.key, required this.qrData});
 
   @override
-  State<ResultPage> createState() => _ResultPageState();
+  State<SavedTicketDetailPage> createState() => _SavedTicketDetailPageState();
 }
 
-class _ResultPageState extends State<ResultPage> {
-  // parsedResult を State の変数として管理
+class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
   Map<String, dynamic>? _parsedResult;
 
   @override
   void initState() {
     super.initState();
-    _parsedResult = widget.parsedResult; // 初期値をウィジェットから受け取る
+    _parseAndDisplayQrData();
   }
 
-  // parsedResult が更新された場合に State を更新する
-  @override
-  void didUpdateWidget(covariant ResultPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.parsedResult != oldWidget.parsedResult) {
-      setState(() {
-        _parsedResult = widget.parsedResult;
-      });
+  // 受け取ったQrDataを解析して表示
+  void _parseAndDisplayQrData() {
+    try {
+      _parsedResult = parseHorseracingTicketQr(widget.qrData.qrCode);
+    } catch (e) {
+      _parsedResult = {'エラー': '解析に失敗しました', '詳細': e.toString()};
     }
+    setState(() {}); // UIを更新
   }
 
   @override
   Widget build(BuildContext context) {
     final prettyJson = _parsedResult != null
         ? JsonEncoder.withIndent('  ').convert(_parsedResult)
-        : '馬券の読み取りに失敗しました';
+        : 'データ解析に失敗しました';
 
     // 合計金額を計算
     int totalAmount = 0;
@@ -55,218 +52,198 @@ class _ResultPageState extends State<ResultPage> {
 
     // Check for 発売所 information
     String? salesLocation;
-    // Assuming '発売所' key might exist at the top level of _parsedResult if available
     if (_parsedResult != null && _parsedResult!.containsKey('発売所')) {
       salesLocation = _parsedResult!['発売所'] as String;
     }
 
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('解析結果'),
-        backgroundColor: Colors.green,
-        // ここに標準の戻るボタンが自動的に表示される
+        title: const Text('馬券詳細'), // AppBarのタイトル
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor, // テーマから背景色を取得
+        foregroundColor: Theme.of(context).appBarTheme.foregroundColor, // テーマから前景色を取得
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '読み込んだ馬券',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.green,
-              ),
+      body: Stack(
+        children: [
+          // カスタム背景を画面いっぱいに配置
+          Positioned.fill(
+            child: CustomBackground(
+              overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
+              stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
+              fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
             ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
-                    borderRadius: BorderRadius.circular(8),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '保存された馬券の詳細',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
                   ),
-                  child: _parsedResult == null
-                      ? Center(
-                    child: Text(
-                      prettyJson,
-                      style: TextStyle(fontSize: 16, color: Colors.black54),
-                    ),
-                  )
-                      : (_parsedResult!.containsKey('エラー')
-                      ? Text(
-                    'エラー: ${_parsedResult!['エラー']}\n詳細: ${_parsedResult!['詳細']}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.red,
-                    ),
-                  )
-                      : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_parsedResult!.containsKey('年') && _parsedResult!.containsKey('回') && _parsedResult!.containsKey('日'))
-                        Text(
-                          '${_parsedResult!['年']}年${_parsedResult!['回']}回${_parsedResult!['日']}日',
-                          style: TextStyle(color: Colors.black54, fontSize: 16),
-                        ),
-                      const SizedBox(height: 4),
-                      if (_parsedResult!.containsKey('開催場') && _parsedResult!.containsKey('レース'))
-                        Text(
-                          '${_parsedResult!['開催場']}${_parsedResult!['レース']}レース',
-                          style: TextStyle(color: Colors.black54, fontSize: 16),
-                        ),
-                      const SizedBox(height: 8),
-                      if (_parsedResult!.containsKey('購入内容') && _parsedResult!.containsKey('方式'))
-                        Builder(builder: (context) {
-                          final List<Map<String, dynamic>> purchaseDetails =
-                          (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-                          String betType = _parsedResult!['方式'] ?? '';
-                          String shikibetsu = '';
-                          if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
-                            shikibetsu = purchaseDetails[0]['式別'];
-                          }
-
-                          String displayString = shikibetsu;
-
-                          if (betType == '応援馬券') {
-                            displayString = '応援馬券 単勝+複勝';
-                          } else if (betType == 'ながし') {
-                            if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
-                              displayString += ' ${purchaseDetails[0]['ながし']}';
-                            } else {
-                              displayString += ' ながし';
-                            }
-                          } else {
-                            displayString += ' $betType';
-                          }
-
-                          return Text(
-                            displayString,
-                            style: TextStyle(color: Colors.black54, fontSize: 16),
-                          );
-                        }),
-                      const SizedBox(height: 8),
-                      if (_parsedResult!.containsKey('購入内容'))
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '購入内容',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                                fontSize: 16,
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: _buildPurchaseDetails(_parsedResult!['購入内容'], _parsedResult!['方式']),
-                              ),
-                            ),
-                          ],
-                        ),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: 100,
-                              child: Text(
-                                '合計金額',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                '$totalAmount円',
-                                style: TextStyle(
-                                  color: Colors.black54,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      if (salesLocation != null && salesLocation.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  '発売所',
+                      child: _parsedResult == null
+                          ? Center(
+                        child: Text(
+                          prettyJson,
+                          style: TextStyle(fontSize: 16, color: Colors.black54),
+                        ),
+                      )
+                          : (_parsedResult!.containsKey('エラー')
+                          ? Text(
+                        'エラー: ${_parsedResult!['エラー']}\n詳細: ${_parsedResult!['詳細']}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.red,
+                        ),
+                      )
+                          : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_parsedResult!.containsKey('年') && _parsedResult!.containsKey('回') && _parsedResult!.containsKey('日'))
+                            Text(
+                              '${_parsedResult!['年']}年${_parsedResult!['回']}回${_parsedResult!['日']}日',
+                              style: TextStyle(color: Colors.black54, fontSize: 16),
+                            ),
+                          const SizedBox(height: 4),
+                          if (_parsedResult!.containsKey('開催場') && _parsedResult!.containsKey('レース'))
+                            Text(
+                              '${_parsedResult!['開催場']}${_parsedResult!['レース']}レース',
+                              style: TextStyle(color: Colors.black54, fontSize: 16),
+                            ),
+                          const SizedBox(height: 8),
+                          if (_parsedResult!.containsKey('購入内容') && _parsedResult!.containsKey('方式'))
+                            Builder(builder: (context) {
+                              final List<Map<String, dynamic>> purchaseDetails =
+                              (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
+                              String betType = _parsedResult!['方式'] ?? '';
+                              String shikibetsu = '';
+                              if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
+                                shikibetsu = purchaseDetails[0]['式別'];
+                              }
+
+                              String displayString = shikibetsu;
+
+                              if (betType == '応援馬券') {
+                                displayString = '応援馬券 単勝+複勝';
+                              } else if (betType == 'ながし') {
+                                if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
+                                  displayString += ' ${purchaseDetails[0]['ながし']}';
+                                } else {
+                                  displayString += ' ながし';
+                                }
+                              } else {
+                                displayString += ' $betType';
+                              }
+
+                              return Text(
+                                displayString,
+                                style: TextStyle(color: Colors.black54, fontSize: 16),
+                              );
+                            }),
+                          const SizedBox(height: 8),
+                          if (_parsedResult!.containsKey('購入内容'))
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '購入内容',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.black87,
                                     fontSize: 16,
                                   ),
                                 ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  salesLocation,
-                                  style: TextStyle(
-                                    color: Colors.black54,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 16.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: _buildPurchaseDetails(_parsedResult!['購入内容'], _parsedResult!['方式']),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 100,
+                                  child: Text(
+                                    '合計金額',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    '$totalAmount円',
+                                    style: TextStyle(
+                                      color: Colors.black54,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                    ],
-                  )),
+                          if (salesLocation != null && salesLocation.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4.0),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 100,
+                                    child: Text(
+                                      '発売所',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      salesLocation,
+                                      style: TextStyle(
+                                        color: Colors.black54,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      )),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                // 現在のResultPageを破棄し、ScanSelectionPageをプッシュ
-                // これにより、ユーザーは次のスキャン方法を選択できる
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const ScanSelectionPage()),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                textStyle: const TextStyle(fontSize: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: const Text('次の馬券を読み込む'),
-            ),
-            const SizedBox(height: 10), // ボタン間のスペース
-            ElevatedButton(
-              onPressed: () {
-                // ナビゲーションスタックをクリアしてトップ画面に戻る
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                textStyle: const TextStyle(fontSize: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                backgroundColor: Colors.grey, // 差別化のために色を変更
-              ),
-              child: const Text('トップ画面に戻る'),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -303,7 +280,6 @@ class _ResultPageState extends State<ResultPage> {
     // 「通常」でも記号が不要な式別（単勝、複勝）は空文字を返す
     return '';
   }
-
 
   // 馬番のリストを記号を挟んで表示するウィジェットのリストを生成するヘルパーメソッド
   List<Widget> _buildHorseNumberDisplay(List<int> horseNumbers, {String symbol = ''}) {
@@ -386,7 +362,7 @@ class _ResultPageState extends State<ResultPage> {
       // その他の買い方の場合
       return purchaseDetails.map((detail) {
         String shikibetsu = detail['式別'] ?? '';
-        String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : ''; // typo corrected: nagashi
+        String nagashi = detail['ながし'] != null ? ' ${detail['ながし']}' : '';
         int? kingaku = detail['購入金額'];
         String kingakuDisplay = kingaku != null ? '${kingaku}円' : '';
         String uraDisplay = (detail['ウラ'] != null) ? 'ウラ: ${detail['ウラ']}' : '';

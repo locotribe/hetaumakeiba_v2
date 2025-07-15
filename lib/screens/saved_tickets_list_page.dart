@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/screens/result_page.dart';
+import 'package:hetaumakeiba_v2/screens/saved_ticket_detail_page.dart'; // 新しい詳細ページをインポート
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart'; // 背景もここで管理
 
 // クラス名を SavedTicketsListPage に変更
@@ -97,81 +97,75 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   @override
   Widget build(BuildContext context) {
     print('DEBUG: SavedTicketsListPage: build called. _qrDataList.length: ${_qrDataList.length}');
-    return Scaffold( // Scaffoldを追加して独立したページにする
-      appBar: AppBar(
-        title: const Text('保存された馬券'),
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
-      ),
-      body: Stack(
-          children: [
-      Positioned.fill(
-      child: CustomBackground(
-      overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-      stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
-      fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
-    ),
-    ),
-    Positioned.fill(
-    child: Padding(
-    padding: const EdgeInsets.all(16.0),
-    child: Column(
-    children: [
-    ElevatedButton(
-    onPressed: _deleteAllData,
-    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-    child: const Text("全データを削除", style: TextStyle(color: Colors.white)),
-    ),
-    const SizedBox(height: 16),
-    const Text('保存された馬券:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-    Expanded(
-    child: _qrDataList.isEmpty
-    ? const Center(
-    child: Text(
-    'まだ読み込まれた馬券はありません。',
-    style: TextStyle(color: Colors.black54),
-    ),
-    )
-        : ListView.builder(
-    itemCount: _qrDataList.length,
-    itemBuilder: (context, index) {
-    final qrData = _qrDataList[index];
-    print('DEBUG: SavedTicketsListPage: Rendering QR Data: ${qrData.qrCode}');
-    return Card(
-    margin: const EdgeInsets.symmetric(vertical: 8.0),
-    elevation: 2.0,
-    child: ListTile(
-    title: Text(
-    qrData.qrCode.length > 50
-    ? '${qrData.qrCode.substring(0, 50)}...'
-        : qrData.qrCode,
-    style: const TextStyle(fontWeight: FontWeight.bold),
-    ),
-    subtitle: Text(
-    '読み込み日時: ${qrData.timestamp.toLocal().toString().split('.')[0]}',
-    ),
-    trailing: IconButton(
-    icon: const Icon(Icons.delete, color: Colors.red),
-    onPressed: () => _deleteQrData(qrData.id!),
-    ),
-    onTap: () async {
-    final result = parseHorseracingTicketQr(qrData.qrCode);
-    Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => ResultPage(parsedResult: result)),
-    );
-    },
-    ),
-    );
-    },
-    ),
-    ),
-    ],
-    ),
-    ),
-    ),
-    ], // ここに閉じ括弧を追加しました
-    )
+    // ScaffoldとAppBarを削除し、Stackウィジェットを直接返すように変更
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: CustomBackground(
+            overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
+            stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
+            fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+          ),
+        ),
+        Positioned.fill(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                ElevatedButton(
+                  onPressed: _deleteAllData,
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text("全データを削除", style: TextStyle(color: Colors.white)),
+                ),
+                const SizedBox(height: 16),
+                const Text('保存された馬券:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                Expanded(
+                  child: _qrDataList.isEmpty
+                      ? const Center(
+                    child: Text(
+                      'まだ読み込まれた馬券はありません。',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  )
+                      : ListView.builder(
+                    itemCount: _qrDataList.length,
+                    itemBuilder: (context, index) {
+                      final qrData = _qrDataList[index];
+                      print('DEBUG: SavedTicketsListPage: Rendering QR Data: ${qrData.qrCode}');
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 8.0),
+                        elevation: 2.0,
+                        child: ListTile(
+                          title: Text(
+                            qrData.qrCode.length > 50
+                                ? '${qrData.qrCode.substring(0, 50)}...'
+                                : qrData.qrCode,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            '読み込み日時: ${qrData.timestamp.toLocal().toString().split('.')[0]}',
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _deleteQrData(qrData.id!),
+                          ),
+                          onTap: () async {
+                            // ResultPageではなくSavedTicketDetailPageに遷移するように変更
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: qrData)),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
