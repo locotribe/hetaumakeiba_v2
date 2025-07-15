@@ -7,8 +7,8 @@ import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart'; // 保存
 import 'package:hetaumakeiba_v2/screens/scan_selection_page.dart'; // スキャン選択画面
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // カメラQRスキャナーページ
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart'; // ギャラリーQRスキャナーページ
-// import 'package:hetaumakeiba_v2/screens/result_page.dart'; // 解析結果ページ (オーバーレイとして使用されるため、ここではインポート不要)
-import 'package:hetaumakeiba_v2/screens/saved_ticket_detail_page.dart'; // 保存済み馬券詳細ページ
+import 'package:hetaumakeiba_v2/screens/result_page.dart'; // 解析結果ページを再インポート
+import 'package:hetaumakeiba_v2/screens/saved_ticket_detail_page.dart'; // 保存済み馬券詳細ページ (修正済み)
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart'; // QrDataモデル
 
 void main() {
@@ -92,6 +92,7 @@ class _MyHomePageState extends State<MyHomePage> {
           Widget page;
           if (settings.name == '/detail') {
             final qrData = settings.arguments as QrData;
+            // SavedTicketDetailPage を直接使用
             page = SavedTicketDetailPage(qrData: qrData);
           } else {
             page = SavedTicketsListPage(key: _savedTicketsListKey); // Keyを割り当て
@@ -106,17 +107,24 @@ class _MyHomePageState extends State<MyHomePage> {
           Widget page;
           if (settings.name == '/camera_scanner') {
             final args = settings.arguments as Map<String, dynamic>?;
+            // QRScannerPage を直接使用
             page = QRScannerPage(
               scanMethod: args?['scanMethod'] ?? 'camera',
               savedListKey: _savedTicketsListKey, // Keyを渡す
             );
           } else if (settings.name == '/gallery_scanner') {
             final args = settings.arguments as Map<String, dynamic>?;
+            // GalleryQrScannerPage を直接使用
             page = GalleryQrScannerPage(
               scanMethod: args?['scanMethod'] ?? 'gallery',
               savedListKey: _savedTicketsListKey, // Keyを渡す
             );
-          } else {
+          } else if (settings.name == '/result') { // 新しいResultPageのルートを追加
+            final parsedResult = settings.arguments as Map<String, dynamic>?;
+            // ResultPage を直接使用
+            page = ResultPage(parsedResult: parsedResult);
+          }
+          else {
             page = ScanSelectionPage(savedListKey: _savedTicketsListKey); // Keyを渡す
           }
           return MaterialPageRoute(builder: (context) => page);
