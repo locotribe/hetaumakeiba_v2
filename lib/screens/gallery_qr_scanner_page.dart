@@ -1,13 +1,20 @@
 // lib/screens/gallery_qr_scanner_page.dart
+
+import 'dart:io'; // dart:io を先頭の方に移動
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/widgets/custom_background.dart'; // 背景ウィジェットをインポート
-import 'dart:ui' as ui; // BackdropFilterのために必要 (今回は使用しないが、念のため残す)
-import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart'; // SavedTicketsListPageState のキーのためにインポート
-import 'package:hetaumakeiba_v2/screens/result_page.dart'; // ResultPageをインポート
+import 'package:flutter/services.dart'; // For PlatformException
+import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
+import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
+import 'package:hetaumakeiba_v2/screens/result_page.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:mobile_scanner/mobile_scanner.dart'; // MobileScannerController と BarcodeCapture をインポート
+import 'package:hetaumakeiba_v2/logic/parse.dart';
+
+// import 'package:google_mlkit_commons/google_mlkit_commons.dart'; // 不要なので削除済み
 
 class GalleryQrScannerPage extends StatefulWidget {
-  final String scanMethod; // スキャン方法を受け取るためのプロパティ
-  final GlobalKey<SavedTicketsListPageState> savedListKey; // Keyを受け取る
+  final String scanMethod;
+  final GlobalKey<SavedTicketsListPageState> savedListKey;
 
   const GalleryQrScannerPage({
     super.key,
@@ -20,38 +27,118 @@ class GalleryQrScannerPage extends StatefulWidget {
 }
 
 class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
-  // ダミーのQRコード解析処理
-  void _processDummyQrCode() {
-    final dummyParsedData = {
-      'エラー': 'ギャラリー機能は未実装です',
-      '詳細': 'ダミーデータです。実際のQRコードは検出されていません。',
-      'QR': 'DUMMY_QR_CODE_FROM_GALLERY',
-      '年': '2024',
-      '回': '1',
-      '日': '1',
-      '開催場': '東京',
-      'レース': '1R',
-      '方式': '通常',
-      '購入内容': [
-        {'式別': '単勝', '馬番': [1], '購入金額': 100},
-      ],
-      '発売所': 'JRA東京',
-    };
+  File? _imageFile;
+  String? _errorMessage;
+  bool _isProcessing = false;
+  // MobileScannerController のインスタンスを生成
+  final MobileScannerController _scannerController = MobileScannerController(
+    // detectionSpeed は画像解析時には直接影響しないかもしれませんが、
+    // カメラプレビューと同じ設定を保持しておくことも一般的です。
+    // 必要に応じて formats などを指定できます。
+    // formats: [BarcodeFormat.qrCode], // QRコードのみを対象にする場合
+  );
 
-    // ResultPageへ遷移
-    if (mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ResultPage(parsedResult: dummyParsedData)),
-      ).then((_) {
-        // ResultPageから戻ってきたらSavedListをリロード
-        widget.savedListKey.currentState?.loadData();
+  @override
+  void dispose() {
+    // Controllerを破棄
+    _scannerController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImageAndScanQr() async {
+    setState(() {
+      _errorMessage = null;
+      _isProcessing = true;
+    });
+
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+    if (pickedFile != null) {
+      final imagePath = pickedFile.path;
+      setState(() {
+        _imageFile = File(imagePath);
       });
+      await _scanQrCodeFromImagePath(imagePath); // パスを渡すように変更
+    } else {
+      setState(() {
+        _isProcessing = false;
+      });
+      // _showError('画像が選択されませんでした。'); // 必要であればメッセージ表示
+    }
+  }
+
+  Future<void> _scanQrCodeFromImagePath(String imagePath) async {
+    try {
+      // MobileScannerControllerのインスタンスメソッド analyzeImage を使用
+      final BarcodeCapture? barcodeCapture = await _scannerController.analyzeImage(imagePath);
+
+      if (barcodeCapture != null && barcodeCapture.barcodes.isNotEmpty) {
+        // 最初のバーコードのrawValueを取得
+        final qrCodeData = barcodeCapture.barcodes.first.rawValue;
+        if (qrCodeData != null && qrCodeData.isNotEmpty) {
+          _processQrCode(qrCodeData);
+        } else {
+          _showError('QRコードのデータが読み取れませんでした。画像を確認してください。');
+        }
+      } else {
+        _showError('画像からQRコードを検出できませんでした。別の画像を試してください。');
+      }
+    } on PlatformException catch (e) { // analyzeImage は PlatformException をスローすることがある
+      _showError('QRコードの読み取り中にプラットフォームエラーが発生しました: ${e.message}');
+      print("PlatformException during QR scan: ${e.code} - ${e.message}");
+    } catch (e) {
+      _showError('QRコードの読み取り中に予期せぬエラーが発生しました: $e');
+      print("Unexpected error during QR scan: $e");
+    } finally {
+      if (mounted) { //非同期処理後に setState を呼ぶ場合は mounted チェック
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+    }
+  }
+
+  void _processQrCode(String qrCodeData) {
+    // QRコードが2つに分割されている場合の処理は、このページでは不要と想定。
+    // もしギャラリーからの画像でも分割QRを結合する必要があるなら、
+    // QRScannerPage のような結合ロジックをここにも実装する必要があります。
+    // 現状は、画像内の1つのQRコードをそのまま処理します。
+    try {
+      final parsedData = parseHorseracingTicketQr(qrCodeData);
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => ResultPage(parsedResult: parsedData)),
+        ).then((_) {
+          // ResultPageから戻ってきたときにリストを更新
+          if (widget.savedListKey.currentState != null && mounted) {
+            widget.savedListKey.currentState!.loadData();
+          }
+        });
+      }
+    } catch (e) {
+      _showError('QRコードの解析に失敗しました: $e');
+    }
+  }
+
+  void _showError(String message) {
+    if (mounted) {
+      setState(() {
+        _errorMessage = message;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.redAccent, // 少し色味を変更
+          duration: const Duration(seconds: 3), // 表示時間を少し長く
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack( // Scaffoldを削除し、Stackを直接返す
+    return Stack(
       children: [
         Positioned.fill(
           child: CustomBackground(
@@ -61,20 +148,84 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
           ),
         ),
         Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'ギャラリーからの読み込み機能は\n今後実装予定です。',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 20, color: Colors.black54),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _processDummyQrCode,
-                child: const Text('ダミーデータでResultPageへ'),
-              ),
-            ],
+          child: Padding( // 全体に少しパディングを追加
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_imageFile != null)
+                  Container(
+                    width: 250, // 少し大きく
+                    height: 250, // 少し大きく
+                    margin: const EdgeInsets.only(bottom: 24), // マージン調整
+                    decoration: BoxDecoration(
+                        border: Border.all(color: Colors.blueGrey, width: 2), // 枠線の見た目変更
+                        borderRadius: BorderRadius.circular(12), // 角丸調整
+                        boxShadow: [ // 影を追加
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.15),
+                            spreadRadius: 2,
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          )
+                        ]
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10), // 内側の画像の角丸
+                      child: Image.file(
+                        _imageFile!,
+                        fit: BoxFit.contain, // 画像全体が見えるように contain に変更
+                      ),
+                    ),
+                  ),
+                ElevatedButton.icon(
+                  onPressed: _isProcessing ? null : _pickImageAndScanQr,
+                  icon: _isProcessing
+                      ? Container( // ローディングインジケータ
+                    width: 24,
+                    height: 24,
+                    padding: const EdgeInsets.all(2.0),
+                    child: const CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 3,
+                    ),
+                  )
+                      : const Icon(Icons.photo_library, size: 28), // アイコンサイズ調整
+                  label: Text(
+                    _isProcessing ? '処理中...' : 'ギャラリーから画像を選択',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // 角丸調整
+                    backgroundColor: _isProcessing ? Colors.grey : Colors.blueAccent, // 処理中の色変更
+                    foregroundColor: Colors.white,
+                    elevation: _isProcessing ? 0 : 3, // 処理中の影を消す
+                  ),
+                ),
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 24.0, left: 16, right: 16), // パディング調整
+                    child: Container( // エラーメッセージの背景
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                          color: Colors.redAccent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.redAccent.withOpacity(0.5))
+                      ),
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(
+                          color: Colors.red, // 元の赤色を維持
+                          fontSize: 15, // 少し小さく
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ],

@@ -19,6 +19,7 @@ dependencies:
   html: ^0.15.0
   url_launcher: ^6.3.0
   cupertino_icons: ^1.0.8
+  image_picker: ^1.1.2 # 追加: ギャラリーからの読み込み機能用。最新の安定バージョンを指定。
 
 dev_dependencies:
   flutter_test:
