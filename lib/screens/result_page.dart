@@ -44,15 +44,15 @@ class _ResultPageState extends State<ResultPage> {
     String amountStr = amount.toString();
     int numDigits = amountStr.length;
     if (numDigits >= 6) {
-      return '';
+      return ''; // 10万円以上
     } else if (numDigits == 5) {
-      return '☆';
+      return '☆'; // 1万円台
     } else if (numDigits == 4) {
-      return '☆☆';
+      return '☆☆'; // 1千円台
     } else if (numDigits == 3) {
-      return '☆☆☆';
+      return '☆☆☆'; // 1百円台
     }
-    return '';
+    return ''; // その他の場合
   }
 
   // 馬番と馬番の間に表示する記号を返すヘルパーメソッド
@@ -397,23 +397,22 @@ class _ResultPageState extends State<ResultPage> {
       salesLocation = _parsedResult!['発売所'] as String;
     }
 
-    return Stack( // Scaffoldを削除し、Stackを直接返す
-      children: [
-        Positioned.fill(
-          child: CustomBackground(
-            overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-            stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
-            fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+    return Scaffold( // Scaffoldを追加してAppBarを表示
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text('解析結果'),
+        // 戻るボタンは自動で表示されます
+      ),
+      body: Stack( // ScaffoldのbodyをStackでラップ
+        children: [
+          Positioned.fill(
+            child: CustomBackground(
+              overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
+              stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
+              fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+            ),
           ),
-        ),
-        Scaffold( // Scaffoldを追加してAppBarを表示
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            title: const Text('解析結果'),
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-          ),
-          body: Column( // ボタンを追加するためにColumnでラップ
+          Column( // ボタンを追加するためにColumnでラップ
             children: [
               Expanded( // 既存のカード部分をExpandedでラップ
                 child: SingleChildScrollView(
@@ -565,7 +564,7 @@ class _ResultPageState extends State<ResultPage> {
                               ],
                             ),
                           ),
-                      ],
+                      ], // 修正箇所: ここにあった余分なカンマを削除
                     )),
                   ),
                 ),
@@ -638,8 +637,8 @@ class _ResultPageState extends State<ResultPage> {
               ),
             ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

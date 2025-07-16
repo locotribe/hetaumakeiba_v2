@@ -149,23 +149,22 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: CustomBackground(
-            overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-            stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
-            fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+    return Scaffold( // Scaffoldを追加してAppBarを表示
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text('ギャラリーからスキャン'),
+        // 戻るボタンは自動で表示されます
+      ),
+      body: Stack( // 修正箇所: StackをScaffoldのbodyの直下に移動
+        children: [
+          Positioned.fill(
+            child: CustomBackground(
+              overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
+              stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
+              fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+            ),
           ),
-        ),
-        Scaffold( // Scaffoldを追加してAppBarを表示
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            title: const Text('ギャラリーからスキャン'),
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-          ),
-          body: Center(
+          Center(
             child: Padding( // 全体に少しパディングを追加
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -246,8 +245,8 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
