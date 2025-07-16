@@ -130,6 +130,7 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
 
       print('DEBUG: rawValue from scanner: $rawValue');
 
+      // 修正箇所: isQrCodeDuplicate を qrCodeExists に変更
       final bool existsSingle = await _dbHelper.qrCodeExists(rawValue); // rawValue単体でのチェック
       if (existsSingle) {
         print('DEBUG: Duplicate single QR code detected (rawValue): $rawValue');
@@ -168,6 +169,7 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
 
         print('DEBUG: Combined QR string for duplicate check: $combinedQrCode');
 
+        // 修正箇所: isQrCodeDuplicate を qrCodeExists に変更
         final bool existsCombined = await _dbHelper.qrCodeExists(combinedQrCode); // 結合済み文字列でチェック
         if (existsCombined) {
           // 重複が見つかった場合
@@ -222,7 +224,10 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
     // ResultPageへ遷移
     if (mounted) {
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ResultPage(parsedResult: parsedData)),
+        MaterialPageRoute(builder: (_) => ResultPage(
+          parsedResult: parsedData,
+          savedListKey: widget.savedListKey, // savedListKey を渡す
+        )),
       ).then((_) {
         // ResultPageから戻ってきたらスキャナーを再開
         _startScanner();

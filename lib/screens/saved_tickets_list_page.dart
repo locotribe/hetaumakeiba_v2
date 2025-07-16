@@ -97,7 +97,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   @override
   Widget build(BuildContext context) {
     print('DEBUG: SavedTicketsListPage: build called. _qrDataList.length: ${_qrDataList.length}');
-    // ScaffoldとAppBarを削除し、Stackウィジェットを直接返すように変更
     return Stack(
       children: [
         Positioned.fill(
@@ -107,8 +106,14 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
           ),
         ),
-        Positioned.fill(
-          child: Padding(
+        // 修正箇所: Scaffoldを追加してAppBarを表示
+        Scaffold(
+          backgroundColor: Colors.transparent, // 背景を透過
+          appBar: AppBar(
+            title: const Text('保存済み馬券一覧'),
+            // 戻るボタンは自動で表示されます
+          ),
+          body: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
@@ -151,8 +156,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                           ),
                           onTap: () async {
                             // ResultPageではなくSavedTicketDetailPageに遷移するように変更
-                            // rootNavigator: false を追加して現在のタブのNavigatorを使用
-                            Navigator.of(context, rootNavigator: false).push(
+                            // rootNavigator: false は不要
+                            Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: qrData)),
                             );
                           },

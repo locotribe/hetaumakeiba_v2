@@ -1,15 +1,14 @@
 // lib/screens/home_page.dart
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart'; // 背景ウィジェットをインポート
-import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart'; // SavedTicketsListPageState のキーのためにインポート
-import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // QRScannerPage をインポート
-import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart'; // GalleryQrScannerPage をインポート
+import 'package:hetaumakeiba_v2/screens/scan_selection_page.dart'; // スキャン選択ページをインポート
+import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart'; // 保存済みリストページをインポート
 
 class HomePage extends StatelessWidget {
-  // _savedListKey を受け取るためのフィールドを追加
+  // SavedTicketsListPageState のキーを受け取るように変更
+  // これにより、他のページから保存済みリストのデータをリロードできるようになります。
   final GlobalKey<SavedTicketsListPageState> savedListKey;
 
-  // コンストラクタに savedListKey を追加
   const HomePage({super.key, required this.savedListKey});
 
   @override
@@ -26,8 +25,9 @@ class HomePage extends StatelessWidget {
         ),
         Center(
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center, // 中央に配置
+            mainAxisAlignment: MainAxisAlignment.center, // ボタンを中央に配置
             children: [
+              // アプリ名
               const Text(
                 'へたうま競馬', // アプリ名
                 style: TextStyle(
@@ -36,67 +36,55 @@ class HomePage extends StatelessWidget {
                   color: Colors.black87, // テキストの色
                 ),
               ),
-              const SizedBox(height: 50), // テキストとボタンの間のスペース
+              const SizedBox(height: 50), // ボタンとの間隔
 
-              // QRスキャナーボタン
-              ElevatedButton(
+              // スキャンボタン
+              ElevatedButton.icon(
                 onPressed: () {
-                  Navigator.of(context, rootNavigator: false).push(
+                  // スキャン選択ページへ遷移
+                  Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => QRScannerPage(
-                        scanMethod: 'camera',
-                        savedListKey: savedListKey, // savedListKey を渡す
-                      ),
+                      builder: (context) => ScanSelectionPage(savedListKey: savedListKey), // savedListKey を渡す
                     ),
                   );
                 },
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15), // パディング
-                  textStyle: const TextStyle(fontSize: 18), // テキストスタイル
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), // 角丸
+                icon: const Icon(Icons.qr_code_scanner, size: 28),
+                label: const Text(
+                  '馬券をスキャンする',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                 ),
-                child: const Text('カメラで馬券をスキャンする'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  elevation: 3,
+                ),
               ),
               const SizedBox(height: 20), // ボタン間のスペース
 
-              // ギャラリーからスキャンボタン
-              ElevatedButton(
+              // 保存済み馬券一覧ボタン
+              ElevatedButton.icon(
                 onPressed: () {
-                  Navigator.of(context, rootNavigator: false).push(
+                  // 保存済み馬券一覧ページへ遷移
+                  Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => GalleryQrScannerPage(
-                        scanMethod: 'gallery',
-                        savedListKey: savedListKey, // savedListKey を渡す
-                      ),
+                      builder: (context) => const SavedTicketsListPage(),
                     ),
                   );
                 },
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15), // パディング
-                  textStyle: const TextStyle(fontSize: 18), // テキストスタイル
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), // 角丸
-                  backgroundColor: Colors.blueGrey, // ボタンの色を差別化
+                icon: const Icon(Icons.list_alt, size: 28),
+                label: const Text(
+                  '保存済み馬券を見る',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                 ),
-                child: const Text('ギャラリーから馬券を読み込む'),
-              ),
-              const SizedBox(height: 20), // ボタン間のスペース
-
-              // 取得済み一覧ボタン
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context, rootNavigator: false).push(
-                    MaterialPageRoute(
-                      builder: (_) => SavedTicketsListPage(), // SavedTicketsListPage は savedListKey を直接受け取らないため、ここでは渡しません
-                    ),
-                  );
-                },
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15), // パディング
-                  textStyle: const TextStyle(fontSize: 18), // テキストスタイル
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), // 角丸
-                  backgroundColor: Colors.green, // ボタンの色を差別化
+                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  elevation: 3,
                 ),
-                child: const Text('取得済み一覧を見る'),
               ),
             ],
           ),

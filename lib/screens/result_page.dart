@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import 'dart:convert'; // JsonEncoderを使用
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // QRScannerPageをインポート
+import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart'; // GalleryQrScannerPageをインポート
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart'; // SavedTicketsListPageState のキーのためにインポート
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart'; // 背景ウィジェットをインポート
 
 class ResultPage extends StatefulWidget {
   final Map<String, dynamic>? parsedResult;
+  // 修正箇所: savedListKey を追加
+  final GlobalKey<SavedTicketsListPageState> savedListKey;
 
-  const ResultPage({super.key, this.parsedResult});
+  const ResultPage({
+    super.key,
+    this.parsedResult,
+    required this.savedListKey, // コンストラクタに追加
+  });
 
   @override
   State<ResultPage> createState() => _ResultPageState();
@@ -399,22 +406,18 @@ class _ResultPageState extends State<ResultPage> {
             fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        Scaffold( // Scaffoldを追加してAppBarを表示
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            title: const Text('解析結果'),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+          ),
+          body: Column( // ボタンを追加するためにColumnでラップ
             children: [
-              Text(
-                '読み込んだ馬券',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
+              Expanded( // 既存のカード部分をExpandedでラップ
                 child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
@@ -565,6 +568,72 @@ class _ResultPageState extends State<ResultPage> {
                       ],
                     )),
                   ),
+                ),
+              ),
+              // 修正箇所: ここからボタンを追加
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20.0),
+                child: Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: () {
+                        // カメラでスキャンページへ遷移 (pushReplacementで現在のページを置き換える)
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => QRScannerPage(
+                              scanMethod: 'camera',
+                              savedListKey: widget.savedListKey, // savedListKey を渡す
+                            ),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                        textStyle: const TextStyle(fontSize: 18),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        backgroundColor: Colors.blueAccent, // ボタンの色
+                        foregroundColor: Colors.white, // テキストの色
+                      ),
+                      child: const Text('続けてカメラでスキャンする'),
+                    ),
+                    const SizedBox(height: 15),
+                    ElevatedButton(
+                      onPressed: () {
+                        // ギャラリーからスキャンページへ遷移 (pushReplacementで現在のページを置き換える)
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => GalleryQrScannerPage(
+                              scanMethod: 'gallery',
+                              savedListKey: widget.savedListKey, // savedListKey を渡す
+                            ),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                        textStyle: const TextStyle(fontSize: 18),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        backgroundColor: Colors.blueGrey, // ボタンの色
+                        foregroundColor: Colors.white, // テキストの色
+                      ),
+                      child: const Text('ギャラリーからスキャンする'),
+                    ),
+                    const SizedBox(height: 15),
+                    ElevatedButton(
+                      onPressed: () {
+                        // ホームに戻る (ルートまで戻る)
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                        textStyle: const TextStyle(fontSize: 18),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        backgroundColor: Colors.green, // ボタンの色
+                        foregroundColor: Colors.white, // テキストの色
+                      ),
+                      child: const Text('ホームに戻る'),
+                    ),
+                  ],
                 ),
               ),
             ],
