@@ -110,7 +110,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         Scaffold(
           backgroundColor: Colors.transparent, // 背景を透過
           appBar: AppBar(
-            title: const Text('保存済み馬券一覧'),
+            title: const Text('購入履歴'),
             // 戻るボタンは自動で表示されます
           ),
           body: Padding(
@@ -123,7 +123,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                   child: const Text("全データを削除", style: TextStyle(color: Colors.white)),
                 ),
                 const SizedBox(height: 16),
-                const Text('保存された馬券:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                const Text('購入履歴:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                 Expanded(
                   child: _qrDataList.isEmpty
                       ? const Center(

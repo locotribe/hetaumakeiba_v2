@@ -152,7 +152,7 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
     return Scaffold( // Scaffoldを追加してAppBarを表示
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('ギャラリーからスキャン'),
+        title: const Text('ギャラリーから登録'),
         // 戻るボタンは自動で表示されます
       ),
       body: Stack( // 修正箇所: StackをScaffoldのbodyの直下に移動

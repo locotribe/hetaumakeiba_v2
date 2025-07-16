@@ -215,9 +215,9 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
           qrCode: parsedData['QR'] as String,
           timestamp: DateTime.now(),
         );
-        print('DEBUG: 馬券データが保存されました: ${qrDataToSave.qrCode}');
+        print('DEBUG: 馬券が保存されました: ${qrDataToSave.qrCode}');
         await _dbHelper.insertQrData(qrDataToSave);
-        print('馬券データが保存されました: ${qrDataToSave.qrCode}');
+        print('馬券が保存されました: ${qrDataToSave.qrCode}');
 
         widget.savedListKey.currentState?.loadData(); // 保存済みリストをリロード
       }
@@ -251,11 +251,11 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
           final screenHeight = constraints.maxHeight;
           final screenWidth = constraints.maxWidth;
 
-          final cameraHeight = screenHeight * 0.7;
-          final cameraWidth = cameraHeight * (16 / 9);
+          final cameraHeight = screenHeight * 0.8;
+          final cameraWidth = cameraHeight * (8 / 5);
 
           final actualCameraWidth = (cameraWidth > screenWidth) ? screenWidth : cameraWidth;
-          final actualCameraHeight = actualCameraWidth * (9 / 16);
+          final actualCameraHeight = actualCameraWidth * (5 / 8);
 
           final cameraTopOffset = screenHeight * 0.3;
 
@@ -267,7 +267,7 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
               Positioned.fill(
                 child: CustomBackground(
                   overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-                  stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
+                  stripeColor: const Color.fromRGBO(219, 234, 234, 0.3),
                   fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
                 ),
               ),
@@ -279,7 +279,7 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
                 width: actualCameraWidth,
                 height: actualCameraHeight,
                 child: AspectRatio(
-                  aspectRatio: 16 / 9,
+                  aspectRatio: 8 / 5,
                   child: ClipRect(
                     child: MobileScanner(
                       controller: _scannerController,

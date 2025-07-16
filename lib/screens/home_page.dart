@@ -50,7 +50,7 @@ class HomePage extends StatelessWidget {
                 },
                 icon: const Icon(Icons.qr_code_scanner, size: 28),
                 label: const Text(
-                  '馬券をスキャンする',
+                  '馬券を登録',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -75,7 +75,7 @@ class HomePage extends StatelessWidget {
                 },
                 icon: const Icon(Icons.list_alt, size: 28),
                 label: const Text(
-                  '保存済み馬券を見る',
+                  '購入履歴',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                 ),
                 style: ElevatedButton.styleFrom(

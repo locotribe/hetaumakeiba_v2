@@ -54,7 +54,7 @@ class _ScanSelectionPageState extends State<ScanSelectionPage> {
                     textStyle: const TextStyle(fontSize: 18), // テキストスタイル
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), // 角丸
                   ),
-                  child: const Text('カメラで馬券をスキャンする'), // ボタンテキスト
+                  child: const Text('カメラで登録'), // ボタンテキスト
                 ),
                 const SizedBox(height: 20), // ボタン間のスペース
                 ElevatedButton(
@@ -74,7 +74,7 @@ class _ScanSelectionPageState extends State<ScanSelectionPage> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), // 角丸
                     backgroundColor: Colors.blueGrey, // ボタンの色を差別化
                   ),
-                  child: const Text('ギャラリーから馬券を読み込む'), // ボタンテキスト
+                  child: const Text('写真で登録'), // ボタンテキスト
                 ),
               ],
             ),

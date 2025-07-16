@@ -593,7 +593,7 @@ class _ResultPageState extends State<ResultPage> {
                         backgroundColor: Colors.blueAccent, // ボタンの色
                         foregroundColor: Colors.white, // テキストの色
                       ),
-                      child: const Text('続けてカメラでスキャンする'),
+                      child: const Text('続けてカメラで登録'),
                     ),
                     const SizedBox(height: 15),
                     ElevatedButton(
@@ -615,7 +615,7 @@ class _ResultPageState extends State<ResultPage> {
                         backgroundColor: Colors.blueGrey, // ボタンの色
                         foregroundColor: Colors.white, // テキストの色
                       ),
-                      child: const Text('ギャラリーからスキャンする'),
+                      child: const Text('ギャラリーから登録'),
                     ),
                     const SizedBox(height: 15),
                     ElevatedButton(
