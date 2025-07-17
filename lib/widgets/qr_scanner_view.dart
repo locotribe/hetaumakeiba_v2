@@ -8,12 +8,14 @@ class QrScannerView extends StatefulWidget {
   final MobileScannerController scannerController;
   final Function(BarcodeCapture) onDetect;
   final bool isShowingDuplicateMessage;
+  final String? warningMessage; // 新しく追加するプロパティ
 
   const QrScannerView({
     super.key,
     required this.scannerController,
     required this.onDetect,
     required this.isShowingDuplicateMessage,
+    this.warningMessage, // コンストラクタにも追加
   });
 
   @override
@@ -103,7 +105,7 @@ class _QrScannerViewState extends State<QrScannerView> {
               ),
             ),
 
-            // 重複メッセージ表示UI
+            // 重複メッセージ表示UI (警告メッセージを表示するように変更)
             if (widget.isShowingDuplicateMessage)
               Positioned.fill(
                 child: Container(
@@ -115,9 +117,9 @@ class _QrScannerViewState extends State<QrScannerView> {
                         color: Colors.red.withOpacity(0.8),
                         borderRadius: BorderRadius.circular(10.0),
                       ),
-                      child: const Text(
-                        'この馬券はすでに読み込みました',
-                        style: TextStyle(
+                      child: Text( // const を削除して動的なテキストを許可
+                        widget.warningMessage ?? 'この馬券はすでに読み込みました', // warningMessage があればそれを表示、なければデフォルト
+                        style: const TextStyle( // TextStyle は const のまま
                           color: Colors.white,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,

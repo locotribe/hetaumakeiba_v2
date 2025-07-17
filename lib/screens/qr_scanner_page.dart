@@ -32,7 +32,8 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
   late DatabaseHelper _dbHelper; // QrCodeProcessorに渡すため保持
 
   // QrScannerViewに渡すための状態変数
-  bool _isShowingDuplicateMessageForUI = false;
+  bool _isShowingWarningForUI = false; // 警告表示の状態
+  String? _currentWarningMessage; // 現在表示する警告メッセージ
 
   @override
   void initState() {
@@ -54,10 +55,11 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
     // QrCodeProcessorの初期化
     _qrProcessor = QrCodeProcessor(
       dbHelper: _dbHelper,
-      onDuplicateStatusChanged: (status) {
-        // QrCodeProcessorから重複メッセージの状態が変更されたことを受け取る
+      // onWarningStatusChanged コールバックを実装
+      onWarningStatusChanged: (status, message) {
         setState(() {
-          _isShowingDuplicateMessageForUI = status;
+          _isShowingWarningForUI = status;
+          _currentWarningMessage = message; // 受け取ったメッセージを状態に保存
         });
       },
       onProcessingComplete: (parsedData) {
@@ -107,23 +109,6 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
     super.dispose();
   }
 
-  // 以下のメソッドと状態変数は、lib/logic/qr_code_processor.dart に移動されたため、削除します。
-  // final List<String> _qrResults = [];
-  // bool _isShowingDuplicateMessage = false; // QrCodeProcessor内で管理されるため削除
-
-  // int _countSequence(String s) {
-  //   const sequence = "0123456789";
-  //   return RegExp(sequence).allMatches(s).length;
-  // }
-
-  // void _onDetect(BarcodeCapture capture) async {
-  //   // このロジックは QrCodeProcessor.processQrCodeDetection に移動されました
-  // }
-
-  // Future<void> _processTwoQRs(String qrCode) async {
-  //   // このロジックは QrCodeProcessor._processCombinedQrCode に移動されました
-  // }
-
   @override
   Widget build(BuildContext context) {
     // UIの大部分をQrScannerViewに委譲
@@ -134,7 +119,8 @@ class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserv
       body: QrScannerView(
         scannerController: _cameraService.controller, // カメラサービスのコントローラーを渡す
         onDetect: _cameraService.handleDetection, // カメラサービスからの検出を処理
-        isShowingDuplicateMessage: _isShowingDuplicateMessageForUI, // 重複メッセージの状態を渡す
+        isShowingDuplicateMessage: _isShowingWarningForUI, // 警告表示の状態を渡す
+        warningMessage: _currentWarningMessage, // 警告メッセージを渡す
       ),
     );
   }
