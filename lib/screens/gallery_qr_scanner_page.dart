@@ -1,18 +1,17 @@
 // lib/screens/gallery_qr_scanner_page.dart
 
-import 'dart:io'; // dart:io を先頭の方に移動
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // For PlatformException
+import 'package:flutter/services.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/result_page.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:mobile_scanner/mobile_scanner.dart'; // MobileScannerController と BarcodeCapture をインポート
-import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:mobile_scanner/mobile_scanner.dart'; // analyzeImageのために必要だが、直接は使わない
 import 'package:hetaumakeiba_v2/db/database_helper.dart'; // DatabaseHelper をインポート
-import 'package:hetaumakeiba_v2/models/qr_data_model.dart'; // QrData をインポート
 
-// import 'package:google_mlkit_commons/google_mlkit_commons.dart'; // 不要なので削除済み
+// 新しく分離したギャラリーQRデータ処理ロジックをインポート
+import 'package:hetaumakeiba_v2/logic/gallery_qr_code_processor.dart';
 
 class GalleryQrScannerPage extends StatefulWidget {
   final String scanMethod;
@@ -32,33 +31,59 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
   File? _imageFile;
   String? _errorMessage;
   bool _isProcessing = false;
-  // MobileScannerController のインスタンスを生成
-  final MobileScannerController _scannerController = MobileScannerController(
-    // detectionSpeed は画像解析時には直接影響しないかもしれませんが、
-    // カメラプレビューと同じ設定を保持しておくことも一般的です。
-    // 必要に応じて formats などを指定できます。
-    // formats: [BarcodeFormat.qrCode], // QRコードのみを対象にする場合
-  );
-  final DatabaseHelper _dbHelper = DatabaseHelper(); // DatabaseHelper のインスタンスを作成
+
+  late GalleryQrCodeProcessor _galleryQrProcessor; // 新しいプロセッサのインスタンス
 
   @override
   void initState() {
     super.initState();
+    final DatabaseHelper dbHelper = DatabaseHelper(); // プロセッサに渡すためのインスタンス
+
+    _galleryQrProcessor = GalleryQrCodeProcessor(
+      dbHelper: dbHelper,
+      onWarningStatusChanged: (status, message) {
+        setState(() {
+          _errorMessage = message; // メッセージをUIに表示
+          _isProcessing = status; // 警告表示中は処理中とみなす
+        });
+        if (!status) { // 警告が解除されたら、処理中フラグを解除
+          setState(() {
+            _isProcessing = false;
+          });
+        }
+      },
+      onProcessingComplete: (parsedData) {
+        setState(() {
+          _isProcessing = false; // 処理完了
+        });
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => ResultPage(
+                parsedResult: parsedData,
+                savedListKey: widget.savedListKey,
+              ),
+            ),
+          );
+        }
+      },
+      savedListKey: widget.savedListKey,
+    );
+
     // ページ表示時に自動でギャラリーを開く
     _pickImageAndScanQr();
   }
 
   @override
   void dispose() {
-    // Controllerを破棄
-    _scannerController.dispose();
+    // MobileScannerController は GalleryQrCodeProcessor 内で管理されるため、ここではdisposeしない
     super.dispose();
   }
 
   Future<void> _pickImageAndScanQr() async {
     setState(() {
       _errorMessage = null;
-      _isProcessing = true;
+      _isProcessing = true; // 処理開始
     });
 
     final picker = ImagePicker();
@@ -69,93 +94,26 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
       setState(() {
         _imageFile = File(imagePath);
       });
-      await _scanQrCodeFromImagePath(imagePath); // パスを渡すように変更
+      // 新しいプロセッサに画像パスを渡して処理を依頼
+      await _galleryQrProcessor.processImageQrCode(imagePath);
     } else {
       setState(() {
-        _isProcessing = false;
+        _isProcessing = false; // 画像選択がキャンセルされたら処理を終了
       });
-      // _showError('画像が選択されませんでした。'); // 必要であればメッセージ表示
       if (mounted) {
         Navigator.of(context).pop(); // 画像選択がキャンセルされた場合、前の画面に戻る
       }
     }
   }
 
-  Future<void> _scanQrCodeFromImagePath(String imagePath) async {
-    try {
-      // MobileScannerControllerのインスタンスメソッド analyzeImage を使用
-      final BarcodeCapture? barcodeCapture = await _scannerController.analyzeImage(imagePath);
-
-      if (barcodeCapture != null && barcodeCapture.barcodes.isNotEmpty) {
-        // 最初のバーコードのrawValueを取得
-        final qrCodeData = barcodeCapture.barcodes.first.rawValue;
-        if (qrCodeData != null && qrCodeData.isNotEmpty) {
-          // 修正箇所: isQrCodeDuplicate を qrCodeExists に変更
-          final bool isDuplicate = await _dbHelper.qrCodeExists(qrCodeData);
-
-          if (isDuplicate) {
-            _showError('この馬券はすでに読み込みました。');
-          } else {
-            // 重複していない場合、データを保存して結果ページへ遷移
-            final qrData = QrData(qrCode: qrCodeData, timestamp: DateTime.now());
-            await _dbHelper.insertQrData(qrData);
-            widget.savedListKey.currentState?.loadData(); // 保存済みリストをリロード
-
-            final parsedData = parseHorseracingTicketQr(qrCodeData);
-            if (mounted) {
-              Navigator.of(context).pushReplacement( // pushReplacement に変更して、ResultPageから直接戻れるようにする
-                MaterialPageRoute(builder: (_) => ResultPage(
-                  parsedResult: parsedData,
-                  savedListKey: widget.savedListKey, // savedListKey を渡す
-                )),
-              );
-            }
-          }
-        } else {
-          _showError('QRコードのデータが読み取れませんでした。画像を確認してください。');
-        }
-      } else {
-        _showError('画像からQRコードを検出できませんでした。別の画像を試してください。');
-      }
-    } on PlatformException catch (e) { // analyzeImage は PlatformException をスローすることがある
-      _showError('QRコードの読み取り中にプラットフォームエラーが発生しました: ${e.message}');
-      print("PlatformException during QR scan: ${e.code} - ${e.message}");
-    } catch (e) {
-      _showError('QRコードの読み取り中に予期せぬエラーが発生しました: $e');
-      print("Unexpected error during QR scan: $e");
-    } finally {
-      if (mounted) { //非同期処理後に setState を呼ぶ場合は mounted チェック
-        setState(() {
-          _isProcessing = false;
-        });
-      }
-    }
-  }
-
-  void _showError(String message) {
-    if (mounted) {
-      setState(() {
-        _errorMessage = message;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.redAccent, // 少し色味を変更
-          duration: const Duration(seconds: 3), // 表示時間を少し長く
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold( // Scaffoldを追加してAppBarを表示
+    return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('ギャラリーから登録'),
-        // 戻るボタンは自動で表示されます
       ),
-      body: Stack( // 修正箇所: StackをScaffoldのbodyの直下に移動
+      body: Stack(
         children: [
           Positioned.fill(
             child: CustomBackground(
@@ -165,20 +123,20 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
             ),
           ),
           Center(
-            child: Padding( // 全体に少しパディングを追加
+            child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (_imageFile != null)
                     Container(
-                      width: 250, // 少し大きく
-                      height: 250, // 少し大きく
-                      margin: const EdgeInsets.only(bottom: 24), // マージン調整
+                      width: 250,
+                      height: 250,
+                      margin: const EdgeInsets.only(bottom: 24),
                       decoration: BoxDecoration(
-                          border: Border.all(color: Colors.blueGrey, width: 2), // 枠線の見た目変更
-                          borderRadius: BorderRadius.circular(12), // 角丸調整
-                          boxShadow: [ // 影を追加
+                          border: Border.all(color: Colors.blueGrey, width: 2),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.15),
                               spreadRadius: 2,
@@ -188,17 +146,17 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
                           ]
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10), // 内側の画像の角丸
+                        borderRadius: BorderRadius.circular(10),
                         child: Image.file(
                           _imageFile!,
-                          fit: BoxFit.contain, // 画像全体が見えるように contain に変更
+                          fit: BoxFit.contain,
                         ),
                       ),
                     ),
                   ElevatedButton.icon(
                     onPressed: _isProcessing ? null : _pickImageAndScanQr,
                     icon: _isProcessing
-                        ? Container( // ローディングインジケータ
+                        ? Container(
                       width: 24,
                       height: 24,
                       padding: const EdgeInsets.all(2.0),
@@ -207,23 +165,23 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
                         strokeWidth: 3,
                       ),
                     )
-                        : const Icon(Icons.photo_library, size: 28), // アイコンサイズ調整
+                        : const Icon(Icons.photo_library, size: 28),
                     label: Text(
                       _isProcessing ? '処理中...' : 'ギャラリーから画像を選択',
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                     ),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // 角丸調整
-                      backgroundColor: _isProcessing ? Colors.grey : Colors.blueAccent, // 処理中の色変更
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      backgroundColor: _isProcessing ? Colors.grey : Colors.blueAccent,
                       foregroundColor: Colors.white,
-                      elevation: _isProcessing ? 0 : 3, // 処理中の影を消す
+                      elevation: _isProcessing ? 0 : 3,
                     ),
                   ),
                   if (_errorMessage != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 24.0, left: 16, right: 16), // パディング調整
-                      child: Container( // エラーメッセージの背景
+                      padding: const EdgeInsets.only(top: 24.0, left: 16, right: 16),
+                      child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                             color: Colors.redAccent.withOpacity(0.15),
@@ -233,8 +191,8 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
                         child: Text(
                           _errorMessage!,
                           style: const TextStyle(
-                            color: Colors.red, // 元の赤色を維持
-                            fontSize: 15, // 少し小さく
+                            color: Colors.red,
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
                           ),
                           textAlign: TextAlign.center,

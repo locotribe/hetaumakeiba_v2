@@ -7,13 +7,12 @@ import 'package:hetaumakeiba_v2/widgets/custom_background.dart'; // 背景ウィ
 
 class ResultPage extends StatefulWidget {
   final Map<String, dynamic>? parsedResult;
-  // 修正箇所: savedListKey を追加
   final GlobalKey<SavedTicketsListPageState> savedListKey;
 
   const ResultPage({
     super.key,
     this.parsedResult,
-    required this.savedListKey, // コンストラクタに追加
+    required this.savedListKey,
   });
 
   @override
@@ -39,23 +38,21 @@ class _ResultPageState extends State<ResultPage> {
     }
   }
 
-  // 金額に応じた☆の数を返すヘルパーメソッド
   String _getStars(int amount) {
     String amountStr = amount.toString();
     int numDigits = amountStr.length;
     if (numDigits >= 6) {
-      return ''; // 10万円以上
+      return '';
     } else if (numDigits == 5) {
-      return '☆'; // 1万円台
+      return '☆';
     } else if (numDigits == 4) {
-      return '☆☆'; // 1千円台
+      return '☆☆';
     } else if (numDigits == 3) {
-      return '☆☆☆'; // 1百円台
+      return '☆☆☆';
     }
-    return ''; // その他の場合
+    return '';
   }
 
-  // 馬番と馬番の間に表示する記号を返すヘルパーメソッド
   String _getHorseNumberSymbol(String shikibetsu, String betType) {
     if (betType == '通常') {
       if (shikibetsu == '馬単' || shikibetsu == '3連単') {
@@ -69,7 +66,6 @@ class _ResultPageState extends State<ResultPage> {
     return '';
   }
 
-  // 馬番のリストを記号を挟んで表示するウィジェットのリストを生成するヘルパーメソッド
   List<Widget> _buildHorseNumberDisplay(List<int> horseNumbers, {String symbol = ''}) {
     List<Widget> widgets = [];
     const double fixedWidth = 30.0;
@@ -104,7 +100,6 @@ class _ResultPageState extends State<ResultPage> {
 
   List<Widget> _buildPurchaseDetails(dynamic purchaseData, String betType) {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
-
     const double labelWidth = 80.0;
 
     if (betType == '応援馬券' && purchaseDetails.length >= 2) {
@@ -378,9 +373,21 @@ class _ResultPageState extends State<ResultPage> {
 
   @override
   Widget build(BuildContext context) {
-    final prettyJson = _parsedResult != null
-        ? JsonEncoder.withIndent('  ').convert(_parsedResult)
-        : '馬券の読み取りに失敗しました';
+    String displayMessage;
+    bool isErrorOrNotTicket = false;
+
+    if (_parsedResult == null) {
+      displayMessage = '馬券の読み取りに失敗しました';
+      isErrorOrNotTicket = true;
+    } else if (_parsedResult!.containsKey('isNotTicket') && _parsedResult!['isNotTicket'] == true) {
+      displayMessage = '馬券ではありませんでした';
+      isErrorOrNotTicket = true;
+    } else if (_parsedResult!.containsKey('エラー')) {
+      displayMessage = 'エラー: ${_parsedResult!['エラー']}\n詳細: ${_parsedResult!['詳細']}';
+      isErrorOrNotTicket = true;
+    } else {
+      displayMessage = JsonEncoder.withIndent('  ').convert(_parsedResult);
+    }
 
     int totalAmount = 0;
     if (_parsedResult != null && _parsedResult!.containsKey('購入内容')) {
@@ -397,14 +404,13 @@ class _ResultPageState extends State<ResultPage> {
       salesLocation = _parsedResult!['発売所'] as String;
     }
 
-    return Scaffold( // Scaffoldを追加してAppBarを表示
-      backgroundColor: Colors.transparent,
+    return Scaffold( // Scaffoldの呼び出しを修正
+      backgroundColor: Colors.transparent, // これはOK
       appBar: AppBar(
         title: const Text('解析結果'),
-        // 戻るボタンは自動で表示されます
       ),
-      body: Stack( // ScaffoldのbodyをStackでラップ
-        children: [
+      body: Stack(
+        children: [ // Stackのchildrenリスト開始
           Positioned.fill(
             child: CustomBackground(
               overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
@@ -412,9 +418,9 @@ class _ResultPageState extends State<ResultPage> {
               fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
-          Column( // ボタンを追加するためにColumnでラップ
-            children: [
-              Expanded( // 既存のカード部分をExpandedでラップ
+          Column( // Stackの直接の子としてColumn
+            children: [ // Columnのchildrenリスト開始
+              Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
                   child: Container(
@@ -423,19 +429,15 @@ class _ResultPageState extends State<ResultPage> {
                       border: Border.all(color: Colors.grey),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: _parsedResult == null
+                    child: isErrorOrNotTicket
                         ? Center(
                       child: Text(
-                        prettyJson,
-                        style: TextStyle(fontSize: 16, color: Colors.black54),
-                      ),
-                    )
-                        : (_parsedResult!.containsKey('エラー')
-                        ? Text(
-                      'エラー: ${_parsedResult!['エラー']}\n詳細: ${_parsedResult!['詳細']}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.red,
+                        displayMessage,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: _parsedResult != null && _parsedResult!.containsKey('エラー') ? Colors.red : Colors.black54,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
                     )
                         : Column(
@@ -564,24 +566,22 @@ class _ResultPageState extends State<ResultPage> {
                               ],
                             ),
                           ),
-                      ], // 修正箇所: ここにあった余分なカンマを削除
-                    )),
-                  ),
-                ),
-              ),
-              // 修正箇所: ここからボタンを追加
+                      ], // isErrorOrNotTicketがfalseの場合のColumnのchildren終了
+                    ), // isErrorOrNotTicketがfalseの場合のColumn終了
+                  ), // Container終了
+                ), // SingleChildScrollView終了
+              ), // Expanded終了
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20.0),
                 child: Column(
                   children: [
                     ElevatedButton(
                       onPressed: () {
-                        // カメラでスキャンページへ遷移 (pushReplacementで現在のページを置き換える)
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(
                             builder: (_) => QRScannerPage(
                               scanMethod: 'camera',
-                              savedListKey: widget.savedListKey, // savedListKey を渡す
+                              savedListKey: widget.savedListKey,
                             ),
                           ),
                         );
@@ -590,20 +590,19 @@ class _ResultPageState extends State<ResultPage> {
                         padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                         textStyle: const TextStyle(fontSize: 18),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        backgroundColor: Colors.blueAccent, // ボタンの色
-                        foregroundColor: Colors.white, // テキストの色
+                        backgroundColor: Colors.blueAccent,
+                        foregroundColor: Colors.white,
                       ),
                       child: const Text('続けてカメラで登録'),
                     ),
                     const SizedBox(height: 15),
                     ElevatedButton(
                       onPressed: () {
-                        // ギャラリーからスキャンページへ遷移 (pushReplacementで現在のページを置き換える)
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(
                             builder: (_) => GalleryQrScannerPage(
                               scanMethod: 'gallery',
-                              savedListKey: widget.savedListKey, // savedListKey を渡す
+                              savedListKey: widget.savedListKey,
                             ),
                           ),
                         );
@@ -612,33 +611,32 @@ class _ResultPageState extends State<ResultPage> {
                         padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                         textStyle: const TextStyle(fontSize: 18),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        backgroundColor: Colors.blueGrey, // ボタンの色
-                        foregroundColor: Colors.white, // テキストの色
+                        backgroundColor: Colors.blueGrey,
+                        foregroundColor: Colors.white,
                       ),
                       child: const Text('ギャラリーから登録'),
                     ),
                     const SizedBox(height: 15),
                     ElevatedButton(
                       onPressed: () {
-                        // ホームに戻る (ルートまで戻る)
                         Navigator.of(context).popUntil((route) => route.isFirst);
                       },
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                         textStyle: const TextStyle(fontSize: 18),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        backgroundColor: Colors.green, // ボタンの色
-                        foregroundColor: Colors.white, // テキストの色
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
                       ),
                       child: const Text('ホームに戻る'),
                     ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+                  ], // ボタン用Columnのchildren終了
+                ), // Padding内のColumn終了
+              ), // Padding終了
+            ], // メインのColumnのchildrenリスト終了
+          ), // メインのColumn終了
+        ], // Stackのchildrenリスト終了
+      ), // Stack終了
+    ); // Scaffold終了
   }
 }
