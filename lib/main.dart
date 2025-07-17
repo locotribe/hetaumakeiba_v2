@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart';
 import 'dart:io';
+import 'dart:convert'; // JsonEncoder を使用するために追加
 
 import 'package:hetaumakeiba_v2/screens/home_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
@@ -13,6 +14,9 @@ import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/result_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_ticket_detail_page.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
+
+// parse.dart をインポート
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +29,10 @@ void main() async {
     },
     version: 1,
   );
+
+  // デバッグ用: 問題のQRコード文字列を直接解析するテスト関数を呼び出す
+  testParsing();
+
   runApp(MyApp(database: database));
 }
 
@@ -63,4 +71,28 @@ class _MyAppState extends State<MyApp> {
       home: HomePage(savedListKey: _savedListKey),
     );
   }
+}
+
+// デバッグ用のテスト関数
+void testParsing() {
+  // 問題のQRコード文字列をここに貼り付けます
+  String testQrCode = "3080002405061100074136027933030330016510587041700000106041700000100000123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234560665";
+
+  print('TEST_PARSING: Starting parseHorseracingTicketQr with: $testQrCode');
+  try {
+    Map<String, dynamic> parsedData = parseHorseracingTicketQr(testQrCode);
+    print('TEST_PARSING: Parsed Data:');
+    // JsonEncoderを使って整形して表示すると見やすいです
+    print(JsonEncoder.withIndent('  ').convert(parsedData));
+  } catch (e) {
+    print('TEST_PARSING: Parsing Error: $e');
+    if (e is StateError) {
+      print('TEST_PARSING: StateError details: ${e.message}');
+    } else if (e is ArgumentError) {
+      print('TEST_PARSING: ArgumentError details: ${e.message}');
+    } else if (e is RangeError) {
+      print('TEST_PARSING: RangeError details: ${e.message}');
+    }
+  }
+  print('TEST_PARSING: Finished parseHorseracingTicketQr test.');
 }
