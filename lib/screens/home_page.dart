@@ -112,8 +112,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           ),
                         );
                       },
-                      backgroundColor: Colors.purple,
+                      backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
+                      shape: const CircleBorder(),
                       child: const Icon(Icons.image),
                     ),
                   ),
@@ -133,8 +134,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           ),
                         );
                       },
-                      backgroundColor: Colors.redAccent,
+                      backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
+                      shape: const CircleBorder(),
                       child: const Icon(Icons.camera_alt),
                     ),
                   ),
@@ -142,12 +144,27 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               FloatingActionButton(
                 heroTag: 'mainFab',
                 onPressed: _toggleFab,
-                backgroundColor: _isFabExpanded ? Colors.grey : Colors.blueAccent,
+                backgroundColor: _isFabExpanded ? Colors.grey : Colors.green,
                 foregroundColor: Colors.white,
-                child: AnimatedIcon(
-                  icon: AnimatedIcons.menu_close,
-                  progress: _animation,
-                ),
+                shape: const CircleBorder(),
+                child: Align(
+                  alignment: const Alignment(0.0, -0.4), // 必要に応じて調整
+                  child: _isFabExpanded // ★ここから変更★
+                      ? const Text( // _isFabExpanded が true の場合（展開時）
+                    'Ｘ',
+                    style: TextStyle(
+                      fontSize: 26, // 「×」のサイズ
+                      color: Colors.black54, // 「×」の色
+                    ),
+                  )
+                      : const Text( // _isFabExpanded が false の場合（非展開時）
+                    '＋',
+                    style: TextStyle(
+                      fontSize: 32, // 「＋」のサイズ
+                      color: Colors.white, // 「＋」の色
+                    ),
+                  ), // ★ここまで変更★
+                ), // ★ここまで変更★
               ),
             ],
           ),
