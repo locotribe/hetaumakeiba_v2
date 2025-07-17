@@ -1,16 +1,16 @@
 // lib/logic/qr_code_processor.dart
 
-import 'package:flutter/material.dart'; // Navigatorのために必要
+import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart'; // .h から .dart に修正
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/result_page.dart';
-import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart'; // SavedTicketsListPageState のキーのためにインポート
+import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 
 class QrCodeProcessor {
   final DatabaseHelper _dbHelper;
-  // コールバックの型を変更: bool (ステータス) と String? (メッセージ) を渡す
   final Function(bool status, String? message) onWarningStatusChanged;
+  final Function(bool) onScannerControl; // スキャナーの制御用コールバック (true: start, false: stop)
   final Function(Map<String, dynamic> parsedData) onProcessingComplete; // 処理完了後の画面遷移を要求するコールバック
   final GlobalKey<SavedTicketsListPageState> savedListKey; // SavedTicketsListPageの更新用
 
@@ -20,13 +20,13 @@ class QrCodeProcessor {
 
   QrCodeProcessor({
     required DatabaseHelper dbHelper,
-    required this.onWarningStatusChanged, // コンストラクタの引数名を変更
+    required this.onWarningStatusChanged,
+    required this.onScannerControl,
     required this.onProcessingComplete,
     required this.savedListKey,
   }) : _dbHelper = dbHelper;
 
   // 警告メッセージ表示状態を更新し、コールバック経由で外部に伝える
-  // メソッド名も変更
   void _setWarningStatus(bool status, String? message) {
     if (_isShowingDuplicateMessageInternal != status) {
       _isShowingDuplicateMessageInternal = status;
@@ -34,7 +34,7 @@ class QrCodeProcessor {
     }
   }
 
-  // QRコードの断片内の数字列の長さを数える
+  // QRコードの断片内の数字列の長さを数える (デバッグ用および isValidTicketQrSegment で間接的に使用)
   int _countSequence(String s) {
     const sequence = "0123456789";
     return RegExp(sequence).allMatches(s).length;
@@ -45,94 +45,133 @@ class QrCodeProcessor {
     return s.length == 95 && RegExp(r'^[0-9]+$').hasMatch(s);
   }
 
+  // QRコードの断片が後半部分であるか（末尾5桁が60XXXパターンか）を判定するヘルパー関数
+  bool _isBackPart(String segment) {
+    if (segment.length < 5) return false; // 5桁未満なら後半部分ではない
+    final lastFiveDigits = segment.substring(segment.length - 5);
+    // JRAの仕様が変わらない限り今のところ60ｘｘｘとなっている
+    return RegExp(r'^60\d{3}$').hasMatch(lastFiveDigits);
+  }
+
   // QRコード検出時のメイン処理
   Future<void> processQrCodeDetection(String? rawValue) async {
+    // 警告表示中または処理中の場合は、新たな検出を無視
     if (rawValue == null || rawValue.isEmpty || _isShowingDuplicateMessageInternal) {
       print('DEBUG: processQrCodeDetection: Invalid rawValue or duplicate message active. rawValue: $rawValue, _isShowingDuplicateMessageInternal: $_isShowingDuplicateMessageInternal');
       return;
     }
 
-    // #1: QRコードの内容が馬券の断片として有効か事前チェック
+    // rawValue単体での重複チェック (これは常に最初に行う)
+    final bool existsSingle = await _dbHelper.qrCodeExists(rawValue);
+    if (existsSingle) {
+      onScannerControl(false); // 警告表示前にスキャナー停止
+      print('DEBUG: Scanner stopped for single duplicate warning: $rawValue');
+      print('DEBUG: Duplicate single QR code detected (rawValue): $rawValue');
+      _setWarningStatus(true, 'この馬券はすでに読み込みました'); // 警告メッセージを指定
+      await Future.delayed(const Duration(seconds: 2));
+      _setWarningStatus(false, null); // 警告解除時はメッセージをnullに
+      onScannerControl(true); // スキャナーを再開
+      print('DEBUG: Scanner resumed after single duplicate warning.');
+      return; // 重複したQRコードはこれ以上処理しない
+    }
+
+    // #1: QRコードの内容が馬券の断片として有効か事前チェック (数字以外や桁数不正)
     if (!_isValidTicketQrSegment(rawValue)) {
+      onScannerControl(false); // 警告表示前にスキャナー停止
+      print('DEBUG: Scanner stopped for invalid QR segment warning: $rawValue');
       print('DEBUG: Not a valid ticket QR segment: $rawValue');
       _setWarningStatus(true, 'これは馬券ではありません'); // 警告メッセージを指定
       _qrResults.clear(); // 無効なQRコードを検出した場合はクリア
       await Future.delayed(const Duration(seconds: 3)); // 警告表示時間
       _setWarningStatus(false, null); // 警告解除時はメッセージをnullに
+      onScannerControl(true); // スキャナーを再開
+      print('DEBUG: Scanner resumed after invalid QR segment warning.');
       return;
     }
 
-    // rawValue単体での重複チェック
-    final bool existsSingle = await _dbHelper.qrCodeExists(rawValue);
-    if (existsSingle) {
-      print('DEBUG: Duplicate single QR code detected (rawValue): $rawValue');
-      _setWarningStatus(true, 'この馬券はすでに読み込みました'); // 警告メッセージを指定
-      await Future.delayed(const Duration(seconds: 2));
-      _setWarningStatus(false, null); // 警告解除時はメッセージをnullに
-      return; // 重複したQRコードはこれ以上処理しない
+    // 新しいロジック: 既に1つ目のQRコードが検出されているかチェックし、異なるQRコードを探す
+    if (_qrResults.isNotEmpty) {
+      // 既に1つ目のQRコードがロックされている場合
+      if (_qrResults[0] == rawValue) {
+        // 検出されたQRコードが既にロックされているものと同じ場合、何もしない（スキップ）
+        print('DEBUG: Detected same QR code again: $rawValue. Skipping.');
+        return;
+      }
+      // 異なるQRコードが検出されたので、リストに追加
+      _qrResults.add(rawValue);
+      print('DEBUG: Added different rawValue to _qrResults. Current length: ${_qrResults.length}');
+    } else {
+      // 最初のQRコードをロック
+      _qrResults.add(rawValue);
+      print('DEBUG: First rawValue locked. Current length: ${_qrResults.length}');
+      // 最初のQRコードが検出されただけなので、スキャナーは停止せず、次のQRコードを待つ
+      return; // ここで処理を終了し、2つ目のQRコードの検出を待つ
     }
 
-    _qrResults.add(rawValue);
-    print('DEBUG: Added rawValue to _qrResults. Current length: ${_qrResults.length}');
-
     // #2: 3つ以上のQRコード断片が検出された場合の処理
+    // このロジックは、上記で既に2つ追加された後に、さらに別のQRコードが検出された場合を想定
     if (_qrResults.length > 2) {
+      onScannerControl(false); // 警告表示前にスキャナー停止
+      print('DEBUG: Scanner stopped for multiple QR warning.');
       print('DEBUG: More than 2 valid QR codes detected. Clearing results.');
       _setWarningStatus(true, '一枚の馬券だけスキャンしてください'); // 警告メッセージを指定
       _qrResults.clear(); // すべての検出された断片をクリア
-      await Future.delayed(const Duration(seconds: 3)); // 警告表示時間
-      _setWarningStatus(false, null); // 警告解除時はメッセージをnullに
+      await Future.delayed(const Duration(seconds: 3));
+      _setWarningStatus(false, null);
+      onScannerControl(true); // スキャナーを再開
+      print('DEBUG: Scanner resumed after multiple QR warning.');
       return;
     }
 
-    // 2つのQRコードの断片が揃った場合のみ処理
+    // ここに到達するのは _qrResults.length == 2 の場合のみ
+    // 2つの異なるQRコードの断片が揃った場合のみ処理
     if (_qrResults.length == 2) {
-      String firstPart = _qrResults[0];
-      String secondPart = _qrResults[1];
+      // 2つのQRコードが揃ったので、ここでスキャナーを停止
+      onScannerControl(false);
+      print('DEBUG: Scanner stopped as two QR parts are detected and processing begins.');
 
-      int count1 = _countSequence(firstPart);
-      int count2 = _countSequence(secondPart);
-      print('DEBUG: Two QR parts detected. count1: $count1, count2: $count2');
+      String qr1 = _qrResults[0];
+      String qr2 = _qrResults[1];
 
-      // 閾値の設定（実際のデータに基づいて調整してください）
-      // 後半部分の0-9数列が複数回繰り返される場合の閾値
-      const int thresholdForBothBackHalves = 5; // 例: 5回以上なら後半部分の可能性が高い
-      // 前半部分の0-9数列の最大出現回数を考慮した閾値
-      const int thresholdForBothFrontHalves = 4; // 例: 4回以下なら前半部分の可能性が高い
+      // 新しい前後判定ロジック: 60XXXパターンを優先
+      bool isQr1Back = _isBackPart(qr1);
+      bool isQr2Back = _isBackPart(qr2);
 
-      // #3: 両方の断片が「後半部分」である可能性が高い場合の判定
-      if (count1 >= thresholdForBothBackHalves && count2 >= thresholdForBothBackHalves) {
-        print('DEBUG: Both detected QR parts appear to be back halves. Aborting combined processing.');
-        _setWarningStatus(true, '両方のQRコードが馬券の後半部分のようです。'); // 警告メッセージを指定
-        _qrResults.clear(); // 検出された断片をクリア
-        await Future.delayed(const Duration(seconds: 3)); // 警告表示時間
-        _setWarningStatus(false, null); // 警告解除時はメッセージをnullに
-        return;
-      }
-
-      // #4: 両方の断片が「前半部分」である可能性が高い場合の判定
-      if (count1 <= thresholdForBothFrontHalves && count2 <= thresholdForBothFrontHalves) {
-        print('DEBUG: Both detected QR parts appear to be front halves. Aborting combined processing.');
-        _setWarningStatus(true, '両方のQRコードが馬券の前半部分のようです。'); // 警告メッセージを指定
-        _qrResults.clear(); // 検出された断片をクリア
-        await Future.delayed(const Duration(seconds: 3)); // 警告表示時間
-        _setWarningStatus(false, null); // 警告解除時はメッセージをnullに
-        return;
-      }
-
-      // データベースに保存されている形式に合わせてQRコードを結合
-      // 前提条件「0から9の数列が多い方を後半に結合」に基づき、少ない方を前半、多い方を後半とする
       String combinedQrCode;
-      if (count1 > count2) {
-        // firstPartの方が0-9数列が多い（＝後半）ので、secondPart + firstPart
-        combinedQrCode = secondPart + firstPart;
-        print('DEBUG: Combined as secondPart + firstPart. count1: $count1 (firstPart), count2: $count2 (secondPart)');
-      } else {
-        // secondPartの方が0-9数列が多いか同数（＝後半）なので、firstPart + secondPart
-        combinedQrCode = firstPart + secondPart;
-        print('DEBUG: Combined as firstPart + secondPart. count1: $count1 (firstPart), count2: $count2 (secondPart)');
+      String frontPart;
+      String backPart;
+
+      if (isQr1Back && !isQr2Back) { // QR1が後半、QR2が前半
+        frontPart = qr2;
+        backPart = qr1;
+        print('DEBUG: Determined QR2 is front, QR1 is back based on 60XXX pattern.');
+      } else if (!isQr1Back && isQr2Back) { // QR2が後半、QR1が前半
+        frontPart = qr1;
+        backPart = qr2;
+        print('DEBUG: Determined QR1 is front, QR2 is back based on 60XXX pattern.');
+      } else if (isQr1Back && isQr2Back) { // 両方とも後半部分
+        onScannerControl(false);
+        print('DEBUG: Scanner stopped for both back halves warning.');
+        _setWarningStatus(true, '両方のQRコードが馬券の後半部分のようです。');
+        _qrResults.clear();
+        await Future.delayed(const Duration(seconds: 3));
+        _setWarningStatus(false, null);
+        onScannerControl(true);
+        print('DEBUG: Scanner resumed after both back halves warning.');
+        return;
+      } else { // どちらも後半部分ではない（両方前半部分、または不正な組み合わせ）
+        onScannerControl(false);
+        print('DEBUG: Scanner stopped for both front halves warning.');
+        _setWarningStatus(true, '両方のQRコードが馬券の前半部分のようです。');
+        _qrResults.clear();
+        await Future.delayed(const Duration(seconds: 3));
+        _setWarningStatus(false, null);
+        onScannerControl(true);
+        print('DEBUG: Scanner resumed after both front halves warning.');
+        return;
       }
 
+      combinedQrCode = frontPart + backPart;
       print('DEBUG: Combined QR string for duplicate check: $combinedQrCode');
 
       final bool existsCombined = await _dbHelper.qrCodeExists(combinedQrCode);
@@ -142,12 +181,16 @@ class QrCodeProcessor {
         _qrResults.clear(); // 検出された断片をクリア
         await Future.delayed(const Duration(seconds: 2));
         _setWarningStatus(false, null); // 警告解除時はメッセージをnullに
+        onScannerControl(true); // スキャナーを再開
+        print('DEBUG: Scanner resumed after combined duplicate warning.');
         return; // 重複したQRコードはこれ以上処理しない
-      } else {
-        // 重複ではない場合、通常通り処理と保存に進む
-        await _processCombinedQrCode(combinedQrCode);
-        _qrResults.clear(); // 処理後、検出された断片をクリア
       }
+
+      // 正常処理
+      await _processCombinedQrCode(combinedQrCode);
+      _qrResults.clear(); // 処理後、検出された断片をクリア
+      // ここではスキャナーを再開しない。onProcessingCompleteが呼ばれて画面遷移するから
+      print('DEBUG: Combined QR code processed. Navigating to ResultPage.');
     }
     // _qrResults.length が 1 の場合は、次のQRコードを待つため何もしない
   }
@@ -174,10 +217,19 @@ class QrCodeProcessor {
         print('DEBUG: Parsing completed but no QR data found in parsedData: $parsedData');
       }
     } catch (e) {
+      // 解析に失敗した場合も警告を表示し、スキャナーを再開する
       parsedData = {'エラー': '解析に失敗しました', '詳細': e.toString()};
       print('DEBUG: Error during QR code parsing: $e');
+      _setWarningStatus(true, '馬券の解析に失敗しました'); // 解析失敗警告
+      _qrResults.clear(); // リストをクリア
+      await Future.delayed(const Duration(seconds: 3));
+      _setWarningStatus(false, null);
+      onScannerControl(true); // スキャナーを再開
+      print('DEBUG: Scanner resumed after parsing error warning.');
+      return; // 画面遷移せずに処理を終了
     }
 
-    onProcessingComplete(parsedData); // 処理完了をコールバックで通知 (これは結果画面への遷移用なので維持)
+    // 処理完了をコールバックで通知。このコールバック内でスキャナー停止と画面遷移が行われる
+    onProcessingComplete(parsedData);
   }
 }
