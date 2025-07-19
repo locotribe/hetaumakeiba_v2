@@ -53,12 +53,19 @@ class _ResultPageState extends State<ResultPage> {
     return '';
   }
 
-  String _getHorseNumberSymbol(String shikibetsu, String betType) {
+  // Modified function
+  String _getHorseNumberSymbol(String shikibetsu, String betType, {String? uraStatus}) {
     // betTypeは"通常", "ボックス", "ながし", "フォーメーション", "クイックピック", "応援馬券"
     // shikibetsuは"単勝", "複勝", "馬連" など
+
+    // ウラありの場合に '◂▸' を返す
+    if (uraStatus == 'あり') {
+      return '◀ ▶';
+    }
+
     if (betType == '通常') {
       if (shikibetsu == '馬単' || shikibetsu == '3連単') {
-        return '→';
+        return '▶'; // '→' から '▸' に変更
       } else if (shikibetsu == '馬連' || shikibetsu == '3連複' || shikibetsu == '枠連') {
         return '-';
       } else if (shikibetsu == 'ワイド') {
@@ -146,12 +153,17 @@ class _ResultPageState extends State<ResultPage> {
         String shikibetsu = detail['式別'] ?? '';
         int? kingaku = detail['購入金額'];
         String kingakuDisplay = kingaku != null ? '${kingaku}円' : '';
-        String uraDisplay = (detail['ウラ'] != null) ? 'ウラ: ${detail['ウラ']}' : '';
+        // Modified: Only display uraDisplay if it's "あり"
+        String uraDisplay = (detail['ウラ'] == 'あり') ? 'ウラ: あり' : '';
+
 
         List<Widget> detailWidgets = [];
-        // calculatePoints関数が返す「組み合わせ数」を使用
-        int combinations = detail['組み合わせ数'] as int? ?? 0;
-
+        int combinations = 0; // 組み合わせ数を初期化
+        if (betType == 'クイックピック') { // クイックピックの場合、組み合わせ数は_parsedResultのトップレベルにあります
+          combinations = _parsedResult!['組合せ数'] as int? ?? 0;
+        } else { // その他の方式では、詳細マップ(detail)内にあります
+          combinations = detail['組み合わせ数'] as int? ?? 0;
+        }
 
         bool isComplexCombinationForPrefix =
             (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
@@ -257,7 +269,8 @@ class _ResultPageState extends State<ResultPage> {
             ));
           }
         } else if (detail.containsKey('馬番') && detail['馬番'] is List) {
-          String currentSymbol = _getHorseNumberSymbol(shikibetsu, betType);
+          // Pass uraStatus to _getHorseNumberSymbol
+          String currentSymbol = _getHorseNumberSymbol(shikibetsu, betType, uraStatus: detail['ウラ']);
 
           if (!isComplexCombinationForPrefix) {
             detailWidgets.add(Padding(
@@ -274,15 +287,24 @@ class _ResultPageState extends State<ResultPage> {
                     ),
                   ),
                   Expanded(
-                    child: Wrap(
-                      spacing: 4.0,
-                      runSpacing: 4.0,
+                    child: Row(
                       children: [
-                        ..._buildHorseNumberDisplay((detail['馬番'] as List).cast<int>(), symbol: currentSymbol),
+                        Wrap(
+                          spacing: 4.0,
+                          runSpacing: 4.0,
+                          children: [
+                            ..._buildHorseNumberDisplay((detail['馬番'] as List).cast<int>(), symbol: currentSymbol),
+                          ],
+                        ),
                         if (kingaku != null)
-                          Text(
-                            '$prefixForAmount$kingakuDisplay',
-                            style: TextStyle(color: Colors.black54),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                '$prefixForAmount$kingakuDisplay',
+                                style: TextStyle(color: Colors.black54),
+                              ),
+                            ),
                           ),
                       ],
                     ),
@@ -319,10 +341,20 @@ class _ResultPageState extends State<ResultPage> {
         if (kingaku != null && !amountHandledInline) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
-            child: Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54)),
+            child: Row( // Rowを追加
+              children: [
+                Expanded( // Expandedでテキストを右寄せに
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54)),
+                  ),
+                ),
+              ],
+            ),
           ));
         }
 
+        // Modified: Only add uraDisplay if it's not empty (i.e., 'ウラ: あり')
         if (uraDisplay.isNotEmpty) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
@@ -372,13 +404,13 @@ class _ResultPageState extends State<ResultPage> {
       salesLocation = _parsedResult!['発売所'] as String;
     }
 
-    return Scaffold( // Scaffoldの呼び出しを修正
-      backgroundColor: Colors.transparent, // これはOK
+    return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('解析結果'),
       ),
       body: Stack(
-        children: [ // Stackのchildrenリスト開始
+        children: [
           Positioned.fill(
             child: CustomBackground(
               overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
@@ -386,8 +418,8 @@ class _ResultPageState extends State<ResultPage> {
               fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
-          Column( // Stackの直接の子としてColumn
-            children: [ // Columnのchildrenリスト開始
+          Column(
+            children: [
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
@@ -424,17 +456,17 @@ class _ResultPageState extends State<ResultPage> {
                           ),
                         const SizedBox(height: 8),
                         // Displaying the overall ticket type and method
-                        if (_parsedResult!.containsKey('方式'))
+                        if (_parsedResult!.containsKey('式別')) // 修正箇所: '方式' -> '式別'
                           Builder(builder: (context) {
-                            String methodType = _parsedResult!['方式'] ?? ''; // "通常", "ボックス", "ながし" など
+                            String overallMethod = _parsedResult!['式別'] ?? ''; // 修正箇所: '方式' -> '式別'
                             String displayString = '';
 
-                            if (methodType == '通常' || methodType == '応援馬券') {
+                            if (overallMethod == '通常' || overallMethod == '応援馬券') {
                               // For "通常" and "応援馬券", the '券種' is essentially the method itself.
                               // Individual '式別' are listed in '購入内容'.
                               // We can show "通常" or "応援馬券 単勝+複勝" as the main type.
-                              displayString = methodType;
-                              if (methodType == '応援馬券') {
+                              displayString = overallMethod;
+                              if (overallMethod == '応援馬券') {
                                 displayString = '応援馬券 単勝+複勝';
                               }
                             } else {
@@ -448,13 +480,13 @@ class _ResultPageState extends State<ResultPage> {
                               }
 
                               if (primaryShikibetsu.isNotEmpty) {
-                                displayString = '$primaryShikibetsu $methodType';
+                                displayString = '$primaryShikibetsu $overallMethod'; // 修正箇所: methodType -> overallMethod
                                 // Special handling for ながし to include wheel type if available
-                                if (methodType == 'ながし' && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
+                                if (overallMethod == 'ながし' && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) { // 修正箇所: methodType -> overallMethod
                                   displayString = '$primaryShikibetsu ${purchaseDetails[0]['ながし']}';
                                 }
                               } else {
-                                displayString = methodType; // Fallback if betting type is missing
+                                displayString = overallMethod; // Fallback if betting type is missing // 修正箇所: methodType -> overallMethod
                               }
                             }
 
@@ -480,7 +512,7 @@ class _ResultPageState extends State<ResultPage> {
                                 padding: const EdgeInsets.only(left: 16.0),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: _buildPurchaseDetails(_parsedResult!['購入内容'], _parsedResult!['方式'] ?? ''), // '方式'を渡す
+                                  children: _buildPurchaseDetails(_parsedResult!['購入内容'], _parsedResult!['式別'] ?? ''), // 修正箇所: '方式' -> '式別'
                                 ),
                               ),
                             ],
@@ -545,11 +577,11 @@ class _ResultPageState extends State<ResultPage> {
                               ],
                             ),
                           ),
-                      ], // isErrorOrNotTicketがfalseの場合のColumnのchildren終了
-                    ), // isErrorOrNotTicketがfalseの場合のColumn終了
-                  ), // Container終了
-                ), // SingleChildScrollView終了
-              ), // Expanded終了
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20.0),
                 child: Column(
@@ -609,13 +641,13 @@ class _ResultPageState extends State<ResultPage> {
                       ),
                       child: const Text('ホームに戻る'),
                     ),
-                  ], // ボタン用Columnのchildren終了
-                ), // Padding内のColumn終了
-              ), // Padding終了
-            ], // メインのColumnのchildrenリスト終了
-          ), // メインのColumn終了
-        ], // Stackのchildrenリスト終了
-      ), // Stack終了
-    ); // Scaffold終了
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
