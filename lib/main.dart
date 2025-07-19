@@ -31,7 +31,7 @@ void main() async {
   );
 
   // デバッグ用: 問題のQRコード文字列を直接解析するテスト関数を呼び出す
-//   testParsing();
+//    testParsing();
 
   runApp(MyApp(database: database));
 }
@@ -74,25 +74,54 @@ class _MyAppState extends State<MyApp> {
 }
 
 // デバッグ用のテスト関数
-// void testParsing() {
+//  void testParsing() {
   // 問題のQRコード文字列をここに貼り付け
-//   String testQrCode = "5070001903070500336919478614070700051359887091100000109120902000019120906000019120910000019120911000010000123456789012345678901234567890123456789012345678901234567890123456789012345678960635";
-//
-//  print('TEST_PARSING: Starting parseHorseracingTicketQr with: $testQrCode');
-//  try {
-//     Map<String, dynamic> parsedData = parseHorseracingTicketQr(testQrCode);
-//     print('TEST_PARSING: Parsed Data:');
+//    String testQrCode = "5060002404091130137464920858030330016083189000000010000100000010000010000100000011000111000001100000010056789012345678901234567890123456789012345678901234567890123456789012345678901234560521";
+
+//   print('TEST_PARSING: Starting parseHorseracingTicketQr with: $testQrCode');
+//   try {
+//      Map<String, dynamic> parsedData = parseHorseracingTicketQr(testQrCode);
+//      print('TEST_PARSING: Parsed Data:');
     // JsonEncoderを使って整形して表示すると見やすいです
-//     print(JsonEncoder.withIndent('  ').convert(parsedData));
-//   } catch (e) {
-//     print('TEST_PARSING: Parsing Error: $e');
-//     if (e is StateError) {
-//       print('TEST_PARSING: StateError details: ${e.message}');
-//     } else if (e is ArgumentError) {
-//       print('TEST_PARSING: ArgumentError details: ${e.message}');
-//     } else if (e is RangeError) {
-//       print('TEST_PARSING: RangeError details: ${e.message}');
-//     }
-//   }
-//   print('TEST_PARSING: Finished parseHorseracingTicketQr test.');
+//      print(JsonEncoder.withIndent('  ').convert(parsedData));
+// ここから組み合わせ数のプリントを追加
+// print('\nTEST_PARSING: Combination Counts:');
+
+// クイックピックの場合の「組合せ数」
+// if (parsedData.containsKey('式別') && parsedData['式別'] == 'クイックピック') {
+// if (parsedData.containsKey('組合せ数')) {
+// print('  Overall (クイックピック) 組合せ数: ${parsedData['組合せ数']}');
 // }
+// }
+
+// 各購入内容の「組み合わせ数」または「組合せ数」
+// if (parsedData.containsKey('購入内容') && parsedData['購入内容'] is List) {
+// List<dynamic> purchaseContents = parsedData['購入内容'];
+// for (int i = 0; i < purchaseContents.length; i++) {
+// var detail = purchaseContents[i];
+// if (detail is Map<String, dynamic>) {
+// String shikibetsu = detail['式別'] ?? '不明な式別';
+// if (detail.containsKey('組み合わせ数')) {
+// print('  購入内容 ${i + 1} (${shikibetsu}) 組み合わせ数: ${detail['組み合わせ数']}');
+// } else if (detail.containsKey('組合せ数')) { // 念のため「組合せ数」も確認
+// print('  購入内容 ${i + 1} (${shikibetsu}) 組合せ数: ${detail['組合せ数']}');
+// } else {
+// print('  購入内容 ${i + 1} (${shikibetsu}) 組み合わせ数情報なし');
+// }
+// }
+// }
+// }
+// ここまで組み合わせ数のプリントを追加
+
+//    } catch (e) {
+//      print('TEST_PARSING: Parsing Error: $e');
+//      if (e is StateError) {
+//        print('TEST_PARSING: StateError details: ${e.message}');
+//      } else if (e is ArgumentError) {
+//        print('TEST_PARSING: ArgumentError details: ${e.message}');
+//      } else if (e is RangeError) {
+//        print('TEST_PARSING: RangeError details: ${e.message}');
+//      }
+//    }
+//    print('TEST_PARSING: Finished parseHorseracingTicketQr test.');
+//  }

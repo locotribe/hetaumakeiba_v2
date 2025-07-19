@@ -153,20 +153,22 @@ class _ResultPageState extends State<ResultPage> {
         String shikibetsu = detail['式別'] ?? '';
         int? kingaku = detail['購入金額'];
         String kingakuDisplay = kingaku != null ? '${kingaku}円' : '';
-        // Modified: Only display uraDisplay if it's "あり"
         String uraDisplay = (detail['ウラ'] == 'あり') ? 'ウラ: あり' : '';
 
-
-        List<Widget> detailWidgets = [];
-        int combinations = 0; // 組み合わせ数を初期化
-        if (betType == 'クイックピック') { // クイックピックの場合、組み合わせ数は_parsedResultのトップレベルにあります
+        int combinations = 0;
+        // クイックピックの場合、組合せ数は_parsedResultのトップレベルにあります
+        // その他の方式では、詳細マップ(detail)内にあります
+        if (betType == 'クイックピック') {
           combinations = _parsedResult!['組合せ数'] as int? ?? 0;
-        } else { // その他の方式では、詳細マップ(detail)内にあります
-          combinations = detail['組み合わせ数'] as int? ?? 0;
+        } else {
+          combinations = detail['組合せ数'] as int? ?? 0;
         }
 
+        // DEBUG: 組合せ数の値を確認
+        print('DEBUG_RESULT_PAGE: combinations for $shikibetsu (overall betType: $betType): $combinations');
+
         bool isComplexCombinationForPrefix =
-            (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
+            (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
                 detail.containsKey('ながし') ||
                 (betType == 'ボックス');
 
@@ -179,6 +181,9 @@ class _ResultPageState extends State<ResultPage> {
           }
         }
 
+        List<Widget> detailWidgets = [];
+
+        // 組合せ数が0より大きい場合、常に先頭に表示
         if (combinations > 0) {
           detailWidgets.add(
             Text(
@@ -186,11 +191,14 @@ class _ResultPageState extends State<ResultPage> {
               style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
             ),
           );
+          detailWidgets.add(const SizedBox(height: 8.0)); // スペースを追加
+          print('DEBUG_RESULT_PAGE: Added combination count widget for $shikibetsu (betType: $betType). Current detailWidgets length: ${detailWidgets.length}');
         }
 
+        // ここで amountHandledInline をローカル変数として宣言
         bool amountHandledInline = false;
 
-        if (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
+        if (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
           final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
           if (horseGroups.length >= 1) {
             detailWidgets.add(Padding(
