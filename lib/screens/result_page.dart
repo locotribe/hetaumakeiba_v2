@@ -54,6 +54,8 @@ class _ResultPageState extends State<ResultPage> {
   }
 
   String _getHorseNumberSymbol(String shikibetsu, String betType) {
+    // betTypeは"通常", "ボックス", "ながし", "フォーメーション", "クイックピック", "応援馬券"
+    // shikibetsuは"単勝", "複勝", "馬連" など
     if (betType == '通常') {
       if (shikibetsu == '馬単' || shikibetsu == '3連単') {
         return '→';
@@ -147,43 +149,9 @@ class _ResultPageState extends State<ResultPage> {
         String uraDisplay = (detail['ウラ'] != null) ? 'ウラ: ${detail['ウラ']}' : '';
 
         List<Widget> detailWidgets = [];
-        int combinations = 0;
+        // calculatePoints関数が返す「組み合わせ数」を使用
+        int combinations = detail['組み合わせ数'] as int? ?? 0;
 
-        if (betType == 'ボックス') {
-          List<int> horseNumbers = (detail['馬番'] as List).cast<int>();
-          int n = horseNumbers.length;
-          if (shikibetsu == '馬連' || shikibetsu == '馬単') {
-            combinations = n * (n - 1) ~/ (shikibetsu == '馬連' ? 2 : 1);
-          } else if (shikibetsu == '3連複') {
-            combinations = n * (n - 1) * (n - 2) ~/ 6;
-          } else if (shikibetsu == '3連単') {
-            combinations = n * (n - 1) * (n - 2);
-          }
-        } else if (betType == 'フォーメーション') {
-          List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
-          if (shikibetsu == '3連単') {
-            if (horseGroups.length >= 3) {
-              combinations = horseGroups[0].length * horseGroups[1].length * horseGroups[2].length;
-            }
-          } else if (shikibetsu == '3連複') {
-            if (horseGroups.length >= 3) {
-              combinations = horseGroups[0].length * horseGroups[1].length * horseGroups[2].length;
-            }
-          }
-        } else if (betType == 'ながし') {
-          int axisCount = 0;
-          if (detail.containsKey('軸') && detail['軸'] is List) {
-            axisCount = (detail['軸'] as List).length;
-          } else if (detail.containsKey('軸') && detail['軸'] != null) {
-            axisCount = 1;
-          }
-
-          int opponentCount = 0;
-          if (detail.containsKey('相手') && detail['相手'] is List) {
-            opponentCount = (detail['相手'] as List).length;
-          }
-          combinations = axisCount * opponentCount;
-        }
 
         bool isComplexCombinationForPrefix =
             (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
@@ -455,28 +423,39 @@ class _ResultPageState extends State<ResultPage> {
                             style: TextStyle(color: Colors.black54, fontSize: 16),
                           ),
                         const SizedBox(height: 8),
-                        if (_parsedResult!.containsKey('購入内容') && _parsedResult!.containsKey('方式'))
+                        // Displaying the overall ticket type and method
+                        if (_parsedResult!.containsKey('方式'))
                           Builder(builder: (context) {
-                            final List<Map<String, dynamic>> purchaseDetails =
-                            (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-                            String betType = _parsedResult!['方式'] ?? '';
-                            String shikibetsu = '';
-                            if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
-                              shikibetsu = purchaseDetails[0]['式別'];
-                            }
+                            String methodType = _parsedResult!['方式'] ?? ''; // "通常", "ボックス", "ながし" など
+                            String displayString = '';
 
-                            String displayString = shikibetsu;
-
-                            if (betType == '応援馬券') {
-                              displayString = '応援馬券 単勝+複勝';
-                            } else if (betType == 'ながし') {
-                              if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
-                                displayString += ' ${purchaseDetails[0]['ながし']}';
-                              } else {
-                                displayString += ' ながし';
+                            if (methodType == '通常' || methodType == '応援馬券') {
+                              // For "通常" and "応援馬券", the '券種' is essentially the method itself.
+                              // Individual '式別' are listed in '購入内容'.
+                              // We can show "通常" or "応援馬券 単勝+複勝" as the main type.
+                              displayString = methodType;
+                              if (methodType == '応援馬券') {
+                                displayString = '応援馬券 単勝+複勝';
                               }
                             } else {
-                              displayString += ' $betType';
+                              // For other methods (ボックス, ながし, フォーメーション, クイックピック),
+                              // the ticket has a primary '式別' (betting type).
+                              final List<Map<String, dynamic>> purchaseDetails =
+                              (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
+                              String primaryShikibetsu = '';
+                              if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
+                                primaryShikibetsu = purchaseDetails[0]['式別'];
+                              }
+
+                              if (primaryShikibetsu.isNotEmpty) {
+                                displayString = '$primaryShikibetsu $methodType';
+                                // Special handling for ながし to include wheel type if available
+                                if (methodType == 'ながし' && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
+                                  displayString = '$primaryShikibetsu ${purchaseDetails[0]['ながし']}';
+                                }
+                              } else {
+                                displayString = methodType; // Fallback if betting type is missing
+                              }
                             }
 
                             return Text(
@@ -501,7 +480,7 @@ class _ResultPageState extends State<ResultPage> {
                                 padding: const EdgeInsets.only(left: 16.0),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: _buildPurchaseDetails(_parsedResult!['購入内容'], _parsedResult!['方式']),
+                                  children: _buildPurchaseDetails(_parsedResult!['購入内容'], _parsedResult!['方式'] ?? ''), // '方式'を渡す
                                 ),
                               ),
                             ],

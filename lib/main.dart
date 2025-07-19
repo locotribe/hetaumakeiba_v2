@@ -31,7 +31,7 @@ void main() async {
   );
 
   // デバッグ用: 問題のQRコード文字列を直接解析するテスト関数を呼び出す
-  testParsing();
+//   testParsing();
 
   runApp(MyApp(database: database));
 }
@@ -74,25 +74,25 @@ class _MyAppState extends State<MyApp> {
 }
 
 // デバッグ用のテスト関数
-void testParsing() {
+// void testParsing() {
   // 問題のQRコード文字列をここに貼り付け
-  String testQrCode = "3080002405061100074136027933030330016510587041700000106041700000100000123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234560665";
-
-  print('TEST_PARSING: Starting parseHorseracingTicketQr with: $testQrCode');
-  try {
-    Map<String, dynamic> parsedData = parseHorseracingTicketQr(testQrCode);
-    print('TEST_PARSING: Parsed Data:');
+//   String testQrCode = "5070001903070500336919478614070700051359887091100000109120902000019120906000019120910000019120911000010000123456789012345678901234567890123456789012345678901234567890123456789012345678960635";
+//
+//  print('TEST_PARSING: Starting parseHorseracingTicketQr with: $testQrCode');
+//  try {
+//     Map<String, dynamic> parsedData = parseHorseracingTicketQr(testQrCode);
+//     print('TEST_PARSING: Parsed Data:');
     // JsonEncoderを使って整形して表示すると見やすいです
-    print(JsonEncoder.withIndent('  ').convert(parsedData));
-  } catch (e) {
-    print('TEST_PARSING: Parsing Error: $e');
-    if (e is StateError) {
-      print('TEST_PARSING: StateError details: ${e.message}');
-    } else if (e is ArgumentError) {
-      print('TEST_PARSING: ArgumentError details: ${e.message}');
-    } else if (e is RangeError) {
-      print('TEST_PARSING: RangeError details: ${e.message}');
-    }
-  }
-  print('TEST_PARSING: Finished parseHorseracingTicketQr test.');
-}
+//     print(JsonEncoder.withIndent('  ').convert(parsedData));
+//   } catch (e) {
+//     print('TEST_PARSING: Parsing Error: $e');
+//     if (e is StateError) {
+//       print('TEST_PARSING: StateError details: ${e.message}');
+//     } else if (e is ArgumentError) {
+//       print('TEST_PARSING: ArgumentError details: ${e.message}');
+//     } else if (e is RangeError) {
+//       print('TEST_PARSING: RangeError details: ${e.message}');
+//     }
+//   }
+//   print('TEST_PARSING: Finished parseHorseracingTicketQr test.');
+// }
