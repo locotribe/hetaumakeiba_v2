@@ -278,14 +278,6 @@ class _ResultPageState extends State<ResultPage> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: labelWidth,
-                    child: Text(
-                      '馬番',
-                      style: TextStyle(color: Colors.black54),
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
                   Expanded(
                     child: Row(
                       children: [
@@ -445,14 +437,40 @@ class _ResultPageState extends State<ResultPage> {
                       children: [
                         if (_parsedResult!.containsKey('年') && _parsedResult!.containsKey('回') && _parsedResult!.containsKey('日'))
                           Text(
-                            '${_parsedResult!['年']}年${_parsedResult!['回']}回${_parsedResult!['日']}日',
-                            style: TextStyle(color: Colors.black54, fontSize: 16),
+                            '20${_parsedResult!['年']}年${_parsedResult!['回']}回${_parsedResult!['日']}日',
+                            style: TextStyle(color: Colors.black, fontSize: 20),
                           ),
                         const SizedBox(height: 4),
                         if (_parsedResult!.containsKey('開催場') && _parsedResult!.containsKey('レース'))
-                          Text(
-                            '${_parsedResult!['開催場']}${_parsedResult!['レース']}レース',
-                            style: TextStyle(color: Colors.black54, fontSize: 16),
+                          Column( // RowをColumnに変更
+                            crossAxisAlignment: CrossAxisAlignment.start, // 左寄せにする
+                            children: [
+                              Text(
+                                '${_parsedResult!['開催場']}',
+                                style: TextStyle(color: Colors.black, fontSize: 28),
+                              ),
+                              const SizedBox(height: 4), // 横方向のスペースを縦方向のスペースに変更
+                              Row( // レース番号と「レース」は横に並べるためRowで囲む
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 0),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black,
+                                      borderRadius: BorderRadius.all(Radius.circular(0)),
+                                    ),
+                                    child: Text(
+                                      '${_parsedResult!['レース']}',
+                                      style: const TextStyle(color: Colors.white, fontSize: 28, height: 0.9),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4), // 必要に応じてスペースを追加
+                                  const Text(
+                                    'レース',
+                                    style: TextStyle(color: Colors.black, fontSize: 20),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         const SizedBox(height: 8),
                         // Displaying the overall ticket type and method
@@ -460,39 +478,41 @@ class _ResultPageState extends State<ResultPage> {
                           Builder(builder: (context) {
                             String overallMethod = _parsedResult!['式別'] ?? ''; // 修正箇所: '方式' -> '式別'
                             String displayString = '';
-
-                            if (overallMethod == '通常' || overallMethod == '応援馬券') {
-                              // For "通常" and "応援馬券", the '券種' is essentially the method itself.
-                              // Individual '式別' are listed in '購入内容'.
-                              // We can show "通常" or "応援馬券 単勝+複勝" as the main type.
-                              displayString = overallMethod;
-                              if (overallMethod == '応援馬券') {
-                                displayString = '応援馬券 単勝+複勝';
-                              }
-                            } else {
-                              // For other methods (ボックス, ながし, フォーメーション, クイックピック),
-                              // the ticket has a primary '式別' (betting type).
+                            String primaryShikibetsu = '';
+                            if (_parsedResult!.containsKey('購入内容')) {
                               final List<Map<String, dynamic>> purchaseDetails =
                               (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-                              String primaryShikibetsu = '';
                               if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
                                 primaryShikibetsu = purchaseDetails[0]['式別'];
                               }
+                            }
 
+                            if (overallMethod == '通常') {
                               if (primaryShikibetsu.isNotEmpty) {
-                                displayString = '$primaryShikibetsu $overallMethod'; // 修正箇所: methodType -> overallMethod
-                                // Special handling for ながし to include wheel type if available
-                                if (overallMethod == 'ながし' && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) { // 修正箇所: methodType -> overallMethod
+                                displayString = '$primaryShikibetsu $overallMethod'; // 例: "単勝 通常"
+                              } else {
+                                displayString = overallMethod;
+                              }
+                            } else if (overallMethod == '応援馬券') {
+                              displayString = '応援馬券 単勝+複勝';
+                            } else {
+                              // ボックス、ながし、フォーメーション、クイックピックの場合
+                              if (primaryShikibetsu.isNotEmpty) {
+                                displayString = '$primaryShikibetsu $overallMethod';
+                                if (overallMethod == 'ながし' && _parsedResult!.containsKey('購入内容') && (_parsedResult!['購入内容'] as List).isNotEmpty && (_parsedResult!['購入内容'] as List)[0].containsKey('ながし')) {
+                                  final List<Map<String, dynamic>> purchaseDetails =
+                                  (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
                                   displayString = '$primaryShikibetsu ${purchaseDetails[0]['ながし']}';
                                 }
                               } else {
-                                displayString = overallMethod; // Fallback if betting type is missing // 修正箇所: methodType -> overallMethod
+                                displayString = overallMethod;
                               }
                             }
 
+
                             return Text(
                               displayString,
-                              style: TextStyle(color: Colors.black54, fontSize: 16),
+                              style: TextStyle(color: Colors.black, fontSize: 28),
                             );
                           }),
                         const SizedBox(height: 8),
