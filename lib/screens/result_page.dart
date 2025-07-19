@@ -183,17 +183,38 @@ class _ResultPageState extends State<ResultPage> {
 
         List<Widget> detailWidgets = [];
 
-        // 組合せ数が0より大きい場合、常に先頭に表示
-        if (combinations > 0) {
-          detailWidgets.add(
-            Text(
-              '組合せ数 $combinations',
-              style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
-            ),
-          );
-          detailWidgets.add(const SizedBox(height: 8.0)); // スペースを追加
-          print('DEBUG_RESULT_PAGE: Added combination count widget for $shikibetsu (betType: $betType). Current detailWidgets length: ${detailWidgets.length}');
+        String combinationDisplay = '$combinations';
+
+// 三連単軸1頭or2頭ながしマルチの表示修飾
+        if (shikibetsu == '3連単' &&
+            betType == 'ながし' &&
+            detail.containsKey('軸') &&
+            detail.containsKey('相手') &&
+            detail.containsKey('マルチ') &&
+            detail['マルチ'] == true) {
+
+          final int opponentCount = (detail['相手'] as List).length;
+          final int axisCount = (detail['軸'] is List)
+              ? (detail['軸'] as List).length
+              : 1;
+
+          if (axisCount == 2) {
+            combinationDisplay = '${opponentCount}×6';
+          } else if (axisCount == 1) {
+            combinationDisplay = '${opponentCount}×3';
+          }
         }
+
+// 表示とスペースとDEBUGログはそのまま維持
+        detailWidgets.add(
+          Text(
+            '組合せ数 $combinationDisplay',
+            style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
+          ),
+        );
+        detailWidgets.add(const SizedBox(height: 8.0)); // スペースはそのまま残す
+        print('DEBUG_RESULT_PAGE: Added combination count widget for $shikibetsu (betType: $betType). Current detailWidgets length: ${detailWidgets.length}');
+
 
         // ここで amountHandledInline をローカル変数として宣言
         bool amountHandledInline = false;
