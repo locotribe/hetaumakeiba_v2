@@ -199,13 +199,15 @@ class _ResultPageState extends State<ResultPage> {
               : 1;
 
           if (axisCount == 2) {
-            combinationDisplay = '${opponentCount}×6';
+            final int multiplier = 6;
+            combinationDisplay = '${opponentCount}×$multiplier';
           } else if (axisCount == 1) {
-            combinationDisplay = '${opponentCount}×3';
+            final int multiplier = 3;
+            combinationDisplay = '${opponentCount}×$multiplier';
           }
         }
 
-// 表示とスペースとDEBUGログはそのまま維持
+// 表示はそのままでOK
         detailWidgets.add(
           Text(
             '組合せ数 $combinationDisplay',
