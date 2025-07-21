@@ -1,3 +1,5 @@
+// lib/screens/result_page.dart
+
 import 'package:flutter/material.dart';
 import 'dart:convert'; // JsonEncoderを使用
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // QRScannerPageをインポート
@@ -65,7 +67,7 @@ class _ResultPageState extends State<ResultPage> {
 
     if (betType == '通常') {
       if (shikibetsu == '馬単' || shikibetsu == '3連単') {
-        return '▶'; // '→' から '▸' に変更
+        return '▶';
       } else if (shikibetsu == '馬連' || shikibetsu == '3連複' || shikibetsu == '枠連') {
         return '-';
       } else if (shikibetsu == 'ワイド') {
@@ -208,12 +210,23 @@ class _ResultPageState extends State<ResultPage> {
         }
 
 // 表示はそのままでOK
-        detailWidgets.add(
-          Text(
-            '組合せ数 $combinationDisplay',
-            style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
+        detailWidgets.add(Padding(
+          padding: const EdgeInsets.only(left: 16.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '組合せ数 $combinationDisplay',
+                    style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
           ),
-        );
+        ));
+
         detailWidgets.add(const SizedBox(height: 8.0)); // スペースはそのまま残す
         print('DEBUG_RESULT_PAGE: Added combination count widget for $shikibetsu (betType: $betType). Current detailWidgets length: ${detailWidgets.length}');
 
@@ -586,6 +599,8 @@ class _ResultPageState extends State<ResultPage> {
                                 ),
                               ),
                               Expanded(
+                                child: Align(
+                                  alignment: Alignment.centerRight,
                                 child: Text(
                                   '$totalAmount円',
                                   style: TextStyle(
@@ -593,6 +608,7 @@ class _ResultPageState extends State<ResultPage> {
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
                                   ),
+                                ),
                                 ),
                               ),
                             ],
