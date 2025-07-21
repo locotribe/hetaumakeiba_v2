@@ -89,8 +89,8 @@ const Map<String, String> bettingDict = {
   "5": "馬連",
   "6": "馬単",
   "7": "ワイド",
-  "8": "3連複", // 「三連複」から「3連複」に統一
-  "9": "3連単", // 「三連単」から「3連単」に統一
+  "8": "3連複",
+  "9": "3連単",
 };
 
 const Map<String, String> wheelExactaDict = {"1": "1着ながし", "2": "2着ながし"};
@@ -106,10 +106,6 @@ const Map<String, String> wheelTrifectaDict = {
   "6": "3着ながし",
 };
 
-/// 競馬の賭式ごとの組み合わせ数計算ロジックと、各方式の解説をまとめた関数です。
-///
-/// 以下のDart言語で書かれた`calculatePoints`関数は、指定された賭式（`ticketType`）と方式（`method`）、
-/// および選択された馬番のリスト（`first`, `second`, `third`）に基づいて、組み合わせの点数を計算します。
 int calculatePoints({
   required String ticketType,
   required String method,
@@ -117,8 +113,6 @@ int calculatePoints({
   List<int>? second,
   List<int>? third,
 }) {
-  // 引数の文字列をトリムして正規化
-  // trim() は文字列の先頭と末尾の空白文字（スペース、タブ、改行など）を除去します。
   final normalizedTicketType = ticketType.trim();
   final normalizedMethod = method.trim();
 
@@ -126,64 +120,38 @@ int calculatePoints({
   final s = second ?? [];
   final t = third ?? [];
 
-  // デバッグ出力 (必要に応じてコメントアウトを解除)
-  // print('DEBUG_CALCULATE_POINTS_INTERNAL: Function entry.');
-  // print('  normalizedTicketType (value): "$normalizedTicketType"');
-  // print('  normalizedMethod (value): "$normalizedMethod"');
-  // print('  f (first) value: $f');
-  // print('  s (second) value: $s');
-  // print('  t (third) value: $t');
-
-  switch (normalizedTicketType) { // normalizedTicketType を使用
-    case '3連単': // 「三連単」から「3連単」に統一
-    // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 3連単 block.');
-    // print('DEBUG_CALCULATE_POINTS_INTERNAL: Method string for inner comparison: "$normalizedMethod"');
-      switch (normalizedMethod) { // normalizedMethod を使用
+  switch (normalizedTicketType) {
+    case '3連単':
+      switch (normalizedMethod) {
         case 'フォーメーション':
           int count = 0;
-          // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 3連単 フォーメーション case.');
-          // print('DEBUG_CALCULATE_POINTS_INTERNAL: Starting 3連単 フォーメーション loop.');
           for (var i in f) {
             for (var j in s) {
               for (var k in t) {
-                // print('DEBUG_CALCULATE_POINTS_INTERNAL: Checking combination: i=$i, j=$j, k=$k');
                 if (i != j && i != k && j != k) {
                   count++;
-                  // print('DEBUG_CALCULATE_POINTS_INTERNAL:   -> Valid combination. Current count: $count');
-                } else {
-                  // print('DEBUG_CALCULATE_POINTS_INTERNAL:   -> Invalid combination (duplicates found).');
                 }
               }
             }
           }
-          // print('DEBUG_CALCULATE_POINTS_INTERNAL: Final count for 3連単 フォーメーション: $count');
           return count;
         case 'BOX':
-        // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 3連単 BOX case.');
           if (f.length < 3) return 0;
           return f.length * (f.length - 1) * (f.length - 2);
         case '軸1頭ながし':
-        // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 3連単 軸1頭ながし case.');
           return s.length * (s.length - 1);
         case '軸1頭マルチ':
-        // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 3連単 軸1頭マルチ case.');
           return s.length * (s.length - 1) * 3;
         case '軸2頭ながし':
-        // f = 軸馬（2頭）, s = 相手馬（3着候補）
-        // 通常流しでは相手馬の頭数がそのまま点数になる
           return s.length;
-      // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 3連単 軸2頭ながし case.');
         case '軸2頭マルチ':
-        // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 3連単 軸2頭マルチ case.');
           return s.length * 6;
         default:
-        // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 3連単 DEFAULT case. Method was: "$normalizedMethod"');
           return 0;
       }
 
-    case '3連複': // 「三連複」から「3連複」に統一
-    // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 3連複 block.');
-      switch (normalizedMethod) { // normalizedMethod を使用
+    case '3連複':
+      switch (normalizedMethod) {
         case 'フォーメーション':
           Set<String> combos = {};
           for (var i in f) {
@@ -210,8 +178,7 @@ int calculatePoints({
       }
 
     case '馬単':
-    // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 馬単 block.');
-      switch (normalizedMethod) { // normalizedMethod を使用
+      switch (normalizedMethod) {
         case 'フォーメーション':
           return f.length * s.length;
         case 'BOX':
@@ -227,8 +194,7 @@ int calculatePoints({
     case '馬連':
     case 'ワイド':
     case '枠連':
-    // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered 馬連/ワイド/枠連 block.');
-      switch (normalizedMethod) { // normalizedMethod を使用
+      switch (normalizedMethod) {
         case 'フォーメーション':
           final overlap = f.toSet().intersection(s.toSet()).length;
           return (f.length * s.length) - overlap;
@@ -242,7 +208,6 @@ int calculatePoints({
       }
 
     default:
-    // print('DEBUG_CALCULATE_POINTS_INTERNAL: Entered top-level DEFAULT case. TicketType was: "$normalizedTicketType"');
       return 0;
   }
 }
@@ -257,8 +222,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
   d["QR"] = s;
   _StringIterator itr = _StringIterator(s);
 
-  print('--- parseHorseracingTicketQr Start ---'); // 開始
-  print('QR String: $s'); // QR文字列全体をログ
+  print('--- parseHorseracingTicketQr Start ---');
+  print('QR String: $s');
 
   String ticketFormat = itr.next();
   print('Parsed ticketFormat: $ticketFormat (Iterator position: ${itr.position})');
@@ -338,10 +303,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       String? prevCode;
 
       while (true) {
-        // ループ開始ログ
         print('[Loop Start] itr.position = ${itr.position}');
 
-        // 終了マーカーチェック
         String peekedChar = itr.peek(0);
         print('  [Peek] next char = "$peekedChar"');
         if (peekedChar == "0") {
@@ -350,7 +313,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           break;
         }
 
-        // 1) 式別コード取得
         String bettingCode = itr.next();
         print('  [Parsed] bettingCode = $bettingCode (position=${itr.position})');
 
@@ -358,7 +320,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         di["式別"] = bettingDict[bettingCode];
         print('    => 式別: ${di["式別"]}');
 
-        // 2) 馬番の数と値を取得
         int count;
         switch (bettingCode) {
           case "1":
@@ -383,7 +344,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         di["馬番"] = [
           for (int i = 0; i < count; i++)
             int.parse(
-              // 2桁ずつ読み取り
               (() {
                 String a = itr.next();
                 String b = itr.next();
@@ -394,10 +354,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         ];
         print('    => 馬番: ${di["馬番"]} (position=${itr.position})');
 
-        // 3) 式別ごとのマーカー／ウラフラグ消費
         switch (bettingCode) {
           case "6":
-          // 馬単：00 or 01 がウラフラグ
             String ura = itr.next() + itr.next();
             di["ウラ"] = (ura == "01") ? "あり" : "なし";
             print('    [Marker] 馬単ウラ = $ura → ${di["ウラ"]} (position=${itr.position})');
@@ -407,15 +365,11 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           case "2":
           case "5":
           case "7":
-          // 単勝・複勝・馬連・ワイド：必ず00マーカーを捨てる
             String m1 = itr.next(), m2 = itr.next();
             print('    [Marker] consumed for code $bettingCode: $m1$m2 (position=${itr.position})');
             break;
-
-        // 3連系(8,9)はマーカー無し → 何もしない
         }
 
-        // 4) 購入金額 (5桁) を正確に読み取る
         String purchaseAmountStr = "";
         print('    [Amount] start reading 5 digits at position=${itr.position}');
         for (int i = 0; i < 5 && itr.position < s.length; i++) {
@@ -427,7 +381,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         (purchaseAmountStr.length == 5) ? int.parse(purchaseAmountStr) * 100 : 0;
         print('    => 購入金額: ${di["購入金額"]} (position=${itr.position})');
 
-        // 5) 下端番号カウンタ更新（既存ロジック踏襲）
         if (underDigits[15] == "0" || underDigits[15] == bettingCode) {
           underDigits[15] = bettingCode;
           underDigits[18] = (int.parse(underDigits[18]) + 1).toString();
@@ -443,7 +396,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           print('    [UD] updated underDigits[16,18] for new code');
         }
 
-        // 6) 購入内容リストに追加
         (d["購入内容"] as List).add(di);
         print('    [Added] purchase entry: $di');
 
@@ -454,7 +406,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       break;
 
 
-  case "1": // ボックス
+    case "1": // ボックス
       print('--- Entering BOX Betting ---');
       Map<String, dynamic> di = {};
       String bettingCode = itr.next();
@@ -464,7 +416,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       List<int> nos = [];
       String purchaseAmountStr = "";
 
-      // 最初の5つの馬番を読み込み
       print('  Reading first 5 horse numbers (BOX)...');
       for (int i = 0; i < 5; i++) {
         nos.add(int.parse(itr.next() + itr.next()));
@@ -477,7 +428,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       String seventh = itr.next();
       itr.currentPosition = originalPos;
       print('  Peeked 6th and 7th chars: "$sixth", "$seventh"');
-      if (!(sixth == "9" && seventh == "0")) { // 続きの馬番がある場合
+      if (!(sixth == "9" && seventh == "0")) {
         print('  Reading next 5 horse numbers (BOX)...');
         for (int i = 0; i < 5; i++) {
           nos.add(int.parse(itr.next() + itr.next()));
@@ -491,9 +442,9 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       String seventh2 = itr.next();
       itr.currentPosition = originalPos2;
       print('  Peeked 6th2 and 7th2 chars: "$sixth2", "$seventh2"');
-      if (!(sixth2 == "9" && seventh2 == "0")) { // さらに続きの馬番がある場合 (最大18頭なので、ここはもう少し細かく条件がいるかも)
+      if (!(sixth2 == "9" && seventh2 == "0")) {
         print('  Reading additional 8 horse numbers (BOX)...');
-        for (int i = 0; i < 8; i++) { // Max 18 horses, 5 + 5 + 8 = 18
+        for (int i = 0; i < 8; i++) {
           nos.add(int.parse(itr.next() + itr.next()));
         }
         print('  After additional 8 horse numbers. Current nos: $nos (Iterator position: ${itr.position})');
@@ -521,7 +472,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       print('  Updated underDigits for BOX. underDigits[15]: ${underDigits[15]}, [17]: ${underDigits[17]}, [18]: ${underDigits[18]}');
       (d["購入内容"] as List).add(di);
 
-      // calculatePoints関数の呼び出し
       di["組合せ数"] = calculatePoints(
         ticketType: bettingDict[bettingCode]!,
         method: 'BOX',
@@ -538,14 +488,14 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       di["式別"] = bettingDict[bettingCode];
       print('  Parsed bettingCode (NAGASHI): $bettingCode, 式別: ${di["式別"]} (Iterator position: ${itr.position})');
 
-      String method = ''; // calculatePointsに渡すためのmethod変数
+      String method = '';
       String wheelCode = itr.next();
       print('  Parsed wheelCode: $wheelCode (Iterator position: ${itr.position})');
 
       switch (bettingCode) {
         case "6": // 馬単
           di["ながし"] = wheelExactaDict[wheelCode];
-          method = 'ながし'; // 馬単のながし
+          method = 'ながし';
           if (di["ながし"] == "1着ながし" || di["ながし"] == "2着ながし") {
             method = 'ながし';
           }
@@ -553,12 +503,12 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           break;
         case "8": // 3連複
           di["ながし"] = wheelTrioDict[wheelCode];
-          method = di["ながし"]!; // 3連複の軸1頭ながし、軸2頭ながし
+          method = di["ながし"]!;
           print('  3連複ながし: ${di["ながし"]}, method: $method');
           break;
         case "9": // 3連単
           di["ながし"] = wheelTrifectaDict[wheelCode];
-          method = di["ながし"]!; // 3連単のながし
+          method = di["ながし"]!;
           if (di["ながし"] == "1着ながし" ||
               di["ながし"] == "2着ながし" ||
               di["ながし"] == "3着ながし") {
@@ -570,11 +520,11 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           break;
         default:
           di["ながし"] = "ながし";
-          method = 'ながし'; // その他のながし
+          method = 'ながし';
           print('  Other ながし: ${di["ながし"]}, method: $method');
       }
       int count = 0;
-      if (bettingCode == "6" || bettingCode == "8") { // 馬単、3連複
+      if (bettingCode == "6" || bettingCode == "8") {
         List<int> horseNumbers = [];
         print('  Parsing axis horses for bettingCode $bettingCode (2 sets of 18 bits)...');
         for (int j = 0; j < 2; j++) {
@@ -616,7 +566,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         print('  Parsed 馬番 (3連単): ${di["馬番"]} (Iterator position: ${itr.position})');
         for (var list in (horseNumbers)) {
           if (list.length > count) {
-            count = list.length; // Max length of any list
+            count = list.length;
           }
         }
         print('  Count (max horse numbers in any set): $count');
@@ -651,7 +601,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         print('  Count (opponent horses for other NAGASHI): $count');
       }
 
-      // 3連複・3連単はここで金額を読み込む
       if (bettingCode == "8" || bettingCode == "9") {
         String purchaseAmountStr = "";
         print('  Reading purchase amount (5 characters) for 3連複/3連単 NAGASHI from position: ${itr.position}');
@@ -669,23 +618,28 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
 
       String multiCode = itr.next();
       print('  Parsed multiCode: $multiCode (Iterator position: ${itr.position})');
-      if (bettingCode == "9") {
-        d["マルチ"] = multiCode == "1" ? "あり" : "なし";
+      if (bettingCode == "9") { // 3連単
+        di["マルチ"] = multiCode == "1" ? "あり" : "なし"; // <-- di["マルチ"]を設定
         if (multiCode == "1") {
-          // 3連単マルチの場合、methodを更新
+          // 3連単マルチの場合、methodを更新し、表示用データを追加
           if (method == '軸1頭ながし') {
             method = '軸1頭マルチ';
+            di["表示用相手頭数"] = (di["馬番"][1] as List).length; // 軸1頭の場合の相手馬はparsedNumbers[1]
+            di["表示用乗数"] = 3;
           } else if (method == '軸2頭ながし') {
             method = '軸2頭マルチ';
+            di["表示用相手頭数"] = (di["馬番"][2] as List).length; // 軸2頭の場合の相手馬はparsedNumbers[2]
+            di["表示用乗数"] = 6;
           }
         }
-        print('  3連単マルチ: ${d["マルチ"]}, method updated to: $method');
+        print('  3連単マルチ: ${di["マルチ"]}, method updated to: $method');
+        if (di.containsKey("表示用相手頭数")) print('  表示用相手頭数: ${di["表示用相手頭数"]}, 表示用乗数: ${di["表示用乗数"]}');
       } else if (bettingCode == "6") { // 馬単のマルチ
-        d["マルチ"] = multiCode == "1" ? "あり" : "なし";
+        di["マルチ"] = multiCode == "1" ? "あり" : "なし";
         if (multiCode == "1") {
           method = 'マルチ';
         }
-        print('  馬単マルチ: ${d["マルチ"]}, method updated to: $method');
+        print('  馬単マルチ: ${di["マルチ"]}, method updated to: $method');
       }
 
 
@@ -702,7 +656,16 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       print('  Added item to 購入内容 (NAGASHI): $di');
 
 
-      // calculatePoints関数の呼び出し
+      List<int> firstHorses = [];
+      List<int> secondHorses = [];
+      List<int> thirdHorses = [];
+      if (bettingCode == "9") {
+        if (di["馬番"].length > 0) firstHorses = di["馬番"][0];
+        if (di["馬番"].length > 1) secondHorses = di["馬番"][1];
+        if (di["馬番"].length > 2) thirdHorses = di["馬番"][2];
+      }
+
+
       if (bettingCode == "6" || bettingCode == "8") {
         di["組合せ数"] = calculatePoints(
           ticketType: bettingDict[bettingCode]!,
@@ -711,34 +674,26 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           second: di["相手"],
         );
       } else if (bettingCode == "9") {
-        List<int> firstHorses = [];
-        List<int> secondHorses = [];
-        List<int> thirdHorses = [];
-
-        if (di["馬番"].length > 0) firstHorses = di["馬番"][0];
-        if (di["馬番"].length > 1) secondHorses = di["馬番"][1];
-        if (di["馬番"].length > 2) thirdHorses = di["馬番"][2];
-
-        if (method == '軸1頭ながし' || method == '軸1頭マルチ') { // 軸1頭の場合は軸馬と相手馬
+        if (method == '軸1頭ながし' || method == '軸1頭マルチ') {
           di["組合せ数"] = calculatePoints(
             ticketType: bettingDict[bettingCode]!,
             method: method,
             first: firstHorses,
-            second: secondHorses.isNotEmpty ? secondHorses : thirdHorses, // 相手馬のリストを渡す
+            second: secondHorses.isNotEmpty ? secondHorses : thirdHorses,
           );
-        } else if (method == '軸2頭ながし' || method == '軸2頭マルチ') { // 軸2頭の場合は軸馬2つと相手馬1つ
+        } else if (method == '軸2頭ながし' || method == '軸2頭マルチ') {
           di["組合せ数"] = calculatePoints(
             ticketType: bettingDict[bettingCode]!,
             method: method,
-            first: firstHorses, // 軸1
-            second: secondHorses, // 軸2
-            third: thirdHorses, // 相手
+            first: firstHorses,
+            second: secondHorses,
+            third: thirdHorses,
           );
-        } else { // その他のケース（本来ここには来ないはずだが念のため）
+        } else {
           di["組合せ数"] = 0;
         }
 
-      } else { // 馬連・ワイド・枠連のながし
+      } else {
         di["組合せ数"] = calculatePoints(
           ticketType: bettingDict[bettingCode]!,
           method: 'ながし',
@@ -805,7 +760,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       print('  Added item to 購入内容 (FORMATION): $di');
 
 
-      // calculatePoints関数の呼び出し
       List<int> firstFormation = [];
       List<int> secondFormation = [];
       List<int> thirdFormation = [];
@@ -902,7 +856,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
 
   d["下端番号"] = joinWithSpaces(underDigits);
   print('Final 下端番号: ${d["下端番号"]}');
-  print('--- parseHorseracingTicketQr End ---'); // 終了
+  print('--- parseHorseracingTicketQr End ---');
   return d;
 }
 
@@ -945,12 +899,9 @@ class _StringIterator {
     _currentPosition = pos;
   }
 
-  /// Peek ahead without advancing the iterator.
   String peek(int offset) {
     int pos = _currentPosition + offset;
     if (pos >= _s.length || pos < 0) {
-      // 範囲外の場合は空文字列を返すか、エラーを投げるか選択
-      // 今回はデバッグ目的なので、分かりやすくエラーを投げる
       throw RangeError("Peek out of range. Current position: $_currentPosition, offset: $offset, Target position: $pos, String length: ${_s.length}");
     }
     return _s[pos];

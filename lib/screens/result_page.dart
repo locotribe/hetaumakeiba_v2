@@ -1,11 +1,11 @@
 // lib/screens/result_page.dart
 
 import 'package:flutter/material.dart';
-import 'dart:convert'; // JsonEncoderを使用
-import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart'; // QRScannerPageをインポート
-import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart'; // GalleryQrScannerPageをインポート
-import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart'; // SavedTicketsListPageState のキーのためにインポート
-import 'package:hetaumakeiba_v2/widgets/custom_background.dart'; // 背景ウィジェットをインポート
+import 'dart:convert';
+import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
+import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
+import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
+import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 
 class ResultPage extends StatefulWidget {
   final Map<String, dynamic>? parsedResult;
@@ -55,12 +55,7 @@ class _ResultPageState extends State<ResultPage> {
     return '';
   }
 
-  // Modified function
   String _getHorseNumberSymbol(String shikibetsu, String betType, {String? uraStatus}) {
-    // betTypeは"通常", "ボックス", "ながし", "フォーメーション", "クイックピック", "応援馬券"
-    // shikibetsuは"単勝", "複勝", "馬連" など
-
-    // ウラありの場合に '◂▸' を返す
     if (uraStatus == 'あり') {
       return '◀ ▶';
     }
@@ -158,15 +153,12 @@ class _ResultPageState extends State<ResultPage> {
         String uraDisplay = (detail['ウラ'] == 'あり') ? 'ウラ: あり' : '';
 
         int combinations = 0;
-        // クイックピックの場合、組合せ数は_parsedResultのトップレベルにあります
-        // その他の方式では、詳細マップ(detail)内にあります
         if (betType == 'クイックピック') {
           combinations = _parsedResult!['組合せ数'] as int? ?? 0;
         } else {
           combinations = detail['組合せ数'] as int? ?? 0;
         }
 
-        // DEBUG: 組合せ数の値を確認
         print('DEBUG_RESULT_PAGE: combinations for $shikibetsu (overall betType: $betType): $combinations');
 
         bool isComplexCombinationForPrefix =
@@ -177,7 +169,7 @@ class _ResultPageState extends State<ResultPage> {
         String prefixForAmount = '';
         if (kingaku != null) {
           if (isComplexCombinationForPrefix) {
-            prefixForAmount = '各組${_getStars(kingaku)}';
+            prefixForAmount = '　各組${_getStars(kingaku)}';
           } else {
             prefixForAmount = '${_getStars(kingaku)}';
           }
@@ -185,32 +177,17 @@ class _ResultPageState extends State<ResultPage> {
 
         List<Widget> detailWidgets = [];
 
-        String combinationDisplay = '$combinations';
+        String combinationDisplay = '$combinations'; // デフォルトは計算された合計数
 
-// 三連単軸1頭or2頭ながしマルチの表示修飾
-        if (shikibetsu == '3連単' &&
-            betType == 'ながし' &&
-            detail.containsKey('軸') &&
-            detail.containsKey('相手') &&
-            detail.containsKey('マルチ') &&
-            detail['マルチ'] == true) {
-
-          final int opponentCount = (detail['相手'] as List).length;
-          final int axisCount = (detail['軸'] is List)
-              ? (detail['軸'] as List).length
-              : 1;
-
-          if (axisCount == 2) {
-            final int multiplier = 6;
-            combinationDisplay = '${opponentCount}×$multiplier';
-          } else if (axisCount == 1) {
-            final int multiplier = 3;
-            combinationDisplay = '${opponentCount}×$multiplier';
-          }
+        // 三連単軸1頭or2頭ながしマルチの表示修飾
+        // parse.dartで追加した "表示用相手頭数" と "表示用乗数" があるかを確認
+        if (detail.containsKey('表示用相手頭数') && detail.containsKey('表示用乗数')) {
+          final int opponentCountForDisplay = detail['表示用相手頭数'] as int;
+          final int multiplierForDisplay = detail['表示用乗数'] as int;
+          combinationDisplay = '${opponentCountForDisplay}×$multiplierForDisplay';
         }
 
 
-        // ここで amountHandledInline をローカル変数として宣言
         bool amountHandledInline = false;
 
         if (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
@@ -292,7 +269,6 @@ class _ResultPageState extends State<ResultPage> {
             ));
           }
         } else if (detail.containsKey('馬番') && detail['馬番'] is List) {
-          // Pass uraStatus to _getHorseNumberSymbol
           String currentSymbol = _getHorseNumberSymbol(shikibetsu, betType, uraStatus: detail['ウラ']);
 
           if (!isComplexCombinationForPrefix) {
@@ -371,18 +347,33 @@ class _ResultPageState extends State<ResultPage> {
             ),
           ));
 
-          detailWidgets.add(const SizedBox(height: 8.0)); // スペースはそのまま残す
+          detailWidgets.add(const SizedBox(height: 8.0));
           print('DEBUG_RESULT_PAGE: Added combination count widget for $shikibetsu (betType: $betType). Current detailWidgets length: ${detailWidgets.length}');
 
 
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
-            child: Row( // Rowを追加
+            child: Row(
               children: [
-                Expanded( // Expandedでテキストを右寄せに
+                Expanded(
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54)),
+                    // マルチの場合に「マルチ」をContainerで表示し、各組と金額を並べる
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min, // Rowの幅を内容に合わせる
+                      children: [
+                        if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり')
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+                            decoration: const BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.all(Radius.circular(0)),
+                            ),
+                            child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
+                          ),
+                        Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54)),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -390,7 +381,6 @@ class _ResultPageState extends State<ResultPage> {
           ));
         }
 
-        // Modified: Only add uraDisplay if it's not empty (i.e., 'ウラ: あり')
         if (uraDisplay.isNotEmpty) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
@@ -486,15 +476,15 @@ class _ResultPageState extends State<ResultPage> {
                           ),
                         const SizedBox(height: 4),
                         if (_parsedResult!.containsKey('開催場') && _parsedResult!.containsKey('レース'))
-                          Column( // RowをColumnに変更
-                            crossAxisAlignment: CrossAxisAlignment.start, // 左寄せにする
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 '${_parsedResult!['開催場']}',
                                 style: TextStyle(color: Colors.black, fontSize: 28),
                               ),
-                              const SizedBox(height: 4), // 横方向のスペースを縦方向のスペースに変更
-                              Row( // レース番号と「レース」は横に並べるためRowで囲む
+                              const SizedBox(height: 4),
+                              Row(
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 0),
@@ -507,7 +497,7 @@ class _ResultPageState extends State<ResultPage> {
                                       style: const TextStyle(color: Colors.white, fontSize: 28, height: 0.9),
                                     ),
                                   ),
-                                  const SizedBox(width: 4), // 必要に応じてスペースを追加
+                                  const SizedBox(width: 4),
                                   const Text(
                                     'レース',
                                     style: TextStyle(color: Colors.black, fontSize: 20),
@@ -517,10 +507,9 @@ class _ResultPageState extends State<ResultPage> {
                             ],
                           ),
                         const SizedBox(height: 8),
-                        // Displaying the overall ticket type and method
-                        if (_parsedResult!.containsKey('式別')) // 修正箇所: '方式' -> '式別'
+                        if (_parsedResult!.containsKey('式別'))
                           Builder(builder: (context) {
-                            String overallMethod = _parsedResult!['式別'] ?? ''; // 修正箇所: '方式' -> '式別'
+                            String overallMethod = _parsedResult!['式別'] ?? '';
                             String displayString = '';
                             String primaryShikibetsu = '';
                             if (_parsedResult!.containsKey('購入内容')) {
@@ -533,14 +522,13 @@ class _ResultPageState extends State<ResultPage> {
 
                             if (overallMethod == '通常') {
                               if (primaryShikibetsu.isNotEmpty) {
-                                displayString = '$primaryShikibetsu $overallMethod'; // 例: "単勝 通常"
+                                displayString = '$primaryShikibetsu $overallMethod';
                               } else {
                                 displayString = overallMethod;
                               }
                             } else if (overallMethod == '応援馬券') {
                               displayString = '応援馬券 単勝+複勝';
                             } else {
-                              // ボックス、ながし、フォーメーション、クイックピックの場合
                               if (primaryShikibetsu.isNotEmpty) {
                                 displayString = '$primaryShikibetsu $overallMethod';
                                 if (overallMethod == 'ながし' && _parsedResult!.containsKey('購入内容') && (_parsedResult!['購入内容'] as List).isNotEmpty && (_parsedResult!['購入内容'] as List)[0].containsKey('ながし')) {
@@ -576,7 +564,7 @@ class _ResultPageState extends State<ResultPage> {
                                 padding: const EdgeInsets.only(left: 16.0),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: _buildPurchaseDetails(_parsedResult!['購入内容'], _parsedResult!['式別'] ?? ''), // 修正箇所: '方式' -> '式別'
+                                  children: _buildPurchaseDetails(_parsedResult!['購入内容'], _parsedResult!['式別'] ?? ''),
                                 ),
                               ),
                             ],
@@ -601,14 +589,14 @@ class _ResultPageState extends State<ResultPage> {
                               Expanded(
                                 child: Align(
                                   alignment: Alignment.centerRight,
-                                child: Text(
-                                  '$totalAmount円',
-                                  style: TextStyle(
-                                    color: Colors.black54,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                  child: Text(
+                                    '$totalAmount円',
+                                    style: TextStyle(
+                                      color: Colors.black54,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
-                                ),
                                 ),
                               ),
                             ],
