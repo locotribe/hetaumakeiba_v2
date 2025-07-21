@@ -1,6 +1,7 @@
 // lib/widgets/purchase_details_card.dart
 
 import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/widgets/app_styles.dart'; // ★追加: app_styles.dart をインポート
 
 class PurchaseDetailsCard extends StatelessWidget {
   final Map<String, dynamic> parsedResult; // 全体の解析結果を渡す
@@ -58,19 +59,20 @@ class PurchaseDetailsCard extends StatelessWidget {
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(vertical: 2.0),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.black54),
+              border: Border.all(color: AppStyles.horseNumberBorderColor), // ★スタイル適用
               borderRadius: BorderRadius.circular(4.0),
+              color: AppStyles.horseNumberBackgroundColor, // ★スタイル適用
             ),
             child: Text(
               horseNumbers[i].toString(),
-              style: TextStyle(color: Colors.black54),
+              style: AppStyles.horseNumberTextStyle, // ★スタイル適用
             ),
           ),
         ),
       );
       if (symbol.isNotEmpty && i < horseNumbers.length - 1) {
         widgets.add(
-          Text(symbol, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+          Text(symbol, style: AppStyles.horseNumberSymbolTextStyle), // ★スタイル適用
         );
       }
     }
@@ -95,7 +97,7 @@ class PurchaseDetailsCard extends StatelessWidget {
               width: labelWidth,
               child: Text(
                 '馬番',
-                style: TextStyle(color: Colors.black54),
+                style: AppStyles.totalLabelStyle, // ★スタイル適用 (既存のスタイルを流用)
                 textAlign: TextAlign.end,
               ),
             ),
@@ -108,15 +110,15 @@ class PurchaseDetailsCard extends StatelessWidget {
         ),
         Text(
           '各${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black54),
+          style: AppStyles.purchaseAmountTextStyle, // ★スタイル適用
         ),
         Text(
           '単勝 ${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black54),
+          style: AppStyles.purchaseAmountTextStyle, // ★スタイル適用
         ),
         Text(
           '複勝 ${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black54),
+          style: AppStyles.purchaseAmountTextStyle, // ★スタイル適用
         ),
       ];
     } else {
@@ -160,7 +162,7 @@ class PurchaseDetailsCard extends StatelessWidget {
         }
 
 
-        bool amountHandledInline = false; // Initialize here for each detail map
+        bool amountHandledInline = false;
 
         if (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
           final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
@@ -170,7 +172,7 @@ class PurchaseDetailsCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(width: labelWidth, child: Text('1着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  SizedBox(width: labelWidth, child: Text('1着', style: AppStyles.totalLabelStyle, textAlign: TextAlign.end)), // ★スタイル適用
                   Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')])),
                 ],
               ),
@@ -182,7 +184,7 @@ class PurchaseDetailsCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(width: labelWidth, child: Text('2着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  SizedBox(width: labelWidth, child: Text('2着', style: AppStyles.totalLabelStyle, textAlign: TextAlign.end)), // ★スタイル適用
                   Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')])),
                 ],
               ),
@@ -194,31 +196,21 @@ class PurchaseDetailsCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(width: labelWidth, child: Text('3着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  SizedBox(width: labelWidth, child: Text('3着', style: AppStyles.totalLabelStyle, textAlign: TextAlign.end)), // ★スタイル適用
                   Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[2], symbol: '')])),
                 ],
               ),
             ));
           }
         } else if (detail.containsKey('ながし')) {
-          // ながしの場合の軸と相手の表示
           if (detail.containsKey('軸')) {
-            // 軸が単一の数値の場合とリストの場合に対応
-            List<int> axisHorses;
-            if (detail['軸'] is int) {
-              axisHorses = [detail['軸'] as int];
-            } else if (detail['軸'] is List) {
-              axisHorses = (detail['軸'] as List).cast<int>();
-            } else {
-              axisHorses = [];
-            }
-
+            List<int> axisHorses = detail['軸'] is List ? (detail['軸'] as List<dynamic>).cast<int>() : [(detail['軸'] as int)];
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(width: labelWidth, child: Text('軸', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  SizedBox(width: labelWidth, child: Text('軸', style: AppStyles.totalLabelStyle, textAlign: TextAlign.end)), // ★スタイル適用
                   Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(axisHorses, symbol: '')])),
                 ],
               ),
@@ -230,62 +222,12 @@ class PurchaseDetailsCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(width: labelWidth, child: Text('相手', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  SizedBox(width: labelWidth, child: Text('相手', style: AppStyles.totalLabelStyle, textAlign: TextAlign.end)), // ★スタイル適用
                   Expanded(child: Wrap(children: [..._buildHorseNumberDisplay((detail['相手'] as List).cast<int>(), symbol: '')])),
                 ],
               ),
             ));
           }
-          // 馬単ながしの場合にのみ組合せ数と購入金額を表示
-          if (shikibetsu == '馬単' && kingaku != null) { // 馬単の流しのみに限定
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        '組合せ数 $combinationDisplay',
-                        style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ));
-            detailWidgets.add(const SizedBox(height: 8.0));
-
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり')
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                              decoration: const BoxDecoration(
-                                color: Colors.black,
-                                borderRadius: BorderRadius.all(Radius.circular(0)),
-                              ),
-                              child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
-                            ),
-                          Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ));
-            amountHandledInline = true; // 金額表示を処理済みとしてマーク
-          }
-
         } else if (detail.containsKey('馬番') && detail['馬番'] is List) {
           String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
 
@@ -311,7 +253,7 @@ class PurchaseDetailsCard extends StatelessWidget {
                               alignment: Alignment.centerRight,
                               child: Text(
                                 '$prefixForAmount$kingakuDisplay',
-                                style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold),
+                                style: AppStyles.purchaseAmountTextStyle, // ★スタイル適用
                               ),
                             ),
                           ),
@@ -332,7 +274,7 @@ class PurchaseDetailsCard extends StatelessWidget {
                     width: labelWidth,
                     child: Text(
                       '馬番',
-                      style: TextStyle(color: Colors.black54),
+                      style: AppStyles.totalLabelStyle, // ★スタイル適用
                       textAlign: TextAlign.end,
                     ),
                   ),
@@ -347,7 +289,6 @@ class PurchaseDetailsCard extends StatelessWidget {
           }
         }
 
-        // ながし以外のケース、かつ金額表示がまだされていない場合に、組合せ数と購入金額を表示
         if (kingaku != null && !amountHandledInline) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
@@ -358,7 +299,7 @@ class PurchaseDetailsCard extends StatelessWidget {
                     alignment: Alignment.centerRight,
                     child: Text(
                       '組合せ数 $combinationDisplay',
-                      style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold,),
+                      style: AppStyles.purchaseAmountTextStyle, // ★スタイル適用 (金額と同じスタイルを流用)
                     ),
                   ),
                 ),
@@ -387,9 +328,9 @@ class PurchaseDetailsCard extends StatelessWidget {
                               color: Colors.black,
                               borderRadius: BorderRadius.all(Radius.circular(0)),
                             ),
-                            child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
+                            child: const Text('マルチ', style: AppStyles.multiTextStyle), // ★スタイル適用
                           ),
-                        Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text('$prefixForAmount$kingakuDisplay', style: AppStyles.purchaseAmountTextStyle), // ★スタイル適用
                       ],
                     ),
                   ),
@@ -402,7 +343,7 @@ class PurchaseDetailsCard extends StatelessWidget {
         if (uraDisplay.isNotEmpty) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
-            child: Text(uraDisplay, style: TextStyle(color: Colors.black54)),
+            child: Text(uraDisplay, style: AppStyles.uraDisplayTextStyle), // ★スタイル適用
           ));
         }
 
@@ -424,14 +365,7 @@ class PurchaseDetailsCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '購入内容',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-            fontSize: 16,
-          ),
-        ),
+        // ★ここを削除: Text('購入内容', ...) を削除
         Padding(
           padding: const EdgeInsets.only(left: 16.0),
           child: Column(

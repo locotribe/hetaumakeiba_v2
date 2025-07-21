@@ -6,7 +6,8 @@ import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart'; // ★追加
+import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
+import 'package:hetaumakeiba_v2/widgets/app_styles.dart'; // app_styles.dart をインポート
 
 class ResultPage extends StatefulWidget {
   final Map<String, dynamic>? parsedResult;
@@ -40,15 +41,6 @@ class _ResultPageState extends State<ResultPage> {
       });
     }
   }
-
-  // ★以下のヘルパーメソッドはPurchaseDetailsCardに移動したので削除
-  // String _getStars(int amount) { ... }
-  // String _getHorseNumberSymbol(String shikibetsu, String betType, {String? uraStatus}) { ... }
-  // List<Widget> _buildHorseNumberDisplay(List<int> horseNumbers, {String symbol = ''}) { ... }
-
-  // ★_buildPurchaseDetailsメソッドはPurchaseDetailsCardに移動したので削除
-  // List<Widget> _buildPurchaseDetails(dynamic purchaseData, String betType) { ... }
-
 
   @override
   Widget build(BuildContext context) {
@@ -125,10 +117,9 @@ class _ResultPageState extends State<ResultPage> {
                         ? Center(
                       child: Text(
                         displayMessage,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: _parsedResult != null && _parsedResult!.containsKey('エラー') ? Colors.red : Colors.black54,
-                        ),
+                        style: _parsedResult != null && _parsedResult!.containsKey('エラー')
+                            ? AppStyles.errorMessageStyle
+                            : AppStyles.normalMessageStyle,
                         textAlign: TextAlign.center,
                       ),
                     )
@@ -138,7 +129,7 @@ class _ResultPageState extends State<ResultPage> {
                         if (_parsedResult!.containsKey('年') && _parsedResult!.containsKey('回') && _parsedResult!.containsKey('日'))
                           Text(
                             '20${_parsedResult!['年']}年${_parsedResult!['回']}回${_parsedResult!['日']}日',
-                            style: TextStyle(color: Colors.black, fontSize: 20),
+                            style: AppStyles.dateTextStyle,
                           ),
                         const SizedBox(height: 4),
                         if (_parsedResult!.containsKey('開催場') && _parsedResult!.containsKey('レース'))
@@ -147,74 +138,84 @@ class _ResultPageState extends State<ResultPage> {
                             children: [
                               Text(
                                 '${_parsedResult!['開催場']}',
-                                style: TextStyle(color: Colors.black, fontSize: 28),
+                                style: AppStyles.racecourseTextStyle,
                               ),
                               const SizedBox(height: 4),
                               Row(
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 0),
+                                    width: 50.0,
+                                    height: 30.0,
+                                    alignment: Alignment.center,
                                     decoration: const BoxDecoration(
                                       color: Colors.black,
                                       borderRadius: BorderRadius.all(Radius.circular(0)),
                                     ),
                                     child: Text(
                                       '${_parsedResult!['レース']}',
-                                      style: const TextStyle(color: Colors.white, fontSize: 28, height: 0.9),
+                                      style: AppStyles.raceNumberTextStyle,
                                     ),
                                   ),
                                   const SizedBox(width: 4),
                                   const Text(
                                     'レース',
-                                    style: TextStyle(color: Colors.black, fontSize: 20),
+                                    style: AppStyles.raceLabelTextStyle,
                                   ),
                                 ],
                               ),
                             ],
                           ),
                         const SizedBox(height: 8),
+
                         if (_parsedResult!.containsKey('式別'))
-                          Builder(builder: (context) {
-                            String overallMethod = _parsedResult!['式別'] ?? '';
-                            String displayString = '';
-                            String primaryShikibetsu = '';
-                            if (_parsedResult!.containsKey('購入内容')) {
-                              final List<Map<String, dynamic>> purchaseDetails =
-                              (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-                              if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
-                                primaryShikibetsu = purchaseDetails[0]['式別'];
-                              }
-                            }
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Builder(builder: (context) {
+                                    String overallMethod = _parsedResult!['式別'] ?? '';
+                                    String displayMethod = '';
 
-                            if (overallMethod == '通常') {
-                              if (primaryShikibetsu.isNotEmpty) {
-                                displayString = '$primaryShikibetsu $overallMethod';
-                              } else {
-                                displayString = overallMethod;
-                              }
-                            } else if (overallMethod == '応援馬券') {
-                              displayString = '応援馬券 単勝+複勝';
-                            } else {
-                              if (primaryShikibetsu.isNotEmpty) {
-                                displayString = '$primaryShikibetsu $overallMethod';
-                                if (overallMethod == 'ながし' && _parsedResult!.containsKey('購入内容') && (_parsedResult!['購入内容'] as List).isNotEmpty && (_parsedResult!['購入内容'] as List)[0].containsKey('ながし')) {
-                                  final List<Map<String, dynamic>> purchaseDetails =
-                                  (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-                                  displayString = '$primaryShikibetsu ${purchaseDetails[0]['ながし']}';
-                                }
-                              } else {
-                                displayString = overallMethod;
-                              }
-                            }
+                                    if (overallMethod == '通常') {
+                                      displayMethod = '';
+                                    } else if (overallMethod == '応援馬券') {
+                                      displayMethod = '応援馬券';
+                                    } else if (overallMethod == 'ながし' && _parsedResult!.containsKey('購入内容') && (_parsedResult!['購入内容'] as List).isNotEmpty && (_parsedResult!['購入内容'] as List)[0].containsKey('ながし')) {
+                                      final List<Map<String, dynamic>> purchaseDetails =
+                                      (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
+                                      displayMethod = '${purchaseDetails[0]['ながし']}';
+                                    } else {
+                                      displayMethod = overallMethod;
+                                    }
 
-
-                            return Text(
-                              displayString,
-                              style: TextStyle(color: Colors.black, fontSize: 28),
-                            );
-                          }),
+                                    if (displayMethod.isNotEmpty) {
+                                      // ★ここを修正: Containerの幅と高さを固定し、FittedBoxでテキストを調整
+                                      return Container(
+                                        width: 200.0, // 固定幅
+                                        height: 35.0, // 固定高さ
+                                        alignment: Alignment.center, // テキストを中央寄せ
+                                        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                                        decoration: AppStyles.purchaseMethodBoxDecoration,
+                                        child: FittedBox( // 追加: FittedBoxでテキストを自動調整
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.center, // FittedBox内のテキストも中央寄せ
+                                          child: Text(
+                                            displayMethod,
+                                            style: AppStyles.shikibetsuMethodTextStyle,
+                                          ),
+                                        ),
+                                      );
+                                    } else {
+                                      return const SizedBox.shrink();
+                                    }
+                                  }),
+                                ),
+                              ),
+                            ],
+                          ),
                         const SizedBox(height: 8),
-                        // ★ここを新しいウィジェットに置き換え
+
                         if (_parsedResult!.containsKey('購入内容'))
                           PurchaseDetailsCard(
                             parsedResult: _parsedResult!,
@@ -230,11 +231,7 @@ class _ResultPageState extends State<ResultPage> {
                                 width: 100,
                                 child: Text(
                                   '合計',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                    fontSize: 18,
-                                  ),
+                                  style: AppStyles.totalLabelStyle,
                                 ),
                               ),
                               Expanded(
@@ -242,11 +239,7 @@ class _ResultPageState extends State<ResultPage> {
                                   alignment: Alignment.centerRight,
                                   child: Text(
                                     '$totalAmount円',
-                                    style: TextStyle(
-                                      color: Colors.black54,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
+                                    style: AppStyles.totalAmountStyle,
                                   ),
                                 ),
                               ),
@@ -263,21 +256,13 @@ class _ResultPageState extends State<ResultPage> {
                                   width: 100,
                                   child: Text(
                                     '発売所',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                      fontSize: 16,
-                                    ),
+                                    style: AppStyles.salesLocationLabelStyle,
                                   ),
                                 ),
                                 Expanded(
                                   child: Text(
                                     salesLocation,
-                                    style: TextStyle(
-                                      color: Colors.black54,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
+                                    style: AppStyles.salesLocationTextStyle,
                                   ),
                                 ),
                               ],
