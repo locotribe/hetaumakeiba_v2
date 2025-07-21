@@ -209,27 +209,6 @@ class _ResultPageState extends State<ResultPage> {
           }
         }
 
-// 表示はそのままでOK
-        detailWidgets.add(Padding(
-          padding: const EdgeInsets.only(left: 16.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    '組合せ数 $combinationDisplay',
-                    style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ));
-
-        detailWidgets.add(const SizedBox(height: 8.0)); // スペースはそのまま残す
-        print('DEBUG_RESULT_PAGE: Added combination count widget for $shikibetsu (betType: $betType). Current detailWidgets length: ${detailWidgets.length}');
-
 
         // ここで amountHandledInline をローカル変数として宣言
         bool amountHandledInline = false;
@@ -375,6 +354,27 @@ class _ResultPageState extends State<ResultPage> {
         }
 
         if (kingaku != null && !amountHandledInline) {
+          detailWidgets.add(Padding(
+            padding: const EdgeInsets.only(left: 16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '組合せ数 $combinationDisplay',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ));
+
+          detailWidgets.add(const SizedBox(height: 8.0)); // スペースはそのまま残す
+          print('DEBUG_RESULT_PAGE: Added combination count widget for $shikibetsu (betType: $betType). Current detailWidgets length: ${detailWidgets.length}');
+
+
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
             child: Row( // Rowを追加
