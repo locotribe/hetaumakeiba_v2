@@ -160,7 +160,7 @@ class PurchaseDetailsCard extends StatelessWidget {
         }
 
 
-        bool amountHandledInline = false;
+        bool amountHandledInline = false; // Initialize here for each detail map
 
         if (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
           final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
@@ -201,8 +201,18 @@ class PurchaseDetailsCard extends StatelessWidget {
             ));
           }
         } else if (detail.containsKey('ながし')) {
+          // ながしの場合の軸と相手の表示
           if (detail.containsKey('軸')) {
-            List<int> axisHorses = detail['軸'] is List ? (detail['軸'] as List).cast<int>() : [(detail['軸'] as int)];
+            // 軸が単一の数値の場合とリストの場合に対応
+            List<int> axisHorses;
+            if (detail['軸'] is int) {
+              axisHorses = [detail['軸'] as int];
+            } else if (detail['軸'] is List) {
+              axisHorses = (detail['軸'] as List).cast<int>();
+            } else {
+              axisHorses = [];
+            }
+
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
@@ -226,6 +236,56 @@ class PurchaseDetailsCard extends StatelessWidget {
               ),
             ));
           }
+          // 馬単ながしの場合にのみ組合せ数と購入金額を表示
+          if (shikibetsu == '馬単' && kingaku != null) { // 馬単の流しのみに限定
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '組合せ数 $combinationDisplay',
+                        style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ));
+            detailWidgets.add(const SizedBox(height: 8.0));
+
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり')
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                              decoration: const BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.all(Radius.circular(0)),
+                              ),
+                              child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
+                            ),
+                          Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ));
+            amountHandledInline = true; // 金額表示を処理済みとしてマーク
+          }
+
         } else if (detail.containsKey('馬番') && detail['馬番'] is List) {
           String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
 
@@ -287,6 +347,7 @@ class PurchaseDetailsCard extends StatelessWidget {
           }
         }
 
+        // ながし以外のケース、かつ金額表示がまだされていない場合に、組合せ数と購入金額を表示
         if (kingaku != null && !amountHandledInline) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
