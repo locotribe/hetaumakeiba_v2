@@ -293,7 +293,7 @@ class _ResultPageState extends State<ResultPage> {
                               alignment: Alignment.centerRight,
                               child: Text(
                                 '$prefixForAmount$kingakuDisplay',
-                                style: TextStyle(color: Colors.black54),
+                                style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ),
@@ -339,7 +339,7 @@ class _ResultPageState extends State<ResultPage> {
                     alignment: Alignment.centerRight,
                     child: Text(
                       '組合せ数 $combinationDisplay',
-                      style: TextStyle(color: Colors.black54),
+                      style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold,),
                     ),
                   ),
                 ),
@@ -364,14 +364,14 @@ class _ResultPageState extends State<ResultPage> {
                       children: [
                         if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり')
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+                            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                             decoration: const BoxDecoration(
                               color: Colors.black,
                               borderRadius: BorderRadius.all(Radius.circular(0)),
                             ),
                             child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
                           ),
-                        Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54)),
+                        Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -420,7 +420,20 @@ class _ResultPageState extends State<ResultPage> {
       List<Map<String, dynamic>> purchaseDetails = (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
       for (var detail in purchaseDetails) {
         if (detail.containsKey('購入金額')) {
-          totalAmount += (detail['購入金額'] as int);
+          int kingakuPerCombination = detail['購入金額'] as int;
+          if (detail.containsKey('表示用相手頭数') && detail.containsKey('表示用乗数')) {
+            // Case for Multi with specific display values (e.g., 3x6)
+            int opponentCountForDisplay = detail['表示用相手頭数'] as int;
+            int multiplierForDisplay = detail['表示用乗数'] as int;
+            totalAmount += (opponentCountForDisplay * multiplierForDisplay * kingakuPerCombination);
+          } else if (detail.containsKey('組合せ数')) {
+            // Case for regular combinations (e.g., 12 combinations)
+            int combinations = detail['組合せ数'] as int;
+            totalAmount += (combinations * kingakuPerCombination);
+          } else {
+            // Default: just add the purchase amount if no combination info
+            totalAmount += kingakuPerCombination;
+          }
         }
       }
     }
@@ -578,11 +591,11 @@ class _ResultPageState extends State<ResultPage> {
                               SizedBox(
                                 width: 100,
                                 child: Text(
-                                  '合計金額',
+                                  '合計',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.black87,
-                                    fontSize: 16,
+                                    fontSize: 18,
                                   ),
                                 ),
                               ),
@@ -594,7 +607,7 @@ class _ResultPageState extends State<ResultPage> {
                                     style: TextStyle(
                                       color: Colors.black54,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 16,
+                                      fontSize: 18,
                                     ),
                                   ),
                                 ),
@@ -638,7 +651,7 @@ class _ResultPageState extends State<ResultPage> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20.0),
+                padding: const EdgeInsets.symmetric(vertical: 30.0),
                 child: Column(
                   children: [
                     ElevatedButton(
@@ -653,7 +666,7 @@ class _ResultPageState extends State<ResultPage> {
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 10),
                         textStyle: const TextStyle(fontSize: 18),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         backgroundColor: Colors.blueAccent,
@@ -674,7 +687,7 @@ class _ResultPageState extends State<ResultPage> {
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 10),
                         textStyle: const TextStyle(fontSize: 18),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         backgroundColor: Colors.blueGrey,
@@ -688,7 +701,7 @@ class _ResultPageState extends State<ResultPage> {
                         Navigator.of(context).popUntil((route) => route.isFirst);
                       },
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 10),
                         textStyle: const TextStyle(fontSize: 18),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         backgroundColor: Colors.green,
