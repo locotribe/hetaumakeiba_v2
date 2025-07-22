@@ -45,11 +45,30 @@ class PurchaseDetailsCard extends StatelessWidget {
     return '';
   }
 
-  List<Widget> _buildHorseNumberDisplay(List<int> horseNumbers, {String symbol = ''}) { /* 既存のロジックをそのままコピー */
+  // _buildHorseNumberDisplayの修正点: horseNumbersの型をdynamicに変更し、内部でList<int>とList<List<int>>の両方を処理できるようにする
+  List<Widget> _buildHorseNumberDisplay(dynamic horseNumbers, {String symbol = ''}) {
     List<Widget> widgets = [];
     const double fixedWidth = 30.0;
 
-    for (int i = 0; i < horseNumbers.length; i++) {
+    List<int> numbersToProcess = [];
+
+    // リストのリスト（一部の馬券タイプ、特に枠連などで発生する可能性のある構造）を平坦化する
+    if (horseNumbers is List) {
+      for (var item in horseNumbers) {
+        if (item is int) {
+          numbersToProcess.add(item);
+        } else if (item is List) {
+          // 内部のリストがintのリストであると仮定して追加
+          numbersToProcess.addAll(item.cast<int>());
+        }
+        // 他の型の場合は無視するか、エラー処理を追加することができます
+      }
+    } else if (horseNumbers is int) {
+      numbersToProcess.add(horseNumbers);
+    }
+    // else, 予期しない型の場合、これはそのままでは表示されないか、さらなるエラーを引き起こす可能性があります。
+
+    for (int i = 0; i < numbersToProcess.length; i++) {
       widgets.add(
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2.0),
@@ -62,13 +81,14 @@ class PurchaseDetailsCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(4.0),
             ),
             child: Text(
-              horseNumbers[i].toString(),
+              // ここでnumbersToProcess[i]は常にint型であるはず
+              numbersToProcess[i].toString(),
               style: TextStyle(color: Colors.black54),
             ),
           ),
         ),
       );
-      if (symbol.isNotEmpty && i < horseNumbers.length - 1) {
+      if (symbol.isNotEmpty && i < numbersToProcess.length - 1) {
         widgets.add(
           Text(symbol, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
         );
@@ -84,7 +104,9 @@ class PurchaseDetailsCard extends StatelessWidget {
 
     if (currentBetType == '応援馬券' && purchaseDetails.length >= 2) {
       final firstDetail = purchaseDetails[0];
+      // horseNumbersの型はList<int>またはList<dynamic>が適切であり、_buildHorseNumberDisplayが処理するように変更された
       List<int> umanbanList = (firstDetail['馬番'] as List).cast<int>();
+
       int kingaku = firstDetail['購入金額'] as int;
 
       return [
@@ -302,7 +324,8 @@ class PurchaseDetailsCard extends StatelessWidget {
                           spacing: 4.0,
                           runSpacing: 4.0,
                           children: [
-                            ..._buildHorseNumberDisplay((detail['馬番'] as List).cast<int>(), symbol: currentSymbol),
+                            // _buildHorseNumberDisplayはdynamicな入力を処理するように変更されたため、ここでcast<int>()は安全
+                            ..._buildHorseNumberDisplay(detail['馬番'], symbol: currentSymbol),
                           ],
                         ),
                         if (kingaku != null)
@@ -338,7 +361,7 @@ class PurchaseDetailsCard extends StatelessWidget {
                   ),
                   Expanded(
                     child: Wrap(
-                      children: [..._buildHorseNumberDisplay((detail['馬番'] as List).cast<int>(), symbol: '')],
+                      children: [..._buildHorseNumberDisplay(detail['馬番'], symbol: '')],
                     ),
                   ),
                 ],
