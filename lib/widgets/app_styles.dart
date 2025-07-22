@@ -117,6 +117,14 @@ class AppStyles {
     color: Colors.black,
   );
 
+  // 式別（縦書き）表示用: BetTypeDisplay に使用
+  static const TextStyle betTypeVerticalTextStyle = TextStyle(
+    fontSize: 16,
+    color: Colors.black,
+    height: 1.2,
+    fontWeight: FontWeight.bold,
+  );
+
   // --- 色とボーダースタイル定義 ---
 
   // 購入内容カード: 馬番の枠線色

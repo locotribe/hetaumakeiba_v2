@@ -1,13 +1,15 @@
-// lib/screens/result_page.dart
-
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
-import 'package:hetaumakeiba_v2/widgets/app_styles.dart'; // app_styles.dart をインポート
+import 'package:hetaumakeiba_v2/widgets/app_styles.dart';
+import 'package:hetaumakeiba_v2/widgets/race_info_display.dart';
+import 'package:hetaumakeiba_v2/widgets/bet_type_display.dart';
+import 'package:hetaumakeiba_v2/widgets/purchase_method_display.dart';
+import 'package:hetaumakeiba_v2/widgets/purchase_details_summary.dart';
+import 'package:hetaumakeiba_v2/widgets/sales_location_display.dart';
 
 class ResultPage extends StatefulWidget {
   final Map<String, dynamic>? parsedResult;
@@ -60,29 +62,6 @@ class _ResultPageState extends State<ResultPage> {
       displayMessage = JsonEncoder.withIndent('  ').convert(_parsedResult);
     }
 
-    int totalAmount = 0;
-    if (_parsedResult != null && _parsedResult!.containsKey('購入内容')) {
-      List<Map<String, dynamic>> purchaseDetails = (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-      for (var detail in purchaseDetails) {
-        if (detail.containsKey('購入金額')) {
-          int kingakuPerCombination = detail['購入金額'] as int;
-          if (detail.containsKey('表示用相手頭数') && detail.containsKey('表示用乗数')) {
-            // Case for Multi with specific display values (e.g., 3x6)
-            int opponentCountForDisplay = detail['表示用相手頭数'] as int;
-            int multiplierForDisplay = detail['表示用乗数'] as int;
-            totalAmount += (opponentCountForDisplay * multiplierForDisplay * kingakuPerCombination);
-          } else if (detail.containsKey('組合せ数')) {
-            // Case for regular combinations (e.g., 12 combinations)
-            int combinations = detail['組合せ数'] as int;
-            totalAmount += (combinations * kingakuPerCombination);
-          } else {
-            // Default: just add the purchase amount if no combination info
-            totalAmount += kingakuPerCombination;
-          }
-        }
-      }
-    }
-
     String? salesLocation;
     if (_parsedResult != null && _parsedResult!.containsKey('発売所')) {
       salesLocation = _parsedResult!['発売所'] as String;
@@ -126,148 +105,20 @@ class _ResultPageState extends State<ResultPage> {
                         : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (_parsedResult!.containsKey('年') && _parsedResult!.containsKey('回') && _parsedResult!.containsKey('日'))
-                          Text(
-                            '20${_parsedResult!['年']}年${_parsedResult!['回']}回${_parsedResult!['日']}日',
-                            style: AppStyles.dateTextStyle,
-                          ),
-                        const SizedBox(height: 4),
-                        if (_parsedResult!.containsKey('開催場') && _parsedResult!.containsKey('レース'))
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${_parsedResult!['開催場']}',
-                                style: AppStyles.racecourseTextStyle,
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 50.0,
-                                    height: 30.0,
-                                    alignment: Alignment.center,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.black,
-                                      borderRadius: BorderRadius.all(Radius.circular(0)),
-                                    ),
-                                    child: Text(
-                                      '${_parsedResult!['レース']}',
-                                      style: AppStyles.raceNumberTextStyle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  const Text(
-                                    'レース',
-                                    style: AppStyles.raceLabelTextStyle,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
+                        RaceInfoDisplay(parsedResult: _parsedResult!),
                         const SizedBox(height: 8),
-
                         if (_parsedResult!.containsKey('式別'))
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Builder(builder: (context) {
-                                    String overallMethod = _parsedResult!['式別'] ?? '';
-                                    String displayMethod = '';
-
-                                    if (overallMethod == '通常') {
-                                      displayMethod = '';
-                                    } else if (overallMethod == '応援馬券') {
-                                      displayMethod = '応援馬券';
-                                    } else if (overallMethod == 'ながし' && _parsedResult!.containsKey('購入内容') && (_parsedResult!['購入内容'] as List).isNotEmpty && (_parsedResult!['購入内容'] as List)[0].containsKey('ながし')) {
-                                      final List<Map<String, dynamic>> purchaseDetails =
-                                      (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-                                      displayMethod = '${purchaseDetails[0]['ながし']}';
-                                    } else {
-                                      displayMethod = overallMethod;
-                                    }
-
-                                    if (displayMethod.isNotEmpty) {
-                                      // ★ここを修正: Containerの幅と高さを固定し、FittedBoxでテキストを調整
-                                      return Container(
-                                        width: 200.0, // 固定幅
-                                        height: 35.0, // 固定高さ
-                                        alignment: Alignment.center, // テキストを中央寄せ
-                                        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                                        decoration: AppStyles.purchaseMethodBoxDecoration,
-                                        child: FittedBox( // 追加: FittedBoxでテキストを自動調整
-                                          fit: BoxFit.scaleDown,
-                                          alignment: Alignment.center, // FittedBox内のテキストも中央寄せ
-                                          child: Text(
-                                            displayMethod,
-                                            style: AppStyles.shikibetsuMethodTextStyle,
-                                          ),
-                                        ),
-                                      );
-                                    } else {
-                                      return const SizedBox.shrink();
-                                    }
-                                  }),
-                                ),
-                              ),
-                            ],
-                          ),
+                          BetTypeDisplay(betType: _parsedResult!['式別']),
                         const SizedBox(height: 8),
-
+                        PurchaseMethodDisplay(parsedResult: _parsedResult!),
+                        const SizedBox(height: 8),
                         if (_parsedResult!.containsKey('購入内容'))
-                          PurchaseDetailsCard(
+                          PurchaseDetailsSummary(
                             parsedResult: _parsedResult!,
                             betType: _parsedResult!['式別'] ?? '',
                           ),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  '合計',
-                                  style: AppStyles.totalLabelStyle,
-                                ),
-                              ),
-                              Expanded(
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    '$totalAmount円',
-                                    style: AppStyles.totalAmountStyle,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (salesLocation != null && salesLocation.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4.0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(
-                                  width: 100,
-                                  child: Text(
-                                    '発売所',
-                                    style: AppStyles.salesLocationLabelStyle,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    salesLocation,
-                                    style: AppStyles.salesLocationTextStyle,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        if (salesLocation != null && salesLocation!.isNotEmpty)
+                          SalesLocationDisplay(salesLocation: salesLocation!),
                       ],
                     ),
                   ),
