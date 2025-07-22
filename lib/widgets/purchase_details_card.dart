@@ -12,8 +12,8 @@ class PurchaseDetailsCard extends StatelessWidget {
     required this.betType,
   }) : super(key: key);
 
-  // ResultPageから_getStars, _getHorseNumberSymbol, _buildHorseNumberDisplayを移動
-  String _getStars(int amount) { /* 既存のロジックをそのままコピー */
+  // 既存の _getStars メソッド (☆を使用)
+  String _getStars(int amount) {
     String amountStr = amount.toString();
     int numDigits = amountStr.length;
     if (numDigits >= 6) {
@@ -28,7 +28,26 @@ class PurchaseDetailsCard extends StatelessWidget {
     return '';
   }
 
-  String _getHorseNumberSymbol(String shikibetsu, String betType, {String? uraStatus}) { /* 既存のロジックをそのままコピー */
+  // 合計金額表示用の _getTotalAmountStars メソッド (★を使用)
+  String _getTotalAmountStars(int amount) {
+    String amountStr = amount.toString();
+    int numDigits = amountStr.length;
+    // 7桁の場合は何も表示しない
+    if (numDigits >= 7) {
+      return '';
+    } else if (numDigits == 6) {
+      return '★'; // 6桁の場合、★を1つ表示
+    } else if (numDigits == 5) {
+      return '★★'; // 5桁の場合、★★を2つ表示
+    } else if (numDigits == 4) {
+      return '★★★'; // 4桁の場合、★★★を3つ表示
+    } else if (numDigits == 3) {
+      return '★★★★'; // 3桁の場合、★★★★を4つ表示
+    }
+    return ''; // それ以外の場合（2桁以下）は何も表示しない
+  }
+
+  String _getHorseNumberSymbol(String shikibetsu, String betType, {String? uraStatus}) {
     if (uraStatus == 'あり') {
       return '◀ ▶';
     }
@@ -45,28 +64,23 @@ class PurchaseDetailsCard extends StatelessWidget {
     return '';
   }
 
-  // _buildHorseNumberDisplayの修正点: horseNumbersの型をdynamicに変更し、内部でList<int>とList<List<int>>の両方を処理できるようにする
   List<Widget> _buildHorseNumberDisplay(dynamic horseNumbers, {String symbol = ''}) {
     List<Widget> widgets = [];
     const double fixedWidth = 30.0;
 
     List<int> numbersToProcess = [];
 
-    // リストのリスト（一部の馬券タイプ、特に枠連などで発生する可能性のある構造）を平坦化する
     if (horseNumbers is List) {
       for (var item in horseNumbers) {
         if (item is int) {
           numbersToProcess.add(item);
         } else if (item is List) {
-          // 内部のリストがintのリストであると仮定して追加
           numbersToProcess.addAll(item.cast<int>());
         }
-        // 他の型の場合は無視するか、エラー処理を追加することができます
       }
     } else if (horseNumbers is int) {
       numbersToProcess.add(horseNumbers);
     }
-    // else, 予期しない型の場合、これはそのままでは表示されないか、さらなるエラーを引き起こす可能性があります。
 
     for (int i = 0; i < numbersToProcess.length; i++) {
       widgets.add(
@@ -81,7 +95,6 @@ class PurchaseDetailsCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(4.0),
             ),
             child: Text(
-              // ここでnumbersToProcess[i]は常にint型であるはず
               numbersToProcess[i].toString(),
               style: TextStyle(color: Colors.black54),
             ),
@@ -97,17 +110,32 @@ class PurchaseDetailsCard extends StatelessWidget {
     return widgets;
   }
 
-  // ResultPageの_buildPurchaseDetailsメソッドのロジックをここに移植
   List<Widget> _buildPurchaseDetailsInternal(dynamic purchaseData, String currentBetType) {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
     const double labelWidth = 80.0;
 
+    // ☆の部分のスタイル定義（heightを削除し、必要に応じてTextウィジェットのCrossAxisAlignmentで調整）
+    final TextStyle starStyle = TextStyle(
+      color: Colors.black54,
+      fontWeight: FontWeight.bold,
+      fontSize: 12,
+      // height: 0.9, // Text.richでなくRowでAlignするためheightは削除
+    );
+
+    // 金額部分のスタイル定義
+    final TextStyle amountStyle = TextStyle(
+      color: Colors.black54,
+      fontWeight: FontWeight.bold,
+      fontSize: 20,
+    );
+
     if (currentBetType == '応援馬券' && purchaseDetails.length >= 2) {
       final firstDetail = purchaseDetails[0];
-      // horseNumbersの型はList<int>またはList<dynamic>が適切であり、_buildHorseNumberDisplayが処理するように変更された
       List<int> umanbanList = (firstDetail['馬番'] as List).cast<int>();
 
       int kingaku = firstDetail['購入金額'] as int;
+      String starsForAmount = _getStars(kingaku);
+      String amountValue = kingaku.toString();
 
       return [
         Row(
@@ -128,17 +156,71 @@ class PurchaseDetailsCard extends StatelessWidget {
             ),
           ],
         ),
-        Text(
-          '各${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black54),
+        // 各組の金額表示（RowとCrossAxisAlignment.centerで垂直方向を中央揃え）
+        Align(
+          alignment: Alignment.center, // 水平方向も中央
+          child: Row(
+            mainAxisSize: MainAxisSize.min, // 内容に合わせて幅を最小限に
+            crossAxisAlignment: CrossAxisAlignment.center, // 垂直方向の中央揃え
+            children: [
+              Text(
+                '各',
+                style: amountStyle,
+              ),
+              Text(
+                starsForAmount,
+                style: starStyle,
+              ),
+              Text(
+                '${amountValue}円',
+                style: amountStyle,
+              ),
+            ],
+          ),
         ),
-        Text(
-          '単勝 ${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black54),
+        // 単勝の金額表示（RowとCrossAxisAlignment.centerで垂直方向を中央揃え）
+        Align(
+          alignment: Alignment.center, // 水平方向も中央
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                '単勝 ',
+                style: amountStyle,
+              ),
+              Text(
+                starsForAmount,
+                style: starStyle,
+              ),
+              Text(
+                '${amountValue}円',
+                style: amountStyle,
+              ),
+            ],
+          ),
         ),
-        Text(
-          '複勝 ${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black54),
+        // 複勝の金額表示（RowとCrossAxisAlignment.centerで垂直方向を中央揃え）
+        Align(
+          alignment: Alignment.center, // 水平方向も中央
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                '複勝 ',
+                style: amountStyle,
+              ),
+              Text(
+                starsForAmount,
+                style: starStyle,
+              ),
+              Text(
+                '${amountValue}円',
+                style: amountStyle,
+              ),
+            ],
+          ),
         ),
       ];
     } else {
@@ -150,25 +232,22 @@ class PurchaseDetailsCard extends StatelessWidget {
 
         int combinations = 0;
         if (currentBetType == 'クイックピック') {
-          combinations = parsedResult['組合せ数'] as int? ?? 0; // parsedResultを使用
+          combinations = parsedResult['組合せ数'] as int? ?? 0;
         } else {
           combinations = detail['組合せ数'] as int? ?? 0;
         }
 
-        print('DEBUG_RESULT_PAGE: combinations for $shikibetsu (overall betType: $currentBetType): $combinations');
-
         bool isComplexCombinationForPrefix =
             (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
                 detail.containsKey('ながし') ||
-                (currentBetType == 'ボックス'); // betTypeを使用
+                (currentBetType == 'ボックス');
 
-        String prefixForAmount = '';
+        String starsForPrefix = '';
+        String amountValueForPrefix = '';
+
         if (kingaku != null) {
-          if (isComplexCombinationForPrefix) {
-            prefixForAmount = '　各組${_getStars(kingaku)}';
-          } else {
-            prefixForAmount = '${_getStars(kingaku)}';
-          }
+          starsForPrefix = _getStars(kingaku);
+          amountValueForPrefix = kingaku.toString();
         }
 
         List<Widget> detailWidgets = [];
@@ -181,8 +260,7 @@ class PurchaseDetailsCard extends StatelessWidget {
           combinationDisplay = '${opponentCountForDisplay}×$multiplierForDisplay';
         }
 
-
-        bool amountHandledInline = false; // Initialize here for each detail map
+        bool amountHandledInline = false;
 
         if (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
           final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
@@ -223,9 +301,7 @@ class PurchaseDetailsCard extends StatelessWidget {
             ));
           }
         } else if (detail.containsKey('ながし')) {
-          // ながしの場合の軸と相手の表示
           if (detail.containsKey('軸')) {
-            // 軸が単一の数値の場合とリストの場合に対応
             List<int> axisHorses;
             if (detail['軸'] is int) {
               axisHorses = [detail['軸'] as int];
@@ -258,8 +334,7 @@ class PurchaseDetailsCard extends StatelessWidget {
               ),
             ));
           }
-          // 馬単ながしの場合にのみ組合せ数と購入金額を表示
-          if (shikibetsu == '馬単' && kingaku != null) { // 馬単の流しのみに限定
+          if (shikibetsu == '馬単' && kingaku != null) {
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
@@ -284,9 +359,10 @@ class PurchaseDetailsCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Row(
+                      alignment: Alignment.centerRight, // 水平方向は右寄せ
+                      child: Row( // RowとCrossAxisAlignment.centerで垂直方向を中央揃え
                         mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり')
                             Container(
@@ -297,7 +373,18 @@ class PurchaseDetailsCard extends StatelessWidget {
                               ),
                               child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
                             ),
-                          Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold)),
+                          Text( // '各組'の部分
+                            isComplexCombinationForPrefix ? '　各組' : '',
+                            style: amountStyle,
+                          ),
+                          Text( // ☆の部分
+                            starsForPrefix,
+                            style: starStyle,
+                          ),
+                          Text( // 金額の部分
+                            '${amountValueForPrefix}円',
+                            style: amountStyle,
+                          ),
                         ],
                       ),
                     ),
@@ -305,9 +392,8 @@ class PurchaseDetailsCard extends StatelessWidget {
                 ],
               ),
             ));
-            amountHandledInline = true; // 金額表示を処理済みとしてマーク
+            amountHandledInline = true;
           }
-
         } else if (detail.containsKey('馬番') && detail['馬番'] is List) {
           String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
 
@@ -324,17 +410,26 @@ class PurchaseDetailsCard extends StatelessWidget {
                           spacing: 4.0,
                           runSpacing: 4.0,
                           children: [
-                            // _buildHorseNumberDisplayはdynamicな入力を処理するように変更されたため、ここでcast<int>()は安全
                             ..._buildHorseNumberDisplay(detail['馬番'], symbol: currentSymbol),
                           ],
                         ),
                         if (kingaku != null)
                           Expanded(
                             child: Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                '$prefixForAmount$kingakuDisplay',
-                                style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold),
+                              alignment: Alignment.centerRight, // 水平方向は右寄せ
+                              child: Row( // RowとCrossAxisAlignment.centerで垂直方向を中央揃え
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text( // ☆の部分
+                                    starsForPrefix,
+                                    style: starStyle,
+                                  ),
+                                  Text( // 金額の部分
+                                    '${amountValueForPrefix}円',
+                                    style: amountStyle,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -370,7 +465,6 @@ class PurchaseDetailsCard extends StatelessWidget {
           }
         }
 
-        // ながし以外のケース、かつ金額表示がまだされていない場合に、組合せ数と購入金額を表示
         if (kingaku != null && !amountHandledInline) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
@@ -390,8 +484,6 @@ class PurchaseDetailsCard extends StatelessWidget {
           ));
 
           detailWidgets.add(const SizedBox(height: 8.0));
-          print('DEBUG_RESULT_PAGE: Added combination count widget for $shikibetsu (betType: $currentBetType). Current detailWidgets length: ${detailWidgets.length}');
-
 
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
@@ -399,9 +491,10 @@ class PurchaseDetailsCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Row(
+                    alignment: Alignment.centerRight, // 水平方向は右寄せ
+                    child: Row( // RowとCrossAxisAlignment.centerで垂直方向を中央揃え
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり')
                           Container(
@@ -412,7 +505,18 @@ class PurchaseDetailsCard extends StatelessWidget {
                             ),
                             child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
                           ),
-                        Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text( // '各組'の部分
+                          isComplexCombinationForPrefix ? '　各組' : '',
+                          style: amountStyle,
+                        ),
+                        Text( // ☆の部分
+                          starsForPrefix,
+                          style: starStyle,
+                        ),
+                        Text( // 金額の部分
+                          '${amountValueForPrefix}円',
+                          style: amountStyle,
+                        ),
                       ],
                     ),
                   ),
@@ -437,29 +541,79 @@ class PurchaseDetailsCard extends StatelessWidget {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     if (!parsedResult.containsKey('購入内容')) {
-      return const SizedBox.shrink(); // 購入内容がない場合は何も表示しない
+      return const SizedBox.shrink();
     }
+
+    int totalAmount = 0;
+    if (parsedResult['購入内容'] is List) {
+      for (var item in parsedResult['購入内容']) {
+        if (item is Map<String, dynamic> && item.containsKey('購入金額') && item['購入金額'] is int) {
+          totalAmount += item['購入金額'] as int;
+        }
+      }
+    }
+
+    String totalStars = _getTotalAmountStars(totalAmount);
+    String totalAmountString = totalAmount.toString();
+
+    // 合計金額の★の部分のスタイル（heightを削除）
+    final TextStyle totalStarStyle = TextStyle(
+      color: Colors.black54,
+      fontWeight: FontWeight.bold,
+      fontSize: 12,
+      // height: 0.9, // RowでAlignするためheightは削除
+    );
+
+    // 合計金額の通常テキストのスタイル
+    final TextStyle totalAmountTextStyle = TextStyle(
+      color: Colors.black54,
+      fontWeight: FontWeight.bold,
+      fontSize: 20,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '購入内容',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-            fontSize: 16,
-          ),
-        ),
         Padding(
           padding: const EdgeInsets.only(left: 16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: _buildPurchaseDetailsInternal(parsedResult['購入内容'], betType),
+          ),
+        ),
+        // 合計金額の表示部分
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight, // 水平方向は右寄せを維持
+                  child: Row( // Text.richの代わりにRowを使用
+                    mainAxisSize: MainAxisSize.min, // 内容に合わせて幅を最小限に
+                    crossAxisAlignment: CrossAxisAlignment.center, // 垂直方向の中央揃え
+                    children: [
+                      Text(
+                        '合計　　',
+                        style: totalAmountTextStyle,
+                      ),
+                      Text(
+                        totalStars,
+                        style: totalStarStyle,
+                      ),
+                      Text(
+                        '${totalAmountString}円',
+                        style: totalAmountTextStyle,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],

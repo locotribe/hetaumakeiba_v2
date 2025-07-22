@@ -41,15 +41,6 @@ class _ResultPageState extends State<ResultPage> {
     }
   }
 
-  // ★以下のヘルパーメソッドはPurchaseDetailsCardに移動したので削除
-  // String _getStars(int amount) { ... }
-  // String _getHorseNumberSymbol(String shikibetsu, String betType, {String? uraStatus}) { ... }
-  // List<Widget> _buildHorseNumberDisplay(List<int> horseNumbers, {String symbol = ''}) { ... }
-
-  // ★_buildPurchaseDetailsメソッドはPurchaseDetailsCardに移動したので削除
-  // List<Widget> _buildPurchaseDetails(dynamic purchaseData, String betType) { ... }
-
-
   @override
   Widget build(BuildContext context) {
     String displayMessage;
@@ -175,84 +166,74 @@ class _ResultPageState extends State<ResultPage> {
                         const SizedBox(height: 8),
                         if (_parsedResult!.containsKey('式別'))
                           Builder(builder: (context) {
+                            String shikibetsuToDisplay = ''; // 例: 馬単, 応援馬券, ボックス
+                            String hoshikiToDisplay = ''; // 例: マルチ, 単勝+複勝, 軸1頭
+
                             String overallMethod = _parsedResult!['式別'] ?? '';
-                            String displayString = '';
-                            String primaryShikibetsu = '';
+                            String primaryShikibetsuFromDetails = '';
+
+                            // purchaseDetailsをBuilderスコープ内で宣言し、初期化
+                            List<Map<String, dynamic>> purchaseDetails = [];
                             if (_parsedResult!.containsKey('購入内容')) {
-                              final List<Map<String, dynamic>> purchaseDetails =
-                              (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
+                              purchaseDetails = (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
                               if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
-                                primaryShikibetsu = purchaseDetails[0]['式別'];
+                                primaryShikibetsuFromDetails = purchaseDetails[0]['式別'];
                               }
                             }
 
-                            if (overallMethod == '通常') {
-                              if (primaryShikibetsu.isNotEmpty) {
-                                displayString = '$primaryShikibetsu $overallMethod';
-                              } else {
-                                displayString = overallMethod;
-                              }
-                            } else if (overallMethod == '応援馬券') {
-                              displayString = '応援馬券 単勝+複勝';
+                            if (overallMethod == '応援馬券') {
+                              shikibetsuToDisplay = '応援馬券';
+                              hoshikiToDisplay = '単勝+複勝';
+                            } else if (overallMethod == '通常') {
+                              shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : '通常';
+                              hoshikiToDisplay = ''; // 「通常」の場合は方式を独立して表示しない
                             } else {
-                              if (primaryShikibetsu.isNotEmpty) {
-                                displayString = '$primaryShikibetsu $overallMethod';
-                                if (overallMethod == 'ながし' && _parsedResult!.containsKey('購入内容') && (_parsedResult!['購入内容'] as List).isNotEmpty && (_parsedResult!['購入内容'] as List)[0].containsKey('ながし')) {
-                                  final List<Map<String, dynamic>> purchaseDetails =
-                                  (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-                                  displayString = '$primaryShikibetsu ${purchaseDetails[0]['ながし']}';
-                                }
+                              // ボックス, ながし, フォーメーション, クイックピック
+                              shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
+
+                              // purchaseDetailsが有効な範囲内でアクセス
+                              if (overallMethod == 'ながし' && primaryShikibetsuFromDetails.isNotEmpty && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
+                                hoshikiToDisplay = purchaseDetails[0]['ながし']; // 例: 軸1頭, 軸2頭
+                              } else if (primaryShikibetsuFromDetails.isNotEmpty) {
+                                hoshikiToDisplay = overallMethod; // 例: ボックス, フォーメーション, クイックピック
                               } else {
-                                displayString = overallMethod;
+                                // primaryShikibetsuFromDetailsがない場合は、方式も表示しない（overallMethodが式別として表示されるため）
+                                hoshikiToDisplay = '';
                               }
                             }
 
-
-                            return Text(
-                              displayString,
-                              style: TextStyle(color: Colors.black, fontSize: 28),
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (shikibetsuToDisplay.isNotEmpty)
+                                  Text(
+                                    shikibetsuToDisplay,
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 28, // 大きめのフォント
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                if (hoshikiToDisplay.isNotEmpty)
+                                  Text(
+                                    hoshikiToDisplay,
+                                    style: const TextStyle(
+                                      color: Colors.black54, // 少し薄い色
+                                      fontSize: 20, // 少し小さめのフォント
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                              ],
                             );
                           }),
                         const SizedBox(height: 8),
-                        // ★ここを新しいウィジェットに置き換え
                         if (_parsedResult!.containsKey('購入内容'))
                           PurchaseDetailsCard(
                             parsedResult: _parsedResult!,
                             betType: _parsedResult!['式別'] ?? '',
                           ),
                         const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  '合計',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    '$totalAmount円',
-                                    style: TextStyle(
-                                      color: Colors.black54,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+
                         if (salesLocation != null && salesLocation.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4.0),
