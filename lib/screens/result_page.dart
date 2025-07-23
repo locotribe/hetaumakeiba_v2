@@ -240,22 +240,11 @@ class _ResultPageState extends State<ResultPage> {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                SizedBox(
-                                  width: 100,
-                                  child: Text(
-                                    '発売所',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
                                 Expanded(
                                   child: Text(
                                     salesLocation,
                                     style: TextStyle(
-                                      color: Colors.black54,
+                                      color: Colors.black,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
                                     ),
