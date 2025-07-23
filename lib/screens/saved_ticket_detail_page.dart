@@ -77,19 +77,19 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(vertical: 2.0),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.black54),
+              border: Border.all(color: Colors.black),
               borderRadius: BorderRadius.circular(4.0),
             ),
             child: Text(
               horseNumbers[i].toString(),
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(color: Colors.black),
             ),
           ),
         ),
       );
       if (symbol.isNotEmpty && i < horseNumbers.length - 1) {
         widgets.add(
-          Text(symbol, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+          Text(symbol, style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         );
       }
     }
@@ -114,7 +114,7 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
               width: labelWidth,
               child: Text(
                 '馬番',
-                style: TextStyle(color: Colors.black54),
+                style: TextStyle(color: Colors.black),
                 textAlign: TextAlign.end,
               ),
             ),
@@ -127,15 +127,15 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
         ),
         Text(
           '各${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black54),
+          style: TextStyle(color: Colors.black),
         ),
         Text(
           '単勝 ${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black54),
+          style: TextStyle(color: Colors.black),
         ),
         Text(
           '複勝 ${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black54),
+          style: TextStyle(color: Colors.black),
         ),
       ];
     } else {

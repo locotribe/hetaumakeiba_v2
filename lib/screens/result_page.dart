@@ -119,8 +119,8 @@ class _ResultPageState extends State<ResultPage> {
       }
 
       if (overallMethod == '応援馬券') {
-        shikibetsuToDisplay = '応援馬券';
-        hoshikiToDisplay = '単勝+複勝';
+        shikibetsuToDisplay = '単勝＋複勝';
+        hoshikiToDisplay = 'がんばれ！';
       } else if (overallMethod == '通常') {
         shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : '通常';
         hoshikiToDisplay = ''; // 「通常」の場合は方式を独立して表示しない
@@ -137,7 +137,7 @@ class _ResultPageState extends State<ResultPage> {
           hoshikiToDisplay = '';
         }
       }
-      // ★ここで半角数字を全角に変換
+      // 半角数字を全角に変換
       shikibetsuToDisplay = _convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
     }
 
@@ -239,19 +239,26 @@ class _ResultPageState extends State<ResultPage> {
                               child: _parsedResult!.containsKey('式別')
                                   ? Align( // 垂直方向の中央揃え
                                 alignment: Alignment.center,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min, // Columnの高さを内容に合わせる
-                                  crossAxisAlignment: CrossAxisAlignment.start, // 各文字を左揃え
-                                  children: shikibetsuToDisplay.characters.map((char) {
-                                    return Text(
-                                      char,
-                                      style: const TextStyle(
-                                        color: Colors.black,
-                                        fontSize: 28, // 大きめのフォント
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    );
-                                  }).toList(),
+                                child: Container( // ★Containerを追加して線で囲む
+                                  padding: const EdgeInsets.all(4.0), // 内側の余白
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.black, width: 2.0), // 線の色と太さ
+                                    // borderRadius: BorderRadius.circular(4.0), // ★この行を削除
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min, // Columnの高さを内容に合わせる
+                                    crossAxisAlignment: CrossAxisAlignment.start, // 各文字を左揃え
+                                    children: shikibetsuToDisplay.characters.map((char) {
+                                      return Text(
+                                        char,
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 28, // 大きめのフォント
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
                                 ),
                               )
                                   : const SizedBox.shrink(), // 式別がない場合は空のウィジェットを返す

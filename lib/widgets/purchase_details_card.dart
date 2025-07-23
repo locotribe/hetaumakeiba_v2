@@ -91,19 +91,18 @@ class PurchaseDetailsCard extends StatelessWidget {
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(vertical: 2.0),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.black54),
-              borderRadius: BorderRadius.circular(4.0),
+              border: Border.all(color: Colors.black),
             ),
             child: Text(
               numbersToProcess[i].toString(),
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(color: Colors.black),
             ),
           ),
         ),
       );
       if (symbol.isNotEmpty && i < numbersToProcess.length - 1) {
         widgets.add(
-          Text(symbol, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+          Text(symbol, style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         );
       }
     }
@@ -116,7 +115,7 @@ class PurchaseDetailsCard extends StatelessWidget {
 
     // ☆の部分のスタイル定義（heightを削除し、必要に応じてTextウィジェットのCrossAxisAlignmentで調整）
     final TextStyle starStyle = TextStyle(
-      color: Colors.black54,
+      color: Colors.black,
       fontWeight: FontWeight.bold,
       fontSize: 12,
       // height: 0.9, // Text.richでなくRowでAlignするためheightは削除
@@ -124,7 +123,7 @@ class PurchaseDetailsCard extends StatelessWidget {
 
     // 金額部分のスタイル定義
     final TextStyle amountStyle = TextStyle(
-      color: Colors.black54,
+      color: Colors.black,
       fontWeight: FontWeight.bold,
       fontSize: 20,
     );
@@ -144,7 +143,7 @@ class PurchaseDetailsCard extends StatelessWidget {
             SizedBox(
               width: labelWidth,
               child: Text(
-                '馬番',
+                '　',
                 style: TextStyle(color: Colors.black54),
                 textAlign: TextAlign.end,
               ),
@@ -450,7 +449,7 @@ class PurchaseDetailsCard extends StatelessWidget {
                     width: labelWidth,
                     child: Text(
                       '馬番',
-                      style: TextStyle(color: Colors.black54),
+                      style: TextStyle(color: Colors.black),
                       textAlign: TextAlign.end,
                     ),
                   ),
@@ -529,7 +528,7 @@ class PurchaseDetailsCard extends StatelessWidget {
         if (uraDisplay.isNotEmpty) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
-            child: Text(uraDisplay, style: TextStyle(color: Colors.black54)),
+            child: Text(uraDisplay, style: TextStyle(color: Colors.black)),
           ));
         }
 
@@ -561,7 +560,7 @@ class PurchaseDetailsCard extends StatelessWidget {
 
     // 合計金額の★の部分のスタイル（heightを削除）
     final TextStyle totalStarStyle = TextStyle(
-      color: Colors.black54,
+      color: Colors.black,
       fontWeight: FontWeight.bold,
       fontSize: 12,
       // height: 0.9, // RowでAlignするためheightは削除
@@ -569,7 +568,7 @@ class PurchaseDetailsCard extends StatelessWidget {
 
     // 合計金額の通常テキストのスタイル
     final TextStyle totalAmountTextStyle = TextStyle(
-      color: Colors.black54,
+      color: Colors.black,
       fontWeight: FontWeight.bold,
       fontSize: 20,
     );
