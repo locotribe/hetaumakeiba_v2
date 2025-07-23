@@ -91,18 +91,19 @@ class PurchaseDetailsCard extends StatelessWidget {
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(vertical: 2.0),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.black),
+              border: Border.all(color: Colors.black54),
+              borderRadius: BorderRadius.circular(4.0),
             ),
             child: Text(
               numbersToProcess[i].toString(),
-              style: TextStyle(color: Colors.black),
+              style: TextStyle(color: Colors.black54),
             ),
           ),
         ),
       );
       if (symbol.isNotEmpty && i < numbersToProcess.length - 1) {
         widgets.add(
-          Text(symbol, style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          Text(symbol, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
         );
       }
     }
@@ -113,19 +114,18 @@ class PurchaseDetailsCard extends StatelessWidget {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
     const double labelWidth = 80.0;
 
-    // ☆の部分のスタイル定義（heightを削除し、必要に応じてTextウィジェットのCrossAxisAlignmentで調整）
+    // ☆の部分のスタイル定義
     final TextStyle starStyle = TextStyle(
-      color: Colors.black,
+      color: Colors.black54,
       fontWeight: FontWeight.bold,
-      fontSize: 12,
-      // height: 0.9, // Text.richでなくRowでAlignするためheightは削除
+      fontSize: 12, // フォントサイズを12に設定
     );
 
     // 金額部分のスタイル定義
     final TextStyle amountStyle = TextStyle(
-      color: Colors.black,
+      color: Colors.black54,
       fontWeight: FontWeight.bold,
-      fontSize: 20,
+      fontSize: 20, // フォントサイズを20に設定
     );
 
     if (currentBetType == '応援馬券' && purchaseDetails.length >= 2) {
@@ -143,7 +143,7 @@ class PurchaseDetailsCard extends StatelessWidget {
             SizedBox(
               width: labelWidth,
               child: Text(
-                '　',
+                '馬番',
                 style: TextStyle(color: Colors.black54),
                 textAlign: TextAlign.end,
               ),
@@ -158,67 +158,79 @@ class PurchaseDetailsCard extends StatelessWidget {
         // 各組の金額表示（RowとCrossAxisAlignment.centerで垂直方向を中央揃え）
         Align(
           alignment: Alignment.center, // 水平方向も中央
-          child: Row(
-            mainAxisSize: MainAxisSize.min, // 内容に合わせて幅を最小限に
-            crossAxisAlignment: CrossAxisAlignment.center, // 垂直方向の中央揃え
-            children: [
-              Text(
-                '各',
-                style: amountStyle,
-              ),
-              Text(
-                starsForAmount,
-                style: starStyle,
-              ),
-              Text(
-                '${amountValue}円',
-                style: amountStyle,
-              ),
-            ],
+          child: FittedBox( // FittedBoxを追加
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min, // 内容に合わせて幅を最小限に
+              crossAxisAlignment: CrossAxisAlignment.center, // 垂直方向の中央揃え
+              children: [
+                Text(
+                  '各',
+                  style: amountStyle,
+                ),
+                Text(
+                  starsForAmount,
+                  style: starStyle,
+                ),
+                Text(
+                  '${amountValue}円',
+                  style: amountStyle,
+                ),
+              ],
+            ),
           ),
         ),
         // 単勝の金額表示（RowとCrossAxisAlignment.centerで垂直方向を中央揃え）
         Align(
           alignment: Alignment.center, // 水平方向も中央
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                '単勝 ',
-                style: amountStyle,
-              ),
-              Text(
-                starsForAmount,
-                style: starStyle,
-              ),
-              Text(
-                '${amountValue}円',
-                style: amountStyle,
-              ),
-            ],
+          child: FittedBox( // FittedBoxを追加
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  '単勝 ',
+                  style: amountStyle,
+                ),
+                Text(
+                  starsForAmount,
+                  style: starStyle,
+                ),
+                Text(
+                  '${amountValue}円',
+                  style: amountStyle,
+                ),
+              ],
+            ),
           ),
         ),
         // 複勝の金額表示（RowとCrossAxisAlignment.centerで垂直方向を中央揃え）
         Align(
           alignment: Alignment.center, // 水平方向も中央
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                '複勝 ',
-                style: amountStyle,
-              ),
-              Text(
-                starsForAmount,
-                style: starStyle,
-              ),
-              Text(
-                '${amountValue}円',
-                style: amountStyle,
-              ),
-            ],
+          child: FittedBox( // FittedBoxを追加
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  '複勝 ',
+                  style: amountStyle,
+                ),
+                Text(
+                  starsForAmount,
+                  style: starStyle,
+                ),
+                Text(
+                  '${amountValue}円',
+                  style: amountStyle,
+                ),
+              ],
+            ),
           ),
         ),
       ];
@@ -359,32 +371,36 @@ class PurchaseDetailsCard extends StatelessWidget {
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerRight, // 水平方向は右寄せ
-                      child: Row( // RowとCrossAxisAlignment.centerで垂直方向を中央揃え
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり')
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                              decoration: const BoxDecoration(
-                                color: Colors.black,
-                                borderRadius: BorderRadius.all(Radius.circular(0)),
+                      child: FittedBox( // FittedBoxを追加
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり')
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                                decoration: const BoxDecoration(
+                                  color: Colors.black,
+                                  borderRadius: BorderRadius.all(Radius.circular(0)),
+                                ),
+                                child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
                               ),
-                              child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
+                            Text( // '各組'の部分
+                              isComplexCombinationForPrefix ? '　各組' : '',
+                              style: amountStyle,
                             ),
-                          Text( // '各組'の部分
-                            isComplexCombinationForPrefix ? '　各組' : '',
-                            style: amountStyle,
-                          ),
-                          Text( // ☆の部分
-                            starsForPrefix,
-                            style: starStyle,
-                          ),
-                          Text( // 金額の部分
-                            '${amountValueForPrefix}円',
-                            style: amountStyle,
-                          ),
-                        ],
+                            Text( // ☆の部分
+                              starsForPrefix,
+                              style: starStyle,
+                            ),
+                            Text( // 金額の部分
+                              '${amountValueForPrefix}円',
+                              style: amountStyle,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -416,19 +432,23 @@ class PurchaseDetailsCard extends StatelessWidget {
                           Expanded(
                             child: Align(
                               alignment: Alignment.centerRight, // 水平方向は右寄せ
-                              child: Row( // RowとCrossAxisAlignment.centerで垂直方向を中央揃え
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Text( // ☆の部分
-                                    starsForPrefix,
-                                    style: starStyle,
-                                  ),
-                                  Text( // 金額の部分
-                                    '${amountValueForPrefix}円',
-                                    style: amountStyle,
-                                  ),
-                                ],
+                              child: FittedBox( // FittedBoxを追加
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Text( // ☆の部分
+                                      starsForPrefix,
+                                      style: starStyle,
+                                    ),
+                                    Text( // 金額の部分
+                                      '${amountValueForPrefix}円',
+                                      style: amountStyle,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -449,7 +469,7 @@ class PurchaseDetailsCard extends StatelessWidget {
                     width: labelWidth,
                     child: Text(
                       '馬番',
-                      style: TextStyle(color: Colors.black),
+                      style: TextStyle(color: Colors.black54),
                       textAlign: TextAlign.end,
                     ),
                   ),
@@ -467,56 +487,32 @@ class PurchaseDetailsCard extends StatelessWidget {
         if (kingaku != null && !amountHandledInline) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
-            child: Row(
+            child: Row( // Rowで囲む
               children: [
-                Expanded(
+                Expanded( // Expandedで囲む
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: Text(
-                      '組合せ数 $combinationDisplay',
-                      style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold,),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ));
-
-          detailWidgets.add(const SizedBox(height: 8.0));
-
-          detailWidgets.add(Padding(
-            padding: const EdgeInsets.only(left: 16.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerRight, // 水平方向は右寄せ
-                    child: Row( // RowとCrossAxisAlignment.centerで垂直方向を中央揃え
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり')
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                            decoration: const BoxDecoration(
-                              color: Colors.black,
-                              borderRadius: BorderRadius.all(Radius.circular(0)),
-                            ),
-                            child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
+                    child: FittedBox( // FittedBoxを追加
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Row( // RowとCrossAxisAlignment.centerで垂直方向を中央揃え
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text( // '各組'の部分
+                            isComplexCombinationForPrefix ? '　各組' : '',
+                            style: amountStyle,
                           ),
-                        Text( // '各組'の部分
-                          isComplexCombinationForPrefix ? '　各組' : '',
-                          style: amountStyle,
-                        ),
-                        Text( // ☆の部分
-                          starsForPrefix,
-                          style: starStyle,
-                        ),
-                        Text( // 金額の部分
-                          '${amountValueForPrefix}円',
-                          style: amountStyle,
-                        ),
-                      ],
+                          Text( // ☆の部分
+                            starsForPrefix,
+                            style: starStyle,
+                          ),
+                          Text( // 金額の部分
+                            '${amountValueForPrefix}円',
+                            style: amountStyle,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -528,7 +524,7 @@ class PurchaseDetailsCard extends StatelessWidget {
         if (uraDisplay.isNotEmpty) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
-            child: Text(uraDisplay, style: TextStyle(color: Colors.black)),
+            child: Text(uraDisplay, style: TextStyle(color: Colors.black54)),
           ));
         }
 
@@ -558,19 +554,18 @@ class PurchaseDetailsCard extends StatelessWidget {
     String totalStars = _getTotalAmountStars(totalAmount);
     String totalAmountString = totalAmount.toString();
 
-    // 合計金額の★の部分のスタイル（heightを削除）
+    // 合計金額の★の部分のスタイル
     final TextStyle totalStarStyle = TextStyle(
-      color: Colors.black,
+      color: Colors.black54,
       fontWeight: FontWeight.bold,
-      fontSize: 12,
-      // height: 0.9, // RowでAlignするためheightは削除
+      fontSize: 12, // フォントサイズを12に設定
     );
 
     // 合計金額の通常テキストのスタイル
     final TextStyle totalAmountTextStyle = TextStyle(
-      color: Colors.black,
+      color: Colors.black54,
       fontWeight: FontWeight.bold,
-      fontSize: 20,
+      fontSize: 20, // フォントサイズを20に設定
     );
 
     return Column(
@@ -592,23 +587,27 @@ class PurchaseDetailsCard extends StatelessWidget {
               Expanded(
                 child: Align(
                   alignment: Alignment.centerRight, // 水平方向は右寄せを維持
-                  child: Row( // Text.richの代わりにRowを使用
-                    mainAxisSize: MainAxisSize.min, // 内容に合わせて幅を最小限に
-                    crossAxisAlignment: CrossAxisAlignment.center, // 垂直方向の中央揃え
-                    children: [
-                      Text(
-                        '合計　　',
-                        style: totalAmountTextStyle,
-                      ),
-                      Text(
-                        totalStars,
-                        style: totalStarStyle,
-                      ),
-                      Text(
-                        '${totalAmountString}円',
-                        style: totalAmountTextStyle,
-                      ),
-                    ],
+                  child: FittedBox( // FittedBoxを追加
+                    fit: BoxFit.scaleDown, // 必要に応じて縮小する
+                    alignment: Alignment.centerRight, // 右寄せを維持
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min, // 内容に合わせて幅を最小限に
+                      crossAxisAlignment: CrossAxisAlignment.center, // 垂直方向の中央揃え
+                      children: [
+                        Text(
+                          '合計　　',
+                          style: totalAmountTextStyle,
+                        ),
+                        Text(
+                          totalStars,
+                          style: totalStarStyle,
+                        ),
+                        Text(
+                          '${totalAmountString}円',
+                          style: totalAmountTextStyle,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
