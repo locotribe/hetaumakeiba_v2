@@ -41,6 +41,21 @@ class _ResultPageState extends State<ResultPage> {
     }
   }
 
+  // 半角数字を全角数字に変換するヘルパー関数
+  String _convertHalfWidthNumbersToFullWidth(String text) {
+    return text
+        .replaceAll('0', '０')
+        .replaceAll('1', '１')
+        .replaceAll('2', '２')
+        .replaceAll('3', '３')
+        .replaceAll('4', '４')
+        .replaceAll('5', '５')
+        .replaceAll('6', '６')
+        .replaceAll('7', '７')
+        .replaceAll('8', '８')
+        .replaceAll('9', '９');
+  }
+
   @override
   Widget build(BuildContext context) {
     String displayMessage;
@@ -87,7 +102,7 @@ class _ResultPageState extends State<ResultPage> {
       salesLocation = _parsedResult!['発売所'] as String;
     }
 
-    // ★ここから式別と方式の計算ロジックを移動
+    // 式別と方式の計算ロジック
     String shikibetsuToDisplay = ''; // 例: 馬単, 応援馬券, ボックス
     String hoshikiToDisplay = ''; // 例: マルチ, 単勝+複勝, 軸1頭
 
@@ -122,8 +137,9 @@ class _ResultPageState extends State<ResultPage> {
           hoshikiToDisplay = '';
         }
       }
+      // ★ここで半角数字を全角に変換
+      shikibetsuToDisplay = _convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
     }
-    // ★ここまで計算ロジックを移動
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -201,7 +217,7 @@ class _ResultPageState extends State<ResultPage> {
                               ),
                             ],
                           ),
-                        // ★方式の表示をここに追加
+                        // 方式の表示をここに追加
                         if (hoshikiToDisplay.isNotEmpty)
                           Text(
                             hoshikiToDisplay,
@@ -221,20 +237,22 @@ class _ResultPageState extends State<ResultPage> {
                             Expanded(
                               flex: 15, // 幅の比率
                               child: _parsedResult!.containsKey('式別')
-                                  ? Column( // Builderを削除し、直接Columnを返す
-                                crossAxisAlignment: CrossAxisAlignment.start, // テキストを左揃えにする
-                                children: [
-                                  if (shikibetsuToDisplay.isNotEmpty)
-                                    Text(
-                                      shikibetsuToDisplay,
+                                  ? Align( // 垂直方向の中央揃え
+                                alignment: Alignment.center,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min, // Columnの高さを内容に合わせる
+                                  crossAxisAlignment: CrossAxisAlignment.start, // 各文字を左揃え
+                                  children: shikibetsuToDisplay.characters.map((char) {
+                                    return Text(
+                                      char,
                                       style: const TextStyle(
                                         color: Colors.black,
                                         fontSize: 28, // 大きめのフォント
                                         fontWeight: FontWeight.bold,
                                       ),
-                                    ),
-                                  // hoshikiToDisplayは移動したのでここからは削除
-                                ],
+                                    );
+                                  }).toList(),
+                                ),
                               )
                                   : const SizedBox.shrink(), // 式別がない場合は空のウィジェットを返す
                             ),
