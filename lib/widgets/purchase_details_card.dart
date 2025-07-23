@@ -250,6 +250,7 @@ class PurchaseDetailsCard extends StatelessWidget {
 
         bool isComplexCombinationForPrefix =
             (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
+                (shikibetsu == '馬単' && detail['購入方式'] == 'フォーメーション') || // ★追加: 馬単フォーメーションも複雑な組み合わせとみなす
                 detail.containsKey('ながし') ||
                 (currentBetType == 'ボックス');
 
@@ -273,7 +274,79 @@ class PurchaseDetailsCard extends StatelessWidget {
 
         bool amountHandledInline = false;
 
-        if (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
+        // ★修正: 馬単フォーメーションの処理を追加
+        if (shikibetsu == '馬単' && detail['購入方式'] == 'フォーメーション') {
+          final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
+          if (horseGroups.length >= 1) {
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: labelWidth, child: Text('1着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')])),
+                ],
+              ),
+            ));
+          }
+          if (horseGroups.length >= 2) {
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: labelWidth, child: Text('2着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')])),
+                ],
+              ),
+            ));
+          }
+          // 馬単なので3着は通常なし。必要であれば追加
+          if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり') {
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                        decoration: const BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.all(Radius.circular(0)),
+                        ),
+                        child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ));
+          }
+          // 組合せ数と1点あたりの金額表示
+          if (combinations > 0 && kingaku != null && kingaku > 0) {
+            final double amountPerPoint = kingaku / combinations;
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '組合せ数 $combinations点 (1点あたり ${amountPerPoint.toInt()}円)',
+                        style: TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ));
+          }
+          amountHandledInline = true; // 金額表示をここで処理したので、後続の共通処理では行わない
+
+        } else if (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
           final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
           if (horseGroups.length >= 1) {
             detailWidgets.add(Padding(
@@ -345,6 +418,7 @@ class PurchaseDetailsCard extends StatelessWidget {
               ),
             ));
           }
+          // 馬単ながしの場合の金額表示ロジックは既に存在
           if (shikibetsu == '馬単' && kingaku != null) {
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
@@ -460,6 +534,7 @@ class PurchaseDetailsCard extends StatelessWidget {
             ));
             amountHandledInline = true;
           } else {
+            // 他のフォーメーションやボックス、クイックピックなどで馬番リストをシンプルに表示する場合
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0),
               child: Row(
@@ -484,6 +559,7 @@ class PurchaseDetailsCard extends StatelessWidget {
           }
         }
 
+        // 共通の金額表示ロジック（上記で処理されていない場合のみ）
         if (kingaku != null && !amountHandledInline) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),

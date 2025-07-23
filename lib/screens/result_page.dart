@@ -6,7 +6,7 @@ import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart'; // ★追加
+import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart'; // ★変更なし
 
 class ResultPage extends StatefulWidget {
   final Map<String, dynamic>? parsedResult;
@@ -74,6 +74,7 @@ class _ResultPageState extends State<ResultPage> {
       displayMessage = JsonEncoder.withIndent('  ').convert(_parsedResult);
     }
 
+    // totalAmountの計算ロジックは変更なし
     int totalAmount = 0;
     if (_parsedResult != null && _parsedResult!.containsKey('購入内容')) {
       List<Map<String, dynamic>> purchaseDetails = (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
@@ -102,7 +103,7 @@ class _ResultPageState extends State<ResultPage> {
       salesLocation = _parsedResult!['発売所'] as String;
     }
 
-    // 式別と方式の計算ロジック
+    // 式別と方式の計算ロジックは変更なし
     String shikibetsuToDisplay = ''; // 例: 馬単, 応援馬券, ボックス
     String hoshikiToDisplay = ''; // 例: マルチ, 単勝+複勝, 軸1頭
 
@@ -155,7 +156,7 @@ class _ResultPageState extends State<ResultPage> {
               fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
-          Column(
+          Column( // ページ全体のコンテンツを縦に並べる
             children: [
               Expanded(
                 child: SingleChildScrollView(
@@ -177,9 +178,11 @@ class _ResultPageState extends State<ResultPage> {
                         textAlign: TextAlign.center,
                       ),
                     )
-                        : Column(
+                        : Column( // メインコンテンツの縦並び
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // コンテナ1: レース情報など表示
+                        // 現在のリザルトページのレース情報部分をここに配置
                         if (_parsedResult!.containsKey('年') && _parsedResult!.containsKey('回') && _parsedResult!.containsKey('日'))
                           Text(
                             '20${_parsedResult!['年']}年${_parsedResult!['回']}回${_parsedResult!['日']}日',
@@ -217,64 +220,121 @@ class _ResultPageState extends State<ResultPage> {
                               ),
                             ],
                           ),
-                        // 方式の表示をここに追加
-                        if (hoshikiToDisplay.isNotEmpty)
-                          Text(
-                            hoshikiToDisplay,
-                            style: const TextStyle(
-                              color: Colors.black54, // 少し薄い色
-                              fontSize: 20, // 少し小さめのフォント
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        const SizedBox(height: 8), // 方式と次のRowの間にスペースを追加
+                        const SizedBox(height: 16), // レース情報と次のRowの間にスペース
 
-                        // ここからが「式別」と「購入内容」を横並びにするセクション
+                        // 中央のRowで式別と購入内容を横に並べる
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start, // 子ウィジェットを上揃えにする
                           children: [
-                            // 1. 式別表示部分 (ページ全体の約15%の幅)
+                            // コンテナ2: 左側の式別関連の親コンテナ
+                            // 幅は固定ではなく、flexで調整することでレスポンシブに対応
                             Expanded(
                               flex: 15, // 幅の比率
-                              child: _parsedResult!.containsKey('式別')
-                                  ? Align( // 垂直方向の中央揃え
-                                alignment: Alignment.center,
-                                child: Container( // ★Containerを追加して線で囲む
-                                  padding: const EdgeInsets.all(4.0), // 内側の余白
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.black, width: 2.0), // 線の色と太さ
-                                    // borderRadius: BorderRadius.circular(4.0), // ★この行を削除
+                              child: Column( // コンテナ4, 5, 6を縦に並べる
+                                mainAxisSize: MainAxisSize.min, // Columnの高さを内容に合わせる
+                                crossAxisAlignment: CrossAxisAlignment.start, // 各文字を左揃え
+                                children: [
+                                  // コンテナ4: 式別の英語名を表示（未実装）
+                                  // 仮のテキストを配置
+                                  Container(
+                                    // width: 100, // 固定幅ではなくコンテンツに合わせるかExpandedで
+                                    // height: 39, // 固定高ではなくコンテンツに合わせるかExpandedで
+                                    padding: const EdgeInsets.all(4.0),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.blue), // 仮のボーダー
+                                      borderRadius: BorderRadius.circular(4.0),
+                                    ),
+                                    child: const Text(
+                                      'BET TYPE (Top)', // 仮の英語名
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(fontSize: 12, color: Colors.blue),
+                                    ),
                                   ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min, // Columnの高さを内容に合わせる
-                                    crossAxisAlignment: CrossAxisAlignment.start, // 各文字を左揃え
-                                    children: shikibetsuToDisplay.characters.map((char) {
-                                      return Text(
-                                        char,
-                                        style: const TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 28, // 大きめのフォント
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      );
-                                    }).toList(),
+                                  const SizedBox(height: 8), // スペース
+
+                                  // コンテナ5: 式別のみ表示
+                                  // 現在のリザルトページの式別表示部分をここに配置
+                                  _parsedResult!.containsKey('式別')
+                                      ? Align( // 垂直方向の中央揃え
+                                    alignment: Alignment.center,
+                                    child: Container( // ★Containerを追加して線で囲む
+                                      padding: const EdgeInsets.all(4.0), // 内側の余白
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: Colors.black, width: 2.0), // 線の色と太さ
+                                      ),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min, // Columnの高さを内容に合わせる
+                                        crossAxisAlignment: CrossAxisAlignment.start, // 各文字を左揃え
+                                        children: shikibetsuToDisplay.characters.map((char) {
+                                          return Text(
+                                            char,
+                                            style: const TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 28, // 大きめのフォント
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  )
+                                      : const SizedBox.shrink(), // 式別がない場合は空のウィジェットを返す
+                                  const SizedBox(height: 8), // スペース
+
+                                  // コンテナ6: 式別の英語名を表示（未実装）
+                                  // 仮のテキストを配置
+                                  Container(
+                                    // width: 100,
+                                    // height: 39,
+                                    padding: const EdgeInsets.all(4.0),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.blue), // 仮のボーダー
+                                      borderRadius: BorderRadius.circular(4.0),
+                                    ),
+                                    child: const Text(
+                                      'BET TYPE (Bottom)', // 仮の英語名
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(fontSize: 12, color: Colors.blue),
+                                    ),
                                   ),
-                                ),
-                              )
-                                  : const SizedBox.shrink(), // 式別がない場合は空のウィジェットを返す
+                                ],
+                              ),
                             ),
-                            // 2. 購入内容部分 (ページ全体の約85%の幅)
+
+                            const SizedBox(width: 16), // 式別と方式/購入内容の間のスペース
+
+                            // コンテナ3: 右側の方式と購入内容の親コンテナ
                             Expanded(
                               flex: 85, // 幅の比率
-                              child: PurchaseDetailsCard(
-                                parsedResult: _parsedResult!,
-                                betType: _parsedResult!['式別'] ?? '',
+                              child: Column( // コンテナ7, 8を縦に並べる
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // コンテナ7: 方式を表示
+                                  // 現在のリザルトページの方式表示部分をここに配置
+                                  if (hoshikiToDisplay.isNotEmpty)
+                                    Text(
+                                      hoshikiToDisplay,
+                                      style: const TextStyle(
+                                        color: Colors.black54, // 少し薄い色
+                                        fontSize: 20, // 少し小さめのフォント
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 8), // 方式と購入内容の間にスペース
+
+                                  // コンテナ8: 購入内容を表示
+                                  // 現在のリザルトページのPurchaseDetailsCardをここに配置
+                                  PurchaseDetailsCard(
+                                    parsedResult: _parsedResult!,
+                                    betType: _parsedResult!['式別'] ?? '',
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                        // 以前ここにあった SizedBox(height: 8) は Row の中に移動したため削除
 
+                        // 発売所情報 (既存の配置を維持)
                         if (salesLocation != null && salesLocation.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -299,6 +359,7 @@ class _ResultPageState extends State<ResultPage> {
                   ),
                 ),
               ),
+              // 画面下部のボタン (既存の配置を維持)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 30.0),
                 child: Column(
