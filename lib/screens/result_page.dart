@@ -87,6 +87,44 @@ class _ResultPageState extends State<ResultPage> {
       salesLocation = _parsedResult!['発売所'] as String;
     }
 
+    // ★ここから式別と方式の計算ロジックを移動
+    String shikibetsuToDisplay = ''; // 例: 馬単, 応援馬券, ボックス
+    String hoshikiToDisplay = ''; // 例: マルチ, 単勝+複勝, 軸1頭
+
+    if (_parsedResult != null && _parsedResult!.containsKey('式別')) {
+      String overallMethod = _parsedResult!['式別'] ?? '';
+      String primaryShikibetsuFromDetails = '';
+
+      List<Map<String, dynamic>> purchaseDetails = [];
+      if (_parsedResult!.containsKey('購入内容')) {
+        purchaseDetails = (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
+        if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
+          primaryShikibetsuFromDetails = purchaseDetails[0]['式別'];
+        }
+      }
+
+      if (overallMethod == '応援馬券') {
+        shikibetsuToDisplay = '応援馬券';
+        hoshikiToDisplay = '単勝+複勝';
+      } else if (overallMethod == '通常') {
+        shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : '通常';
+        hoshikiToDisplay = ''; // 「通常」の場合は方式を独立して表示しない
+      } else {
+        // ボックス, ながし, フォーメーション, クイックピック
+        shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
+
+        if (overallMethod == 'ながし' && primaryShikibetsuFromDetails.isNotEmpty && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
+          hoshikiToDisplay = purchaseDetails[0]['ながし']; // 例: 軸1頭, 軸2頭
+        } else if (primaryShikibetsuFromDetails.isNotEmpty) {
+          hoshikiToDisplay = overallMethod; // 例: ボックス, フォーメーション, クイックピック
+        } else {
+          // primaryShikibetsuFromDetailsがない場合は、方式も表示しない（overallMethodが式別として表示されるため）
+          hoshikiToDisplay = '';
+        }
+      }
+    }
+    // ★ここまで計算ロジックを移動
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -163,76 +201,54 @@ class _ResultPageState extends State<ResultPage> {
                               ),
                             ],
                           ),
-                        const SizedBox(height: 8),
-                        if (_parsedResult!.containsKey('式別'))
-                          Builder(builder: (context) {
-                            String shikibetsuToDisplay = ''; // 例: 馬単, 応援馬券, ボックス
-                            String hoshikiToDisplay = ''; // 例: マルチ, 単勝+複勝, 軸1頭
-
-                            String overallMethod = _parsedResult!['式別'] ?? '';
-                            String primaryShikibetsuFromDetails = '';
-
-                            // purchaseDetailsをBuilderスコープ内で宣言し、初期化
-                            List<Map<String, dynamic>> purchaseDetails = [];
-                            if (_parsedResult!.containsKey('購入内容')) {
-                              purchaseDetails = (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-                              if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
-                                primaryShikibetsuFromDetails = purchaseDetails[0]['式別'];
-                              }
-                            }
-
-                            if (overallMethod == '応援馬券') {
-                              shikibetsuToDisplay = '応援馬券';
-                              hoshikiToDisplay = '単勝+複勝';
-                            } else if (overallMethod == '通常') {
-                              shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : '通常';
-                              hoshikiToDisplay = ''; // 「通常」の場合は方式を独立して表示しない
-                            } else {
-                              // ボックス, ながし, フォーメーション, クイックピック
-                              shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
-
-                              // purchaseDetailsが有効な範囲内でアクセス
-                              if (overallMethod == 'ながし' && primaryShikibetsuFromDetails.isNotEmpty && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
-                                hoshikiToDisplay = purchaseDetails[0]['ながし']; // 例: 軸1頭, 軸2頭
-                              } else if (primaryShikibetsuFromDetails.isNotEmpty) {
-                                hoshikiToDisplay = overallMethod; // 例: ボックス, フォーメーション, クイックピック
-                              } else {
-                                // primaryShikibetsuFromDetailsがない場合は、方式も表示しない（overallMethodが式別として表示されるため）
-                                hoshikiToDisplay = '';
-                              }
-                            }
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (shikibetsuToDisplay.isNotEmpty)
-                                  Text(
-                                    shikibetsuToDisplay,
-                                    style: const TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 28, // 大きめのフォント
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                if (hoshikiToDisplay.isNotEmpty)
-                                  Text(
-                                    hoshikiToDisplay,
-                                    style: const TextStyle(
-                                      color: Colors.black54, // 少し薄い色
-                                      fontSize: 20, // 少し小さめのフォント
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                              ],
-                            );
-                          }),
-                        const SizedBox(height: 8),
-                        if (_parsedResult!.containsKey('購入内容'))
-                          PurchaseDetailsCard(
-                            parsedResult: _parsedResult!,
-                            betType: _parsedResult!['式別'] ?? '',
+                        // ★方式の表示をここに追加
+                        if (hoshikiToDisplay.isNotEmpty)
+                          Text(
+                            hoshikiToDisplay,
+                            style: const TextStyle(
+                              color: Colors.black54, // 少し薄い色
+                              fontSize: 20, // 少し小さめのフォント
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 8), // 方式と次のRowの間にスペースを追加
+
+                        // ここからが「式別」と「購入内容」を横並びにするセクション
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start, // 子ウィジェットを上揃えにする
+                          children: [
+                            // 1. 式別表示部分 (ページ全体の約15%の幅)
+                            Expanded(
+                              flex: 15, // 幅の比率
+                              child: _parsedResult!.containsKey('式別')
+                                  ? Column( // Builderを削除し、直接Columnを返す
+                                crossAxisAlignment: CrossAxisAlignment.start, // テキストを左揃えにする
+                                children: [
+                                  if (shikibetsuToDisplay.isNotEmpty)
+                                    Text(
+                                      shikibetsuToDisplay,
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 28, // 大きめのフォント
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  // hoshikiToDisplayは移動したのでここからは削除
+                                ],
+                              )
+                                  : const SizedBox.shrink(), // 式別がない場合は空のウィジェットを返す
+                            ),
+                            // 2. 購入内容部分 (ページ全体の約85%の幅)
+                            Expanded(
+                              flex: 85, // 幅の比率
+                              child: PurchaseDetailsCard(
+                                parsedResult: _parsedResult!,
+                                betType: _parsedResult!['式別'] ?? '',
+                              ),
+                            ),
+                          ],
+                        ),
+                        // 以前ここにあった SizedBox(height: 8) は Row の中に移動したため削除
 
                         if (salesLocation != null && salesLocation.isNotEmpty)
                           Padding(
