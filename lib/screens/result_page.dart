@@ -195,7 +195,7 @@ class _ResultPageState extends State<ResultPage> {
                             children: [
                               Text(
                                 '${_parsedResult!['開催場']}',
-                                style: TextStyle(color: Colors.black, fontSize: 28),
+                                style: TextStyle(color: Colors.black, fontSize: 30),
                               ),
                               const SizedBox(height: 4),
                               Row(
@@ -206,10 +206,13 @@ class _ResultPageState extends State<ResultPage> {
                                       color: Colors.black,
                                       borderRadius: BorderRadius.all(Radius.circular(0)),
                                     ),
-                                    child: Text(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 2.0),
+                                      child: Text(
                                       '${_parsedResult!['レース']}',
-                                      style: const TextStyle(color: Colors.white, fontSize: 28, height: 0.9),
+                                      style: const TextStyle(color: Colors.white, fontSize: 32, height: 0.9),
                                     ),
+                                  ),
                                   ),
                                   const SizedBox(width: 4),
                                   const Text(
@@ -230,90 +233,85 @@ class _ResultPageState extends State<ResultPage> {
                               width: 50,
                               height: 250,
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.black, width: 2.0), // ✅ 黒い縁取り
+                                border: Border.all(color: Colors.black, width: 2.0),
                               ),
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final totalHeight = constraints.maxHeight;
-                                  final topHeight = totalHeight * 0.10;
-                                  final bottomHeight = totalHeight * 0.10;
-                                  final middleHeight = totalHeight - topHeight - bottomHeight;
+                              child: Column(
+                                mainAxisSize: MainAxisSize.max,
+                                children: [
+                                  // コンテナ4: 式別の英語名（Top）★高さを自動調整
+                                  IntrinsicHeight(
+                                    child: Container(
+                                      width: double.infinity,
+                                      color: Colors.black,
+                                      child: Center(
+                                      child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 2.0),
+                                        child: Text(
+                                          'Top', // 2行になる可能性あり
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  ),
 
-                                  return Column(
-                                    children: [
-                                      // コンテナ4: 式別の英語名（Top）
-                                      SizedBox(
-                                        height: topHeight,
-                                        width: double.infinity,
-                                        child: Container(
-                                          color: Colors.black,
-                                          child: Center(
-                                            child: FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              child: Text(
-                                                'Top',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
+                                  const SizedBox(height: 4),
+
+                                  // コンテナ5: 式別の表示（中央領域にフィット）
+                                  Expanded(
+                                    child: Container(
+                                      width: double.infinity,
+                                      alignment: Alignment.center,
+                                      child: _parsedResult!.containsKey('式別')
+                                          ? Column(
+                                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                        children: shikibetsuToDisplay.characters.map((char) {
+                                          return Text(
+                                            char,
+                                            style: const TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 28,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          );
+                                        }).toList(),
+                                      )
+                                          : const SizedBox.shrink(),
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 4),
+
+                                  // コンテナ6: 式別の英語名（Bottom）★高さを自動調整
+                                  IntrinsicHeight(
+                                    child: Container(
+                                      width: double.infinity,
+                                      color: Colors.black,
+                                      child: Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 2.0), // 上下2pxずつ余白
+                                          child: Text(
+                                            'Bottom', // 2行になる可能性あり
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white,
                                             ),
                                           ),
                                         ),
                                       ),
+                                    ),
+                                  )
 
-                                      // コンテナ5: 式別の表示
-                                      SizedBox(
-                                        height: middleHeight,
-                                        width: double.infinity,
-                                        child: _parsedResult!.containsKey('式別')
-                                            ? Center(
-                                          child: Column(
-                                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                            children: shikibetsuToDisplay.characters.map((char) {
-                                              return Text(
-                                                char,
-                                                style: const TextStyle(
-                                                  color: Colors.black,
-                                                  fontSize: 28,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              );
-                                            }).toList(),
-                                          ),
-                                        )
-                                            : const SizedBox.shrink(),
-                                      ),
-
-                                      // コンテナ6: 式別の英語名（Bottom）
-                                      SizedBox(
-                                        height: bottomHeight,
-                                        width: double.infinity,
-                                        child: Container(
-                                          color: Colors.black,
-                                          child: Center(
-                                            child: FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              child: Text(
-                                                'Bottom',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                },
+                                ],
                               ),
                             ),
 
-                            const SizedBox(width: 16), // 左右の間のスペース
+                            const SizedBox(width: 16),
 
                             // コンテナ3: 右側の方式と購入内容の親コンテナ
                             Expanded(
@@ -321,7 +319,6 @@ class _ResultPageState extends State<ResultPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // コンテナ7: 方式の表示
                                   if (hoshikiToDisplay.isNotEmpty)
                                     Text(
                                       hoshikiToDisplay,
@@ -332,8 +329,6 @@ class _ResultPageState extends State<ResultPage> {
                                       ),
                                     ),
                                   const SizedBox(height: 8),
-
-                                  // コンテナ8: 購入内容を表示
                                   PurchaseDetailsCard(
                                     parsedResult: _parsedResult!,
                                     betType: _parsedResult!['式別'] ?? '',
