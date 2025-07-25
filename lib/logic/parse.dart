@@ -143,7 +143,7 @@ int calculatePoints({
         case '軸1頭マルチ':
           return s.length * (s.length - 1) * 3;
         case '軸2頭ながし':
-          return s.length;
+          return t.length;
         case '軸2頭マルチ':
           return s.length * 6;
         default:
@@ -354,21 +354,27 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         ];
         print('    => 馬番: ${di["馬番"]} (position=${itr.position})');
 
-        switch (bettingCode) {
-          case "6":
-            String ura = itr.next() + itr.next();
-            di["ウラ"] = (ura == "01") ? "あり" : "なし";
-            print('    [Marker] 馬単ウラ = $ura → ${di["ウラ"]} (position=${itr.position})');
-            break;
-
-          case "1":
-          case "2":
-          case "5":
-          case "7":
-            String m1 = itr.next(), m2 = itr.next();
-            print('    [Marker] consumed for code $bettingCode: $m1$m2 (position=${itr.position})');
-            break;
+        // ★★★★★ 修正箇所 ★★★★★
+        // ticketFormatを元に券面が確保している馬の数を計算し、
+        // 実際の馬番数との差があれば、その分イテレータを進める。
+        int c = (int.parse(ticketFormat) + 1) ~/ 2;
+        if (bettingCode == "5" && ticketFormat == "3") {
+          c += 1;
         }
+        // 応援馬券(typeCode=5)と馬単(bettingCode=6)以外の場合に、
+        // フォーマット上の馬数と実際の馬数が異なれば、その差分だけイテレータを進める
+        if (c > count && typeCode != "5" && bettingCode != "6") {
+          itr.move((c - count) * 2);
+        }
+
+        // 単勝(1), 複勝(2), 馬単(6)の場合、追加の2文字（ウラ指定など）を読み取る
+        if (bettingCode == "1" || bettingCode == "2" || bettingCode == "6") {
+          String ura = itr.next() + itr.next();
+          if (bettingCode == "6") {
+            di["ウラ"] = ura == "01" ? "あり" : "なし";
+          }
+        }
+        // ★★★★★ ここまで ★★★★★
 
         String purchaseAmountStr = "";
         print('    [Amount] start reading 5 digits at position=${itr.position}');
@@ -669,9 +675,9 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       List<int> secondHorses = [];
       List<int> thirdHorses = [];
       if (bettingCode == "9") {
-        if (di["馬番"].length > 0) firstHorses = di["馬番"][0];
-        if (di["馬番"].length > 1) secondHorses = di["馬番"][1];
-        if (di["馬番"].length > 2) thirdHorses = di["馬番"][2];
+        if (di["馬番"].length > 0) firstHorses = (di["馬番"][0] as List).cast<int>();
+        if (di["馬番"].length > 1) secondHorses = (di["馬番"][1] as List).cast<int>();
+        if (di["馬番"].length > 2) thirdHorses = (di["馬番"][2] as List).cast<int>();
       }
 
       // MOVED: Combination calculation to before adding di to list
@@ -679,8 +685,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         di["組合せ数"] = calculatePoints(
           ticketType: bettingDict[bettingCode]!,
           method: method,
-          first: di["軸"],
-          second: di["相手"],
+          first: (di["軸"] as List).cast<int>(),
+          second: (di["相手"] as List).cast<int>(),
         );
       } else if (bettingCode == "9") {
         if (method == '軸1頭ながし' || method == '軸1頭マルチ') {
@@ -706,8 +712,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         di["組合せ数"] = calculatePoints(
           ticketType: bettingDict[bettingCode]!,
           method: 'ながし',
-          first: [di["軸"]],
-          second: di["相手"],
+          first: [di["軸"] as int],
+          second: (di["相手"] as List).cast<int>(),
         );
       }
       print('  Calculated 組合せ数 (NAGASHI): ${di["組合せ数"]}'); // Log after calculation
@@ -776,9 +782,9 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       List<int> secondFormation = [];
       List<int> thirdFormation = [];
 
-      if (di["馬番"].length > 0) firstFormation = di["馬番"][0];
-      if (di["馬番"].length > 1) secondFormation = di["馬番"][1];
-      if (di["馬番"].length > 2) thirdFormation = di["馬番"][2];
+      if (di["馬番"].length > 0) firstFormation = (di["馬番"][0] as List).cast<int>();
+      if (di["馬番"].length > 1) secondFormation = (di["馬番"][1] as List).cast<int>();
+      if (di["馬番"].length > 2) thirdFormation = (di["馬番"][2] as List).cast<int>();
 
       di["組合せ数"] = calculatePoints(
         ticketType: bettingDict[bettingCode]!,
