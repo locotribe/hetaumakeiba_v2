@@ -5,26 +5,38 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.8.1
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  flutter_localizations: # <--- 修正点: flutter_localizations パッケージを別途指定
-    sdk: flutter         # <--- 修正点: flutter_localizations も sdk: flutter が必要
+  flutter_localizations:
+    sdk: flutter
+
+  # Icons
+  cupertino_icons: ^1.0.8
+
+  # QR Scanner
   mobile_scanner: ^7.0.1
+  image_picker: ^1.1.2
+
+  # Database
   sqflite: ^2.3.0
   path_provider: ^2.1.1
+
+  # Network & Scraping
   http: ^1.2.0
-  html: ^0.15.0
+  html: ^0.15.4
   url_launcher: ^6.3.0
-  cupertino_icons: ^1.0.8
-  image_picker: ^1.1.2 # 追加: ギャラリーからの読み込み機能用。最新の安定バージョンを指定。
+  charset_converter: ^2.1.1 # ★★★★★ この行を追加 ★★★★★
+
+  # Utility
+  itertools: ^0.1.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true

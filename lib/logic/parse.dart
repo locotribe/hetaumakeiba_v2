@@ -255,15 +255,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
   d["日"] = int.parse(itr.next() + itr.next());
   d["レース"] = int.parse(itr.next() + itr.next());
   print('Parsed 年: ${d["年"]}, 回: ${d["回"]}, 日: ${d["日"]}, レース: ${d["レース"]} (Iterator position: ${itr.position})');
-
-  String suffix = [
-    d["年"],
-    racecourseCode,
-    d["回"],
-    d["日"],
-    d["レース"],
-  ].map((n) => n.toString().padLeft(2, '0')).join();
-  d["URL"] = "https://db.netkeiba.com/race/20$suffix";
+  
   String typeCode = itr.next();
   d["式別"] = typeDict[typeCode];
   print('Parsed typeCode (購入方式): $typeCode, 式別: ${d["式別"]} (Iterator position: ${itr.position})');

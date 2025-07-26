@@ -1,12 +1,29 @@
 // lib/screens/saved_ticket_detail_page.dart
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/models/qr_data_model.dart'; // QrDataモデルをインポート
-import 'package:hetaumakeiba_v2/logic/parse.dart'; // 解析ロジックをインポート
-import 'dart:convert'; // JsonEncoderを使用
-import 'package:hetaumakeiba_v2/widgets/custom_background.dart'; // 背景ウィジェットをインポート
+import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/logic/hit_checker.dart'; // ★追加：当たり判定サービスをインポート
+import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/utils/url_generator.dart';
+import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
+
+// ページのロードに必要なデータをまとめるためのヘルパークラス
+class PageData {
+  final Map<String, dynamic> parsedTicket;
+  final RaceResult raceResult;
+  final HitResult hitResult; // ★追加：当たり判定の結果も保持
+
+  PageData({
+    required this.parsedTicket,
+    required this.raceResult,
+    required this.hitResult, // ★追加
+  });
+}
 
 class SavedTicketDetailPage extends StatefulWidget {
-  final QrData qrData; // 表示するQrDataオブジェクトを受け取る
+  final QrData qrData;
 
   const SavedTicketDetailPage({super.key, required this.qrData});
 
@@ -15,563 +32,321 @@ class SavedTicketDetailPage extends StatefulWidget {
 }
 
 class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
-  Map<String, dynamic>? _parsedResult;
+  late Future<PageData> _pageDataFuture;
+  final DatabaseHelper _dbHelper = DatabaseHelper();
 
   @override
   void initState() {
     super.initState();
-    _parseAndDisplayQrData();
+    _pageDataFuture = _loadPageData();
   }
 
-  // 受け取ったQrDataを解析して表示
-  void _parseAndDisplayQrData() {
+  Future<PageData> _loadPageData() async {
     try {
-      _parsedResult = parseHorseracingTicketQr(widget.qrData.qrCode);
-    } catch (e) {
-      _parsedResult = {'エラー': '解析に失敗しました', '詳細': e.toString()};
-    }
-    setState(() {}); // UIを更新
-  }
+      final parsedTicket = parseHorseracingTicketQr(widget.qrData.qrCode);
 
-  // 金額に応じた☆の数を返すヘルパーメソッド
-  String _getStars(int amount) {
-    String amountStr = amount.toString();
-    int numDigits = amountStr.length;
-    if (numDigits >= 6) {
-      return '';
-    } else if (numDigits == 5) {
-      return '☆';
-    } else if (numDigits == 4) {
-      return '☆☆';
-    } else if (numDigits == 3) {
-      return '☆☆☆';
-    }
-    return '';
-  }
+      final url = generateNetkeibaUrl(
+        year: parsedTicket['年'].toString(),
+        racecourseCode: racecourseDict.entries
+            .firstWhere((entry) => entry.value == parsedTicket['開催場'])
+            .key,
+        round: parsedTicket['回'].toString(),
+        day: parsedTicket['日'].toString(),
+        race: parsedTicket['レース'].toString(),
+      );
+      final raceId = ScraperService.getRaceIdFromUrl(url)!;
 
-  // 馬番と馬番の間に表示する記号を返すヘルパーメソッド
-  String _getHorseNumberSymbol(String shikibetsu, String betType) {
-    if (betType == '通常') {
-      if (shikibetsu == '馬単' || shikibetsu == '3連単') {
-        return '→';
-      } else if (shikibetsu == '馬連' || shikibetsu == '3連複' || shikibetsu == '枠連') {
-        return '-';
-      } else if (shikibetsu == 'ワイド') {
-        return '◆';
+      RaceResult? raceResult = await _dbHelper.getRaceResult(raceId);
+
+      if (raceResult == null) {
+        print('DBにデータがないため、スクレイピングを実行します: $url');
+        raceResult = await ScraperService.scrapeRaceDetails(url);
+        await _dbHelper.insertOrUpdateRaceResult(raceResult);
+        print('スクレイピング結果をDBに保存しました。');
+      } else {
+        print('DBからレース結果を読み込みました。');
       }
+
+      // ★追加：当たり判定を実行
+      final hitResult = HitChecker.check(
+        parsedTicket: parsedTicket,
+        raceResult: raceResult,
+      );
+
+      return PageData(
+        parsedTicket: parsedTicket,
+        raceResult: raceResult,
+        hitResult: hitResult, // ★追加
+      );
+    } catch (e) {
+      print('ページデータの読み込みに失敗しました: $e');
+      throw Exception('レース結果の取得に失敗しました。\n時間をおいて再度お試しください。');
     }
-    return '';
   }
 
-  // 馬番のリストを記号を挟んで表示するウィジェットのリストを生成するヘルパーメソッド
-  List<Widget> _buildHorseNumberDisplay(List<int> horseNumbers, {String symbol = ''}) {
-    List<Widget> widgets = [];
-    const double fixedWidth = 30.0;
-
-    for (int i = 0; i < horseNumbers.length; i++) {
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2.0),
-          child: Container(
-            width: fixedWidth,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(vertical: 2.0),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.black),
-              borderRadius: BorderRadius.circular(4.0),
-            ),
-            child: Text(
-              horseNumbers[i].toString(),
-              style: TextStyle(color: Colors.black),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('購入馬券の詳細'),
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: CustomBackground(
+              overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
+              stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
+              fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
-        ),
-      );
-      if (symbol.isNotEmpty && i < horseNumbers.length - 1) {
-        widgets.add(
-          Text(symbol, style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        );
-      }
-    }
-    return widgets;
+          FutureBuilder<PageData>(
+            future: _pageDataFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('レース結果を取得・判定中...'),
+                    ],
+                  ),
+                );
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      'エラー: ${snapshot.error}',
+                      style: const TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                );
+              }
+              if (snapshot.hasData) {
+                final pageData = snapshot.data!;
+                final raceResult = pageData.raceResult;
+                final parsedTicket = pageData.parsedTicket;
+                final hitResult = pageData.hitResult;
+
+                return ListView(
+                  padding: const EdgeInsets.all(8.0),
+                  children: [
+                    _buildHitResultCard(hitResult), // ★追加：的中結果カード
+                    _buildRaceInfoCard(raceResult),
+                    _buildUserTicketCard(parsedTicket),
+                    _buildFullResultsCard(raceResult),
+                    _buildRefundsCard(raceResult),
+                  ],
+                );
+              }
+              return const Center(child: Text('データがありません。'));
+            },
+          ),
+        ],
+      ),
+    );
   }
 
-  List<Widget> _buildPurchaseDetails(dynamic purchaseData, String betType) {
-    List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
+  // ★★★★★ 新しく追加したウィジェット ★★★★★
+  /// 的中結果を表示するカード
+  Widget _buildHitResultCard(HitResult hitResult) {
+    final bool isHit = hitResult.isHit;
+    final Color cardColor = isHit ? Colors.green.shade50 : Colors.grey.shade200;
+    final Color textColor = isHit ? Colors.green.shade800 : Colors.black87;
 
-    const double labelWidth = 80.0;
-
-    if (betType == '応援馬券' && purchaseDetails.length >= 2) {
-      final firstDetail = purchaseDetails[0];
-      List<int> umanbanList = (firstDetail['馬番'] as List).cast<int>();
-      int kingaku = firstDetail['購入金額'] as int;
-
-      return [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Card(
+      elevation: 4,
+      color: cardColor,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
           children: [
-            SizedBox(
-              width: labelWidth,
-              child: Text(
-                '馬番',
-                style: TextStyle(color: Colors.black),
-                textAlign: TextAlign.end,
+            Text(
+              isHit ? '🎉 的中！ 🎉' : 'はずれ',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: textColor,
               ),
             ),
-            Expanded(
-              child: Wrap(
-                children: [..._buildHorseNumberDisplay(umanbanList, symbol: '')],
+            if (isHit) ...[
+              const SizedBox(height: 16),
+              Text(
+                '総払戻金額',
+                style: TextStyle(fontSize: 16, color: textColor),
+              ),
+              Text(
+                '${hitResult.totalPayout} 円',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+              const Divider(height: 24),
+              const Text(
+                '的中内容',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              ...hitResult.hitDetails.map((detail) => Text(detail)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  // ★★★★★ ここまで ★★★★★
+
+  // レース情報カード
+  Widget _buildRaceInfoCard(RaceResult raceResult) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              raceResult.raceTitle,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(raceResult.raceDate),
+            Text(raceResult.raceInfo),
+            Text(raceResult.raceGrade),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ユーザーの購入内容カード
+  Widget _buildUserTicketCard(Map<String, dynamic> parsedTicket) {
+    final purchaseDetails = parsedTicket['購入内容'] as List;
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'あなたの購入内容',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const Divider(height: 20),
+            ...purchaseDetails.map((detail) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text(
+                  '${detail['式別']} ${detail['馬番']} - ${detail['購入金額']}円',
+                  style: const TextStyle(fontSize: 16),
+                ),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // レース全着順カード
+  Widget _buildFullResultsCard(RaceResult raceResult) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'レース結果',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 16,
+                columns: const [
+                  DataColumn(label: Text('着')),
+                  DataColumn(label: Text('馬番')),
+                  DataColumn(label: Text('馬名')),
+                  DataColumn(label: Text('騎手')),
+                  DataColumn(label: Text('単勝')),
+                  DataColumn(label: Text('人気')),
+                ],
+                rows: raceResult.horseResults.map((horse) {
+                  return DataRow(cells: [
+                    DataCell(Text(horse.rank)),
+                    DataCell(Text(horse.horseNumber)),
+                    DataCell(Text(horse.horseName)),
+                    DataCell(Text(horse.jockeyName)),
+                    DataCell(Text(horse.odds)),
+                    DataCell(Text(horse.popularity)),
+                  ]);
+                }).toList(),
               ),
             ),
           ],
         ),
-        Text(
-          '各${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black),
-        ),
-        Text(
-          '単勝 ${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black),
-        ),
-        Text(
-          '複勝 ${_getStars(kingaku)}${kingaku}円',
-          style: TextStyle(color: Colors.black),
-        ),
-      ];
-    } else {
-      return purchaseDetails.map((detail) {
-        String shikibetsu = detail['式別'] ?? '';
-        int? kingaku = detail['購入金額'];
-        String kingakuDisplay = kingaku != null ? '${kingaku}円' : '';
-        String uraDisplay = (detail['ウラ'] != null) ? 'ウラ: ${detail['ウラ']}' : '';
-
-        List<Widget> detailWidgets = [];
-        int combinations = 0;
-
-        if (betType == 'ボックス') {
-          List<int> horseNumbers = (detail['馬番'] as List).cast<int>();
-          int n = horseNumbers.length;
-          if (shikibetsu == '馬連' || shikibetsu == '馬単') {
-            combinations = n * (n - 1) ~/ (shikibetsu == '馬連' ? 2 : 1);
-          } else if (shikibetsu == '3連複') {
-            combinations = n * (n - 1) * (n - 2) ~/ 6;
-          } else if (shikibetsu == '3連単') {
-            combinations = n * (n - 1) * (n - 2);
-          }
-        } else if (betType == 'フォーメーション') {
-          List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
-          if (shikibetsu == '3連単') {
-            if (horseGroups.length >= 3) {
-              combinations = horseGroups[0].length * horseGroups[1].length * horseGroups[2].length;
-            }
-          } else if (shikibetsu == '3連複') {
-            if (horseGroups.length >= 3) {
-              combinations = horseGroups[0].length * horseGroups[1].length * horseGroups[2].length;
-            }
-          }
-        } else if (betType == 'ながし') {
-          int axisCount = 0;
-          if (detail.containsKey('軸') && detail['軸'] is List) {
-            axisCount = (detail['軸'] as List).length;
-          } else if (detail.containsKey('軸') && detail['軸'] != null) {
-            axisCount = 1;
-          }
-
-          int opponentCount = 0;
-          if (detail.containsKey('相手') && detail['相手'] is List) {
-            opponentCount = (detail['相手'] as List).length;
-          }
-          combinations = axisCount * opponentCount;
-        }
-
-        bool isComplexCombinationForPrefix =
-            (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
-                detail.containsKey('ながし') ||
-                (betType == 'ボックス');
-
-        String prefixForAmount = '';
-        if (kingaku != null) {
-          if (isComplexCombinationForPrefix) {
-            prefixForAmount = '各組${_getStars(kingaku)}';
-          } else {
-            prefixForAmount = '${_getStars(kingaku)}';
-          }
-        }
-
-        if (combinations > 0) {
-          detailWidgets.add(
-            Text(
-              '組合せ数 $combinations',
-              style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
-            ),
-          );
-        }
-
-        bool amountHandledInline = false;
-
-        if (detail['式別'] == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
-          final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
-          if (horseGroups.length >= 1) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('1着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')])),
-                ],
-              ),
-            ));
-          }
-          if (horseGroups.length >= 2) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('2着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')])),
-                ],
-              ),
-            ));
-          }
-          if (horseGroups.length >= 3) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('3着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[2], symbol: '')])),
-                ],
-              ),
-            ));
-          }
-        } else if (detail.containsKey('ながし')) {
-          if (detail.containsKey('軸')) {
-            List<int> axisHorses = detail['軸'] is List ? (detail['軸'] as List).cast<int>() : [(detail['軸'] as int)];
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('軸', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(axisHorses, symbol: '')])),
-                ],
-              ),
-            ));
-          }
-          if (detail.containsKey('相手') && detail['相手'] is List) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('相手', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay((detail['相手'] as List).cast<int>(), symbol: '')])),
-                ],
-              ),
-            ));
-          }
-        } else if (detail.containsKey('馬番') && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
-          List<List<int>> formationHorseNumbers = (detail['馬番'] as List).cast<List<int>>();
-          for (int i = 0; i < formationHorseNumbers.length; i++) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('${i + 1}組', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(formationHorseNumbers[i], symbol: '')])),
-                ],
-              ),
-            ));
-          }
-        } else if (detail.containsKey('馬番') && detail['馬番'] is List) {
-          String currentSymbol = _getHorseNumberSymbol(shikibetsu, betType);
-
-          if (!isComplexCombinationForPrefix) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: labelWidth,
-                    child: Text(
-                      '馬番',
-                      style: TextStyle(color: Colors.black54),
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                  Expanded(
-                    child: Wrap(
-                      spacing: 4.0,
-                      runSpacing: 4.0,
-                      children: [
-                        ..._buildHorseNumberDisplay((detail['馬番'] as List).cast<int>(), symbol: currentSymbol),
-                        if (kingaku != null)
-                          Text(
-                            '$prefixForAmount$kingakuDisplay',
-                            style: TextStyle(color: Colors.black54),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ));
-            amountHandledInline = true;
-          } else {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: labelWidth,
-                    child: Text(
-                      '馬番',
-                      style: TextStyle(color: Colors.black54),
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                  Expanded(
-                    child: Wrap(
-                      children: [..._buildHorseNumberDisplay((detail['馬番'] as List).cast<int>(), symbol: '')],
-                    ),
-                  ),
-                ],
-              ),
-            ));
-          }
-        }
-
-        if (kingaku != null && !amountHandledInline) {
-          detailWidgets.add(Padding(
-            padding: const EdgeInsets.only(left: 16.0),
-            child: Text('$prefixForAmount$kingakuDisplay', style: TextStyle(color: Colors.black54)),
-          ));
-        }
-
-        if (uraDisplay.isNotEmpty) {
-          detailWidgets.add(Padding(
-            padding: const EdgeInsets.only(left: 16.0),
-            child: Text(uraDisplay, style: TextStyle(color: Colors.black54)),
-          ));
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: detailWidgets,
-        );
-      }).toList();
-    }
+      ),
+    );
   }
 
-
-  @override
-  Widget build(BuildContext context) {
-    final prettyJson = _parsedResult != null
-        ? JsonEncoder.withIndent('  ').convert(_parsedResult)
-        : '馬券の読み取りに失敗しました';
-
-    int totalAmount = 0;
-    if (_parsedResult != null && _parsedResult!.containsKey('購入内容')) {
-      List<Map<String, dynamic>> purchaseDetails = (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-      for (var detail in purchaseDetails) {
-        if (detail.containsKey('購入金額')) {
-          totalAmount += (detail['購入金額'] as int);
-        }
-      }
-    }
-
-    String? salesLocation;
-    if (_parsedResult != null && _parsedResult!.containsKey('発売所')) {
-      salesLocation = _parsedResult!['発売所'] as String;
-    }
-
-    return Stack( // Scaffoldを削除し、Stackを直接返す
-      children: [
-        Positioned.fill(
-          child: CustomBackground(
-            overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-            stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
-            fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '読み込んだ馬券',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: _parsedResult == null
-                        ? Center(
+  // 払戻情報カード
+  Widget _buildRefundsCard(RaceResult raceResult) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '払戻',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ...raceResult.refunds.map((refund) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 60,
                       child: Text(
-                        prettyJson,
-                        style: TextStyle(fontSize: 16, color: Colors.black54),
+                        refund.ticketType,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    )
-                        : (_parsedResult!.containsKey('エラー')
-                        ? Text(
-                      'エラー: ${_parsedResult!['エラー']}\n詳細: ${_parsedResult!['詳細']}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.red,
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: refund.payouts.map((payout) {
+                          return Text(
+                            '${payout.combination} : ${payout.amount}円 (${payout.popularity}人気)',
+                          );
+                        }).toList(),
                       ),
-                    )
-                        : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_parsedResult!.containsKey('年') && _parsedResult!.containsKey('回') && _parsedResult!.containsKey('日'))
-                          Text(
-                            '${_parsedResult!['年']}年${_parsedResult!['回']}回${_parsedResult!['日']}日',
-                            style: TextStyle(color: Colors.black54, fontSize: 16),
-                          ),
-                        const SizedBox(height: 4),
-                        if (_parsedResult!.containsKey('開催場') && _parsedResult!.containsKey('レース'))
-                          Text(
-                            '${_parsedResult!['開催場']}${_parsedResult!['レース']}レース',
-                            style: TextStyle(color: Colors.black54, fontSize: 16),
-                          ),
-                        const SizedBox(height: 8),
-                        if (_parsedResult!.containsKey('購入内容') && _parsedResult!.containsKey('方式'))
-                          Builder(builder: (context) {
-                            final List<Map<String, dynamic>> purchaseDetails =
-                            (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-                            String betType = _parsedResult!['方式'] ?? '';
-                            String shikibetsu = '';
-                            if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
-                              shikibetsu = purchaseDetails[0]['式別'];
-                            }
-
-                            String displayString = shikibetsu;
-
-                            if (betType == '応援馬券') {
-                              displayString = '応援馬券 単勝+複勝';
-                            } else if (betType == 'ながし') {
-                              if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
-                                displayString += ' ${purchaseDetails[0]['ながし']}';
-                              } else {
-                                displayString += ' ながし';
-                              }
-                            } else {
-                              displayString += ' $betType';
-                            }
-
-                            return Text(
-                              displayString,
-                              style: TextStyle(color: Colors.black54, fontSize: 16),
-                            );
-                          }),
-                        const SizedBox(height: 8),
-                        if (_parsedResult!.containsKey('購入内容'))
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '購入内容',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(left: 16.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: _buildPurchaseDetails(_parsedResult!['購入内容'], _parsedResult!['方式']),
-                                ),
-                              ),
-                            ],
-                          ),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  '合計金額',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  '$totalAmount円',
-                                  style: TextStyle(
-                                    color: Colors.black54,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (salesLocation != null && salesLocation.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4.0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(
-                                  width: 100,
-                                  child: Text(
-                                    '発売所',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    salesLocation,
-                                    style: TextStyle(
-                                      color: Colors.black54,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    )),
-                  ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
+              );
+            }).toList(),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
