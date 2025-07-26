@@ -32,19 +32,18 @@ class PurchaseDetailsCard extends StatelessWidget {
   String _getTotalAmountStars(int amount) {
     String amountStr = amount.toString();
     int numDigits = amountStr.length;
-    // 7桁の場合は何も表示しない
     if (numDigits >= 7) {
       return '';
     } else if (numDigits == 6) {
-      return '★'; // 6桁の場合、★を1つ表示
+      return '★';
     } else if (numDigits == 5) {
-      return '★★'; // 5桁の場合、★★を2つ表示
+      return '★★';
     } else if (numDigits == 4) {
-      return '★★★'; // 4桁の場合、★★★を3つ表示
+      return '★★★';
     } else if (numDigits == 3) {
-      return '★★★★'; // 3桁の場合、★★★★を4つ表示
+      return '★★★★';
     }
-    return ''; // それ以外の場合（2桁以下）は何も表示しない
+    return '';
   }
 
   String _getHorseNumberSymbol(String shikibetsu, String betType, {String? uraStatus}) {
@@ -71,13 +70,8 @@ class PurchaseDetailsCard extends StatelessWidget {
     List<int> numbersToProcess = [];
 
     if (horseNumbers is List) {
-      for (var item in horseNumbers) {
-        if (item is int) {
-          numbersToProcess.add(item);
-        } else if (item is List) {
-          numbersToProcess.addAll(item.cast<int>());
-        }
-      }
+      // この関数は常にフラットなリストを受け取る想定
+      numbersToProcess.addAll(horseNumbers.cast<int>());
     } else if (horseNumbers is int) {
       numbersToProcess.add(horseNumbers);
     }
@@ -110,25 +104,42 @@ class PurchaseDetailsCard extends StatelessWidget {
     return widgets;
   }
 
+  // 組み合わせ計算 C(n, k) を行うヘルパー関数
+  int _combinations(int n, int k) {
+    if (k < 0 || k > n) {
+      return 0;
+    }
+    if (k == 0 || k == n) {
+      return 1;
+    }
+    if (k > n / 2) {
+      k = n - k;
+    }
+    int res = 1;
+    for (int i = 1; i <= k; ++i) {
+      res = res * (n - i + 1) ~/ i;
+    }
+    return res;
+  }
+
   List<Widget> _buildPurchaseDetailsInternal(dynamic purchaseData, String currentBetType) {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
     const double labelWidth = 80.0;
 
-    // ☆の部分のスタイル定義
     final TextStyle starStyle = TextStyle(
       color: Colors.black54,
       fontWeight: FontWeight.bold,
-      fontSize: 12, // フォントサイズを12に設定
+      fontSize: 12,
     );
 
-    // 金額部分のスタイル定義
     final TextStyle amountStyle = TextStyle(
       color: Colors.black54,
       fontWeight: FontWeight.bold,
-      fontSize: 20, // フォントサイズを20に設定
+      fontSize: 20,
     );
 
     if (currentBetType == '応援馬券' && purchaseDetails.length >= 2) {
+      // (応援馬券のロジックは変更なし)
       final firstDetail = purchaseDetails[0];
       List<int> umanbanList = (firstDetail['馬番'] as List).cast<int>();
 
@@ -142,93 +153,57 @@ class PurchaseDetailsCard extends StatelessWidget {
           children: [
             SizedBox(
               width: labelWidth,
-              child: Text(
-                '馬番',
-                style: TextStyle(color: Colors.black54),
-                textAlign: TextAlign.end,
-              ),
+              child: Text('馬番', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end,),
             ),
             Expanded(
-              child: Wrap(
-                children: [..._buildHorseNumberDisplay(umanbanList, symbol: '')],
-              ),
+              child: Wrap(children: [..._buildHorseNumberDisplay(umanbanList, symbol: '')],),
             ),
           ],
         ),
-        // 各組の金額表示（RowとCrossAxisAlignment.centerで垂直方向を中央揃え）
         Align(
-          alignment: Alignment.center, // 水平方向も中央
-          child: FittedBox( // FittedBoxを追加
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisSize: MainAxisSize.min, // 内容に合わせて幅を最小限に
-              crossAxisAlignment: CrossAxisAlignment.center, // 垂直方向の中央揃え
-              children: [
-                Text(
-                  '各',
-                  style: amountStyle,
-                ),
-                Text(
-                  starsForAmount,
-                  style: starStyle,
-                ),
-                Text(
-                  '${amountValue}円',
-                  style: amountStyle,
-                ),
-              ],
-            ),
-          ),
-        ),
-        // 単勝の金額表示（RowとCrossAxisAlignment.centerで垂直方向を中央揃え）
-        Align(
-          alignment: Alignment.center, // 水平方向も中央
-          child: FittedBox( // FittedBoxを追加
+          alignment: Alignment.center,
+          child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.center,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  '単勝 ',
-                  style: amountStyle,
-                ),
-                Text(
-                  starsForAmount,
-                  style: starStyle,
-                ),
-                Text(
-                  '${amountValue}円',
-                  style: amountStyle,
-                ),
+                Text('各', style: amountStyle,),
+                Text(starsForAmount, style: starStyle,),
+                Text('${amountValue}円', style: amountStyle,),
               ],
             ),
           ),
         ),
-        // 複勝の金額表示（RowとCrossAxisAlignment.centerで垂直方向を中央揃え）
         Align(
-          alignment: Alignment.center, // 水平方向も中央
-          child: FittedBox( // FittedBoxを追加
+          alignment: Alignment.center,
+          child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.center,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  '複勝 ',
-                  style: amountStyle,
-                ),
-                Text(
-                  starsForAmount,
-                  style: starStyle,
-                ),
-                Text(
-                  '${amountValue}円',
-                  style: amountStyle,
-                ),
+                Text('単勝 ', style: amountStyle,),
+                Text(starsForAmount, style: starStyle,),
+                Text('${amountValue}円', style: amountStyle,),
+              ],
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.center,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text('複勝 ', style: amountStyle,),
+                Text(starsForAmount, style: starStyle,),
+                Text('${amountValue}円', style: amountStyle,),
               ],
             ),
           ),
@@ -238,446 +213,245 @@ class PurchaseDetailsCard extends StatelessWidget {
       return purchaseDetails.map((detail) {
         String shikibetsu = detail['式別'] ?? '';
         int? kingaku = detail['購入金額'];
-        String kingakuDisplay = kingaku != null ? '${kingaku}円' : '';
         String uraDisplay = (detail['ウラ'] == 'あり') ? 'ウラ: あり' : '';
+        int combinations = detail['組合せ数'] as int? ?? 0;
 
-        int combinations = 0;
-        if (currentBetType == 'クイックピック') {
-          combinations = parsedResult['組合せ数'] as int? ?? 0;
-        } else {
-          combinations = detail['組合せ数'] as int? ?? 0;
-        }
-
-        bool isComplexCombinationForPrefix =
-            (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) ||
-                (shikibetsu == '馬単' && detail['購入方式'] == 'フォーメーション') || // ★追加: 馬単フォーメーションも複雑な組み合わせとみなす
-                detail.containsKey('ながし') ||
-                (currentBetType == 'ボックス');
+        bool isComplexCombinationForPrefix = (currentBetType == 'ボックス' || currentBetType == 'ながし' || currentBetType == 'フォーメーション');
 
         String starsForPrefix = '';
         String amountValueForPrefix = '';
-
         if (kingaku != null) {
           starsForPrefix = _getStars(kingaku);
           amountValueForPrefix = kingaku.toString();
         }
 
         List<Widget> detailWidgets = [];
-
-        String combinationDisplay = '$combinations';
-
-        if (detail.containsKey('表示用相手頭数') && detail.containsKey('表示用乗数')) {
-          final int opponentCountForDisplay = detail['表示用相手頭数'] as int;
-          final int multiplierForDisplay = detail['表示用乗数'] as int;
-          combinationDisplay = '${opponentCountForDisplay}×$multiplierForDisplay';
-        }
-
         bool amountHandledInline = false;
 
-        // ★修正: 馬単フォーメーションの処理を追加
-        if (shikibetsu == '馬単' && detail['購入方式'] == 'フォーメーション') {
-          final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
+        // 馬番表示を先に処理
+        if (shikibetsu == '3連単' && currentBetType == 'フォーメーション') {
+          final List<List<int>> horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
           if (horseGroups.length >= 1) {
             detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
+              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(width: labelWidth, child: Text('1着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')])),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')])),
                 ],
               ),
             ));
           }
           if (horseGroups.length >= 2) {
             detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
+              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(width: labelWidth, child: Text('2着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')])),
-                ],
-              ),
-            ));
-          }
-          // 馬単なので3着は通常なし。必要であれば追加
-          if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり') {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                        decoration: const BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.all(Radius.circular(0)),
-                        ),
-                        child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ));
-          }
-          // 組合せ数と1点あたりの金額表示
-          if (combinations > 0 && kingaku != null && kingaku > 0) {
-            final double amountPerPoint = kingaku / combinations;
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        '組合せ数 $combinations点 (1点あたり ${amountPerPoint.toInt()}円)',
-                        style: TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ));
-          }
-          amountHandledInline = true; // 金額表示をここで処理したので、後続の共通処理では行わない
-
-        } else if (shikibetsu == '3連単' && detail['馬番'] is List && (detail['馬番'] as List).isNotEmpty && (detail['馬番'] as List)[0] is List) {
-          final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
-          if (horseGroups.length >= 1) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('1着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')])),
-                ],
-              ),
-            ));
-          }
-          if (horseGroups.length >= 2) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('2着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')])),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')])),
                 ],
               ),
             ));
           }
           if (horseGroups.length >= 3) {
             detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
+              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(width: labelWidth, child: Text('3着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(horseGroups[2], symbol: '')])),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[2], symbol: '')])),
                 ],
               ),
             ));
           }
-        }
-        // ★★★★★ ここから追加 ★★★★★
-        else if (shikibetsu == '3連複' && currentBetType == 'フォーメーション') {
-          // '馬番'キーからネストされたリストを取得
-          final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
-
-          // 各馬番グループ（1頭目、2頭目...）をループ処理
+        } else if (shikibetsu == '3連複' && currentBetType == 'フォーメーション') {
+          final List<List<int>> horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
           for (int i = 0; i < horseGroups.length; i++) {
-            // グループごとに1つの行ウィジェットを生成
             detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0), // 各行の下に少し余白を追加
+              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ラベル（例: "1頭目"）を表示
-                  SizedBox(
-                      width: labelWidth,
-                      child: Text(
-                          '${i + 1}頭目', // 3連複なので「着」ではなく「頭目」と表示
-                          style: TextStyle(color: Colors.black54),
-                          textAlign: TextAlign.end
-                      )
-                  ),
-                  // 対応する馬番のリストを表示
-                  Expanded(
-                      child: Wrap(
-                          spacing: 4.0, // 馬番同士の水平間隔
-                          runSpacing: 4.0, // 馬番が改行された際の垂直間隔
-                          children: [..._buildHorseNumberDisplay(horseGroups[i], symbol: '')] // ネストされていない単一のリストを渡す
-                      )
-                  ),
+                  SizedBox(width: labelWidth, child: Text('${i + 1}頭目', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[i], symbol: '')])),
                 ],
               ),
             ));
           }
-        }
-        // ★★★★★ ここまで追加 ★★★★★
-        // ★★★★★ ここから追加 ★★★★★
-        else if (shikibetsu == '馬単' && currentBetType == 'フォーメーション') {
-          // '馬番'キーからネストされたリストを取得
-          final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
-
-          // 1着の馬番を表示
+        } else if (shikibetsu == '馬単' && currentBetType == 'フォーメーション') {
+          final List<List<int>> horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
           if (horseGroups.isNotEmpty) {
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                      width: labelWidth,
-                      child: Text('1着',
-                          style: TextStyle(color: Colors.black54),
-                          textAlign: TextAlign.end)),
-                  Expanded(
-                    child: Wrap(
-                        spacing: 4.0,
-                        runSpacing: 4.0,
-                        children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')]),
-                  ),
+                  SizedBox(width: labelWidth, child: Text('1着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')])),
                 ],
               ),
             ));
           }
-
-          // 2着の馬番を表示
           if (horseGroups.length >= 2) {
             detailWidgets.add(Padding(
               padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                      width: labelWidth,
-                      child: Text('2着',
-                          style: TextStyle(color: Colors.black54),
-                          textAlign: TextAlign.end)),
-                  Expanded(
-                    child: Wrap(
-                        spacing: 4.0,
-                        runSpacing: 4.0,
-                        children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')]),
-                  ),
+                  SizedBox(width: labelWidth, child: Text('2着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')])),
                 ],
               ),
             ));
           }
-        }
-        // ★★★★★ ここまで追加 ★★★★★
-
-
-        else if (detail.containsKey('ながし')) {
-          if (detail.containsKey('軸')) {
-            List<int> axisHorses;
-            if (detail['軸'] is int) {
-              axisHorses = [detail['軸'] as int];
-            } else if (detail['軸'] is List) {
-              axisHorses = (detail['軸'] as List).cast<int>();
-            } else {
-              axisHorses = [];
+        } else if (currentBetType == 'ながし') {
+          if (shikibetsu == '3連単') {
+            final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
+            final labels = ['1着', '2着', '3着'];
+            for (int i = 0; i < horseGroups.length; i++) {
+              if (horseGroups[i].isNotEmpty) {
+                detailWidgets.add(Padding(
+                  padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: labelWidth, child: Text(labels[i], style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                      Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[i], symbol: '')])),
+                    ],
+                  ),
+                ));
+              }
             }
-
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('軸', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay(axisHorses, symbol: '')])),
-                ],
-              ),
-            ));
-          }
-          if (detail.containsKey('相手') && detail['相手'] is List) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('相手', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(children: [..._buildHorseNumberDisplay((detail['相手'] as List).cast<int>(), symbol: '')])),
-                ],
-              ),
-            ));
-          }
-          // 馬単ながしの場合の金額表示ロジックは既に存在
-          if (shikibetsu == '馬単' && kingaku != null) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        '組合せ数 $combinationDisplay',
-                        style: TextStyle(color: Colors.black54, fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ));
-            detailWidgets.add(const SizedBox(height: 8.0));
-
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight, // 水平方向は右寄せ
-                      child: FittedBox( // FittedBoxを追加
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            if (detail.containsKey('マルチ') && detail['マルチ'] == 'あり')
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                                decoration: const BoxDecoration(
-                                  color: Colors.black,
-                                  borderRadius: BorderRadius.all(Radius.circular(0)),
-                                ),
-                                child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
-                              ),
-                            Text( // '各組'の部分
-                              isComplexCombinationForPrefix ? '　各組' : '',
-                              style: amountStyle,
-                            ),
-                            Text( // ☆の部分
-                              starsForPrefix,
-                              style: starStyle,
-                            ),
-                            Text( // 金額の部分
-                              '${amountValueForPrefix}円',
-                              style: amountStyle,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ));
-            amountHandledInline = true;
-          }
-        } else if (detail.containsKey('馬番') && detail['馬番'] is List) {
-          String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
-
-          if (!isComplexCombinationForPrefix) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Wrap(
-                          spacing: 4.0,
-                          runSpacing: 4.0,
-                          children: [
-                            ..._buildHorseNumberDisplay(detail['馬番'], symbol: currentSymbol),
-                          ],
-                        ),
-                        if (kingaku != null)
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerRight, // 水平方向は右寄せ
-                              child: FittedBox( // FittedBoxを追加
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerRight,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Text( // ☆の部分
-                                      starsForPrefix,
-                                      style: starStyle,
-                                    ),
-                                    Text( // 金額の部分
-                                      '${amountValueForPrefix}円',
-                                      style: amountStyle,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ));
-            amountHandledInline = true;
           } else {
-            // 他のフォーメーションやボックス、クイックピックなどで馬番リストをシンプルに表示する場合
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: labelWidth,
-                    child: Text(
-                      '馬番',
-                      style: TextStyle(color: Colors.black54),
-                      textAlign: TextAlign.end,
-                    ),
+            if (detail.containsKey('軸')) {
+              detailWidgets.add(Padding(
+                padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: labelWidth, child: Text('軸', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                    Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(detail['軸'], symbol: '')])),
+                  ],
+                ),
+              ));
+            }
+            if (detail.containsKey('相手')) {
+              detailWidgets.add(Padding(
+                padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: labelWidth, child: Text('相手', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
+                    Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(detail['相手'], symbol: '')])),
+                  ],
+                ),
+              ));
+            }
+          }
+        } else {
+          String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
+          detailWidgets.add(Padding(
+            padding: const EdgeInsets.only(left: 16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 4.0, runSpacing: 4.0,
+                    children: [..._buildHorseNumberDisplay(detail['馬番'], symbol: currentSymbol)],
                   ),
-                  Expanded(
-                    child: Wrap(
-                      children: [..._buildHorseNumberDisplay(detail['馬番'], symbol: '')],
-                    ),
-                  ),
-                ],
-              ),
-            ));
+                ),
+              ],
+            ),
+          ));
+        }
+
+        // 統一的な組合せ数表示ロジック
+        String combinationDisplayString = '';
+        if (detail['マルチ'] == 'あり' && currentBetType == 'ながし') {
+          if (shikibetsu == '馬単') {
+            final opponents = detail['相手'] as List?;
+            if (opponents != null) {
+              combinationDisplayString = '${opponents.length} × 2';
+            }
+          } else if (shikibetsu == '3連単') {
+            // ★★★ ここから軸1頭/軸2頭の判別ロジックを修正 ★★★
+            final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
+            final nagashiType = detail['ながし'] as String? ?? '';
+
+            // 「・」が含まれていれば軸2頭、そうでなければ軸1頭と判定
+            bool is2Axis = nagashiType.contains('・');
+
+            if (is2Axis) {
+              // 軸2頭ながし (例: "1・2着ながし")
+              // ベースの組み合わせは相手の頭数 (3番目のリスト)
+              if (horseGroups.length >= 3) {
+                final opponents = horseGroups[2];
+                combinationDisplayString = '${opponents.length} × 6';
+              }
+            } else {
+              // 軸1頭ながし (例: "1着ながし")
+              // ベースの組み合わせは相手から2頭選ぶ C(相手の頭数, 2)
+              if (horseGroups.length >= 2) {
+                final opponents = horseGroups[1];
+                final baseCombinations = _combinations(opponents.length, 2);
+                combinationDisplayString = '$baseCombinations × 6';
+              }
+            }
+            // ★★★ ここまで修正 ★★★
           }
         }
 
-        // 共通の金額表示ロジック（上記で処理されていない場合のみ）
+        if (combinationDisplayString.isEmpty && combinations > 1) {
+          combinationDisplayString = '$combinations';
+        }
+
+        if (combinationDisplayString.isNotEmpty) {
+          detailWidgets.add(
+            Padding(
+              padding: const EdgeInsets.only(left: 16.0, right: 0.0, top: 8.0, bottom: 4.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    '組合せ数 $combinationDisplayString',
+                    style: const TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // 共通の金額表示ロジック
         if (kingaku != null && !amountHandledInline) {
           detailWidgets.add(Padding(
             padding: const EdgeInsets.only(left: 16.0),
-            child: Row( // Rowで囲む
+            child: Row(
               children: [
-                Expanded( // Expandedで囲む
+                Expanded(
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: FittedBox( // FittedBoxを追加
+                    child: FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerRight,
-                      child: Row( // RowとCrossAxisAlignment.centerで垂直方向を中央揃え
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text( // '各組'の部分
-                            isComplexCombinationForPrefix ? '　各組' : '',
-                            style: amountStyle,
-                          ),
-                          Text( // ☆の部分
-                            starsForPrefix,
-                            style: starStyle,
-                          ),
-                          Text( // 金額の部分
-                            '${amountValueForPrefix}円',
-                            style: amountStyle,
-                          ),
+                          if (detail['マルチ'] == 'あり')
+                            Container(
+                              margin: const EdgeInsets.only(right: 8.0),
+                              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                              decoration: const BoxDecoration(color: Colors.black, borderRadius: BorderRadius.all(Radius.circular(0))),
+                              child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 22, height: 1)),
+                            ),
+                          Text(isComplexCombinationForPrefix ? '各組' : '', style: amountStyle),
+                          Text(starsForPrefix, style: starStyle),
+                          Text('${amountValueForPrefix}円', style: amountStyle),
                         ],
                       ),
                     ),
@@ -703,6 +477,7 @@ class PurchaseDetailsCard extends StatelessWidget {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     if (!parsedResult.containsKey('購入内容')) {
@@ -712,7 +487,9 @@ class PurchaseDetailsCard extends StatelessWidget {
     int totalAmount = 0;
     if (parsedResult['購入内容'] is List) {
       for (var item in parsedResult['購入内容']) {
-        if (item is Map<String, dynamic> && item.containsKey('購入金額') && item['購入金額'] is int) {
+        if (item is Map<String, dynamic> && item.containsKey('購入金額') && item.containsKey('組合せ数')) {
+          totalAmount += (item['購入金額'] as int) * (item['組合せ数'] as int);
+        } else if (item is Map<String, dynamic> && item.containsKey('購入金額')) {
           totalAmount += item['購入金額'] as int;
         }
       }
@@ -721,18 +498,16 @@ class PurchaseDetailsCard extends StatelessWidget {
     String totalStars = _getTotalAmountStars(totalAmount);
     String totalAmountString = totalAmount.toString();
 
-    // 合計金額の★の部分のスタイル
     final TextStyle totalStarStyle = TextStyle(
       color: Colors.black54,
       fontWeight: FontWeight.bold,
-      fontSize: 12, // フォントサイズを12に設定
+      fontSize: 12,
     );
 
-    // 合計金額の通常テキストのスタイル
     final TextStyle totalAmountTextStyle = TextStyle(
       color: Colors.black54,
       fontWeight: FontWeight.bold,
-      fontSize: 20, // フォントサイズを20に設定
+      fontSize: 20,
     );
 
     return Column(
@@ -745,7 +520,6 @@ class PurchaseDetailsCard extends StatelessWidget {
             children: _buildPurchaseDetailsInternal(parsedResult['購入内容'], betType),
           ),
         ),
-        // 合計金額の表示部分
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 4.0),
           child: Row(
@@ -753,26 +527,17 @@ class PurchaseDetailsCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Align(
-                  alignment: Alignment.centerRight, // 水平方向は右寄せを維持
-                  child: FittedBox( // FittedBoxを追加
-                    fit: BoxFit.scaleDown, // 必要に応じて縮小する
-                    alignment: Alignment.centerRight, // 右寄せを維持
+                  alignment: Alignment.centerRight,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
                     child: Row(
-                      mainAxisSize: MainAxisSize.min, // 内容に合わせて幅を最小限に
-                      crossAxisAlignment: CrossAxisAlignment.center, // 垂直方向の中央揃え
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(
-                          '合計　　',
-                          style: totalAmountTextStyle,
-                        ),
-                        Text(
-                          totalStars,
-                          style: totalStarStyle,
-                        ),
-                        Text(
-                          '${totalAmountString}円',
-                          style: totalAmountTextStyle,
-                        ),
+                        Text('合計　', style: totalAmountTextStyle,),
+                        Text(totalStars, style: totalStarStyle,),
+                        Text('${totalAmountString}円', style: totalAmountTextStyle,),
                       ],
                     ),
                   ),
