@@ -143,7 +143,7 @@ int calculatePoints({
         case '軸1頭マルチ':
           return s.length * (s.length - 1) * 3;
         case '軸2頭ながし':
-          return t.length;
+          return t.length * 2; // 2頭軸流しは (相手の数) * 2通り
         case '軸2頭マルチ':
           return s.length * 6;
         default:
@@ -180,7 +180,15 @@ int calculatePoints({
     case '馬単':
       switch (normalizedMethod) {
         case 'フォーメーション':
-          return f.length * s.length;
+          int count = 0;
+          for (var i in f) {
+            for (var j in s) {
+              if (i != j) {
+                count++;
+              }
+            }
+          }
+          return count;
         case 'BOX':
           return f.length * (f.length - 1);
         case 'ながし':
@@ -212,6 +220,24 @@ int calculatePoints({
   }
 }
 
+// 組み合わせ計算 C(n, k) を行うヘルパー関数
+int _combinations(int n, int k) {
+  if (k < 0 || k > n) {
+    return 0;
+  }
+  if (k == 0 || k == n) {
+    return 1;
+  }
+  if (k > n / 2) {
+    k = n - k;
+  }
+  int res = 1;
+  for (int i = 1; i <= k; ++i) {
+    res = res * (n - i + 1) ~/ i;
+  }
+  return res;
+}
+
 Map<String, dynamic> parseHorseracingTicketQr(String s) {
   List<String> underDigits = List.filled(40, "X");
   for (int i = 0; i < 34; i++) {
@@ -230,11 +256,11 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
 
   String racecourseCode = itr.next() + itr.next();
   d["開催場"] = racecourseDict[racecourseCode];
-  print('Parsed racecourseCode: $racecourseCode, 開催場: ${d["開催場"]} (Iterator position: ${itr.position})');
+  print(
+      'Parsed racecourseCode: $racecourseCode, 開催場: ${d["開催場"]} (Iterator position: ${itr.position})');
 
   itr.move(2);
   print('Moved 2 positions. (Iterator position: ${itr.position})');
-
 
   String alternativeCode = itr.next();
   if (alternativeCode != "0") {
@@ -245,21 +271,24 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
     } else {
       d["開催種別"] = "不明";
     }
-    print('Parsed alternativeCode: $alternativeCode, 開催種別: ${d["開催種別"]} (Iterator position: ${itr.position})');
+    print(
+        'Parsed alternativeCode: $alternativeCode, 開催種別: ${d["開催種別"]} (Iterator position: ${itr.position})');
   } else {
-    print('Parsed alternativeCode: $alternativeCode (no special type). (Iterator position: ${itr.position})');
+    print(
+        'Parsed alternativeCode: $alternativeCode (no special type). (Iterator position: ${itr.position})');
   }
 
   d["年"] = int.parse(itr.next() + itr.next());
   d["回"] = int.parse(itr.next() + itr.next());
   d["日"] = int.parse(itr.next() + itr.next());
   d["レース"] = int.parse(itr.next() + itr.next());
-  print('Parsed 年: ${d["年"]}, 回: ${d["回"]}, 日: ${d["日"]}, レース: ${d["レース"]} (Iterator position: ${itr.position})');
+  print(
+      'Parsed 年: ${d["年"]}, 回: ${d["回"]}, 日: ${d["日"]}, レース: ${d["レース"]} (Iterator position: ${itr.position})');
 
   String typeCode = itr.next();
   d["式別"] = typeDict[typeCode];
-  print('Parsed typeCode (購入方式): $typeCode, 式別: ${d["式別"]} (Iterator position: ${itr.position})');
-
+  print(
+      'Parsed typeCode (購入方式): $typeCode, 式別: ${d["式別"]} (Iterator position: ${itr.position})');
 
   itr.next(); // 常に1文字スキップ
 
@@ -275,14 +304,11 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
   underDigits[26] = itr.next();
   print('Populated initial underDigits. (Iterator position: ${itr.position})');
 
-
   String ticketofficeCode = underDigits.sublist(0, 4).join();
-  d["発売所"] =
-      ticketofficeDict[ticketofficeCode.substring(2)] ??
-          ticketofficeDict[ticketofficeCode.substring(0, 2)] ??
-          "不明";
+  d["発売所"] = ticketofficeDict[ticketofficeCode.substring(2)] ??
+      ticketofficeDict[ticketofficeCode.substring(0, 2)] ??
+      "不明";
   print('Parsed 発売所: ${d["発売所"]} (ticketofficeCode: $ticketofficeCode)');
-
 
   underDigits[13] = "1";
   underDigits[14] = typeCode;
@@ -362,14 +388,16 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         }
 
         String purchaseAmountStr = "";
-        print('    [Amount] start reading 5 digits at position=${itr.position}');
+        print(
+            '    [Amount] start reading 5 digits at position=${itr.position}');
         for (int i = 0; i < 5 && itr.position < s.length; i++) {
           purchaseAmountStr += itr.next();
         }
         print('    [Amount] raw="$purchaseAmountStr"');
 
-        di["購入金額"] =
-        (purchaseAmountStr.length == 5) ? int.parse(purchaseAmountStr) * 100 : 0;
+        di["購入金額"] = (purchaseAmountStr.length == 5)
+            ? int.parse(purchaseAmountStr) * 100
+            : 0;
         print('    => 購入金額: ${di["購入金額"]} (position=${itr.position})');
 
         if (underDigits[15] == "0" || underDigits[15] == bettingCode) {
@@ -396,13 +424,13 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       print('--- Exited Normal/Ouen Betting Loop ---');
       break;
 
-
     case "1": // ボックス
       print('--- Entering BOX Betting ---');
       Map<String, dynamic> di = {};
       String bettingCode = itr.next();
       di["式別"] = bettingDict[bettingCode];
-      print('  Parsed bettingCode (BOX): $bettingCode, 式別: ${di["式別"]} (Iterator position: ${itr.position})');
+      print(
+          '  Parsed bettingCode (BOX): $bettingCode, 式別: ${di["式別"]} (Iterator position: ${itr.position})');
 
       List<int> nos = [];
       String purchaseAmountStr = "";
@@ -411,7 +439,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       for (int i = 0; i < 5; i++) {
         nos.add(int.parse(itr.next() + itr.next()));
       }
-      print('  After first 5 horse numbers. Current nos: $nos (Iterator position: ${itr.position})');
+      print(
+          '  After first 5 horse numbers. Current nos: $nos (Iterator position: ${itr.position})');
 
       final originalPos = itr.position;
       itr.move(5);
@@ -424,7 +453,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         for (int i = 0; i < 5; i++) {
           nos.add(int.parse(itr.next() + itr.next()));
         }
-        print('  After next 5 horse numbers. Current nos: $nos (Iterator position: ${itr.position})');
+        print(
+            '  After next 5 horse numbers. Current nos: $nos (Iterator position: ${itr.position})');
       }
 
       final originalPos2 = itr.position;
@@ -438,10 +468,12 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         for (int i = 0; i < 8; i++) {
           nos.add(int.parse(itr.next() + itr.next()));
         }
-        print('  After additional 8 horse numbers. Current nos: $nos (Iterator position: ${itr.position})');
+        print(
+            '  After additional 8 horse numbers. Current nos: $nos (Iterator position: ${itr.position})');
       }
 
-      print('  Reading purchase amount (5 characters) for BOX from position: ${itr.position}');
+      print(
+          '  Reading purchase amount (5 characters) for BOX from position: ${itr.position}');
       for (int i = 0; i < 5; i++) {
         purchaseAmountStr += itr.next();
       }
@@ -450,8 +482,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       print('  Raw purchaseAmountStr (BOX): "$purchaseAmountStr"');
 
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
-      print('  Parsed 購入金額 (BOX): ${di["購入金額"]} (Iterator position: ${itr.position})');
-
+      print(
+          '  Parsed 購入金額 (BOX): ${di["購入金額"]} (Iterator position: ${itr.position})');
 
       underDigits[15] = bettingCode;
       if ((di["馬番"] as List).length < 10) {
@@ -460,7 +492,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         underDigits[17] = "1";
         underDigits[18] = ((di["馬番"] as List).length % 10).toString();
       }
-      print('  Updated underDigits for BOX. underDigits[15]: ${underDigits[15]}, [17]: ${underDigits[17]}, [18]: ${underDigits[18]}');
+      print(
+          '  Updated underDigits for BOX. underDigits[15]: ${underDigits[15]}, [17]: ${underDigits[17]}, [18]: ${underDigits[18]}');
 
       di["組合せ数"] = calculatePoints(
         ticketType: bettingDict[bettingCode]!,
@@ -480,7 +513,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       Map<String, dynamic> di = {};
       String bettingCode = itr.next();
       di["式別"] = bettingDict[bettingCode];
-      print('  Parsed bettingCode (NAGASHI): $bettingCode, 式別: ${di["式別"]} (Iterator position: ${itr.position})');
+      print(
+          '  Parsed bettingCode (NAGASHI): $bettingCode, 式別: ${di["式別"]} (Iterator position: ${itr.position})');
 
       String method = '';
       String wheelCode = itr.next();
@@ -492,9 +526,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         case "6":
           di["ながし"] = wheelExactaDict[wheelCode];
           method = 'ながし';
-          if (di["ながし"] == "1着ながし" || di["ながし"] == "2着ながし") {
-            method = 'ながし';
-          }
           print('  馬単ながし: ${di["ながし"]}, method: $method');
           break;
         case "8":
@@ -505,12 +536,10 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         case "9":
           di["ながし"] = wheelTrifectaDict[wheelCode];
           method = di["ながし"]!;
-          if (di["ながし"] == "1着ながし" ||
-              di["ながし"] == "2着ながし" ||
-              di["ながし"] == "3着ながし") {
-            method = '軸1頭ながし';
-          } else {
+          if (di["ながし"]!.contains('・')) {
             method = '軸2頭ながし';
+          } else {
+            method = '軸1頭ながし';
           }
           print('  3連単ながし: ${di["ながし"]}, method: $method');
           break;
@@ -522,7 +551,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       int count = 0;
       if (bettingCode == "6" || bettingCode == "8") {
         List<int> horseNumbers = [];
-        print('  Parsing axis horses for bettingCode $bettingCode (2 sets of 18 bits)...');
+        print(
+            '  Parsing axis horses for bettingCode $bettingCode (2 sets of 18 bits)...');
         for (int j = 0; j < 2; j++) {
           for (int i = 1; i <= 18; i++) {
             if (itr.next() == "1") {
@@ -534,7 +564,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         print('  Parsed 軸: ${di["軸"]} (Iterator position: ${itr.position})');
 
         List<int> innerList = [];
-        print('  Parsing opponent horses for bettingCode $bettingCode (1 set of 18 bits)...');
+        print(
+            '  Parsing opponent horses for bettingCode $bettingCode (1 set of 18 bits)...');
         for (int i = 1; i <= 18; i++) {
           if (itr.next() == "1") {
             innerList.add(i);
@@ -544,7 +575,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         print('  Parsed 相手: ${di["相手"]} (Iterator position: ${itr.position})');
         count = innerList.length;
         print('  Count (opponent horses): $count');
-
       } else if (bettingCode == "9") {
         List<List<int>> horseNumbers = [];
         print('  Parsing horses for 3連単 (3 sets of 18 bits)...');
@@ -556,146 +586,159 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
             }
           }
           horseNumbers.add(innerList);
-          print('    Horse set ${j+1}: $innerList');
+          print('    Horse set ${j + 1}: $innerList');
         }
         di["馬番"] = horseNumbers;
-        print('  Parsed 馬番 (3連単): ${di["馬番"]} (Iterator position: ${itr.position})');
-        for (var list in (horseNumbers)) {
-          if (list.length > count) {
-            count = list.length;
-          }
+        print(
+            '  Parsed 馬番 (3連単): ${di["馬番"]} (Iterator position: ${itr.position})');
+        // Use the count of opponents for the underDigits calculation
+        if (method == '軸2頭ながし') {
+          count = horseNumbers.length > 2 ? horseNumbers[2].length : 0;
+        } else if (method == '軸1頭ながし') {
+          count = horseNumbers.length > 1 ? horseNumbers[1].length : 0;
         }
-        print('  Count (max horse numbers in any set): $count');
-
+        print('  Count (opponent horses): $count');
       } else {
         di["軸"] = int.parse(itr.next() + itr.next());
-        print('  Parsed 軸 (single horse): ${di["軸"]} (Iterator position: ${itr.position})');
+        print(
+            '  Parsed 軸 (single horse): ${di["軸"]} (Iterator position: ${itr.position})');
 
         String purchaseAmountStr = "";
-        print('  Reading purchase amount (5 characters) for other NAGASHI from position: ${itr.position}');
+        print(
+            '  Reading purchase amount (5 characters) for other NAGASHI from position: ${itr.position}');
         for (int i = 0; i < 5; i++) {
-          if (itr.position < s.length) {
-            purchaseAmountStr += itr.next();
-          } else {
-            print('  WARNING: Ran out of string while parsing purchase amount for other NAGASHI.');
-            break;
-          }
+          purchaseAmountStr += itr.next();
         }
         currentPurchaseAmount = int.parse("${purchaseAmountStr}00");
-        print('  Parsed 購入金額 (other NAGASHI): $currentPurchaseAmount (Iterator position: ${itr.position})');
+        print(
+            '  Parsed 購入金額 (other NAGASHI): $currentPurchaseAmount (Iterator position: ${itr.position})');
 
         List<int> innerList = [];
-        print('  Parsing opponent horses for other NAGASHI (1 set of 18 bits)...');
+        print(
+            '  Parsing opponent horses for other NAGASHI (1 set of 18 bits)...');
         for (int i = 1; i <= 18; i++) {
           if (itr.next() == "1") {
             innerList.add(i);
           }
         }
         di["相手"] = innerList;
-        print('  Parsed 相手 (other NAGASHI): ${di["相手"]} (Iterator position: ${itr.position})');
+        print(
+            '  Parsed 相手 (other NAGASHI): ${di["相手"]} (Iterator position: ${itr.position})');
         count = innerList.length;
         print('  Count (opponent horses for other NAGASHI): $count');
       }
 
       if (bettingCode == "8" || bettingCode == "9" || bettingCode == "6") {
         String purchaseAmountStr = "";
-        print('  Reading purchase amount (5 characters) for 3連複/3連単/馬単 NAGASHI from position: ${itr.position}');
+        print(
+            '  Reading purchase amount (5 characters) for 3連複/3連単/馬単 NAGASHI from position: ${itr.position}');
         for (int i = 0; i < 5; i++) {
-          if (itr.position < s.length) {
-            purchaseAmountStr += itr.next();
-          } else {
-            print('  WARNING: Ran out of string while parsing purchase amount for 3連複/3連単/馬単 NAGASHI.');
-            break;
-          }
+          purchaseAmountStr += itr.next();
         }
         currentPurchaseAmount = int.parse("${purchaseAmountStr}00");
-        print('  Parsed 購入金額 (3連複/3連単/馬単 NAGASHI): $currentPurchaseAmount (Iterator position: ${itr.position})');
+        print(
+            '  Parsed 購入金額 (3連複/3連単/馬単 NAGASHI): $currentPurchaseAmount (Iterator position: ${itr.position})');
       }
+      di["購入金額"] = currentPurchaseAmount ?? 0;
 
       String multiCode = itr.next();
       print('  Parsed multiCode: $multiCode (Iterator position: ${itr.position})');
-      if (bettingCode == "9") {
-        di["マルチ"] = multiCode == "1" ? "あり" : "なし";
-        if (multiCode == "1") {
+
+      int calculatedCombinations = 0;
+      String? combinationDisplayString;
+
+      if (multiCode == "1") {
+        di["マルチ"] = "あり";
+        if (bettingCode == "9") {
+          final horseGroups =
+          (di["馬番"] as List).map((e) => (e as List).cast<int>()).toList();
           if (method == '軸1頭ながし') {
             method = '軸1頭マルチ';
-            di["表示用相手頭数"] = (di["馬番"][1] as List).length;
-            di["表示用乗数"] = 3;
+            final opponents = horseGroups.length > 1 ? horseGroups[1] : [];
+            final baseCombinations = _combinations(opponents.length, 2);
+            calculatedCombinations = baseCombinations * 6;
+            combinationDisplayString = '$baseCombinations × 6';
+            print(
+                '  3連単マルチ(1頭軸): $combinationDisplayString, method updated to: $method');
           } else if (method == '軸2頭ながし') {
             method = '軸2頭マルチ';
-            di["表示用相手頭数"] = (di["馬番"][2] as List).length;
-            di["表示用乗数"] = 6;
+            final opponents = horseGroups.length > 2 ? horseGroups[2] : [];
+            calculatedCombinations = opponents.length * 6;
+            combinationDisplayString = '${opponents.length} × 6';
+            print(
+                '  3連単マルチ(2頭軸): $combinationDisplayString, method updated to: $method');
           }
-        }
-        print('  3連単マルチ: ${di["マルチ"]}, method updated to: $method');
-        if (di.containsKey("表示用相手頭数")) print('  表示用相手頭数: ${di["表示用相手頭数"]}, 表示用乗数: ${di["表示用乗数"]}');
-      } else if (bettingCode == "6") {
-        di["マルチ"] = multiCode == "1" ? "あり" : "なし";
-        if (multiCode == "1") {
+        } else if (bettingCode == "6") {
           method = 'マルチ';
+          final opponents = (di["相手"] as List?)?.cast<int>() ?? [];
+          calculatedCombinations = opponents.length * 2;
+          combinationDisplayString = '${opponents.length} × 2';
+          print('  馬単マルチ: $combinationDisplayString, method updated to: $method');
+        } else {
+          di["マルチ"] = "なし";
         }
-        print('  馬単マルチ: ${di["マルチ"]}, method updated to: $method');
+      } else {
+        di["マルチ"] = "なし";
       }
 
+      if (combinationDisplayString != null) {
+        di["組合せ数_表示用"] = combinationDisplayString;
+        di["組合せ数"] = calculatedCombinations;
+      } else {
+        // Fallback to existing calculatePoints logic for non-multi nagashi
+        List<int> firstHorses = [];
+        List<int> secondHorses = [];
+        List<int> thirdHorses = [];
+        if (bettingCode == "9") {
+          if (di["馬番"].length > 0)
+            firstHorses = (di["馬番"][0] as List).cast<int>();
+          if (di["馬番"].length > 1)
+            secondHorses = (di["馬番"][1] as List).cast<int>();
+          if (di["馬番"].length > 2)
+            thirdHorses = (di["馬番"][2] as List).cast<int>();
+
+          if (method == '軸1頭ながし' || method == '軸1頭マルチ') {
+            di["組合せ数"] = calculatePoints(
+                ticketType: bettingDict[bettingCode]!,
+                method: method,
+                first: firstHorses,
+                second: secondHorses.isNotEmpty ? secondHorses : thirdHorses);
+          } else if (method == '軸2頭ながし' || method == '軸2頭マルチ') {
+            di["組合せ数"] = calculatePoints(
+                ticketType: bettingDict[bettingCode]!,
+                method: method,
+                first: firstHorses,
+                second: secondHorses,
+                third: thirdHorses);
+          }
+        } else if (bettingCode == "6" || bettingCode == "8") {
+          di["組合せ数"] = calculatePoints(
+              ticketType: bettingDict[bettingCode]!,
+              method: method,
+              first: (di["軸"] as List).cast<int>(),
+              second: (di["相手"] as List).cast<int>());
+        } else {
+          di["組合せ数"] = calculatePoints(
+              ticketType: bettingDict[bettingCode]!,
+              method: 'ながし',
+              first: [di["軸"] as int],
+              second: (di["相手"] as List).cast<int>());
+        }
+      }
+      print('  Calculated 組合せ数 (NAGASHI): ${di["組合せ数"]}');
+      if (di.containsKey("組合せ数_表示用"))
+        print('  組合せ数_表示用: ${di["組合せ数_表示用"]}');
 
       underDigits[15] = bettingCode;
       if (bettingCode == "6" || bettingCode == "8" || bettingCode == "9") {
         underDigits[16] = wheelCode;
       }
-      print('  Updated underDigits for NAGASHI. underDigits[15]: ${underDigits[15]}, [16]: ${underDigits[16]}');
+      print(
+          '  Updated underDigits for NAGASHI. underDigits[15]: ${underDigits[15]}, [16]: ${underDigits[16]}');
 
       underDigits[17] = (count ~/ 10).toString();
       underDigits[18] = (count % 10).toString();
       print('  Updated underDigits[17] and [18] for NAGASHI. Count: $count');
-
-      di["購入金額"] = currentPurchaseAmount ?? 0;
-      print('  Final di["購入金額"] for NAGASHI: ${di["購入金額"]}');
-
-      List<int> firstHorses = [];
-      List<int> secondHorses = [];
-      List<int> thirdHorses = [];
-      if (bettingCode == "9") {
-        if (di["馬番"].length > 0) firstHorses = (di["馬番"][0] as List).cast<int>();
-        if (di["馬番"].length > 1) secondHorses = (di["馬番"][1] as List).cast<int>();
-        if (di["馬番"].length > 2) thirdHorses = (di["馬番"][2] as List).cast<int>();
-      }
-
-      if (bettingCode == "6" || bettingCode == "8") {
-        di["組合せ数"] = calculatePoints(
-          ticketType: bettingDict[bettingCode]!,
-          method: method,
-          first: (di["軸"] as List).cast<int>(),
-          second: (di["相手"] as List).cast<int>(),
-        );
-      } else if (bettingCode == "9") {
-        if (method == '軸1頭ながし' || method == '軸1頭マルチ') {
-          di["組合せ数"] = calculatePoints(
-            ticketType: bettingDict[bettingCode]!,
-            method: method,
-            first: firstHorses,
-            second: secondHorses.isNotEmpty ? secondHorses : thirdHorses,
-          );
-        } else if (method == '軸2頭ながし' || method == '軸2頭マルチ') {
-          di["組合せ数"] = calculatePoints(
-            ticketType: bettingDict[bettingCode]!,
-            method: method,
-            first: firstHorses,
-            second: secondHorses,
-            third: thirdHorses,
-          );
-        } else {
-          di["組合せ数"] = 0;
-        }
-
-      } else {
-        di["組合せ数"] = calculatePoints(
-          ticketType: bettingDict[bettingCode]!,
-          method: 'ながし',
-          first: [di["軸"] as int],
-          second: (di["相手"] as List).cast<int>(),
-        );
-      }
-      print('  Calculated 組合せ数 (NAGASHI): ${di["組合せ数"]}');
 
       (d["購入内容"] as List).add(di);
       print('  Added item to 購入内容 (NAGASHI): $di');
@@ -708,7 +751,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       Map<String, dynamic> di = {};
       String bettingCode = itr.next();
       di["式別"] = bettingDict[bettingCode];
-      print('  Parsed bettingCode (FORMATION): $bettingCode, 式別: ${di["式別"]} (Iterator position: ${itr.position})');
+      print(
+          '  Parsed bettingCode (FORMATION): $bettingCode, 式別: ${di["式別"]} (Iterator position: ${itr.position})');
 
       itr.next();
 
@@ -724,23 +768,27 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         if (innerList.isNotEmpty) {
           horseNumbers.add(innerList);
         }
-        print('    Horse set ${j+1}: $innerList');
+        print('    Horse set ${j + 1}: $innerList');
       }
       di["馬番"] = horseNumbers;
-      print('  Parsed 馬番 (FORMATION): ${di["馬番"]} (Iterator position: ${itr.position})');
+      print(
+          '  Parsed 馬番 (FORMATION): ${di["馬番"]} (Iterator position: ${itr.position})');
 
       String purchaseAmountStr = "";
-      print('  Reading purchase amount (5 characters) for FORMATION from position: ${itr.position}');
+      print(
+          '  Reading purchase amount (5 characters) for FORMATION from position: ${itr.position}');
       for (int i = 0; i < 5; i++) {
         if (itr.position < s.length) {
           purchaseAmountStr += itr.next();
         } else {
-          print('  WARNING: Ran out of string while parsing purchase amount for FORMATION.');
+          print(
+              '  WARNING: Ran out of string while parsing purchase amount for FORMATION.');
           break;
         }
       }
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
-      print('  Parsed 購入金額 (FORMATION): ${di["購入金額"]} (Iterator position: ${itr.position})');
+      print(
+          '  Parsed 購入金額 (FORMATION): ${di["購入金額"]} (Iterator position: ${itr.position})');
 
       itr.next();
 
@@ -753,15 +801,19 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           underDigits[15] = (int.parse(underDigits[15]) + (1 << i)).toString();
         }
       }
-      print('  Updated underDigits for FORMATION. underDigits[13]: ${underDigits[13]}, [14]: ${underDigits[14]} etc.');
+      print(
+          '  Updated underDigits for FORMATION. underDigits[13]: ${underDigits[13]}, [14]: ${underDigits[14]} etc.');
 
       List<int> firstFormation = [];
       List<int> secondFormation = [];
       List<int> thirdFormation = [];
 
-      if (di["馬番"].length > 0) firstFormation = (di["馬番"][0] as List).cast<int>();
-      if (di["馬番"].length > 1) secondFormation = (di["馬番"][1] as List).cast<int>();
-      if (di["馬番"].length > 2) thirdFormation = (di["馬番"][2] as List).cast<int>();
+      if (di["馬番"].length > 0)
+        firstFormation = (di["馬番"][0] as List).cast<int>();
+      if (di["馬番"].length > 1)
+        secondFormation = (di["馬番"][1] as List).cast<int>();
+      if (di["馬番"].length > 2)
+        thirdFormation = (di["馬番"][2] as List).cast<int>();
 
       di["組合せ数"] = calculatePoints(
         ticketType: bettingDict[bettingCode]!,
@@ -782,7 +834,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       Map<String, dynamic> di = {};
       String bettingCode = itr.next();
       di["式別"] = bettingDict[bettingCode];
-      print('  Parsed bettingCode (QUICK PICK): $bettingCode, 式別: ${di["式別"]} (Iterator position: ${itr.position})');
+      print(
+          '  Parsed bettingCode (QUICK PICK): $bettingCode, 式別: ${di["式別"]} (Iterator position: ${itr.position})');
 
       int no = int.parse(itr.next() + itr.next());
       if (no != 0) {
@@ -792,37 +845,43 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         print('  No 軸 for QUICK PICK. (Iterator position: ${itr.position})');
       }
 
-
       int positionSpecify = int.parse(itr.next());
       if (bettingCode == "6" || bettingCode == "9") {
         d["着順指定"] = positionSpecify != 0 ? "$positionSpecify着指定" : "なし";
-        print('  Parsed 着順指定 (QUICK PICK): ${d["着順指定"]} (Iterator position: ${itr.position})');
+        print(
+            '  Parsed 着順指定 (QUICK PICK): ${d["着順指定"]} (Iterator position: ${itr.position})');
       } else {
-        print('  No 着順指定 for bettingCode $bettingCode. (Iterator position: ${itr.position})');
+        print(
+            '  No 着順指定 for bettingCode $bettingCode. (Iterator position: ${itr.position})');
       }
 
-
       d["組合せ数"] = int.parse(itr.next() + itr.next());
-      print('  Parsed 組合せ数 (QUICK PICK): ${d["組合せ数"]} (Iterator position: ${itr.position})');
+      print(
+          '  Parsed 組合せ数 (QUICK PICK): ${d["組合せ数"]} (Iterator position: ${itr.position})');
 
       String purchaseAmountStr = "";
-      print('  Reading purchase amount (5 characters) for QUICK PICK from position: ${itr.position}');
+      print(
+          '  Reading purchase amount (5 characters) for QUICK PICK from position: ${itr.position}');
       for (int i = 0; i < 5; i++) {
         if (itr.position < s.length) {
           purchaseAmountStr += itr.next();
         } else {
-          print('  WARNING: Ran out of string while parsing purchase amount for QUICK PICK.');
+          print(
+              '  WARNING: Ran out of string while parsing purchase amount for QUICK PICK.');
           break;
         }
       }
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
-      print('  Parsed 購入金額 (QUICK PICK): ${di["購入金額"]} (Iterator position: ${itr.position})');
+      print(
+          '  Parsed 購入金額 (QUICK PICK): ${di["購入金額"]} (Iterator position: ${itr.position})');
 
       itr.move(2);
-      print('  Moved 2 positions after amount (QUICK PICK). (Iterator position: ${itr.position})');
+      print(
+          '  Moved 2 positions after amount (QUICK PICK). (Iterator position: ${itr.position})');
 
       List<List<int>> horseNumbersList = [];
-      print('  Parsing horse numbers list for QUICK PICK (${d["組合せ数"]} combinations)...');
+      print(
+          '  Parsing horse numbers list for QUICK PICK (${d["組合せ数"]} combinations)...');
       for (int i = 0; i < d["組合せ数"]; i++) {
         List<int> innerList = [];
         for (int j = 0; j < 3; j++) {
@@ -832,16 +891,17 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           }
         }
         horseNumbersList.add(innerList);
-        print('    Combination ${i+1}: $innerList');
+        print('    Combination ${i + 1}: $innerList');
       }
       di["馬番"] = horseNumbersList;
-      print('  Parsed 馬番 (QUICK PICK, list of combinations): ${di["馬番"]} (Iterator position: ${itr.position})');
-
+      print(
+          '  Parsed 馬番 (QUICK PICK, list of combinations): ${di["馬番"]} (Iterator position: ${itr.position})');
 
       underDigits[15] = bettingCode;
       underDigits[17] = (d["組合せ数"] ~/ 10).toString();
       underDigits[18] = (d["組合せ数"] % 10).toString();
-      print('  Updated underDigits for QUICK PICK. underDigits[15]: ${underDigits[15]}, [17]: ${underDigits[17]}, [18]: ${underDigits[18]}');
+      print(
+          '  Updated underDigits for QUICK PICK. underDigits[15]: ${underDigits[15]}, [17]: ${underDigits[17]}, [18]: ${underDigits[18]}');
 
       (d["購入内容"] as List).add(di);
       print('  Added item to 購入内容 (QUICK PICK): $di');
@@ -853,8 +913,28 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       throw ArgumentError("Unknown type code: $typeCode");
   }
 
+  // ★★★ ここから合計金額を計算するロジック ★★★
+  int totalAmount = 0;
+  if (d.containsKey('購入内容') && d['購入内容'] is List) {
+    for (var detail in (d['購入内容'] as List)) {
+      if (detail is Map<String, dynamic>) {
+        final amount = detail['購入金額'] as int? ?? 0;
+        // 通常馬券など、組合せ数がない場合は1として計算
+        final combinations = detail['組合せ数'] as int? ?? 1;
+        totalAmount += amount * combinations;
+      }
+    }
+  }
+  d['合計金額'] = totalAmount;
+  // ★★★ ここまで ★★★
+
   d["下端番号"] = joinWithSpaces(underDigits);
-  print('Final 下端番号: ${d["下端番号"]}');
+
+  // ★★★ ログ出力用のprint文を追加 ★★★
+  print('--- [DB保存直前データ] パーサーが出力する最終データ ---');
+  print(d);
+  // ★★★ ここまで追加 ★★★
+
   print('--- parseHorseracingTicketQr End ---');
   return d;
 }
@@ -888,7 +968,8 @@ class _StringIterator {
   void move(int offset) {
     _currentPosition += offset;
     if (_currentPosition < 0 || _currentPosition > _s.length) {
-      throw RangeError("Invalid position after move. Current position: ${_currentPosition - offset}, offset: $offset, String length: ${_s.length}");
+      throw RangeError(
+          "Invalid position after move. Current position: ${_currentPosition - offset}, offset: $offset, String length: ${_s.length}");
     }
   }
 
@@ -901,7 +982,8 @@ class _StringIterator {
   String peek(int offset) {
     int pos = _currentPosition + offset;
     if (pos >= _s.length || pos < 0) {
-      throw RangeError("Peek out of range. Current position: $_currentPosition, offset: $offset, Target position: $pos, String length: ${_s.length}");
+      throw RangeError(
+          "Peek out of range. Current position: $_currentPosition, offset: $offset, Target position: $pos, String length: ${_s.length}");
     }
     return _s[pos];
   }

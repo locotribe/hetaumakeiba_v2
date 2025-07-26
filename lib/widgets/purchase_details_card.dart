@@ -378,30 +378,23 @@ class PurchaseDetailsCard extends StatelessWidget {
               combinationDisplayString = '${opponents.length} × 2';
             }
           } else if (shikibetsu == '3連単') {
-            // ★★★ ここから軸1頭/軸2頭の判別ロジックを修正 ★★★
             final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
             final nagashiType = detail['ながし'] as String? ?? '';
 
-            // 「・」が含まれていれば軸2頭、そうでなければ軸1頭と判定
             bool is2Axis = nagashiType.contains('・');
 
             if (is2Axis) {
-              // 軸2頭ながし (例: "1・2着ながし")
-              // ベースの組み合わせは相手の頭数 (3番目のリスト)
               if (horseGroups.length >= 3) {
                 final opponents = horseGroups[2];
                 combinationDisplayString = '${opponents.length} × 6';
               }
             } else {
-              // 軸1頭ながし (例: "1着ながし")
-              // ベースの組み合わせは相手から2頭選ぶ C(相手の頭数, 2)
               if (horseGroups.length >= 2) {
                 final opponents = horseGroups[1];
                 final baseCombinations = _combinations(opponents.length, 2);
                 combinationDisplayString = '$baseCombinations × 6';
               }
             }
-            // ★★★ ここまで修正 ★★★
           }
         }
 
@@ -484,16 +477,8 @@ class PurchaseDetailsCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    int totalAmount = 0;
-    if (parsedResult['購入内容'] is List) {
-      for (var item in parsedResult['購入内容']) {
-        if (item is Map<String, dynamic> && item.containsKey('購入金額') && item.containsKey('組合せ数')) {
-          totalAmount += (item['購入金額'] as int) * (item['組合せ数'] as int);
-        } else if (item is Map<String, dynamic> && item.containsKey('購入金額')) {
-          totalAmount += item['購入金額'] as int;
-        }
-      }
-    }
+    // ★★★ 修正: 計算ループを削除し、パーサーからの値を直接利用 ★★★
+    final int totalAmount = parsedResult['合計金額'] as int? ?? 0;
 
     String totalStars = _getTotalAmountStars(totalAmount);
     String totalAmountString = totalAmount.toString();

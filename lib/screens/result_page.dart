@@ -6,7 +6,7 @@ import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart'; // ★変更なし
+import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 
 class ResultPage extends StatefulWidget {
   final Map<String, dynamic>? parsedResult;
@@ -74,38 +74,13 @@ class _ResultPageState extends State<ResultPage> {
       displayMessage = JsonEncoder.withIndent('  ').convert(_parsedResult);
     }
 
-    // totalAmountの計算ロジックは変更なし
-    int totalAmount = 0;
-    if (_parsedResult != null && _parsedResult!.containsKey('購入内容')) {
-      List<Map<String, dynamic>> purchaseDetails = (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
-      for (var detail in purchaseDetails) {
-        if (detail.containsKey('購入金額')) {
-          int kingakuPerCombination = detail['購入金額'] as int;
-          if (detail.containsKey('表示用相手頭数') && detail.containsKey('表示用乗数')) {
-            // Case for Multi with specific display values (e.g., 3x6)
-            int opponentCountForDisplay = detail['表示用相手頭数'] as int;
-            int multiplierForDisplay = detail['表示用乗数'] as int;
-            totalAmount += (opponentCountForDisplay * multiplierForDisplay * kingakuPerCombination);
-          } else if (detail.containsKey('組合せ数')) {
-            // Case for regular combinations (e.g., 12 combinations)
-            int combinations = detail['組合せ数'] as int;
-            totalAmount += (combinations * kingakuPerCombination);
-          } else {
-            // Default: just add the purchase amount if no combination info
-            totalAmount += kingakuPerCombination;
-          }
-        }
-      }
-    }
-
     String? salesLocation;
     if (_parsedResult != null && _parsedResult!.containsKey('発売所')) {
       salesLocation = _parsedResult!['発売所'] as String;
     }
 
-    // 式別と方式の計算ロジックは変更なし
-    String shikibetsuToDisplay = ''; // 例: 馬単, 応援馬券, ボックス
-    String hoshikiToDisplay = ''; // 例: マルチ, 単勝+複勝, 軸1頭
+    String shikibetsuToDisplay = '';
+    String hoshikiToDisplay = '';
 
     if (_parsedResult != null && _parsedResult!.containsKey('式別')) {
       String overallMethod = _parsedResult!['式別'] ?? '';
@@ -124,21 +99,18 @@ class _ResultPageState extends State<ResultPage> {
         hoshikiToDisplay = 'がんばれ！';
       } else if (overallMethod == '通常') {
         shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : '通常';
-        hoshikiToDisplay = ''; // 「通常」の場合は方式を独立して表示しない
+        hoshikiToDisplay = '';
       } else {
-        // ボックス, ながし, フォーメーション, クイックピック
         shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
 
         if (overallMethod == 'ながし' && primaryShikibetsuFromDetails.isNotEmpty && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
-          hoshikiToDisplay = purchaseDetails[0]['ながし']; // 例: 軸1頭, 軸2頭
+          hoshikiToDisplay = purchaseDetails[0]['ながし'];
         } else if (primaryShikibetsuFromDetails.isNotEmpty) {
-          hoshikiToDisplay = overallMethod; // 例: ボックス, フォーメーション, クイックピック
+          hoshikiToDisplay = overallMethod;
         } else {
-          // primaryShikibetsuFromDetailsがない場合は、方式も表示しない（overallMethodが式別として表示されるため）
           hoshikiToDisplay = '';
         }
       }
-      // 半角数字を全角に変換
       shikibetsuToDisplay = _convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
     }
 
@@ -156,7 +128,7 @@ class _ResultPageState extends State<ResultPage> {
               fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
-          Column( // ページ全体のコンテンツを縦に並べる
+          Column(
             children: [
               Expanded(
                 child: SingleChildScrollView(
@@ -178,11 +150,9 @@ class _ResultPageState extends State<ResultPage> {
                         textAlign: TextAlign.center,
                       ),
                     )
-                        : Column( // メインコンテンツの縦並び
+                        : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // コンテナ1: レース情報など表示
-                        // 現在のリザルトページのレース情報部分をここに配置
                         if (_parsedResult!.containsKey('年') && _parsedResult!.containsKey('回') && _parsedResult!.containsKey('日'))
                           Text(
                             '20${_parsedResult!['年']}年${_parsedResult!['回']}回${_parsedResult!['日']}日',
@@ -209,10 +179,10 @@ class _ResultPageState extends State<ResultPage> {
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 2.0),
                                       child: Text(
-                                      '${_parsedResult!['レース']}',
-                                      style: const TextStyle(color: Colors.white, fontSize: 32, height: 0.9),
+                                        '${_parsedResult!['レース']}',
+                                        style: const TextStyle(color: Colors.white, fontSize: 32, height: 0.9),
+                                      ),
                                     ),
-                                  ),
                                   ),
                                   const SizedBox(width: 4),
                                   const Text(
@@ -223,12 +193,11 @@ class _ResultPageState extends State<ResultPage> {
                               ),
                             ],
                           ),
-                        const SizedBox(height: 16), // レース情報と次のRowの間にスペース
+                        const SizedBox(height: 16),
 
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // コンテナ2: 左側の式別関連の親コンテナ
                             Container(
                               width: 50,
                               height: 250,
@@ -238,30 +207,28 @@ class _ResultPageState extends State<ResultPage> {
                               child: Column(
                                 mainAxisSize: MainAxisSize.max,
                                 children: [
-                                  // コンテナ4: 式別の英語名（Top）★高さを自動調整
                                   IntrinsicHeight(
                                     child: Container(
                                       width: double.infinity,
                                       color: Colors.black,
                                       child: Center(
-                                      child: Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 2.0),
-                                        child: Text(
-                                          'Top', // 2行になる可能性あり
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.white,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 2.0),
+                                          child: Text(
+                                            'Top',
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                  ),
 
                                   const SizedBox(height: 4),
 
-                                  // コンテナ5: 式別の表示（中央領域にフィット）
                                   Expanded(
                                     child: Container(
                                       width: double.infinity,
@@ -286,16 +253,15 @@ class _ResultPageState extends State<ResultPage> {
 
                                   const SizedBox(height: 4),
 
-                                  // コンテナ6: 式別の英語名（Bottom）★高さを自動調整
                                   IntrinsicHeight(
                                     child: Container(
                                       width: double.infinity,
                                       color: Colors.black,
                                       child: Center(
                                         child: Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 2.0), // 上下2pxずつ余白
+                                          padding: const EdgeInsets.symmetric(vertical: 2.0),
                                           child: Text(
-                                            'Bottom', // 2行になる可能性あり
+                                            'Bottom',
                                             textAlign: TextAlign.center,
                                             style: const TextStyle(
                                               fontSize: 12,
@@ -313,7 +279,6 @@ class _ResultPageState extends State<ResultPage> {
 
                             const SizedBox(width: 16),
 
-                            // コンテナ3: 右側の方式と購入内容の親コンテナ
                             Expanded(
                               flex: 85,
                               child: Column(
@@ -339,8 +304,6 @@ class _ResultPageState extends State<ResultPage> {
                           ],
                         ),
 
-
-                        // 発売所情報 (既存の配置を維持)
                         if (salesLocation != null && salesLocation.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -365,7 +328,6 @@ class _ResultPageState extends State<ResultPage> {
                   ),
                 ),
               ),
-              // 画面下部のボタン (既存の配置を維持)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 30.0),
                 child: Column(

@@ -58,21 +58,33 @@ class DatabaseHelper {
       ''');
     }
     if (oldVersion < 3) {
-      await db.execute('''
-        ALTER TABLE qr_codes ADD COLUMN parsed_data_json TEXT NOT NULL DEFAULT '{}'
-      ''');
+      // カラムが存在しない場合のみ追加する
+      var tableInfo = await db.rawQuery('PRAGMA table_info(qr_codes)');
+      var columnNames = tableInfo.map((row) => row['name']).toList();
+      if (!columnNames.contains('parsed_data_json')) {
+        await db.execute('''
+          ALTER TABLE qr_codes ADD COLUMN parsed_data_json TEXT NOT NULL DEFAULT '{}'
+        ''');
+      }
     }
   }
 
   Future<int> insertQrData(QrData qrData) async {
     final db = await database;
+
+    // ★★★ ログ出力用のprint文を追加 ★★★
+    print('--- [DB保存データ] qr_codesテーブルに保存するデータ ---');
+    print(qrData.toMap());
+    // ★★★ ここまで追加 ★★★
+
     return await db.insert('qr_codes', qrData.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<QrData>> getAllQrData() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('qr_codes', orderBy: 'timestamp ASC');
+    final List<Map<String, dynamic>> maps =
+    await db.query('qr_codes', orderBy: 'timestamp DESC'); // 最新のものが上に来るように変更
     return List.generate(maps.length, (i) {
       return QrData.fromMap(maps[i]);
     });
