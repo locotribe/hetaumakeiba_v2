@@ -255,7 +255,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
   d["日"] = int.parse(itr.next() + itr.next());
   d["レース"] = int.parse(itr.next() + itr.next());
   print('Parsed 年: ${d["年"]}, 回: ${d["回"]}, 日: ${d["日"]}, レース: ${d["レース"]} (Iterator position: ${itr.position})');
-  
+
   String typeCode = itr.next();
   d["式別"] = typeDict[typeCode];
   print('Parsed typeCode (購入方式): $typeCode, 式別: ${d["式別"]} (Iterator position: ${itr.position})');
@@ -346,27 +346,20 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         ];
         print('    => 馬番: ${di["馬番"]} (position=${itr.position})');
 
-        // ★★★★★ 修正箇所 ★★★★★
-        // ticketFormatを元に券面が確保している馬の数を計算し、
-        // 実際の馬番数との差があれば、その分イテレータを進める。
         int c = (int.parse(ticketFormat) + 1) ~/ 2;
         if (bettingCode == "5" && ticketFormat == "3") {
           c += 1;
         }
-        // 応援馬券(typeCode=5)と馬単(bettingCode=6)以外の場合に、
-        // フォーマット上の馬数と実際の馬数が異なれば、その差分だけイテレータを進める
         if (c > count && typeCode != "5" && bettingCode != "6") {
           itr.move((c - count) * 2);
         }
 
-        // 単勝(1), 複勝(2), 馬単(6)の場合、追加の2文字（ウラ指定など）を読み取る
         if (bettingCode == "1" || bettingCode == "2" || bettingCode == "6") {
           String ura = itr.next() + itr.next();
           if (bettingCode == "6") {
             di["ウラ"] = ura == "01" ? "あり" : "なし";
           }
         }
-        // ★★★★★ ここまで ★★★★★
 
         String purchaseAmountStr = "";
         print('    [Amount] start reading 5 digits at position=${itr.position}');
@@ -469,7 +462,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       }
       print('  Updated underDigits for BOX. underDigits[15]: ${underDigits[15]}, [17]: ${underDigits[17]}, [18]: ${underDigits[18]}');
 
-      // MOVED: 組合せ数 calculation before adding di to list
       di["組合せ数"] = calculatePoints(
         ticketType: bettingDict[bettingCode]!,
         method: 'BOX',
@@ -477,9 +469,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       );
       print('  Calculated 組合せ数 (BOX): ${di["組合せ数"]}');
 
-      // MOVED: di adding to list after all properties are set
       (d["購入内容"] as List).add(di);
-      print('  Added item to 購入内容 (BOX): $di'); // Log after adding to ensure full di is shown
+      print('  Added item to 購入内容 (BOX): $di');
 
       print('--- Exited BOX Betting ---');
       break;
@@ -495,10 +486,10 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       String wheelCode = itr.next();
       print('  Parsed wheelCode: $wheelCode (Iterator position: ${itr.position})');
 
-      int? currentPurchaseAmount; // ADDED: Common variable for purchase amount for NAGASHI
+      int? currentPurchaseAmount;
 
       switch (bettingCode) {
-        case "6": // 馬単
+        case "6":
           di["ながし"] = wheelExactaDict[wheelCode];
           method = 'ながし';
           if (di["ながし"] == "1着ながし" || di["ながし"] == "2着ながし") {
@@ -506,12 +497,12 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           }
           print('  馬単ながし: ${di["ながし"]}, method: $method');
           break;
-        case "8": // 3連複
+        case "8":
           di["ながし"] = wheelTrioDict[wheelCode];
           method = di["ながし"]!;
           print('  3連複ながし: ${di["ながし"]}, method: $method');
           break;
-        case "9": // 3連単
+        case "9":
           di["ながし"] = wheelTrifectaDict[wheelCode];
           method = di["ながし"]!;
           if (di["ながし"] == "1着ながし" ||
@@ -554,7 +545,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         count = innerList.length;
         print('  Count (opponent horses): $count');
 
-      } else if (bettingCode == "9") { // 3連単
+      } else if (bettingCode == "9") {
         List<List<int>> horseNumbers = [];
         print('  Parsing horses for 3連単 (3 sets of 18 bits)...');
         for (int j = 0; j < 3; j++) {
@@ -576,7 +567,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         }
         print('  Count (max horse numbers in any set): $count');
 
-      } else { // 馬連・ワイド・枠連のながし (単軸)
+      } else {
         di["軸"] = int.parse(itr.next() + itr.next());
         print('  Parsed 軸 (single horse): ${di["軸"]} (Iterator position: ${itr.position})');
 
@@ -590,8 +581,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
             break;
           }
         }
-        currentPurchaseAmount = int.parse("${purchaseAmountStr}00"); // MODIFIED: Assign to common variable
-        print('  Parsed 購入金額 (other NAGASHI): $currentPurchaseAmount (Iterator position: ${itr.position})'); // MODIFIED: Log common variable
+        currentPurchaseAmount = int.parse("${purchaseAmountStr}00");
+        print('  Parsed 購入金額 (other NAGASHI): $currentPurchaseAmount (Iterator position: ${itr.position})');
 
         List<int> innerList = [];
         print('  Parsing opponent horses for other NAGASHI (1 set of 18 bits)...');
@@ -606,41 +597,39 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         print('  Count (opponent horses for other NAGASHI): $count');
       }
 
-      // MODIFIED: Added bettingCode "6" (馬単) here to ensure its purchase amount is parsed.
       if (bettingCode == "8" || bettingCode == "9" || bettingCode == "6") {
         String purchaseAmountStr = "";
-        print('  Reading purchase amount (5 characters) for 3連複/3連単/馬単 NAGASHI from position: ${itr.position}'); // MODIFIED: Log for 馬単
+        print('  Reading purchase amount (5 characters) for 3連複/3連単/馬単 NAGASHI from position: ${itr.position}');
         for (int i = 0; i < 5; i++) {
           if (itr.position < s.length) {
             purchaseAmountStr += itr.next();
           } else {
-            print('  WARNING: Ran out of string while parsing purchase amount for 3連複/3連単/馬単 NAGASHI.'); // MODIFIED: Log for 馬単
+            print('  WARNING: Ran out of string while parsing purchase amount for 3連複/3連単/馬単 NAGASHI.');
             break;
           }
         }
-        currentPurchaseAmount = int.parse("${purchaseAmountStr}00"); // MODIFIED: Assign to common variable
-        print('  Parsed 購入金額 (3連複/3連単/馬単 NAGASHI): $currentPurchaseAmount (Iterator position: ${itr.position})'); // MODIFIED: Log common variable
+        currentPurchaseAmount = int.parse("${purchaseAmountStr}00");
+        print('  Parsed 購入金額 (3連複/3連単/馬単 NAGASHI): $currentPurchaseAmount (Iterator position: ${itr.position})');
       }
 
       String multiCode = itr.next();
       print('  Parsed multiCode: $multiCode (Iterator position: ${itr.position})');
-      if (bettingCode == "9") { // 3連単
-        di["マルチ"] = multiCode == "1" ? "あり" : "なし"; // <-- di["マルチ"]を設定
+      if (bettingCode == "9") {
+        di["マルチ"] = multiCode == "1" ? "あり" : "なし";
         if (multiCode == "1") {
-          // 3連単マルチの場合、methodを更新し、表示用データを追加
           if (method == '軸1頭ながし') {
             method = '軸1頭マルチ';
-            di["表示用相手頭数"] = (di["馬番"][1] as List).length; // 軸1頭の場合の相手馬はparsedNumbers[1]
+            di["表示用相手頭数"] = (di["馬番"][1] as List).length;
             di["表示用乗数"] = 3;
           } else if (method == '軸2頭ながし') {
             method = '軸2頭マルチ';
-            di["表示用相手頭数"] = (di["馬番"][2] as List).length; // 軸2頭の場合の相手馬はparsedNumbers[2]
+            di["表示用相手頭数"] = (di["馬番"][2] as List).length;
             di["表示用乗数"] = 6;
           }
         }
         print('  3連単マルチ: ${di["マルチ"]}, method updated to: $method');
         if (di.containsKey("表示用相手頭数")) print('  表示用相手頭数: ${di["表示用相手頭数"]}, 表示用乗数: ${di["表示用乗数"]}');
-      } else if (bettingCode == "6") { // 馬単のマルチ
+      } else if (bettingCode == "6") {
         di["マルチ"] = multiCode == "1" ? "あり" : "なし";
         if (multiCode == "1") {
           method = 'マルチ';
@@ -659,9 +648,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       underDigits[18] = (count % 10).toString();
       print('  Updated underDigits[17] and [18] for NAGASHI. Count: $count');
 
-      // ADDED: Assign the common purchase amount variable to di before adding to list
       di["購入金額"] = currentPurchaseAmount ?? 0;
-      print('  Final di["購入金額"] for NAGASHI: ${di["購入金額"]}'); // ADDED: Log final purchase amount
+      print('  Final di["購入金額"] for NAGASHI: ${di["購入金額"]}');
 
       List<int> firstHorses = [];
       List<int> secondHorses = [];
@@ -672,7 +660,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         if (di["馬番"].length > 2) thirdHorses = (di["馬番"][2] as List).cast<int>();
       }
 
-      // MOVED: Combination calculation to before adding di to list
       if (bettingCode == "6" || bettingCode == "8") {
         di["組合せ数"] = calculatePoints(
           ticketType: bettingDict[bettingCode]!,
@@ -708,11 +695,10 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           second: (di["相手"] as List).cast<int>(),
         );
       }
-      print('  Calculated 組合せ数 (NAGASHI): ${di["組合せ数"]}'); // Log after calculation
+      print('  Calculated 組合せ数 (NAGASHI): ${di["組合せ数"]}');
 
-      // MOVED: Add di to list after all properties (購入金額, 組合せ数) are set
       (d["購入内容"] as List).add(di);
-      print('  Added item to 購入内容 (NAGASHI): $di'); // Log after adding to ensure full di is shown
+      print('  Added item to 購入内容 (NAGASHI): $di');
 
       print('--- Exited NAGASHI Betting ---');
       break;
@@ -724,7 +710,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       di["式別"] = bettingDict[bettingCode];
       print('  Parsed bettingCode (FORMATION): $bettingCode, 式別: ${di["式別"]} (Iterator position: ${itr.position})');
 
-      itr.next(); // 常に1文字スキップ
+      itr.next();
 
       List<List<int>> horseNumbers = [];
       print('  Parsing horse numbers for FORMATION (3 sets of 18 bits)...');
@@ -756,7 +742,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
       print('  Parsed 購入金額 (FORMATION): ${di["購入金額"]} (Iterator position: ${itr.position})');
 
-      itr.next(); // 常に1文字スキップ
+      itr.next();
 
       underDigits[13] = "2";
       underDigits[14] = bettingCode;
@@ -769,7 +755,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       }
       print('  Updated underDigits for FORMATION. underDigits[13]: ${underDigits[13]}, [14]: ${underDigits[14]} etc.');
 
-      // MOVED: 組合せ数 calculation before adding di to list
       List<int> firstFormation = [];
       List<int> secondFormation = [];
       List<int> thirdFormation = [];
@@ -787,9 +772,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       );
       print('  Calculated 組合せ数 (FORMATION): ${di["組合せ数"]}');
 
-      // MOVED: di adding to list after all properties are set
       (d["購入内容"] as List).add(di);
-      print('  Added item to 購入内容 (FORMATION): $di'); // Log after adding to ensure full di is shown
+      print('  Added item to 購入内容 (FORMATION): $di');
       print('--- Exited FORMATION Betting ---');
       break;
 
@@ -859,9 +843,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       underDigits[18] = (d["組合せ数"] % 10).toString();
       print('  Updated underDigits for QUICK PICK. underDigits[15]: ${underDigits[15]}, [17]: ${underDigits[17]}, [18]: ${underDigits[18]}');
 
-      // ADDED: di adding to list to ensure purchase details are included
       (d["購入内容"] as List).add(di);
-      print('  Added item to 購入内容 (QUICK PICK): $di'); // Log after adding to ensure full di is shown
+      print('  Added item to 購入内容 (QUICK PICK): $di');
       print('--- Exited QUICK PICK Betting ---');
       break;
 
