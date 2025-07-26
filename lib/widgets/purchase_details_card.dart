@@ -421,6 +421,58 @@ class PurchaseDetailsCard extends StatelessWidget {
           }
         }
         // ★★★★★ ここまで追加 ★★★★★
+        // ★★★★★ ここから追加 ★★★★★
+        else if (shikibetsu == '馬単' && currentBetType == 'フォーメーション') {
+          // '馬番'キーからネストされたリストを取得
+          final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
+
+          // 1着の馬番を表示
+          if (horseGroups.isNotEmpty) {
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                      width: labelWidth,
+                      child: Text('1着',
+                          style: TextStyle(color: Colors.black54),
+                          textAlign: TextAlign.end)),
+                  Expanded(
+                    child: Wrap(
+                        spacing: 4.0,
+                        runSpacing: 4.0,
+                        children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')]),
+                  ),
+                ],
+              ),
+            ));
+          }
+
+          // 2着の馬番を表示
+          if (horseGroups.length >= 2) {
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                      width: labelWidth,
+                      child: Text('2着',
+                          style: TextStyle(color: Colors.black54),
+                          textAlign: TextAlign.end)),
+                  Expanded(
+                    child: Wrap(
+                        spacing: 4.0,
+                        runSpacing: 4.0,
+                        children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')]),
+                  ),
+                ],
+              ),
+            ));
+          }
+        }
+        // ★★★★★ ここまで追加 ★★★★★
 
 
         else if (detail.containsKey('ながし')) {

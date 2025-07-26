@@ -1,5 +1,6 @@
 // lib/logic/qr_code_processor.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart'; // .h から .dart に修正
@@ -205,6 +206,7 @@ class QrCodeProcessor {
         final qrDataToSave = QrData(
           qrCode: parsedData['QR'] as String,
           timestamp: DateTime.now(),
+          parsedDataJson: json.encode(parsedData),
         );
         print('DEBUG: 馬券が保存されました: ${qrDataToSave.qrCode}');
         await _dbHelper.insertQrData(qrDataToSave);

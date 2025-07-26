@@ -59,7 +59,6 @@ class HitChecker {
     if (winners.isEmpty) return HitResult();
 
     for (var purchase in (parsedTicket['購入内容'] as List<dynamic>)) {
-      final String purchaseMethod = parsedTicket['方式'] ?? '通常';
       final String ticketType = purchase['式別'];
 
       final int combinationCount = purchase['組合せ数'] ?? 1;
@@ -67,11 +66,11 @@ class HitChecker {
           ? (purchase['購入金額'] as int) ~/ combinationCount
           : (purchase['購入金額'] as int);
 
-      final List<List<int>> allUserCombinations = _generateUserCombinations(
-        purchaseMethod: purchaseMethod,
-        ticketType: ticketType,
-        purchaseData: purchase,
-      );
+      // 保存済みの組み合わせリストを直接利用
+      final List<List<int>> allUserCombinations =
+      (purchase['all_combinations'] as List)
+          .map((combo) => (combo as List).cast<int>())
+          .toList();
 
       final Set<String> hitCombinationStrings = {};
 
@@ -111,109 +110,6 @@ class HitChecker {
       ..sort((a, b) => int.parse(a.rank).compareTo(int.parse(b.rank)));
 
     return top3.map((h) => h.horseNumber).toList();
-  }
-
-  /// ★★★★★ 修正箇所：全ての購入方式に対応できるようにロジックを全面的に改修 ★★★★★
-  static List<List<int>> _generateUserCombinations({
-    required String purchaseMethod,
-    required String ticketType,
-    required Map<String, dynamic> purchaseData,
-  }) {
-    try {
-      switch (purchaseMethod) {
-        case '通常':
-        case '応援馬券':
-          if (purchaseData['馬番'] is List) {
-            return [(purchaseData['馬番'] as List).cast<int>()];
-          }
-          return [];
-        case 'ボックス':
-          if (purchaseData['馬番'] is List) {
-            final horses = (purchaseData['馬番'] as List).cast<int>();
-            if (ticketType == '馬単' || ticketType == '3連単') {
-              int r = (ticketType == '馬単') ? 2 : 3;
-              if (horses.length < r) return [];
-              return permutations(horses, r).toList();
-            } else {
-              int r = (ticketType == '3連複') ? 3 : 2;
-              if (horses.length < r) return [];
-              return combinations(horses, r).toList();
-            }
-          }
-          return [];
-        case 'ながし':
-        // 3連単ながしは'馬番'キー、それ以外は'軸'/'相手'キーを使用
-          if (purchaseData.containsKey('馬番') && purchaseData['馬番'] is List) { // 3連単ながし
-            final groups = (purchaseData['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
-            if (groups.length < 2) return [];
-
-            if (purchaseData['ながし'] != null && purchaseData['ながし'].contains('軸1頭')) { // 軸1頭ながし (1着ながしなど)
-              final axis = groups[0];
-              final opponents = groups[1];
-              if (axis.isEmpty || opponents.length < 2) return [];
-              return permutations(opponents, 2).map((p) => [axis.first, ...p]).toList();
-            } else if (groups.length >= 3) { // 軸2頭ながし (1・2着ながしなど)
-              final axis1 = groups[0];
-              final axis2 = groups[1];
-              final opponents = groups[2];
-              if (axis1.isEmpty || axis2.isEmpty || opponents.isEmpty) return [];
-              return opponents.map((o) => [axis1.first, axis2.first, o]).toList();
-            }
-          } else { // 3連単以外のながし
-            List<int> axis;
-            if (purchaseData['軸'] is List) {
-              axis = (purchaseData['軸'] as List).cast<int>();
-            } else if (purchaseData['軸'] is int) {
-              axis = [purchaseData['軸'] as int];
-            } else {
-              return [];
-            }
-
-            if (purchaseData['相手'] is List) {
-              final opponents = (purchaseData['相手'] as List).cast<int>();
-              if (axis.isEmpty || opponents.isEmpty) return [];
-
-              if (ticketType == '馬連' || ticketType == 'ワイド' || ticketType == '枠連') {
-                return opponents.map((o) => [axis.first, o]).toList();
-              } else if (ticketType == '馬単') {
-                return opponents.map((o) => [axis.first, o]).toList();
-              } else if (ticketType == '3連複') {
-                if(axis.length == 1) { // 軸1頭
-                  if (opponents.length < 2) return [];
-                  return combinations(opponents, 2).map((pair) => [axis.first, ...pair]).toList();
-                } else if (axis.length == 2) { // 軸2頭
-                  return opponents.map((o) => [...axis, o]).toList();
-                }
-              }
-            }
-          }
-          return [];
-        case 'フォーメーション':
-          if (purchaseData['馬番'] is List) {
-            final groups = (purchaseData['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
-            if (ticketType == '3連複' && groups.length == 3) {
-              List<List<int>> result = [];
-              for (var i in groups[0]) {
-                for (var j in groups[1]) {
-                  for (var k in groups[2]) {
-                    final combo = {i, j, k};
-                    if (combo.length == 3) {
-                      result.add(combo.toList());
-                    }
-                  }
-                }
-              }
-              return result;
-            }
-          }
-          return [];
-        default:
-          return [];
-      }
-    } catch (e) {
-      print('組み合わせ生成中にエラー: $e / data: $purchaseData');
-      return [];
-    }
   }
 
   static bool _isCombinationHit(String ticketType, List<int> userCombo, List<String> winners) {

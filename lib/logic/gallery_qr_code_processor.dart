@@ -1,5 +1,6 @@
 // lib/logic/gallery_qr_code_processor.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart'; // analyzeImageのために必要
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
@@ -192,6 +193,7 @@ class GalleryQrCodeProcessor {
         final qrDataToSave = QrData(
           qrCode: parsedData['QR'] as String,
           timestamp: DateTime.now(),
+          parsedDataJson: json.encode(parsedData),
         );
         print('DEBUG: Gallery: 馬券が保存されました: ${qrDataToSave.qrCode}');
         await _dbHelper.insertQrData(qrDataToSave);

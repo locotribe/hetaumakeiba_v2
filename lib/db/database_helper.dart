@@ -25,7 +25,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -36,7 +36,8 @@ class DatabaseHelper {
       CREATE TABLE qr_codes(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         qr_code TEXT NOT NULL,
-        timestamp TEXT NOT NULL
+        timestamp TEXT NOT NULL,
+        parsed_data_json TEXT NOT NULL
       )
     ''');
     await db.execute('''
@@ -54,6 +55,11 @@ class DatabaseHelper {
           race_id TEXT PRIMARY KEY,
           race_data TEXT NOT NULL
         )
+      ''');
+    }
+    if (oldVersion < 3) {
+      await db.execute('''
+        ALTER TABLE qr_codes ADD COLUMN parsed_data_json TEXT NOT NULL DEFAULT '{}'
       ''');
     }
   }
@@ -81,11 +87,10 @@ class DatabaseHelper {
     );
   }
 
-  // ★★★★★ 修正箇所：メソッド名を変更し、レース結果テーブルも削除するように修正 ★★★★★
   Future<void> deleteAllData() async {
     final db = await database;
-    await db.delete('qr_codes'); // 馬券データをすべて削除
-    await db.delete('race_results'); // レース結果データもすべて削除
+    await db.delete('qr_codes');
+    await db.delete('race_results');
   }
 
   Future<bool> qrCodeExists(String qrCode) async {

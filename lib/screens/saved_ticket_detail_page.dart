@@ -1,7 +1,8 @@
 // lib/screens/saved_ticket_detail_page.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/hit_checker.dart'; // ★追加：当たり判定サービスをインポート
+import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
@@ -13,12 +14,12 @@ import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 class PageData {
   final Map<String, dynamic> parsedTicket;
   final RaceResult raceResult;
-  final HitResult hitResult; // ★追加：当たり判定の結果も保持
+  final HitResult hitResult;
 
   PageData({
     required this.parsedTicket,
     required this.raceResult,
-    required this.hitResult, // ★追加
+    required this.hitResult,
   });
 }
 
@@ -43,7 +44,8 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
 
   Future<PageData> _loadPageData() async {
     try {
-      final parsedTicket = parseHorseracingTicketQr(widget.qrData.qrCode);
+      // DBに保存されたJSON文字列をデコードして利用
+      final parsedTicket = json.decode(widget.qrData.parsedDataJson) as Map<String, dynamic>;
 
       final url = generateNetkeibaUrl(
         year: parsedTicket['年'].toString(),
@@ -67,7 +69,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
         print('DBからレース結果を読み込みました。');
       }
 
-      // ★追加：当たり判定を実行
       final hitResult = HitChecker.check(
         parsedTicket: parsedTicket,
         raceResult: raceResult,
@@ -76,7 +77,7 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
       return PageData(
         parsedTicket: parsedTicket,
         raceResult: raceResult,
-        hitResult: hitResult, // ★追加
+        hitResult: hitResult,
       );
     } catch (e) {
       print('ページデータの読み込みに失敗しました: $e');
@@ -135,7 +136,7 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                 return ListView(
                   padding: const EdgeInsets.all(8.0),
                   children: [
-                    _buildHitResultCard(hitResult), // ★追加：的中結果カード
+                    _buildHitResultCard(hitResult),
                     _buildRaceInfoCard(raceResult),
                     _buildUserTicketCard(parsedTicket),
                     _buildFullResultsCard(raceResult),
@@ -151,7 +152,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     );
   }
 
-  // ★★★★★ 新しく追加したウィジェット ★★★★★
   /// 的中結果を表示するカード
   Widget _buildHitResultCard(HitResult hitResult) {
     final bool isHit = hitResult.isHit;
@@ -200,7 +200,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
       ),
     );
   }
-  // ★★★★★ ここまで ★★★★★
 
   // レース情報カード
   Widget _buildRaceInfoCard(RaceResult raceResult) {
