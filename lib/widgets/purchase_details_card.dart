@@ -384,7 +384,46 @@ class PurchaseDetailsCard extends StatelessWidget {
               ),
             ));
           }
-        } else if (detail.containsKey('ながし')) {
+        }
+        // ★★★★★ ここから追加 ★★★★★
+        else if (shikibetsu == '3連複' && currentBetType == 'フォーメーション') {
+          // '馬番'キーからネストされたリストを取得
+          final List<List<int>> horseGroups = (detail['馬番'] as List).cast<List<int>>();
+
+          // 各馬番グループ（1頭目、2頭目...）をループ処理
+          for (int i = 0; i < horseGroups.length; i++) {
+            // グループごとに1つの行ウィジェットを生成
+            detailWidgets.add(Padding(
+              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0), // 各行の下に少し余白を追加
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ラベル（例: "1頭目"）を表示
+                  SizedBox(
+                      width: labelWidth,
+                      child: Text(
+                          '${i + 1}頭目', // 3連複なので「着」ではなく「頭目」と表示
+                          style: TextStyle(color: Colors.black54),
+                          textAlign: TextAlign.end
+                      )
+                  ),
+                  // 対応する馬番のリストを表示
+                  Expanded(
+                      child: Wrap(
+                          spacing: 4.0, // 馬番同士の水平間隔
+                          runSpacing: 4.0, // 馬番が改行された際の垂直間隔
+                          children: [..._buildHorseNumberDisplay(horseGroups[i], symbol: '')] // ネストされていない単一のリストを渡す
+                      )
+                  ),
+                ],
+              ),
+            ));
+          }
+        }
+        // ★★★★★ ここまで追加 ★★★★★
+
+
+        else if (detail.containsKey('ながし')) {
           if (detail.containsKey('軸')) {
             List<int> axisHorses;
             if (detail['軸'] is int) {
