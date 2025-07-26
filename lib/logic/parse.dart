@@ -286,9 +286,10 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       'Parsed 年: ${d["年"]}, 回: ${d["回"]}, 日: ${d["日"]}, レース: ${d["レース"]} (Iterator position: ${itr.position})');
 
   String typeCode = itr.next();
-  d["式別"] = typeDict[typeCode];
+  // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
+  d["方式"] = typeDict[typeCode];
   print(
-      'Parsed typeCode (購入方式): $typeCode, 式別: ${d["式別"]} (Iterator position: ${itr.position})');
+      'Parsed typeCode (購入方式): $typeCode, 方式: ${d["方式"]} (Iterator position: ${itr.position})');
 
   itr.next(); // 常に1文字スキップ
 

@@ -101,10 +101,12 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         subtitle = 'タップしてレース結果を取得';
       }
 
+      // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
       final purchaseMethod = item.parsedTicket['方式'] ?? '';
       final purchaseDetails = (item.parsedTicket['購入内容'] as List)
           .map((p) => p['式別'])
           .where((p) => p != null)
+          .toSet() // 式別の重複を削除
           .join(', ');
 
       subtitle += ' / $purchaseDetails $purchaseMethod';
@@ -127,7 +129,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
     if (mounted) {
       setState(() {
-        _ticketListItems = finalItems.reversed.toList(); // ★修正：新しいものが上に来るようにリストを逆順にする
+        _ticketListItems = finalItems;
         _isLoading = false;
       });
     }
@@ -146,6 +148,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       );
       final raceId = ScraperService.getRaceIdFromUrl(url)!;
 
+      // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
       final purchaseMethod = parsedTicket['方式'] ?? '';
       final purchaseDetails = (parsedTicket['購入内容'] as List);
 
@@ -211,7 +214,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     );
 
     if (confirm == true) {
-      // ★★★★★ 修正箇所：新しい全削除メソッドを呼び出す ★★★★★
       await _dbHelper.deleteAllData();
       await loadData();
       if (mounted) {

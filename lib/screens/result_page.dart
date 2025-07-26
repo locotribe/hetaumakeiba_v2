@@ -82,8 +82,9 @@ class _ResultPageState extends State<ResultPage> {
     String shikibetsuToDisplay = '';
     String hoshikiToDisplay = '';
 
-    if (_parsedResult != null && _parsedResult!.containsKey('式別')) {
-      String overallMethod = _parsedResult!['式別'] ?? '';
+    // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
+    if (_parsedResult != null && _parsedResult!.containsKey('方式')) {
+      String overallMethod = _parsedResult!['方式'] ?? '';
       String primaryShikibetsuFromDetails = '';
 
       List<Map<String, dynamic>> purchaseDetails = [];
@@ -98,17 +99,17 @@ class _ResultPageState extends State<ResultPage> {
         shikibetsuToDisplay = '単勝＋複勝';
         hoshikiToDisplay = 'がんばれ！';
       } else if (overallMethod == '通常') {
-        shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : '通常';
+        // 「通常」の場合は、購入内容の式別をそのまま表示
+        shikibetsuToDisplay = purchaseDetails.map((p) => p['式別']).toSet().join(',');
         hoshikiToDisplay = '';
       } else {
         shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
 
         if (overallMethod == 'ながし' && primaryShikibetsuFromDetails.isNotEmpty && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
           hoshikiToDisplay = purchaseDetails[0]['ながし'];
-        } else if (primaryShikibetsuFromDetails.isNotEmpty) {
-          hoshikiToDisplay = overallMethod;
         } else {
-          hoshikiToDisplay = '';
+          // ながし以外の方式（ボックス、フォーメーション）は、その方式名を表示
+          hoshikiToDisplay = overallMethod;
         }
       }
       shikibetsuToDisplay = _convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
@@ -233,7 +234,8 @@ class _ResultPageState extends State<ResultPage> {
                                     child: Container(
                                       width: double.infinity,
                                       alignment: Alignment.center,
-                                      child: _parsedResult!.containsKey('式別')
+                                      // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
+                                      child: _parsedResult!.containsKey('方式')
                                           ? Column(
                                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                         children: shikibetsuToDisplay.characters.map((char) {
@@ -296,7 +298,8 @@ class _ResultPageState extends State<ResultPage> {
                                   const SizedBox(height: 8),
                                   PurchaseDetailsCard(
                                     parsedResult: _parsedResult!,
-                                    betType: _parsedResult!['式別'] ?? '',
+                                    // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
+                                    betType: _parsedResult!['方式'] ?? '',
                                   ),
                                 ],
                               ),
