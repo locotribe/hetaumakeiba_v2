@@ -2,23 +2,26 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart'; // ★追加
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/screens/saved_ticket_detail_page.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart'; // ★追加
-import 'package:hetaumakeiba_v2/utils/url_generator.dart'; // ★追加
+import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 
-// ★追加：リストに表示する情報をまとめるためのヘルパークラス
 class TicketListItem {
   final QrData qrData;
-  final Map<String, dynamic> parsedTicket; // QRを簡易解析したデータ
-  final RaceResult? raceResult; // DBから取得したレース結果（存在しない場合もある）
+  final Map<String, dynamic> parsedTicket;
+  final RaceResult? raceResult;
+  final String displayTitle;
+  final String displaySubtitle;
 
   TicketListItem({
     required this.qrData,
     required this.parsedTicket,
     this.raceResult,
+    required this.displayTitle,
+    required this.displaySubtitle,
   });
 }
 
@@ -30,9 +33,8 @@ class SavedTicketsListPage extends StatefulWidget {
 }
 
 class SavedTicketsListPageState extends State<SavedTicketsListPage> {
-  // ★修正：保持するデータの型を変更
   List<TicketListItem> _ticketListItems = [];
-  bool _isLoading = true; // ★追加：ロード中の状態を管理
+  bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   @override
@@ -41,7 +43,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     loadData();
   }
 
-  // ★★★★★ 修正箇所：リスト表示用のデータを準備するロジックを全面的に改修 ★★★★★
   Future<void> loadData() async {
     if (!mounted) return;
     setState(() {
@@ -49,14 +50,11 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     });
 
     final allQrData = await _dbHelper.getAllQrData();
-    final List<TicketListItem> items = [];
+    final List<TicketListItem> tempItems = [];
 
     for (final qrData in allQrData) {
       try {
-        // QRコードを解析して、レースIDの元になる情報を取得
         final parsedTicket = parseHorseracingTicketQr(qrData.qrCode);
-
-        // URLとレースIDを生成
         final url = generateNetkeibaUrl(
           year: parsedTicket['年'].toString(),
           racecourseCode: racecourseDict.entries
@@ -67,26 +65,99 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           race: parsedTicket['レース'].toString(),
         );
         final raceId = ScraperService.getRaceIdFromUrl(url)!;
-
-        // DBからレース結果を取得（なければnull）
         final raceResult = await _dbHelper.getRaceResult(raceId);
 
-        items.add(TicketListItem(
+        tempItems.add(TicketListItem(
           qrData: qrData,
           parsedTicket: parsedTicket,
           raceResult: raceResult,
+          displayTitle: '',
+          displaySubtitle: '',
         ));
       } catch (e) {
         print('購入履歴の解析中にエラーが発生しました: ${qrData.id} - $e');
-        // 解析エラーが発生した項目はリストに追加しない、などのハンドリングも可能
       }
+    }
+
+    final Map<String, int> duplicateCounter = {};
+    for (final item in tempItems) {
+      final key = _generatePurchaseKey(item.parsedTicket);
+      duplicateCounter[key] = (duplicateCounter[key] ?? 0) + 1;
+    }
+
+    final Map<String, int> currentDuplicateIndex = {};
+    final List<TicketListItem> finalItems = [];
+    for (final item in tempItems) {
+      String title;
+      String subtitle;
+
+      if (item.raceResult != null) {
+        title = item.raceResult!.raceTitle;
+        subtitle = item.raceResult!.raceDate;
+      } else {
+        final venue = item.parsedTicket['開催場'] ?? '不明';
+        final raceNum = item.parsedTicket['レース'] ?? '??';
+        title = '$venue ${raceNum}R';
+        subtitle = 'タップしてレース結果を取得';
+      }
+
+      final purchaseMethod = item.parsedTicket['方式'] ?? '';
+      final purchaseDetails = (item.parsedTicket['購入内容'] as List)
+          .map((p) => p['式別'])
+          .where((p) => p != null)
+          .join(', ');
+
+      subtitle += ' / $purchaseDetails $purchaseMethod';
+
+      final key = _generatePurchaseKey(item.parsedTicket);
+      if (duplicateCounter[key]! > 1) {
+        final index = (currentDuplicateIndex[key] ?? 0) + 1;
+        subtitle += ' ($index)';
+        currentDuplicateIndex[key] = index;
+      }
+
+      finalItems.add(TicketListItem(
+        qrData: item.qrData,
+        parsedTicket: item.parsedTicket,
+        raceResult: item.raceResult,
+        displayTitle: title,
+        displaySubtitle: subtitle,
+      ));
     }
 
     if (mounted) {
       setState(() {
-        _ticketListItems = items;
+        _ticketListItems = finalItems.reversed.toList(); // ★修正：新しいものが上に来るようにリストを逆順にする
         _isLoading = false;
       });
+    }
+  }
+
+  String _generatePurchaseKey(Map<String, dynamic> parsedTicket) {
+    try {
+      final url = generateNetkeibaUrl(
+        year: parsedTicket['年'].toString(),
+        racecourseCode: racecourseDict.entries
+            .firstWhere((entry) => entry.value == parsedTicket['開催場'])
+            .key,
+        round: parsedTicket['回'].toString(),
+        day: parsedTicket['日'].toString(),
+        race: parsedTicket['レース'].toString(),
+      );
+      final raceId = ScraperService.getRaceIdFromUrl(url)!;
+
+      final purchaseMethod = parsedTicket['方式'] ?? '';
+      final purchaseDetails = (parsedTicket['購入内容'] as List);
+
+      final detailsString = purchaseDetails.map((p) {
+        final detailMap = p as Map<String, dynamic>;
+        final sortedKeys = detailMap.keys.toList()..sort();
+        return sortedKeys.map((key) => '$key:${detailMap[key]}').join(';');
+      }).join('|');
+
+      return '$raceId-$purchaseMethod-$detailsString';
+    } catch (e) {
+      return parsedTicket['QR'] ?? DateTime.now().toIso8601String();
     }
   }
 
@@ -140,7 +211,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     );
 
     if (confirm == true) {
-      await _dbHelper.deleteAllQrData();
+      // ★★★★★ 修正箇所：新しい全削除メソッドを呼び出す ★★★★★
+      await _dbHelper.deleteAllData();
       await loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -187,46 +259,29 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                       style: TextStyle(color: Colors.black54),
                     ),
                   )
-                  // ★★★★★ 修正箇所：ListView.builderの表示ロジックを刷新 ★★★★★
                       : ListView.builder(
                     itemCount: _ticketListItems.length,
                     itemBuilder: (context, index) {
                       final item = _ticketListItems[index];
-
-                      String title;
-                      String subtitle;
-
-                      // DBにレース結果があれば、その情報を表示
-                      if (item.raceResult != null) {
-                        title = item.raceResult!.raceTitle;
-                        subtitle = item.raceResult!.raceDate;
-                      } else {
-                        // なければ、QRの解析情報から簡易的な表示を作成
-                        final venue = item.parsedTicket['開催場'] ?? '不明';
-                        final raceNum = item.parsedTicket['レース'] ?? '??';
-                        title = '$venue ${raceNum}R';
-                        subtitle = 'タップしてレース結果を取得';
-                      }
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 8.0),
                         elevation: 2.0,
                         child: ListTile(
                           title: Text(
-                            title,
+                            item.displayTitle,
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          subtitle: Text(subtitle),
+                          subtitle: Text(item.displaySubtitle),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
                             onPressed: () => _deleteQrData(item.qrData.id!),
                           ),
                           onTap: () async {
-                            // 詳細ページに遷移し、戻ってきたらリストを更新
                             await Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: item.qrData)),
                             );
-                            loadData(); // 戻ってきたときに再読み込み
+                            loadData();
                           },
                         ),
                       );
