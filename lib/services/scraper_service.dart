@@ -3,9 +3,9 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:charset_converter/charset_converter.dart'; // ★★★★★ 追加：文字コード変換パッケージをインポート ★★★★★
 
 class ScraperService {
-  /// ★★★★★ 修正箇所：メソッド名を `_getRaceIdFromUrl` から `getRaceIdFromUrl` に変更 ★★★★★
   /// URLからレースIDを抽出するヘルパー関数
   static String? getRaceIdFromUrl(String url) {
     final uri = Uri.parse(url);
@@ -19,7 +19,7 @@ class ScraperService {
   /// netkeiba.comのレース結果ページをスクレイピングし、RaceResultオブジェクトを返す
   static Future<RaceResult> scrapeRaceDetails(String url) async {
     try {
-      final raceId = getRaceIdFromUrl(url); // ★修正箇所：呼び出し元も修正
+      final raceId = getRaceIdFromUrl(url);
       if (raceId == null) {
         throw Exception('無効なURLです: レースIDが取得できませんでした。');
       }
@@ -29,7 +29,10 @@ class ScraperService {
         throw Exception('HTTPリクエストに失敗しました: Status code ${response.statusCode}');
       }
 
-      final document = html.parse(response.body);
+      // ★★★★★ 修正箇所：EUC-JPからUTF-8へ文字コードを変換 ★★★★★
+      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
+      final document = html.parse(decodedBody);
+      // ★★★★★ ここまで ★★★★★
 
       // 各解析パートを個別の関数に分離
       final raceTitle = _parseRaceTitle(document);
@@ -54,8 +57,6 @@ class ScraperService {
       );
     } catch (e) {
       print('スクレイピングエラー: $e');
-      // エラーが発生した場合は、その情報を保持した空のRaceResultを返すことも検討できる
-      // ここでは例外を再スローして、呼び出し元でハンドリングする
       rethrow;
     }
   }
@@ -139,7 +140,6 @@ class ScraperService {
         final ticketType = _safeGetText(th);
         final payouts = <Payout>[];
 
-        // 複勝やワイドのように複数の払戻が1行に含まれる場合に対応
         final combinations = tds[0].innerHtml.split('<br>').map((e) => e.trim()).toList();
         final amounts = tds.length > 1 ? tds[1].innerHtml.split('<br>').map((e) => e.trim()).toList() : [];
         final popularities = tds.length > 2 ? tds[2].innerHtml.split('<br>').map((e) => e.trim()).toList() : [];
