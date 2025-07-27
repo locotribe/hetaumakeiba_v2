@@ -134,6 +134,7 @@ class _ResultPageState extends State<ResultPage> {
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
+                  // Container 1: 解析結果全体を囲むメインのコンテナ
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
@@ -171,8 +172,10 @@ class _ResultPageState extends State<ResultPage> {
                               const SizedBox(height: 4),
                               Row(
                                 children: [
+                                  // Container 2: レース番号を表示する黒い背景のコンテナ
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 0),
+                                    width: 70,
+                                    alignment: Alignment.center,
                                     decoration: const BoxDecoration(
                                       color: Colors.black,
                                       borderRadius: BorderRadius.all(Radius.circular(0)),
@@ -199,6 +202,7 @@ class _ResultPageState extends State<ResultPage> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Container 3: 左側の縦長のコンテナ（式別などを表示）
                             Container(
                               width: 50,
                               height: 250,
@@ -209,6 +213,7 @@ class _ResultPageState extends State<ResultPage> {
                                 mainAxisSize: MainAxisSize.max,
                                 children: [
                                   IntrinsicHeight(
+                                    // Container 4: 左側コンテナ内の上部ヘッダー（"Top"）
                                     child: Container(
                                       width: double.infinity,
                                       color: Colors.black,
@@ -231,6 +236,7 @@ class _ResultPageState extends State<ResultPage> {
                                   const SizedBox(height: 4),
 
                                   Expanded(
+                                    // Container 5: 左側コンテナの中央部分（式別の文字を表示）
                                     child: Container(
                                       width: double.infinity,
                                       alignment: Alignment.center,
@@ -256,6 +262,7 @@ class _ResultPageState extends State<ResultPage> {
                                   const SizedBox(height: 4),
 
                                   IntrinsicHeight(
+                                    // Container 6: 左側コンテナ内の下部フッター（"Bottom"）
                                     child: Container(
                                       width: double.infinity,
                                       color: Colors.black,
@@ -284,21 +291,32 @@ class _ResultPageState extends State<ResultPage> {
                             Expanded(
                               flex: 85,
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.stretch, // 子要素を横幅いっぱいに広げる
                                 children: [
+                                  // 上のコンテナ：方式（ながし、ボックスなど）
                                   if (hoshikiToDisplay.isNotEmpty)
-                                    Text(
-                                      hoshikiToDisplay,
-                                      style: const TextStyle(
-                                        color: Colors.black54,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
+                                    Container(
+                                      height: 40, // 高さを固定
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: Colors.black, width: 2.0), // 黒線で囲む
+                                      ),
+                                      alignment: Alignment.center, // テキストを中央に配置
+                                      child: Text(
+                                        hoshikiToDisplay,
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
-                                  const SizedBox(height: 8),
+
+                                  if (hoshikiToDisplay.isNotEmpty)
+                                    const SizedBox(height: 8),
+
+                                  // 下の部分：購入詳細カード
                                   PurchaseDetailsCard(
                                     parsedResult: _parsedResult!,
-                                    // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
                                     betType: _parsedResult!['方式'] ?? '',
                                   ),
                                 ],
@@ -306,26 +324,21 @@ class _ResultPageState extends State<ResultPage> {
                             ),
                           ],
                         ),
-
+                        // ### ここからが修正箇所 ###
+                        const SizedBox(height: 16),
+                        // 発売所情報を表示する新しいコンテナ
                         if (salesLocation != null && salesLocation.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4.0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    salesLocation,
-                                    style: TextStyle(
-                                      color: Colors.black,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                          Container(
+                            child: Text(
+                              salesLocation,
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                           ),
+                        // ### ここまでが修正箇所 ###
                       ],
                     ),
                   ),
