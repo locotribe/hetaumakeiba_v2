@@ -1,14 +1,16 @@
 // lib/screens/saved_tickets_list_page.dart
+import 'dart:convert'; // JSONのデコードに必要
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart'; // racecourseDictを利用するためにインポート
 import 'package:hetaumakeiba_v2/screens/saved_ticket_detail_page.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 
+// リストアイテムのデータを保持するためのヘルパークラス
 class TicketListItem {
   final QrData qrData;
   final Map<String, dynamic> parsedTicket;
@@ -43,6 +45,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     loadData();
   }
 
+  /// データベースからデータを読み込み、リスト表示用に整形する
   Future<void> loadData() async {
     if (!mounted) return;
     setState(() {
@@ -54,7 +57,13 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
     for (final qrData in allQrData) {
       try {
-        final parsedTicket = parseHorseracingTicketQr(qrData.qrCode);
+        final parsedTicket = jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>;
+
+        if (parsedTicket.isEmpty) {
+          print('解析済みデータが空です: ${qrData.id}');
+          continue;
+        }
+
         final url = generateNetkeibaUrl(
           year: parsedTicket['年'].toString(),
           racecourseCode: racecourseDict.entries
@@ -75,7 +84,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           displaySubtitle: '',
         ));
       } catch (e) {
-        print('購入履歴の解析中にエラーが発生しました: ${qrData.id} - $e');
+        print('購入履歴のデータ処理中にエラーが発生しました: ${qrData.id} - $e');
       }
     }
 
@@ -89,40 +98,57 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     final List<TicketListItem> finalItems = [];
     for (final item in tempItems) {
       String title;
-      String subtitle;
+      String line2; // 2行目
+      String line3; // 3行目
 
       if (item.raceResult != null) {
         title = item.raceResult!.raceTitle;
-        subtitle = item.raceResult!.raceDate;
+        line2 = item.raceResult!.raceDate;
       } else {
         final venue = item.parsedTicket['開催場'] ?? '不明';
         final raceNum = item.parsedTicket['レース'] ?? '??';
         title = '$venue ${raceNum}R';
-        subtitle = 'タップしてレース結果を取得';
+        line2 = 'タップしてレース結果を取得';
       }
 
-      final purchaseMethod = item.parsedTicket['方式'] ?? '';
+      String purchaseMethodDisplay = item.parsedTicket['方式'] ?? '';
+      if (purchaseMethodDisplay == 'ながし') {
+        final purchaseContents = item.parsedTicket['購入内容'] as List<dynamic>?;
+        if (purchaseContents != null && purchaseContents.isNotEmpty) {
+          final firstPurchase = purchaseContents.first as Map<String, dynamic>;
+          purchaseMethodDisplay = firstPurchase['ながし種別'] as String? ?? purchaseMethodDisplay;
+
+          if (firstPurchase.containsKey('マルチ') && firstPurchase['マルチ'] == 'あり') {
+            purchaseMethodDisplay += 'マルチ';
+          }
+        }
+      }
+
       final purchaseDetails = (item.parsedTicket['購入内容'] as List)
           .map((p) => p['式別'])
           .where((p) => p != null)
-          .toSet() // 式別の重複を削除
+          .toSet()
           .join(', ');
 
-      subtitle += ' / $purchaseDetails $purchaseMethod';
+      line2 += ' / $purchaseDetails $purchaseMethodDisplay';
 
       final key = _generatePurchaseKey(item.parsedTicket);
       if (duplicateCounter[key]! > 1) {
         final index = (currentDuplicateIndex[key] ?? 0) + 1;
-        subtitle += ' ($index)';
+        line2 += ' ($index)';
         currentDuplicateIndex[key] = index;
       }
+
+      line3 = _formatPurchaseSummary(item.parsedTicket['購入内容'] as List<dynamic>);
+
+      final combinedSubtitle = '$line2\n$line3';
 
       finalItems.add(TicketListItem(
         qrData: item.qrData,
         parsedTicket: item.parsedTicket,
         raceResult: item.raceResult,
         displayTitle: title,
-        displaySubtitle: subtitle,
+        displaySubtitle: combinedSubtitle,
       ));
     }
 
@@ -134,6 +160,54 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     }
   }
 
+  /// 購入内容のリストから、表示用の概要文字列を生成する
+  String _formatPurchaseSummary(List<dynamic> purchases) {
+    if (purchases.isEmpty) return '';
+
+    try {
+      final firstPurchase = purchases.first as Map<String, dynamic>;
+      final ticketType = firstPurchase['式別'] ?? '';
+      final amount = firstPurchase['購入金額'] ?? 0;
+      String horseNumbersStr = '';
+
+      if (firstPurchase.containsKey('馬番')) {
+        final horseNumbers = firstPurchase['馬番'];
+        if (horseNumbers is List && horseNumbers.isNotEmpty) {
+          if (horseNumbers.first is List) {
+            final listOfLists = horseNumbers.map((e) => (e as List).map((num) => num.toString()).toList()).toList();
+            horseNumbersStr = listOfLists
+                .map((group) => group.join(','))
+                .join(' → ');
+          }
+          else {
+            final simpleList = horseNumbers.map((e) => e.toString()).toList();
+            horseNumbersStr = simpleList.join(',');
+          }
+        }
+      }
+      else if (firstPurchase.containsKey('軸')) {
+        final axis = firstPurchase['軸'];
+        final opponents = firstPurchase['相手'];
+
+        final axisList = (axis is List) ? axis.map((e) => e.toString()).toList() : [axis.toString()];
+        final opponentsList = (opponents is List) ? opponents.map((e) => e.toString()).toList() : [opponents.toString()];
+
+        horseNumbersStr = '軸:${axisList.join(',')} 相手:${opponentsList.join(',')}';
+      }
+
+      String summary = '$ticketType: $horseNumbersStr / ${amount}円';
+      if (purchases.length > 1) {
+        summary += ' ...他';
+      }
+      return summary;
+    } catch (e) {
+      print('Error in _formatPurchaseSummary: $e');
+      return '購入内容の表示に失敗しました';
+    }
+  }
+
+
+  /// 購入内容から一意のキーを生成する
   String _generatePurchaseKey(Map<String, dynamic> parsedTicket) {
     try {
       final url = generateNetkeibaUrl(
@@ -158,10 +232,12 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
       return '$raceId-$purchaseMethod-$detailsString';
     } catch (e) {
-      return parsedTicket['QR'] ?? DateTime.now().toIso8601String();
+      final qrContent = parsedTicket['QR'] ?? parsedTicket.toString();
+      return qrContent;
     }
   }
 
+  /// 全データを削除する
   Future<void> _deleteAllData() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -233,15 +309,11 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                     itemCount: _ticketListItems.length,
                     itemBuilder: (context, index) {
                       final item = _ticketListItems[index];
+                      final totalAmount = item.parsedTicket['合計金額'] as int? ?? 0;
 
-                      // ★★★ 修正箇所 ★★★
-                      // ListTileをDismissibleウィジェットでラップし、スワイプ機能を実装
                       return Dismissible(
-                        // 各項目を一意に識別するためのキー
                         key: ValueKey(item.qrData.id),
-                        // スワイプ方向を右から左に限定
                         direction: DismissDirection.endToStart,
-                        // スワイプが完了する前に確認ダイアログを表示
                         confirmDismiss: (direction) async {
                           return await showDialog<bool>(
                             context: context,
@@ -261,48 +333,52 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                                 ],
                               );
                             },
-                            // ダイアログ外をタップして閉じた場合はfalse（キャンセル）とする
                           ) ?? false;
                         },
-                        // 確認ダイアログで「削除」が選択された場合に実行される
                         onDismissed: (direction) async {
-                          // データベースからデータを削除
                           await _dbHelper.deleteQrData(item.qrData.id!);
                           if (mounted) {
-                            // 削除完了をユーザーに通知
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('「${item.displayTitle}」を削除しました。')),
                             );
-                            // リストを再読み込みしてUIを最新の状態に更新
                             loadData();
                           }
                         },
-                        // スワイプ中に表示される背景
                         background: Container(
                           color: Colors.red,
                           alignment: Alignment.centerRight,
                           padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                          child: const Icon(
-                            Icons.delete,
-                            color: Colors.white,
-                          ),
+                          child: const Icon(Icons.delete, color: Colors.white),
                         ),
-                        // スワイプ対象のウィジェット
                         child: Card(
                           margin: const EdgeInsets.symmetric(vertical: 8.0),
                           elevation: 2.0,
                           child: ListTile(
+                            isThreeLine: true,
                             title: Text(
                               item.displayTitle,
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             subtitle: Text(item.displaySubtitle),
-                            // trailingの削除ボタンは不要のため削除
+                            trailing: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${totalAmount}円',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 16.0),
+                                const SizedBox(height: 16.0),
+                              ],
+                            ),
                             onTap: () async {
                               await Navigator.of(context).push(
                                 MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: item.qrData)),
                               );
-                              // 詳細ページから戻ってきた時にリストを再読み込み
                               loadData();
                             },
                           ),
