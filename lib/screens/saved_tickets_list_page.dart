@@ -2,6 +2,7 @@
 import 'dart:convert'; // JSONのデコードに必要
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/logic/hit_checker.dart'; // HitCheckerをインポート
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart'; // racecourseDictを利用するためにインポート
@@ -10,11 +11,12 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 
-// リストアイテムのデータを保持するためのヘルパークラス
+// リストアイテムのデータを保持するためのヘルパークラスにHitResultを追加
 class TicketListItem {
   final QrData qrData;
   final Map<String, dynamic> parsedTicket;
   final RaceResult? raceResult;
+  final HitResult? hitResult; // 的中結果を保持
   final String displayTitle;
   final String displaySubtitle;
 
@@ -22,6 +24,7 @@ class TicketListItem {
     required this.qrData,
     required this.parsedTicket,
     this.raceResult,
+    this.hitResult,
     required this.displayTitle,
     required this.displaySubtitle,
   });
@@ -76,10 +79,21 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         final raceId = ScraperService.getRaceIdFromUrl(url)!;
         final raceResult = await _dbHelper.getRaceResult(raceId);
 
+        // ▼▼▼ 的中判定処理を追加 ▼▼▼
+        HitResult? hitResult;
+        if (raceResult != null) {
+          hitResult = HitChecker.check(
+            parsedTicket: parsedTicket,
+            raceResult: raceResult,
+          );
+        }
+        // ▲▲▲ ここまで ▲▲▲
+
         tempItems.add(TicketListItem(
           qrData: qrData,
           parsedTicket: parsedTicket,
           raceResult: raceResult,
+          hitResult: hitResult, // 判定結果をセット
           displayTitle: '',
           displaySubtitle: '',
         ));
@@ -127,7 +141,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           .toSet()
           .join(', ');
 
-      // 2行目の表示を「式別」と「方式」のみに修正
       String line2 = '$purchaseDetails $purchaseMethodDisplay';
 
       final key = _generatePurchaseKey(item.parsedTicket);
@@ -145,6 +158,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         qrData: item.qrData,
         parsedTicket: item.parsedTicket,
         raceResult: item.raceResult,
+        hitResult: item.hitResult, // 判定結果を渡す
         displayTitle: title,
         displaySubtitle: combinedSubtitle,
       ));
@@ -167,33 +181,15 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       final amount = firstPurchase['購入金額'] ?? 0;
       String horseNumbersStr = '';
 
-      if (firstPurchase.containsKey('馬番')) {
-        final horseNumbers = firstPurchase['馬番'];
-        if (horseNumbers is List && horseNumbers.isNotEmpty) {
-          if (horseNumbers.first is List) {
-            final listOfLists = horseNumbers.map((e) => (e as List).map((num) => num.toString()).toList()).toList();
-            horseNumbersStr = listOfLists
-                .map((group) => group.join(','))
-                .join(' → ');
-          }
-          else {
-            final simpleList = horseNumbers.map((e) => e.toString()).toList();
-            horseNumbersStr = simpleList.join(',');
-          }
+      if (firstPurchase.containsKey('all_combinations')) {
+        final combinations = firstPurchase['all_combinations'] as List;
+        if (combinations.isNotEmpty) {
+          horseNumbersStr = (combinations.first as List).join('→');
         }
-      }
-      else if (firstPurchase.containsKey('軸')) {
-        final axis = firstPurchase['軸'];
-        final opponents = firstPurchase['相手'];
-
-        final axisList = (axis is List) ? axis.map((e) => e.toString()).toList() : [axis.toString()];
-        final opponentsList = (opponents is List) ? opponents.map((e) => e.toString()).toList() : [opponents.toString()];
-
-        horseNumbersStr = '軸:${axisList.join(',')} 相手:${opponentsList.join(',')}';
       }
 
       String summary = '$horseNumbersStr / ${amount}円';
-      if (purchases.length > 1) {
+      if (purchases.length > 1 || (firstPurchase['all_combinations'] as List).length > 1) {
         summary += ' ...他';
       }
       return summary;
@@ -274,11 +270,11 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(
+          const Positioned.fill(
             child: CustomBackground(
-              overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-              stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
-              fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+              overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
+              stripeColor: Color.fromRGBO(219, 234, 234, 0.6),
+              fillColor: Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
           Padding(
@@ -307,6 +303,9 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                     itemBuilder: (context, index) {
                       final item = _ticketListItems[index];
                       final totalAmount = item.parsedTicket['合計金額'] as int? ?? 0;
+                      final isHit = item.hitResult?.isHit ?? false;
+                      final payout = item.hitResult?.totalPayout ?? 0;
+                      final balance = payout - totalAmount;
 
                       return Dismissible(
                         key: ValueKey(item.qrData.id),
@@ -348,6 +347,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                           child: const Icon(Icons.delete, color: Colors.white),
                         ),
                         child: Card(
+                          color: isHit ? Colors.red.shade50 : null,
                           margin: const EdgeInsets.symmetric(vertical: 8.0),
                           elevation: 2.0,
                           child: ListTile(
@@ -366,10 +366,32 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
+                                    color: Colors.black54,
+                                    height: 1.2, // 行の高さを調整
                                   ),
                                 ),
-                                const SizedBox(height: 16.0),
-                                const SizedBox(height: 16.0),
+                                if (item.raceResult != null) ...[
+                                  Text(
+                                    '${payout}円',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      // ▼▼▼ 的中時の色を緑に変更 ▼▼▼
+                                      color: isHit ? Colors.green.shade700 : Colors.black,
+                                      height: 1.2, // 行の高さを調整
+                                    ),
+                                  ),
+                                  Text(
+                                    '${balance >= 0 ? '+' : ''}$balance円',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: balance > 0 ? Colors.blue.shade700 : (balance < 0 ? Colors.red.shade700 : Colors.black),
+                                      height: 1.2, // 行の高さを調整
+                                    ),
+                                  ),
+                                ] else
+                                  const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
                               ],
                             ),
                             onTap: () async {
