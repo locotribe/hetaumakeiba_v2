@@ -7,6 +7,9 @@ import 'package:hetaumakeiba_v2/logic/parse.dart'; // .h から .dart に修正
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/result_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
+import 'package:hetaumakeiba_v2/services/scraper_service.dart'; // スクレイピングサービスをインポート
+import 'package:hetaumakeiba_v2/utils/url_generator.dart'; // URL生成サービスをインポート
+
 
 class QrCodeProcessor {
   final DatabaseHelper _dbHelper;
@@ -213,6 +216,45 @@ class QrCodeProcessor {
         print('馬券が保存されました: ${qrDataToSave.qrCode}'); // 既存のプリント文
 
         savedListKey.currentState?.loadData(); // 保存済みリストをリロード
+
+        // ★★★ ここから追加：レースデータをスクレイピングしてDBに保存する処理 ★★★
+        try {
+          final String year = parsedData['年'].toString();
+          final String racecourseCode = racecourseDict.entries
+              .firstWhere((entry) => entry.value == parsedData['開催場'])
+              .key;
+          final String round = parsedData['回'].toString();
+          final String day = parsedData['日'].toString();
+          final String race = parsedData['レース'].toString();
+
+          final String raceUrl = generateNetkeibaUrl(
+            year: year,
+            racecourseCode: racecourseCode,
+            round: round,
+            day: day,
+            race: race,
+          );
+          final String? raceId = ScraperService.getRaceIdFromUrl(raceUrl);
+
+          if (raceId != null) {
+            final existingRaceResult = await _dbHelper.getRaceResult(raceId);
+            if (existingRaceResult == null) {
+              print('DEBUG: レースデータがDBに存在しないため、スクレイピングを開始します: $raceUrl');
+              final raceResult = await ScraperService.scrapeRaceDetails(raceUrl);
+              await _dbHelper.insertOrUpdateRaceResult(raceResult);
+              print('DEBUG: レースデータをスクレイピングしてDBに保存しました: ${raceResult.raceId}');
+            } else {
+              print('DEBUG: レースデータは既にDBに存在します: ${existingRaceResult.raceId}');
+            }
+          } else {
+            print('DEBUG: レースIDが生成できませんでした。スクレイピングをスキップします。');
+          }
+        } catch (e) {
+          print('ERROR: レースデータのスクレイピングまたは保存中にエラーが発生しました: $e');
+          // ここでエラーが発生しても、馬券データは保存されているため、処理を続行
+        }
+        // ★★★ ここまで追加 ★★★
+
       } else {
         // parseHorseracingTicketQr がQRキーを返さないがエラーもない場合
         parsedData = {'エラー': '解析結果にQRデータが含まれていません。', '詳細': '不明な解析結果'};
