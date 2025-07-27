@@ -98,17 +98,14 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     final List<TicketListItem> finalItems = [];
     for (final item in tempItems) {
       String title;
-      String line2; // 2行目
       String line3; // 3行目
 
       if (item.raceResult != null) {
         title = item.raceResult!.raceTitle;
-        line2 = item.raceResult!.raceDate;
       } else {
         final venue = item.parsedTicket['開催場'] ?? '不明';
         final raceNum = item.parsedTicket['レース'] ?? '??';
         title = '$venue ${raceNum}R';
-        line2 = 'タップしてレース結果を取得';
       }
 
       String purchaseMethodDisplay = item.parsedTicket['方式'] ?? '';
@@ -130,7 +127,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           .toSet()
           .join(', ');
 
-      line2 += ' / $purchaseDetails $purchaseMethodDisplay';
+      // 2行目の表示を「式別」と「方式」のみに修正
+      String line2 = '$purchaseDetails $purchaseMethodDisplay';
 
       final key = _generatePurchaseKey(item.parsedTicket);
       if (duplicateCounter[key]! > 1) {
@@ -166,7 +164,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
     try {
       final firstPurchase = purchases.first as Map<String, dynamic>;
-      final ticketType = firstPurchase['式別'] ?? '';
       final amount = firstPurchase['購入金額'] ?? 0;
       String horseNumbersStr = '';
 
@@ -195,7 +192,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         horseNumbersStr = '軸:${axisList.join(',')} 相手:${opponentsList.join(',')}';
       }
 
-      String summary = '$ticketType: $horseNumbersStr / ${amount}円';
+      String summary = '$horseNumbersStr / ${amount}円';
       if (purchases.length > 1) {
         summary += ' ...他';
       }
