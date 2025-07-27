@@ -101,7 +101,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         subtitle = 'タップしてレース結果を取得';
       }
 
-      // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
       final purchaseMethod = item.parsedTicket['方式'] ?? '';
       final purchaseDetails = (item.parsedTicket['購入内容'] as List)
           .map((p) => p['式別'])
@@ -148,7 +147,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       );
       final raceId = ScraperService.getRaceIdFromUrl(url)!;
 
-      // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
       final purchaseMethod = parsedTicket['方式'] ?? '';
       final purchaseDetails = (parsedTicket['購入内容'] as List);
 
@@ -161,36 +159,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       return '$raceId-$purchaseMethod-$detailsString';
     } catch (e) {
       return parsedTicket['QR'] ?? DateTime.now().toIso8601String();
-    }
-  }
-
-  void _deleteQrData(int id) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('データ削除'),
-        content: const Text('このデータを削除しますか？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('キャンセル'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('削除'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      await _dbHelper.deleteQrData(id);
-      await loadData();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('データが削除されました。')),
-        );
-      }
     }
   }
 
@@ -266,25 +234,78 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                     itemBuilder: (context, index) {
                       final item = _ticketListItems[index];
 
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 8.0),
-                        elevation: 2.0,
-                        child: ListTile(
-                          title: Text(
-                            item.displayTitle,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(item.displaySubtitle),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _deleteQrData(item.qrData.id!),
-                          ),
-                          onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: item.qrData)),
+                      // ★★★ 修正箇所 ★★★
+                      // ListTileをDismissibleウィジェットでラップし、スワイプ機能を実装
+                      return Dismissible(
+                        // 各項目を一意に識別するためのキー
+                        key: ValueKey(item.qrData.id),
+                        // スワイプ方向を右から左に限定
+                        direction: DismissDirection.endToStart,
+                        // スワイプが完了する前に確認ダイアログを表示
+                        confirmDismiss: (direction) async {
+                          return await showDialog<bool>(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                title: const Text('削除の確認'),
+                                content: const Text('この項目を本当に削除しますか？'),
+                                actions: <Widget>[
+                                  TextButton(
+                                    onPressed: () => Navigator.of(context).pop(false),
+                                    child: const Text('キャンセル'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.of(context).pop(true),
+                                    child: const Text('削除', style: TextStyle(color: Colors.red)),
+                                  ),
+                                ],
+                              );
+                            },
+                            // ダイアログ外をタップして閉じた場合はfalse（キャンセル）とする
+                          ) ?? false;
+                        },
+                        // 確認ダイアログで「削除」が選択された場合に実行される
+                        onDismissed: (direction) async {
+                          // データベースからデータを削除
+                          await _dbHelper.deleteQrData(item.qrData.id!);
+                          if (mounted) {
+                            // 削除完了をユーザーに通知
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('「${item.displayTitle}」を削除しました。')),
                             );
+                            // リストを再読み込みしてUIを最新の状態に更新
                             loadData();
-                          },
+                          }
+                        },
+                        // スワイプ中に表示される背景
+                        background: Container(
+                          color: Colors.red,
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                          child: const Icon(
+                            Icons.delete,
+                            color: Colors.white,
+                          ),
+                        ),
+                        // スワイプ対象のウィジェット
+                        child: Card(
+                          margin: const EdgeInsets.symmetric(vertical: 8.0),
+                          elevation: 2.0,
+                          child: ListTile(
+                            title: Text(
+                              item.displayTitle,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Text(item.displaySubtitle),
+                            // trailingの削除ボタンは不要のため削除
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: item.qrData)),
+                              );
+                              // 詳細ページから戻ってきた時にリストを再読み込み
+                              loadData();
+                            },
+                          ),
                         ),
                       );
                     },
