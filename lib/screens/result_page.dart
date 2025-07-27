@@ -400,52 +400,58 @@ class _ResultPageState extends State<ResultPage> {
                                   // ### ここからが修正箇所 ###
                                   // 上のコンテナ：方式（ながし、ボックスなど）
                                   if (hoshikiToDisplay.isNotEmpty)
-                                    Container(
-                                      height: 40, // 高さを固定
-                                      decoration: BoxDecoration(
-                                        border: Border.all(color: Colors.black, width: 2.0), // 黒線で囲む
-                                      ),
-                                      alignment: Alignment.center, // テキストを中央に配置
-                                      child: () {
-                                        const baseStyle = TextStyle(
-                                          color: Colors.black,
-                                          fontWeight: FontWeight.bold,
-                                        );
-                                        const englishStyle = TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.normal, // 英語は太字にしない
-                                        );
+                                    Row( // ← このRowウィジェットを追加
+                                      children: [
+                                        Container(
+                                          width: 250, // ← ここで幅を指定します（例：180）
+                                          height: 40, // 高さを固定
+                                          decoration: BoxDecoration(
+                                            border: Border.all(color: Colors.black, width: 2.0), // 黒線で囲む
+                                          ),
+                                          alignment: Alignment.center, // テキストを中央に配置
+                                          child: () {
+                                            // ... (この中のRichTextなどの部分は変更なし)
+                                            const baseStyle = TextStyle(
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.bold,
+                                            );
+                                            const englishStyle = TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.normal,
+                                            );
 
-                                        if (overallMethod == 'ながし') {
-                                          return RichText(
-                                            textAlign: TextAlign.center,
-                                            text: TextSpan(
-                                              style: baseStyle.copyWith(fontSize: 20),
-                                              children: <TextSpan>[
-                                                TextSpan(text: hoshikiToDisplay),
-                                                TextSpan(text: ' WHEEL', style: englishStyle),
-                                              ],
-                                            ),
-                                          );
-                                        } else if (overallMethod == 'ボックス') {
-                                          return RichText(
-                                            textAlign: TextAlign.center,
-                                            text: TextSpan(
-                                              style: baseStyle.copyWith(fontSize: 20),
-                                              children: <TextSpan>[
-                                                TextSpan(text: hoshikiToDisplay),
-                                                TextSpan(text: ' BOX', style: englishStyle),
-                                              ],
-                                            ),
-                                          );
-                                        } else {
-                                          return Text(
-                                            hoshikiToDisplay,
-                                            style: baseStyle.copyWith(fontSize: 20),
-                                          );
-                                        }
-                                      }(),
+                                            if (overallMethod == 'ながし') {
+                                              return RichText(
+                                                textAlign: TextAlign.center,
+                                                text: TextSpan(
+                                                  style: baseStyle.copyWith(fontSize: 20),
+                                                  children: <TextSpan>[
+                                                    TextSpan(text: hoshikiToDisplay),
+                                                    TextSpan(text: ' WHEEL', style: englishStyle),
+                                                  ],
+                                                ),
+                                              );
+                                            } else if (overallMethod == 'ボックス') {
+                                              return RichText(
+                                                textAlign: TextAlign.center,
+                                                text: TextSpan(
+                                                  style: baseStyle.copyWith(fontSize: 20),
+                                                  children: <TextSpan>[
+                                                    TextSpan(text: hoshikiToDisplay),
+                                                    TextSpan(text: ' BOX', style: englishStyle),
+                                                  ],
+                                                ),
+                                              );
+                                            } else {
+                                              return Text(
+                                                hoshikiToDisplay,
+                                                style: baseStyle.copyWith(fontSize: 20),
+                                              );
+                                            }
+                                          }(),
+                                        ),
+                                      ],
                                     ),
                                   // ### ここまでが修正箇所 ###
 

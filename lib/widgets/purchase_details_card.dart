@@ -85,19 +85,18 @@ class PurchaseDetailsCard extends StatelessWidget {
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(vertical: 2.0),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.black54),
-              borderRadius: BorderRadius.circular(4.0),
+              border: Border.all(color: Colors.black),
             ),
             child: Text(
               numbersToProcess[i].toString(),
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(color: Colors.black),
             ),
           ),
         ),
       );
       if (symbol.isNotEmpty && i < numbersToProcess.length - 1) {
         widgets.add(
-          Text(symbol, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+          Text(symbol, style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         );
       }
     }
@@ -112,13 +111,13 @@ class PurchaseDetailsCard extends StatelessWidget {
     const double labelWidth = 80.0;
 
     final TextStyle starStyle = TextStyle(
-      color: Colors.black54,
+      color: Colors.black,
       fontWeight: FontWeight.bold,
       fontSize: 12,
     );
 
     final TextStyle amountStyle = TextStyle(
-      color: Colors.black54,
+      color: Colors.black,
       fontWeight: FontWeight.bold,
       fontSize: 20,
     );
@@ -370,7 +369,7 @@ class PurchaseDetailsCard extends StatelessWidget {
                 children: [
                   Text(
                     '組合せ数 $combinationDisplayString',
-                    style: const TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -443,13 +442,13 @@ class PurchaseDetailsCard extends StatelessWidget {
     String totalAmountString = totalAmount.toString();
 
     final TextStyle totalStarStyle = TextStyle(
-      color: Colors.black54,
+      color: Colors.black,
       fontWeight: FontWeight.bold,
       fontSize: 12,
     );
 
     final TextStyle totalAmountTextStyle = TextStyle(
-      color: Colors.black54,
+      color: Colors.black,
       fontWeight: FontWeight.bold,
       fontSize: 20,
     );
