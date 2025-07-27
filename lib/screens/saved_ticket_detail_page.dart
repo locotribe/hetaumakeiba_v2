@@ -2,7 +2,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
@@ -10,16 +9,14 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 
-// ページのロードに必要なデータをまとめるためのヘルパークラス
+// ページのロードに必要なデータをまとめるためのヘルパークラス（簡素化）
 class PageData {
   final Map<String, dynamic> parsedTicket;
-  final RaceResult raceResult;
-  final HitResult hitResult;
+  final RaceResult? raceResult; // レース結果は存在しない場合もある
 
   PageData({
     required this.parsedTicket,
-    required this.raceResult,
-    required this.hitResult,
+    this.raceResult,
   });
 }
 
@@ -42,11 +39,13 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     _pageDataFuture = _loadPageData();
   }
 
+  // DBからデータを読み込むだけのシンプルな処理に変更
   Future<PageData> _loadPageData() async {
     try {
       // DBに保存されたJSON文字列をデコードして利用
       final parsedTicket = json.decode(widget.qrData.parsedDataJson) as Map<String, dynamic>;
 
+      // QRコード読み取り時にレース結果も保存されているはずなので、DBから取得を試みる
       final url = generateNetkeibaUrl(
         year: parsedTicket['年'].toString(),
         racecourseCode: racecourseDict.entries
@@ -60,28 +59,15 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
 
       RaceResult? raceResult = await _dbHelper.getRaceResult(raceId);
 
-      if (raceResult == null) {
-        print('DBにデータがないため、スクレイピングを実行します: $url');
-        raceResult = await ScraperService.scrapeRaceDetails(url);
-        await _dbHelper.insertOrUpdateRaceResult(raceResult);
-        print('スクレイピング結果をDBに保存しました。');
-      } else {
-        print('DBからレース結果を読み込みました。');
-      }
-
-      final hitResult = HitChecker.check(
-        parsedTicket: parsedTicket,
-        raceResult: raceResult,
-      );
-
+      // 的中判定は行わない
       return PageData(
         parsedTicket: parsedTicket,
         raceResult: raceResult,
-        hitResult: hitResult,
       );
     } catch (e) {
       print('ページデータの読み込みに失敗しました: $e');
-      throw Exception('レース結果の取得に失敗しました。\n時間をおいて再度お試しください。');
+      // エラーをスローしてFutureBuilderでハンドリング
+      throw Exception('データの表示に失敗しました。');
     }
   }
 
@@ -93,27 +79,18 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(
+          const Positioned.fill(
             child: CustomBackground(
-              overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-              stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
-              fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+              overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
+              stripeColor: Color.fromRGBO(219, 234, 234, 0.6),
+              fillColor: Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
           FutureBuilder<PageData>(
             future: _pageDataFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('レース結果を取得・判定中...'),
-                    ],
-                  ),
-                );
+                return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
                 return Center(
@@ -129,18 +106,21 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
               }
               if (snapshot.hasData) {
                 final pageData = snapshot.data!;
-                final raceResult = pageData.raceResult;
                 final parsedTicket = pageData.parsedTicket;
-                final hitResult = pageData.hitResult;
+                final raceResult = pageData.raceResult;
 
                 return ListView(
                   padding: const EdgeInsets.all(8.0),
                   children: [
-                    _buildHitResultCard(hitResult),
-                    _buildRaceInfoCard(raceResult),
+                    // 的中結果カードは削除
                     _buildUserTicketCard(parsedTicket),
-                    _buildFullResultsCard(raceResult),
-                    _buildRefundsCard(raceResult),
+                    if (raceResult != null) ...[
+                      _buildRaceInfoCard(raceResult),
+                      _buildFullResultsCard(raceResult),
+                      _buildRefundsCard(raceResult),
+                    ] else ...[
+                      _buildNoRaceDataCard(),
+                    ]
                   ],
                 );
               }
@@ -152,49 +132,76 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     );
   }
 
-  /// 的中結果を表示するカード
-  Widget _buildHitResultCard(HitResult hitResult) {
-    final bool isHit = hitResult.isHit;
-    final Color cardColor = isHit ? Colors.green.shade50 : Colors.grey.shade200;
-    final Color textColor = isHit ? Colors.green.shade800 : Colors.black87;
+  // レース情報がなかった場合に表示するカード
+  Widget _buildNoRaceDataCard() {
+    return Card(
+      elevation: 2,
+      color: Colors.orange.shade50,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Center(
+          child: Text(
+            'レース結果のデータはまだありません。\nレース確定後に再度ご確認ください。',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ユーザーの購入内容カード
+  Widget _buildUserTicketCard(Map<String, dynamic> parsedTicket) {
+    final purchaseDetails = parsedTicket['購入内容'] as List;
+    final totalAmount = parsedTicket['合計金額'] ?? 0;
 
     return Card(
-      elevation: 4,
-      color: cardColor,
+      elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              isHit ? '🎉 的中！ 🎉' : 'はずれ',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: textColor,
+            const Text(
+              'あなたの購入内容',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const Divider(height: 20),
+            ...purchaseDetails.map((detail) {
+              final combination = (detail['all_combinations'] as List?)
+                  ?.map((c) => (c as List).join('-'))
+                  .join(', ');
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${detail['式別']} (${detail['方式']}) - ${detail['購入金額']}円 x ${detail['組合せ数']}点',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                    if(combination != null && combination.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+                        child: Text(
+                          '組み合わせ: $combination',
+                          style: const TextStyle(fontSize: 14, color: Colors.black54),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }).toList(),
+            const Divider(height: 20),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '合計購入金額: $totalAmount円',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
-            if (isHit) ...[
-              const SizedBox(height: 16),
-              Text(
-                '総払戻金額',
-                style: TextStyle(fontSize: 16, color: textColor),
-              ),
-              Text(
-                '${hitResult.totalPayout} 円',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
-              ),
-              const Divider(height: 24),
-              const Text(
-                '的中内容',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              ...hitResult.hitDetails.map((detail) => Text(detail)),
-            ],
           ],
         ),
       ),
@@ -219,37 +226,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
             Text(raceResult.raceDate),
             Text(raceResult.raceInfo),
             Text(raceResult.raceGrade),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ユーザーの購入内容カード
-  Widget _buildUserTicketCard(Map<String, dynamic> parsedTicket) {
-    final purchaseDetails = parsedTicket['購入内容'] as List;
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'あなたの購入内容',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const Divider(height: 20),
-            ...purchaseDetails.map((detail) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Text(
-                  '${detail['式別']} ${detail['馬番']} - ${detail['購入金額']}円',
-                  style: const TextStyle(fontSize: 16),
-                ),
-              );
-            }).toList(),
           ],
         ),
       ),
