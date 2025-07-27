@@ -81,11 +81,22 @@ class _ResultPageState extends State<ResultPage> {
 
     String shikibetsuToDisplay = '';
     String hoshikiToDisplay = '';
+    String primaryShikibetsuFromDetails = '';
+    String overallMethod = '';
 
-    // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
+    // ### ここからがスタイル変更ロジック ###
+
+    // スタイル変数の初期化（デフォルト値）
+    Widget topWidget = Text('Top', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white));
+    Widget bottomWidget = Text('Bottom', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white));
+    Color topContainerColor = Colors.black;
+    Color bottomContainerColor = Colors.black;
+    Color middleContainerColor = Colors.transparent;
+    Color middleTextColor = Colors.black;
+
+
     if (_parsedResult != null && _parsedResult!.containsKey('方式')) {
-      String overallMethod = _parsedResult!['方式'] ?? '';
-      String primaryShikibetsuFromDetails = '';
+      overallMethod = _parsedResult!['方式'] ?? '';
 
       List<Map<String, dynamic>> purchaseDetails = [];
       if (_parsedResult!.containsKey('購入内容')) {
@@ -98,22 +109,127 @@ class _ResultPageState extends State<ResultPage> {
       if (overallMethod == '応援馬券') {
         shikibetsuToDisplay = '単勝＋複勝';
         hoshikiToDisplay = 'がんばれ！';
-      } else if (overallMethod == '通常') {
-        // 「通常」の場合は、購入内容の式別をそのまま表示
-        shikibetsuToDisplay = purchaseDetails.map((p) => p['式別']).toSet().join(',');
-        hoshikiToDisplay = '';
-      } else {
-        shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
 
-        if (overallMethod == 'ながし' && primaryShikibetsuFromDetails.isNotEmpty && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
-          hoshikiToDisplay = purchaseDetails[0]['ながし'];
+        // 応援馬券のスタイル設定
+        topWidget = SizedBox(
+          height: 15.0,
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: Text('WIN', textAlign: TextAlign.center, style: const TextStyle(color: Colors.black)),
+          ),
+        );
+        topContainerColor = Colors.transparent;
+
+        bottomWidget = SizedBox(
+          height: 30.0,
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: Text('PLACE\nSHOW', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+          ),
+        );
+        bottomContainerColor = Colors.black;
+
+      } else {
+        if (overallMethod == '通常') {
+          shikibetsuToDisplay = purchaseDetails.map((p) => p['式別']).toSet().join(',');
+          hoshikiToDisplay = '';
         } else {
-          // ながし以外の方式（ボックス、フォーメーション）は、その方式名を表示
-          hoshikiToDisplay = overallMethod;
+          shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
+          if (overallMethod == 'ながし' && primaryShikibetsuFromDetails.isNotEmpty && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
+            hoshikiToDisplay = purchaseDetails[0]['ながし'];
+          } else {
+            hoshikiToDisplay = overallMethod;
+          }
+        }
+        shikibetsuToDisplay = _convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
+
+        // 通常馬券のスタイル設定
+        switch (primaryShikibetsuFromDetails) {
+          case '単勝':
+            topWidget = bottomWidget = SizedBox(
+              height: 15.0,
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: Text('WIN', textAlign: TextAlign.center, style: const TextStyle(color: Colors.black)),
+              ),
+            );
+            topContainerColor = bottomContainerColor = Colors.transparent;
+            break;
+          case '複勝':
+            topWidget = bottomWidget = SizedBox(
+              height: 30.0,
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: Text('PLACE\nSHOW', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+              ),
+            );
+            topContainerColor = bottomContainerColor = Colors.black;
+            break;
+          case '馬連':
+            topWidget = bottomWidget = SizedBox(
+              height: 15.0,
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: Text('QUINELLA', textAlign: TextAlign.center, style: const TextStyle(color: Colors.black)),
+              ),
+            );
+            topContainerColor = bottomContainerColor = Colors.transparent;
+            break;
+          case '馬単':
+            topWidget = bottomWidget = SizedBox(
+              height: 15.0,
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: Text('EXACTA', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+              ),
+            );
+            topContainerColor = bottomContainerColor = Colors.black;
+            break;
+          case 'ワイド':
+            topWidget = bottomWidget = SizedBox(
+              height: 30.0,
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: Text('QUINELLA\nPLACE', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+              ),
+            );
+            topContainerColor = bottomContainerColor = Colors.black;
+            break;
+          case '枠連':
+            Widget wakurenText = Text('BRACKET\nQUINELLA', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white));
+            topWidget = bottomWidget = SizedBox(
+                height: 30.0,
+                child: FittedBox(fit: BoxFit.contain, child: wakurenText)
+            );
+            topContainerColor = bottomContainerColor = Colors.black;
+            middleContainerColor = Colors.black;
+            middleTextColor = Colors.white;
+            break;
+          case '3連複':
+            topWidget = bottomWidget = SizedBox(
+              height: 15.0,
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: Text('TRIO', textAlign: TextAlign.center, style: const TextStyle(color: Colors.black)),
+              ),
+            );
+            topContainerColor = bottomContainerColor = Colors.transparent;
+            break;
+          case '3連単':
+            topWidget = bottomWidget = SizedBox(
+              height: 15.0,
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: Text('TRIFECTA', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+              ),
+            );
+            topContainerColor = bottomContainerColor = Colors.black;
+            break;
         }
       }
-      shikibetsuToDisplay = _convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
     }
+    // ### ここまでがスタイル変更ロジック ###
+
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -212,43 +328,32 @@ class _ResultPageState extends State<ResultPage> {
                               child: Column(
                                 mainAxisSize: MainAxisSize.max,
                                 children: [
-                                  IntrinsicHeight(
-                                    // Container 4: 左側コンテナ内の上部ヘッダー（"Top"）
-                                    child: Container(
-                                      width: double.infinity,
-                                      color: Colors.black,
-                                      child: Center(
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 2.0),
-                                          child: Text(
-                                            'Top',
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                                  // Container 4: 左側コンテナ内の上部ヘッダー
+                                  Container(
+                                    width: double.infinity,
+                                    color: topContainerColor, // 変数を適用
+                                    padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 2.0),
+                                    child: Center(
+                                      child: topWidget, // 変数を適用
                                     ),
                                   ),
 
                                   const SizedBox(height: 4),
 
+                                  // Container 5: 左側コンテナの中央部分（式別の文字を表示）
                                   Expanded(
-                                    // Container 5: 左側コンテナの中央部分（式別の文字を表示）
                                     child: Container(
                                       width: double.infinity,
                                       alignment: Alignment.center,
-                                      // ★★★ 修正箇所: キーを「式別」から「方式」へ変更 ★★★
+                                      color: middleContainerColor, // 変数を適用
                                       child: _parsedResult!.containsKey('方式')
                                           ? Column(
                                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                         children: shikibetsuToDisplay.characters.map((char) {
                                           return Text(
                                             char,
-                                            style: const TextStyle(
-                                              color: Colors.black,
+                                            style: TextStyle(
+                                              color: middleTextColor, // 変数を適用
                                               fontSize: 28,
                                               fontWeight: FontWeight.bold,
                                             ),
@@ -261,24 +366,13 @@ class _ResultPageState extends State<ResultPage> {
 
                                   const SizedBox(height: 4),
 
-                                  IntrinsicHeight(
-                                    // Container 6: 左側コンテナ内の下部フッター（"Bottom"）
-                                    child: Container(
-                                      width: double.infinity,
-                                      color: Colors.black,
-                                      child: Center(
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 2.0),
-                                          child: Text(
-                                            'Bottom',
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                                  // Container 6: 左側コンテナ内の下部フッター
+                                  Container(
+                                    width: double.infinity,
+                                    color: bottomContainerColor, // 変数を適用
+                                    padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 2.0),
+                                    child: Center(
+                                      child: bottomWidget, // 変数を適用
                                     ),
                                   )
 
@@ -317,14 +411,13 @@ class _ResultPageState extends State<ResultPage> {
                                   // 下の部分：購入詳細カード
                                   PurchaseDetailsCard(
                                     parsedResult: _parsedResult!,
-                                    betType: _parsedResult!['方式'] ?? '',
+                                    betType: overallMethod,
                                   ),
                                 ],
                               ),
                             ),
                           ],
                         ),
-                        // ### ここからが修正箇所 ###
                         const SizedBox(height: 16),
                         // 発売所情報を表示する新しいコンテナ
                         if (salesLocation != null && salesLocation.isNotEmpty)
@@ -338,7 +431,6 @@ class _ResultPageState extends State<ResultPage> {
                               ),
                             ),
                           ),
-                        // ### ここまでが修正箇所 ###
                       ],
                     ),
                   ),
