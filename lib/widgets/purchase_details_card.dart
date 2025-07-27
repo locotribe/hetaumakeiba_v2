@@ -104,23 +104,8 @@ class PurchaseDetailsCard extends StatelessWidget {
     return widgets;
   }
 
-  // 組み合わせ計算 C(n, k) を行うヘルパー関数
-  int _combinations(int n, int k) {
-    if (k < 0 || k > n) {
-      return 0;
-    }
-    if (k == 0 || k == n) {
-      return 1;
-    }
-    if (k > n / 2) {
-      k = n - k;
-    }
-    int res = 1;
-    for (int i = 1; i <= k; ++i) {
-      res = res * (n - i + 1) ~/ i;
-    }
-    return res;
-  }
+  // ### 修正箇所: _combinations ヘルパー関数を削除 ###
+  // この関数はパーサー側で処理が完結しているため不要
 
   List<Widget> _buildPurchaseDetailsInternal(dynamic purchaseData, String currentBetType) {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
@@ -369,35 +354,9 @@ class PurchaseDetailsCard extends StatelessWidget {
           ));
         }
 
-        // 統一的な組合せ数表示ロジック
-        String combinationDisplayString = '';
-        if (detail['マルチ'] == 'あり' && currentBetType == 'ながし') {
-          if (shikibetsu == '馬単') {
-            final opponents = detail['相手'] as List?;
-            if (opponents != null) {
-              combinationDisplayString = '${opponents.length} × 2';
-            }
-          } else if (shikibetsu == '3連単') {
-            final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
-            final nagashiType = detail['ながし'] as String? ?? '';
-
-            bool is2Axis = nagashiType.contains('・');
-
-            if (is2Axis) {
-              if (horseGroups.length >= 3) {
-                final opponents = horseGroups[2];
-                combinationDisplayString = '${opponents.length} × 6';
-              }
-            } else {
-              if (horseGroups.length >= 2) {
-                final opponents = horseGroups[1];
-                final baseCombinations = _combinations(opponents.length, 2);
-                combinationDisplayString = '$baseCombinations × 6';
-              }
-            }
-          }
-        }
-
+        // ### 修正箇所: 統一的な組合せ数表示ロジック ###
+        // パーサーが生成した表示用の文字列を優先して使用するように変更
+        String combinationDisplayString = detail['組合せ数_表示用'] as String? ?? '';
         if (combinationDisplayString.isEmpty && combinations > 1) {
           combinationDisplayString = '$combinations';
         }
