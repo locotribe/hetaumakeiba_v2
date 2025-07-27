@@ -111,7 +111,7 @@ class _ResultPageState extends State<ResultPage> {
         hoshikiToDisplay = 'がんばれ！';
 
         // 応援馬券のスタイル設定
-        topWidget = SizedBox(
+        topWidget = const SizedBox(
           height: 15.0,
           child: FittedBox(
             fit: BoxFit.contain,
@@ -120,7 +120,7 @@ class _ResultPageState extends State<ResultPage> {
         );
         topContainerColor = Colors.transparent;
 
-        bottomWidget = SizedBox(
+        bottomWidget = const SizedBox(
           height: 30.0,
           child: FittedBox(
             fit: BoxFit.contain,
@@ -136,18 +136,14 @@ class _ResultPageState extends State<ResultPage> {
         } else {
           shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
 
-          // ### 修正箇所: hoshikiToDisplay の設定ロジック ###
           if (overallMethod == 'ながし' && purchaseDetails.isNotEmpty) {
             final detail = purchaseDetails[0];
-            // 新しい 'ながし種別' キーがあればそれを優先して表示
             if (detail.containsKey('ながし種別')) {
               hoshikiToDisplay = detail['ながし種別'];
             }
-            // なければ、従来の 'ながし' キー（3連複などで使用）
             else if (detail.containsKey('ながし')) {
               hoshikiToDisplay = detail['ながし'];
             }
-            // それもなければ、全体方式名
             else {
               hoshikiToDisplay = overallMethod;
             }
@@ -160,7 +156,7 @@ class _ResultPageState extends State<ResultPage> {
         // 通常馬券のスタイル設定
         switch (primaryShikibetsuFromDetails) {
           case '単勝':
-            topWidget = bottomWidget = SizedBox(
+            topWidget = bottomWidget = const SizedBox(
               height: 15.0,
               child: FittedBox(
                 fit: BoxFit.contain,
@@ -170,7 +166,7 @@ class _ResultPageState extends State<ResultPage> {
             topContainerColor = bottomContainerColor = Colors.transparent;
             break;
           case '複勝':
-            topWidget = bottomWidget = SizedBox(
+            topWidget = bottomWidget =  const SizedBox(
               height: 30.0,
               child: FittedBox(
                 fit: BoxFit.contain,
@@ -180,7 +176,7 @@ class _ResultPageState extends State<ResultPage> {
             topContainerColor = bottomContainerColor = Colors.black;
             break;
           case '馬連':
-            topWidget = bottomWidget = SizedBox(
+            topWidget = bottomWidget = const SizedBox(
               height: 15.0,
               child: FittedBox(
                 fit: BoxFit.contain,
@@ -190,7 +186,7 @@ class _ResultPageState extends State<ResultPage> {
             topContainerColor = bottomContainerColor = Colors.transparent;
             break;
           case '馬単':
-            topWidget = bottomWidget = SizedBox(
+            topWidget = bottomWidget = const SizedBox(
               height: 15.0,
               child: FittedBox(
                 fit: BoxFit.contain,
@@ -200,7 +196,7 @@ class _ResultPageState extends State<ResultPage> {
             topContainerColor = bottomContainerColor = Colors.black;
             break;
           case 'ワイド':
-            topWidget = bottomWidget = SizedBox(
+            topWidget = bottomWidget = const SizedBox(
               height: 30.0,
               child: FittedBox(
                 fit: BoxFit.contain,
@@ -220,7 +216,7 @@ class _ResultPageState extends State<ResultPage> {
             middleTextColor = Colors.white;
             break;
           case '3連複':
-            topWidget = bottomWidget = SizedBox(
+            topWidget = bottomWidget = const SizedBox(
               height: 15.0,
               child: FittedBox(
                 fit: BoxFit.contain,
@@ -230,7 +226,7 @@ class _ResultPageState extends State<ResultPage> {
             topContainerColor = bottomContainerColor = Colors.transparent;
             break;
           case '3連単':
-            topWidget = bottomWidget = SizedBox(
+            topWidget = bottomWidget = const SizedBox(
               height: 15.0,
               child: FittedBox(
                 fit: BoxFit.contain,
@@ -252,7 +248,7 @@ class _ResultPageState extends State<ResultPage> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(
+          const Positioned.fill(
             child: CustomBackground(
               overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
               stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
@@ -401,6 +397,7 @@ class _ResultPageState extends State<ResultPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch, // 子要素を横幅いっぱいに広げる
                                 children: [
+                                  // ### ここからが修正箇所 ###
                                   // 上のコンテナ：方式（ながし、ボックスなど）
                                   if (hoshikiToDisplay.isNotEmpty)
                                     Container(
@@ -409,15 +406,48 @@ class _ResultPageState extends State<ResultPage> {
                                         border: Border.all(color: Colors.black, width: 2.0), // 黒線で囲む
                                       ),
                                       alignment: Alignment.center, // テキストを中央に配置
-                                      child: Text(
-                                        hoshikiToDisplay,
-                                        style: const TextStyle(
+                                      child: () {
+                                        const baseStyle = TextStyle(
                                           color: Colors.black,
-                                          fontSize: 20,
                                           fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
+                                        );
+                                        const englishStyle = TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.normal, // 英語は太字にしない
+                                        );
+
+                                        if (overallMethod == 'ながし') {
+                                          return RichText(
+                                            textAlign: TextAlign.center,
+                                            text: TextSpan(
+                                              style: baseStyle.copyWith(fontSize: 20),
+                                              children: <TextSpan>[
+                                                TextSpan(text: hoshikiToDisplay),
+                                                TextSpan(text: ' WHEEL', style: englishStyle),
+                                              ],
+                                            ),
+                                          );
+                                        } else if (overallMethod == 'ボックス') {
+                                          return RichText(
+                                            textAlign: TextAlign.center,
+                                            text: TextSpan(
+                                              style: baseStyle.copyWith(fontSize: 20),
+                                              children: <TextSpan>[
+                                                TextSpan(text: hoshikiToDisplay),
+                                                TextSpan(text: ' BOX', style: englishStyle),
+                                              ],
+                                            ),
+                                          );
+                                        } else {
+                                          return Text(
+                                            hoshikiToDisplay,
+                                            style: baseStyle.copyWith(fontSize: 20),
+                                          );
+                                        }
+                                      }(),
                                     ),
+                                  // ### ここまでが修正箇所 ###
 
                                   if (hoshikiToDisplay.isNotEmpty)
                                     const SizedBox(height: 8),
@@ -438,7 +468,7 @@ class _ResultPageState extends State<ResultPage> {
                           Container(
                             child: Text(
                               salesLocation,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: Colors.black,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
