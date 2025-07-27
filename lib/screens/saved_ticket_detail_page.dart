@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
+import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart'; // PurchaseDetailsCardをインポート
 
 // ページのロードに必要なデータをまとめるためのヘルパークラス（簡素化）
 class PageData {
@@ -33,19 +34,40 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
   late Future<PageData> _pageDataFuture;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
+  // ▼▼▼ 枠番の色を定義するMapを追加 ▼▼▼
+  final Map<String, Color> _frameColors = {
+    '1': Colors.white,
+    '2': Colors.black,
+    '3': Colors.red,
+    '4': Colors.blue,
+    '5': Colors.yellow,
+    '6': Colors.green,
+    '7': Colors.orange,
+    '8': Colors.pink,
+  };
+
+  // ▼▼▼ 背景色に応じて文字色を返すヘルパー関数を追加 ▼▼▼
+  Color _getTextColorForFrame(String frameNumber) {
+    switch (frameNumber) {
+      case '1': // White
+      case '5': // Yellow
+        return Colors.black;
+      default: // Black, Red, Blue, Green, Orange, Pink
+        return Colors.white;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _pageDataFuture = _loadPageData();
   }
 
-  // DBからデータを読み込むだけのシンプルな処理に変更
+  // DBからデータを読み込むだけのシンプルな処理
   Future<PageData> _loadPageData() async {
     try {
-      // DBに保存されたJSON文字列をデコードして利用
       final parsedTicket = json.decode(widget.qrData.parsedDataJson) as Map<String, dynamic>;
 
-      // QRコード読み取り時にレース結果も保存されているはずなので、DBから取得を試みる
       final url = generateNetkeibaUrl(
         year: parsedTicket['年'].toString(),
         racecourseCode: racecourseDict.entries
@@ -59,14 +81,12 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
 
       RaceResult? raceResult = await _dbHelper.getRaceResult(raceId);
 
-      // 的中判定は行わない
       return PageData(
         parsedTicket: parsedTicket,
         raceResult: raceResult,
       );
     } catch (e) {
       print('ページデータの読み込みに失敗しました: $e');
-      // エラーをスローしてFutureBuilderでハンドリング
       throw Exception('データの表示に失敗しました。');
     }
   }
@@ -112,7 +132,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                 return ListView(
                   padding: const EdgeInsets.all(8.0),
                   children: [
-                    // 的中結果カードは削除
                     _buildUserTicketCard(parsedTicket),
                     if (raceResult != null) ...[
                       _buildRaceInfoCard(raceResult),
@@ -168,29 +187,26 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
               'あなたの購入内容',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const Divider(height: 20),
+            const SizedBox(height: 16),
+            PurchaseDetailsCard(
+              parsedResult: parsedTicket,
+              betType: parsedTicket['方式'] as String? ?? '',
+            ),
+            const Divider(height: 32),
+            const Text(
+              '全組み合わせリスト',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
             ...purchaseDetails.map((detail) {
               final combination = (detail['all_combinations'] as List?)
                   ?.map((c) => (c as List).join('-'))
                   .join(', ');
               return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${detail['式別']} (${detail['方式']}) - ${detail['購入金額']}円 x ${detail['組合せ数']}点',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                    ),
-                    if(combination != null && combination.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8.0, top: 4.0),
-                        child: Text(
-                          '組み合わせ: $combination',
-                          style: const TextStyle(fontSize: 14, color: Colors.black54),
-                        ),
-                      ),
-                  ],
+                padding: const EdgeInsets.only(bottom: 8.0, left: 8.0),
+                child: Text(
+                  '${detail['式別']}: ${combination ?? "組み合わせなし"}',
+                  style: const TextStyle(fontSize: 14),
                 ),
               );
             }).toList(),
@@ -262,7 +278,29 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                 rows: raceResult.horseResults.map((horse) {
                   return DataRow(cells: [
                     DataCell(Text(horse.rank)),
-                    DataCell(Text(horse.horseNumber)),
+                    // ▼▼▼ 馬番のセルを修正 ▼▼▼
+                    DataCell(
+                      Center( // Centerウィジェットで中央揃え
+                        child: Container(
+                          width: 32, // 幅を少し広げる
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          decoration: BoxDecoration(
+                            color: _frameColors[horse.frameNumber] ?? Colors.transparent,
+                            borderRadius: BorderRadius.circular(4),
+                            border: horse.frameNumber == '1' ? Border.all(color: Colors.grey.shade400) : null,
+                          ),
+                          child: Text(
+                            horse.horseNumber,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: _getTextColorForFrame(horse.frameNumber),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // ▲▲▲ ここまで修正 ▲▲▲
                     DataCell(Text(horse.horseName)),
                     DataCell(Text(horse.jockeyName)),
                     DataCell(Text(horse.odds)),
