@@ -135,8 +135,22 @@ class _ResultPageState extends State<ResultPage> {
           hoshikiToDisplay = '';
         } else {
           shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
-          if (overallMethod == 'ながし' && primaryShikibetsuFromDetails.isNotEmpty && purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('ながし')) {
-            hoshikiToDisplay = purchaseDetails[0]['ながし'];
+
+          // ### 修正箇所: hoshikiToDisplay の設定ロジック ###
+          if (overallMethod == 'ながし' && purchaseDetails.isNotEmpty) {
+            final detail = purchaseDetails[0];
+            // 新しい 'ながし種別' キーがあればそれを優先して表示
+            if (detail.containsKey('ながし種別')) {
+              hoshikiToDisplay = detail['ながし種別'];
+            }
+            // なければ、従来の 'ながし' キー（3連複などで使用）
+            else if (detail.containsKey('ながし')) {
+              hoshikiToDisplay = detail['ながし'];
+            }
+            // それもなければ、全体方式名
+            else {
+              hoshikiToDisplay = overallMethod;
+            }
           } else {
             hoshikiToDisplay = overallMethod;
           }

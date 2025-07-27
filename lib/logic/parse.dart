@@ -532,6 +532,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         case "8":
           di["ながし"] = wheelTrioDict[wheelCode];
           method = di["ながし"]!;
+          di['ながし種別'] = method; // ### 修正: ながし種別を追加
           print('  3連複ながし: ${di["ながし"]}, method: $method');
           break;
         case "9":
@@ -542,6 +543,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           } else {
             method = '軸1頭ながし';
           }
+          di['ながし種別'] = method; // ### 修正: ながし種別を追加
           print('  3連単ながし: ${di["ながし"]}, method: $method');
           break;
         default:
