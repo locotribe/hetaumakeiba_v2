@@ -350,14 +350,41 @@ class _ResultPageState extends State<ResultPage> {
 
                                   const SizedBox(height: 4),
 
+                                  // ### ここからが修正箇所 ###
                                   // Container 5: 左側コンテナの中央部分（式別の文字を表示）
                                   Expanded(
                                     child: Container(
                                       width: double.infinity,
                                       alignment: Alignment.center,
                                       color: middleContainerColor, // 変数を適用
-                                      child: _parsedResult!.containsKey('方式')
-                                          ? Column(
+                                      child: (_parsedResult!.containsKey('方式'))
+                                          ? (primaryShikibetsuFromDetails == '馬連')
+                                          ? Column( // 「馬連」専用のレイアウト
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            '普通', // 上部の水平テキスト
+                                            style: TextStyle(
+                                              color: middleTextColor,
+                                              fontSize: 14, // 指定されたフォントサイズ
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12), // 適度なスペース
+                                          // 下部の縦書きテキスト
+                                          ...shikibetsuToDisplay.characters.map((char) {
+                                            return Text(
+                                              char,
+                                              style: TextStyle(
+                                                color: middleTextColor,
+                                                fontSize: 28,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ],
+                                      )
+                                          : Column( // それ以外の券種のレイアウト
                                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                         children: shikibetsuToDisplay.characters.map((char) {
                                           return Text(
@@ -373,6 +400,7 @@ class _ResultPageState extends State<ResultPage> {
                                           : const SizedBox.shrink(),
                                     ),
                                   ),
+                                  // ### ここまでが修正箇所 ###
 
                                   const SizedBox(height: 4),
 
@@ -397,7 +425,6 @@ class _ResultPageState extends State<ResultPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch, // 子要素を横幅いっぱいに広げる
                                 children: [
-                                  // ### ここからが修正箇所 ###
                                   // 上のコンテナ：方式（ながし、ボックスなど）
                                   if (hoshikiToDisplay.isNotEmpty)
                                     Row( // ← このRowウィジェットを追加
@@ -453,7 +480,6 @@ class _ResultPageState extends State<ResultPage> {
                                         ),
                                       ],
                                     ),
-                                  // ### ここまでが修正箇所 ###
 
                                   if (hoshikiToDisplay.isNotEmpty)
                                     const SizedBox(height: 8),
