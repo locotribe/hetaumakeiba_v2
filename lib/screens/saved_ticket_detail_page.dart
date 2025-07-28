@@ -43,7 +43,7 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     '5': Colors.yellow,
     '6': Colors.green,
     '7': Colors.orange,
-    '8': Colors.pink,
+    '8': Colors.pink.shade200,
   };
 
   // ▼▼▼ 背景色に応じて文字色を返すヘルパー関数を追加 ▼▼▼

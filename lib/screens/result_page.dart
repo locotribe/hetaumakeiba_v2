@@ -557,20 +557,6 @@ class _ResultPageState extends State<ResultPage> {
                       ),
                       child: const Text('ギャラリーから登録'),
                     ),
-                    const SizedBox(height: 15),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).popUntil((route) => route.isFirst);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 10),
-                        textStyle: const TextStyle(fontSize: 18),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('ホームに戻る'),
-                    ),
                   ],
                 ),
               ),
