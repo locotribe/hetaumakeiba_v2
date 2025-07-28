@@ -4,7 +4,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart'; // ★★★★★ 追加：競走馬成績モデルをインポート ★★★★★
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/featured_race_model.dart'; // ★★★★★ 追加：注目レースモデルをインポート ★★★★★
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -48,7 +49,7 @@ class DatabaseHelper {
             race_result_json TEXT
           )
         ''');
-        // ★★★★★ ここから追加：競走馬成績データテーブルの作成 ★★★★★
+        // 競走馬成績データテーブルの作成
         await db.execute('''
           CREATE TABLE horse_performance(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,6 +78,20 @@ class DatabaseHelper {
             winner_or_second_horse TEXT,
             prize_money TEXT,
             UNIQUE(horse_id, date) ON CONFLICT REPLACE
+          )
+        ''');
+        // ★★★★★ ここから追加：注目レースデータテーブルの作成 ★★★★★
+        await db.execute('''
+          CREATE TABLE featured_races(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_id TEXT UNIQUE,
+            race_name TEXT,
+            race_grade TEXT,
+            race_date TEXT,
+            venue TEXT,
+            race_number TEXT,
+            shutuba_table_url TEXT,
+            last_scraped TEXT
           )
         ''');
         // ★★★★★ ここまで追加 ★★★★★
@@ -163,7 +178,7 @@ class DatabaseHelper {
     );
   }
 
-  // ★★★★★ ここから追加：HorsePerformanceデータ関連のメソッド ★★★★★
+  // HorsePerformanceデータ関連のメソッド
 
   /// 競走馬の単一の競走成績をデータベースに挿入または更新します。
   /// horse_idとdateが重複する場合は既存のレコードを上書きします。
@@ -216,6 +231,49 @@ class DatabaseHelper {
     );
   }
 
+  // ★★★★★ ここから追加：FeaturedRaceデータ関連のメソッド ★★★★★
+
+  /// 注目レースの単一のレコードをデータベースに挿入または更新します。
+  /// race_idが重複する場合は既存のレコードを上書きします。
+  Future<int> insertOrUpdateFeaturedRace(FeaturedRace featuredRace) async {
+    final db = await database;
+    return await db.insert(
+      'featured_races',
+      featuredRace.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace, // 重複した場合は更新
+    );
+  }
+
+  /// データベースに保存されている全ての注目レースを取得します。
+  Future<List<FeaturedRace>> getAllFeaturedRaces() async {
+    final db = await database;
+    final maps = await db.query('featured_races', orderBy: 'last_scraped DESC'); // 最新のスクレイピング日時でソート
+    return List.generate(maps.length, (i) {
+      return FeaturedRace.fromMap(maps[i]);
+    });
+  }
+
+  /// 特定の注目レースをraceIdで取得します。
+  Future<FeaturedRace?> getFeaturedRace(String raceId) async {
+    final db = await database;
+    final maps = await db.query(
+      'featured_races',
+      where: 'race_id = ?',
+      whereArgs: [raceId],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return FeaturedRace.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  /// 全ての注目レースデータを削除します。
+  Future<int> deleteAllFeaturedRaces() async {
+    final db = await database;
+    return await db.delete('featured_races');
+  }
+
   // ★★★★★ ここまで追加 ★★★★★
 
   /// 全てのデータを削除します。
@@ -223,7 +281,8 @@ class DatabaseHelper {
     final db = await database;
     await db.delete('qr_data');
     await db.delete('race_results');
-    await db.delete('horse_performance'); // ★★★★★ 修正：競走馬成績データも削除対象に追加 ★★★★★
-    print('DEBUG: All data deleted from qr_data, race_results, and horse_performance tables.');
+    await db.delete('horse_performance');
+    await db.delete('featured_races'); // ★★★★★ 修正：注目レースデータも削除対象に追加 ★★★★★
+    print('DEBUG: All data deleted from qr_data, race_results, horse_performance, and featured_races tables.');
   }
 }
