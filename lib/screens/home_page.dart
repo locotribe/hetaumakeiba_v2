@@ -2,169 +2,52 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
-import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
-import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 
-class HomePage extends StatefulWidget {
+class HomePage extends StatelessWidget {
   final GlobalKey<SavedTicketsListPageState> savedListKey;
 
   const HomePage({super.key, required this.savedListKey});
 
   @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
-  bool _isFabExpanded = false;
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-    _animation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _toggleFab() {
-    setState(() {
-      _isFabExpanded = !_isFabExpanded;
-      if (_isFabExpanded) {
-        _controller.forward();
-      } else {
-        _controller.reverse();
-      }
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
+    // ScaffoldとFABを削除し、コンテンツ部分のみを返す
     return Stack(
       children: [
-        Positioned.fill(
+        const Positioned.fill(
           child: CustomBackground(
-            overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-            stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
-            fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+            overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
+            stripeColor: Color.fromRGBO(219, 234, 234, 0.6),
+            fillColor: Color.fromRGBO(172, 234, 231, 1.0),
           ),
         ),
-        Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            title: const Text('へたうま競馬'),
-            automaticallyImplyLeading: false,
-          ),
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const SavedTicketsListPage(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.list_alt, size: 28),
-                  label: const Text(
-                    '購入履歴',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    elevation: 3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          floatingActionButton: Column(
-            mainAxisSize: MainAxisSize.min,
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (_isFabExpanded)
-                ScaleTransition(
-                  scale: _animation,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: FloatingActionButton(
-                      heroTag: 'galleryFab',
-                      onPressed: () {
-                        _toggleFab();
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => GalleryQrScannerPage(savedListKey: widget.savedListKey),
-                          ),
-                        );
-                      },
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: const CircleBorder(),
-                      child: const Icon(Icons.image),
+              // このボタンは現在ナビゲーションバーと機能が重複するため、
+              // 将来的には別の機能（例：お知らせ、使い方ガイドなど）に置き換えるか、削除することを推奨します。
+              // ここではUIの確認のため一旦残します。
+              ElevatedButton.icon(
+                onPressed: () {
+                  // ボタンの動作は現状維持（ただし、BottomNavigationBarがあるため冗長）
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const SavedTicketsListPage(),
                     ),
-                  ),
+                  );
+                },
+                icon: const Icon(Icons.history, size: 28),
+                label: const Text(
+                  '購入履歴（リスト表示）',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                 ),
-              if (_isFabExpanded)
-                ScaleTransition(
-                  scale: _animation,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: FloatingActionButton(
-                      heroTag: 'cameraFab',
-                      onPressed: () {
-                        _toggleFab();
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => QRScannerPage(savedListKey: widget.savedListKey),
-                          ),
-                        );
-                      },
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: const CircleBorder(),
-                      child: const Icon(Icons.camera_alt),
-                    ),
-                  ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  elevation: 3,
                 ),
-              FloatingActionButton(
-                heroTag: 'mainFab',
-                onPressed: _toggleFab,
-                backgroundColor: _isFabExpanded ? Colors.grey : Colors.green,
-                foregroundColor: Colors.white,
-                shape: const CircleBorder(),
-                child: Align(
-                  alignment: const Alignment(0.0, -0.4), // 必要に応じて調整
-                  child: _isFabExpanded // ★ここから変更★
-                      ? const Text( // _isFabExpanded が true の場合（展開時）
-                    'Ｘ',
-                    style: TextStyle(
-                      fontSize: 26, // 「×」のサイズ
-                      color: Colors.black54, // 「×」の色
-                    ),
-                  )
-                      : const Text( // _isFabExpanded が false の場合（非展開時）
-                    '＋',
-                    style: TextStyle(
-                      fontSize: 32, // 「＋」のサイズ
-                      color: Colors.white, // 「＋」の色
-                    ),
-                  ), // ★ここまで変更★
-                ), // ★ここまで変更★
               ),
             ],
           ),
