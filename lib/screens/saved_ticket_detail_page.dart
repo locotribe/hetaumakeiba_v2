@@ -34,7 +34,7 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
   late Future<PageData> _pageDataFuture;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  // ▼▼▼ 枠番の色を定義するMapを追加 ▼▼▼
+  // 枠番の色を定義するMap
   final Map<String, Color> _frameColors = {
     '1': Colors.white,
     '2': Colors.black,
@@ -46,7 +46,7 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     '8': Colors.pink.shade200,
   };
 
-  // ▼▼▼ 背景色に応じて文字色を返すヘルパー関数を追加 ▼▼▼
+  // 背景色に応じて文字色を返すヘルパー関数
   Color _getTextColorForFrame(String frameNumber) {
     switch (frameNumber) {
       case '1': // White
@@ -129,6 +129,24 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                 final parsedTicket = pageData.parsedTicket;
                 final raceResult = pageData.raceResult;
 
+                // ▼▼▼ ユーザーが購入した全組み合わせのSetを作成 ▼▼▼
+                final Set<String> userCombinations = {};
+                if (parsedTicket['購入内容'] != null) {
+                  final purchaseDetails = parsedTicket['購入内容'] as List;
+                  for (var detail in purchaseDetails) {
+                    if (detail['all_combinations'] != null) {
+                      final combinations = detail['all_combinations'] as List;
+                      for (var c in combinations) {
+                        if (c is List) {
+                          final combinationString = c.join('-');
+                          userCombinations.add(combinationString);
+                        }
+                      }
+                    }
+                  }
+                }
+                // ▲▲▲ ここまで追加 ▲▲▲
+
                 return ListView(
                   padding: const EdgeInsets.all(8.0),
                   children: [
@@ -136,7 +154,9 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                     if (raceResult != null) ...[
                       _buildRaceInfoCard(raceResult),
                       _buildFullResultsCard(raceResult),
-                      _buildRefundsCard(raceResult),
+                      // ▼▼▼ 作成した組み合わせのSetを払戻カードに渡す ▼▼▼
+                      _buildRefundsCard(raceResult, userCombinations),
+                      // ▲▲▲ ここまで修正 ▲▲▲
                     ] else ...[
                       _buildNoRaceDataCard(),
                     ]
@@ -278,11 +298,10 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                 rows: raceResult.horseResults.map((horse) {
                   return DataRow(cells: [
                     DataCell(Text(horse.rank)),
-                    // ▼▼▼ 馬番のセルを修正 ▼▼▼
                     DataCell(
-                      Center( // Centerウィジェットで中央揃え
+                      Center(
                         child: Container(
-                          width: 32, // 幅を少し広げる
+                          width: 32,
                           padding: const EdgeInsets.symmetric(vertical: 4.0),
                           decoration: BoxDecoration(
                             color: _frameColors[horse.frameNumber] ?? Colors.transparent,
@@ -300,7 +319,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                         ),
                       ),
                     ),
-                    // ▲▲▲ ここまで修正 ▲▲▲
                     DataCell(Text(horse.horseName)),
                     DataCell(Text(horse.jockeyName)),
                     DataCell(Text(horse.odds)),
@@ -315,8 +333,9 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     );
   }
 
+  // ▼▼▼ _buildRefundsCard全体を修正 ▼▼▼
   // 払戻情報カード
-  Widget _buildRefundsCard(RaceResult raceResult) {
+  Widget _buildRefundsCard(RaceResult raceResult, Set<String> userCombinations) {
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -347,8 +366,26 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: refund.payouts.map((payout) {
-                          return Text(
-                            '${payout.combination} : ${payout.amount}円 (${payout.popularity}人気)',
+                          // 的中しているか判定
+                          final isHit = userCombinations.contains(payout.combination);
+
+                          // 的中している場合のスタイル
+                          final hitTextStyle = TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red.shade700,
+                          );
+
+                          // 的中している場合のデコレーション
+                          final hitDecoration = BoxDecoration(
+                              color: Colors.red.shade50,
+                          );
+
+                          return Container(
+                            decoration: isHit ? hitDecoration : null,
+                            child: Text(
+                              '${payout.combination} : ${payout.amount}円 (${payout.popularity}人気)',
+                              style: isHit ? hitTextStyle : null,
+                            ),
                           );
                         }).toList(),
                       ),
@@ -362,4 +399,5 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
       ),
     );
   }
+// ▲▲▲ ここまで修正 ▲▲▲
 }
