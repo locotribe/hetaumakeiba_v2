@@ -5,6 +5,7 @@ import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/analytics_page.dart';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
+import 'package:hetaumakeiba_v2/screens/settings_page.dart';
 
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -15,6 +16,7 @@ class MainScaffold extends StatefulWidget {
 
 class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
+  // ▼▼▼ 履歴ページの状態を管理するためのGlobalKey ▼▼▼
   final GlobalKey<SavedTicketsListPageState> _savedListKey = GlobalKey<SavedTicketsListPageState>();
 
   late final List<Widget> _pages;
@@ -28,8 +30,10 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _pages = <Widget>[
-      HomePage(savedListKey: _savedListKey),
-      const SavedTicketsListPage(),
+      // ▼▼▼ HomePageから不要なキーの受け渡しを削除 ▼▼▼
+      const HomePage(),
+      // ▼▼▼ SavedTicketsListPageにGlobalKeyを正しく設定 ▼▼▼
+      SavedTicketsListPage(key: _savedListKey),
       const AnalyticsPage(),
     ];
 
@@ -50,6 +54,10 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
   }
 
   void _onItemTapped(int index) {
+    // 履歴タブがタップされたときに、リストをリフレッシュする
+    if (index == 1) {
+      _savedListKey.currentState?.reloadData();
+    }
     setState(() {
       _selectedIndex = index;
     });
@@ -72,6 +80,19 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
       appBar: AppBar(
         title: Text(_pageTitles[_selectedIndex]),
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              ).then((_) {
+                // 設定ページから戻ってきたときに履歴をリロードする
+                _savedListKey.currentState?.reloadData();
+              });
+            },
+          ),
+        ],
       ),
       body: IndexedStack(
         index: _selectedIndex,
@@ -86,7 +107,6 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
       ),
-      // ▼▼▼ フローティングボタンの構造を以前のスタイルに戻す ▼▼▼
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -162,7 +182,6 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
           ),
         ],
       ),
-      // ▲▲▲ ここまで変更 ▲▲▲
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }

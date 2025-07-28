@@ -1,16 +1,13 @@
 // lib/screens/home_page.dart
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 
 class HomePage extends StatelessWidget {
-  final GlobalKey<SavedTicketsListPageState> savedListKey;
-
-  const HomePage({super.key, required this.savedListKey});
+  // ▼▼▼ GlobalKeyの受け渡しを削除 ▼▼▼
+  const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // ScaffoldとFABを削除し、コンテンツ部分のみを返す
     return Stack(
       children: [
         const Positioned.fill(
@@ -20,7 +17,6 @@ class HomePage extends StatelessWidget {
             fillColor: Color.fromRGBO(172, 234, 231, 1.0),
           ),
         ),
-        // ▼▼▼ ボタンを削除し、将来のコンテンツ用のプレースホルダーに変更 ▼▼▼
         const Center(
           child: Padding(
             padding: EdgeInsets.all(20.0),
@@ -35,7 +31,6 @@ class HomePage extends StatelessWidget {
             ),
           ),
         ),
-        // ▲▲▲ ここまで変更 ▲▲▲
       ],
     );
   }

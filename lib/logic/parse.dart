@@ -38,16 +38,10 @@ const Map<String, String> wheelTrifectaDict = {
 };
 // --- 定数定義ここまで ---
 
-
-// --- ▼▼▼ ここからが新しく追加する独立したロジック ▼▼▼ ---
-
-/// 組み合わせ (nCk) を生成する
+// ▼▼▼ 組み合わせ計算のロジックを、既存の`calculatePoints`とは別に、安全な場所に追加 ▼▼▼
 Iterable<List<T>> _combinations<T>(List<T> elements, int k) sync* {
   if (k < 0 || k > elements.length) return;
-  if (k == 0) {
-    yield [];
-    return;
-  }
+  if (k == 0) { yield []; return; }
   for (int i = 0; i <= elements.length - k; i++) {
     T head = elements[i];
     List<T> rest = elements.sublist(i + 1);
@@ -56,14 +50,9 @@ Iterable<List<T>> _combinations<T>(List<T> elements, int k) sync* {
     }
   }
 }
-
-/// 順列 (nPk) を生成する
 Iterable<List<T>> _permutations<T>(List<T> elements, int k) sync* {
   if (k < 0 || k > elements.length) return;
-  if (k == 0) {
-    yield [];
-    return;
-  }
+  if (k == 0) { yield []; return; }
   for (int i = 0; i < elements.length; i++) {
     T head = elements[i];
     List<T> rest = [...elements]..removeAt(i);
@@ -72,78 +61,57 @@ Iterable<List<T>> _permutations<T>(List<T> elements, int k) sync* {
     }
   }
 }
-
-/// 購入内容から全ての組み合わせを生成し、di['all_combinations']に格納する新しいヘルパー関数
 void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMethod) {
   final String ticketType = di['式別'];
   List<List<int>> allCombinations = [];
-
-  // (null)問題解決のため、個別の購入内容にも方式をコピー
   di['方式'] = bettingMethod;
 
   try {
     switch (bettingMethod) {
-      case '通常':
-      case '応援馬券':
-        allCombinations.add((di['馬番'] as List).cast<int>());
-        break;
-
+      case '通常': case '応援馬券':
+      allCombinations.add((di['馬番'] as List).cast<int>());
+      break;
       case 'ボックス':
         final horses = (di['馬番'] as List).cast<int>();
         switch (ticketType) {
-          case '馬連': case 'ワイド': case '枠連':
-          allCombinations = _combinations(horses, 2).toList();
-          break;
-          case '3連複':
-            allCombinations = _combinations(horses, 3).toList();
-            break;
-          case '馬単':
-            allCombinations = _permutations(horses, 2).toList();
-            break;
-          case '3連単':
-            allCombinations = _permutations(horses, 3).toList();
-            break;
+          case '馬連': case 'ワイド': case '枠連': allCombinations = _combinations(horses, 2).toList(); break;
+          case '3連複': allCombinations = _combinations(horses, 3).toList(); break;
+          case '馬単': allCombinations = _permutations(horses, 2).toList(); break;
+          case '3連単': allCombinations = _permutations(horses, 3).toList(); break;
         }
         break;
-
       case 'ながし':
-        final axis = (di['軸'] as List? ?? []).cast<int>();
+      // ▼▼▼ ながしで'軸'がintの場合とListの場合がある問題に対応 ▼▼▼
+        List<int> axis;
+        if (di['軸'] is List) {
+          axis = (di['軸'] as List).cast<int>();
+        } else if (di['軸'] is int) {
+          axis = [di['軸'] as int];
+        } else {
+          axis = [];
+        }
+        // ▲▲▲ ここまで修正 ▲▲▲
         final opponents = (di['相手'] as List? ?? []).cast<int>();
         final isMulti = di['マルチ'] == 'あり';
-
         switch (ticketType) {
           case '馬連': case 'ワイド': case '枠連':
-          for (final a in axis) {
-            for (final o in opponents) {
-              if (a != o) allCombinations.add([a, o]);
-            }
-          }
+          for (final a in axis) for (final o in opponents) if (a != o) allCombinations.add([a, o]);
           break;
           case '馬単':
-            for (final a in axis) {
-              for (final o in opponents) {
-                if (a != o) {
-                  if (isMulti) {
-                    allCombinations.add([a, o]);
-                    allCombinations.add([o, a]);
-                  } else {
-                    if (di['ながし'] == '1着ながし') allCombinations.add([a, o]);
-                    if (di['ながし'] == '2着ながし') allCombinations.add([o, a]);
-                  }
-                }
+            for (final a in axis) for (final o in opponents) if (a != o) {
+              if (isMulti) {
+                allCombinations.add([a, o]); allCombinations.add([o, a]);
+              } else {
+                if (di['ながし'] == '1着ながし') allCombinations.add([a, o]);
+                if (di['ながし'] == '2着ながし') allCombinations.add([o, a]);
               }
             }
             break;
           case '3連複':
             if (di['ながし種別'] == '軸1頭ながし') {
-              final opponentCombos = _combinations(opponents, 2);
-              for (final combo in opponentCombos) {
-                allCombinations.add([axis.first, ...combo]);
-              }
+              for (final combo in _combinations(opponents, 2)) allCombinations.add([axis.first, ...combo]);
             } else if (di['ながし種別'] == '軸2頭ながし') {
-              for (final o in opponents) {
-                allCombinations.add([...axis, o]);
-              }
+              for (final o in opponents) allCombinations.add([...axis, o]);
             }
             break;
           case '3連単':
@@ -151,13 +119,11 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
             final firstAxis = horseGroups.isNotEmpty ? horseGroups[0] : <int>[];
             final secondAxis = horseGroups.length > 1 ? horseGroups[1] : <int>[];
             final thirdAxis = horseGroups.length > 2 ? horseGroups[2] : <int>[];
-
             if (!isMulti) {
               if (di['ながし種別'] == '軸1頭ながし') {
                 final nagashiType = di['ながし'];
                 final otherHorses = secondAxis.isNotEmpty ? secondAxis : thirdAxis;
-                final perms = _permutations(otherHorses, 2).toList();
-                for(final p in perms) {
+                for(final p in _permutations(otherHorses, 2)) {
                   if(nagashiType == '1着ながし') allCombinations.add([firstAxis.first, p[0], p[1]]);
                   if(nagashiType == '2着ながし') allCombinations.add([p[0], firstAxis.first, p[1]]);
                   if(nagashiType == '3着ながし') allCombinations.add([p[0], p[1], firstAxis.first]);
@@ -166,126 +132,190 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
                 final nagashiType = di['ながし'];
                 final axisHorses = firstAxis;
                 final opponentHorses = secondAxis.isNotEmpty ? secondAxis : thirdAxis;
-                final axisPerms = _permutations(axisHorses, 2).toList();
-                for(final ap in axisPerms) {
-                  for(final o in opponentHorses) {
-                    if(o != ap[0] && o != ap[1]) {
-                      if(nagashiType == '1・2着ながし') allCombinations.add([ap[0], ap[1], o]);
-                      if(nagashiType == '1・3着ながし') allCombinations.add([ap[0], o, ap[1]]);
-                      if(nagashiType == '2・3着ながし') allCombinations.add([o, ap[0], ap[1]]);
-                    }
-                  }
+                for(final ap in _permutations(axisHorses, 2)) for(final o in opponentHorses) if(o != ap[0] && o != ap[1]) {
+                  if(nagashiType == '1・2着ながし') allCombinations.add([ap[0], ap[1], o]);
+                  if(nagashiType == '1・3着ながし') allCombinations.add([ap[0], o, ap[1]]);
+                  if(nagashiType == '2・3着ながし') allCombinations.add([o, ap[0], ap[1]]);
                 }
               }
-            } else { // マルチの場合
+            } else {
               List<int> multiHorses = [];
-              if (di['ながし種別']?.contains('1頭')) {
-                multiHorses = [firstAxis.first, ...(secondAxis.isNotEmpty ? secondAxis : thirdAxis)];
-              } else if (di['ながし種別']?.contains('2頭')) {
-                multiHorses = [...firstAxis, ...secondAxis, ...thirdAxis];
-              }
-              if (multiHorses.isNotEmpty) {
-                allCombinations = _permutations(multiHorses.toSet().toList(), 3).toList();
-              }
+              if (di['ながし種別']?.contains('1頭')) multiHorses = [firstAxis.first, ...(secondAxis.isNotEmpty ? secondAxis : thirdAxis)];
+              else if (di['ながし種別']?.contains('2頭')) multiHorses = [...firstAxis, ...secondAxis, ...thirdAxis];
+              if (multiHorses.isNotEmpty) allCombinations = _permutations(multiHorses.toSet().toList(), 3).toList();
             }
             break;
         }
         break;
-
       case 'フォーメーション':
-        final firstPos = (di['馬番'][0] as List).cast<int>();
-        final secondPos = (di['馬番'].length > 1) ? (di['馬番'][1] as List).cast<int>() : <int>[];
-        final thirdPos = (di['馬番'].length > 2) ? (di['馬番'][2] as List).cast<int>() : <int>[];
-
+        final p1 = (di['馬番'][0] as List).cast<int>();
+        final p2 = (di['馬番'].length > 1) ? (di['馬番'][1] as List).cast<int>() : <int>[];
+        final p3 = (di['馬番'].length > 2) ? (di['馬番'][2] as List).cast<int>() : <int>[];
         switch (ticketType) {
           case '馬連': case 'ワイド': case '枠連':
-          for (final f in firstPos) {
-            for (final s in secondPos) {
-              if (f != s) allCombinations.add([f, s]);
-            }
-          }
+          for (final f in p1) for (final s in p2) if (f != s) allCombinations.add([f, s]);
           break;
           case '馬単':
-            for (final f in firstPos) {
-              for (final s in secondPos) {
-                if (f != s) allCombinations.add([f, s]);
-              }
-            }
+            for (final f in p1) for (final s in p2) if (f != s) allCombinations.add([f, s]);
             break;
           case '3連複':
-            for (final f in firstPos) {
-              for (final s in secondPos) {
-                for (final t in thirdPos) {
-                  if (f != s && f != t && s != t) {
-                    allCombinations.add([f, s, t]);
-                  }
-                }
-              }
-            }
+            for (final f in p1) for (final s in p2) for (final t in p3) if (f != s && f != t && s != t) allCombinations.add([f, s, t]);
             break;
           case '3連単':
-            for (final f in firstPos) {
-              for (final s in secondPos) {
-                for (final t in thirdPos) {
-                  if (f != s && f != t && s != t) {
-                    allCombinations.add([f, s, t]);
-                  }
-                }
-              }
-            }
+            for (final f in p1) for (final s in p2) for (final t in p3) if (f != s && f != t && s != t) allCombinations.add([f, s, t]);
             break;
         }
         break;
-
       case 'クイックピック':
         allCombinations = (di['馬番'] as List).map((c) => (c as List).cast<int>()).toList();
         break;
     }
-
-    if (ticketType == '馬連' || ticketType == 'ワイド' || ticketType == '枠連' || ticketType == '3連複') {
-      final uniqueCombinations = <String, List<int>>{};
+    if (['馬連', 'ワイド', '枠連', '3連複'].contains(ticketType)) {
+      final unique = <String, List<int>>{};
       for (final combo in allCombinations) {
-        final sortedCombo = List<int>.from(combo)..sort();
-        uniqueCombinations[sortedCombo.join('-')] = sortedCombo;
+        final sorted = List<int>.from(combo)..sort();
+        unique[sorted.join('-')] = sorted;
       }
-      di['all_combinations'] = uniqueCombinations.values.toList();
+      di['all_combinations'] = unique.values.toList();
     } else {
       di['all_combinations'] = allCombinations;
     }
-
-    // ▼▼▼ `組合せ数_表示用`を復活させるロジック ▼▼▼
-    if (di['マルチ'] == 'あり') {
-      if (ticketType == '3連単') {
-        final horseGroups = (di['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
-        if (di['ながし種別'] == '軸1頭ながし') {
-          final opponents = horseGroups.length > 1 ? horseGroups[1] : [];
-          final baseCombinations = _combinations(opponents, 2).length;
-          di['組合せ数_表示用'] = '$baseCombinations × 6';
-        } else if (di['ながし種別'] == '軸2頭ながし') {
-          final opponents = horseGroups.length > 2 ? horseGroups[2] : [];
-          di['組合せ数_表示用'] = '${opponents.length} × 6';
-        }
-      } else if (ticketType == '馬単') {
-        final opponents = (di["相手"] as List?)?.cast<int>() ?? [];
-        di['組合せ数_表示用'] = '${opponents.length} × 2';
-      }
-    }
-    // ▲▲▲ ここまで ▲▲▲
-
   } catch (e) {
     print('Error generating combinations for $ticketType ($bettingMethod): $e');
     di['all_combinations'] = [];
   }
 }
+// ▲▲▲ ここまで ▲▲▲
 
-// --- 組み合わせ生成ロジックここまで ---
 
-// --- 既存ロジック (parseHorseracingTicketQr) ---
+// ▼▼▼ `calculatePoints`関数を元の状態に復元 ▼▼▼
+int calculatePoints({
+  required String ticketType,
+  required String method,
+  required List<int> first,
+  List<int>? second,
+  List<int>? third,
+}) {
+  final normalizedTicketType = ticketType.trim();
+  final normalizedMethod = method.trim();
+
+  final f = first;
+  final s = second ?? [];
+  final t = third ?? [];
+
+  switch (normalizedTicketType) {
+    case '3連単':
+      switch (normalizedMethod) {
+        case 'フォーメーション':
+          int count = 0;
+          for (var i in f) {
+            for (var j in s) {
+              for (var k in t) {
+                if (i != j && i != k && j != k) {
+                  count++;
+                }
+              }
+            }
+          }
+          return count;
+        case 'BOX':
+          if (f.length < 3) return 0;
+          return f.length * (f.length - 1) * (f.length - 2);
+        case '軸1頭ながし':
+          return s.length * (s.length - 1);
+        case '軸1頭マルチ':
+          return s.length * (s.length - 1) * 3;
+        case '軸2頭ながし':
+          return t.length * 2;
+        case '軸2頭マルチ':
+          return s.length * 6;
+        default:
+          return 0;
+      }
+
+    case '3連複':
+      switch (normalizedMethod) {
+        case 'フォーメーション':
+          Set<String> combos = {};
+          for (var i in f) {
+            for (var j in s) {
+              for (var k in t) {
+                var set = {i, j, k};
+                if (set.length == 3) {
+                  var sorted = set.toList()..sort();
+                  combos.add(sorted.join('-'));
+                }
+              }
+            }
+          }
+          return combos.length;
+        case 'BOX':
+          if (f.length < 3) return 0;
+          return f.length * (f.length - 1) * (f.length - 2) ~/ 6;
+        case '軸1頭ながし':
+          return s.length * (s.length - 1) ~/ 2;
+        case '軸2頭ながし':
+          return s.length;
+        default:
+          return 0;
+      }
+
+    case '馬単':
+      switch (normalizedMethod) {
+        case 'フォーメーション':
+          int count = 0;
+          for (var i in f) {
+            for (var j in s) {
+              if (i != j) {
+                count++;
+              }
+            }
+          }
+          return count;
+        case 'BOX':
+          return f.length * (f.length - 1);
+        case 'ながし':
+          return s.length;
+        case 'マルチ':
+          return s.length * 2;
+        default:
+          return 0;
+      }
+
+    case '馬連':
+    case 'ワイド':
+    case '枠連':
+      switch (normalizedMethod) {
+        case 'フォーメーション':
+          final overlap = f.toSet().intersection(s.toSet()).length;
+          return (f.length * s.length) - overlap;
+        case 'BOX':
+          if (f.length < 2) return 0;
+          return f.length * (f.length - 1) ~/ 2;
+        case 'ながし':
+          return s.length;
+        default:
+          return 0;
+      }
+
+    default:
+      return 0;
+  }
+}
+int _combinationsCount(int n, int k) {
+  if (k < 0 || k > n) return 0;
+  if (k == 0 || k == n) return 1;
+  if (k > n / 2) k = n - k;
+  int res = 1;
+  for (int i = 1; i <= k; ++i) res = res * (n - i + 1) ~/ i;
+  return res;
+}
+// ▲▲▲ ここまで復元 ▲▲▲
+
+
 Map<String, dynamic> parseHorseracingTicketQr(String s) {
   List<String> underDigits = List.filled(40, "X");
-  for (int i = 0; i < 34; i++) {
-    underDigits[i] = "0";
-  }
+  for (int i = 0; i < 34; i++) underDigits[i] = "0";
 
   Map<String, dynamic> d = {};
   d["QR"] = s;
@@ -317,8 +347,10 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
   underDigits[13] = "1";
   underDigits[14] = typeCode;
   d["購入内容"] = [];
+
   int totalAmount = 0;
 
+  // ▼▼▼ QRコード解析ロジックを完全に元の状態に戻す ▼▼▼
   switch (typeCode) {
     case "0": // 通常
     case "5": // 応援馬券
@@ -346,9 +378,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         for (int i = 0; i < 5 && itr.position < s.length; i++) purchaseAmountStr += itr.next();
         di["購入金額"] = (purchaseAmountStr.length == 5) ? int.parse(purchaseAmountStr) * 100 : 0;
 
-        _generateAndSetAllCombinations(di, d['方式'] as String);
-        di["組合せ数"] = (di['all_combinations'] as List).length;
-        totalAmount += (di["購入金額"] as int) * (di["組合せ数"] as int);
         (d["購入内容"] as List).add(di);
       }
       break;
@@ -365,24 +394,18 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       if (!(itr.peek(0) == "9" && itr.peek(1) == "0")) {
         itr.currentPosition = originalPos;
         for (int i = 0; i < 5; i++) nos.add(int.parse(itr.next() + itr.next()));
-      } else {
-        itr.currentPosition = originalPos;
-      }
+      } else { itr.currentPosition = originalPos; }
       final originalPos2 = itr.position;
       itr.move(5);
       if (!(itr.peek(0) == "9" && itr.peek(1) == "0")) {
         itr.currentPosition = originalPos2;
         for (int i = 0; i < 8; i++) nos.add(int.parse(itr.next() + itr.next()));
-      } else {
-        itr.currentPosition = originalPos2;
-      }
+      } else { itr.currentPosition = originalPos2; }
       for (int i = 0; i < 5; i++) purchaseAmountStr += itr.next();
       di["馬番"] = nos.where((x) => x != 0).toList();
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
+      di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: 'BOX', first: di["馬番"]);
 
-      _generateAndSetAllCombinations(di, d['方式'] as String);
-      di["組合せ数"] = (di['all_combinations'] as List).length;
-      totalAmount += (di["購入金額"] as int) * (di["組合せ数"] as int);
       (d["購入内容"] as List).add(di);
       break;
 
@@ -390,14 +413,25 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       Map<String, dynamic> di = {};
       String bettingCode = itr.next();
       di["式別"] = bettingDict[bettingCode];
+      String method = '';
       String wheelCode = itr.next();
+      int? currentPurchaseAmount;
       switch (bettingCode) {
-        case "6": di["ながし"] = wheelExactaDict[wheelCode]; break;
-        case "8": di["ながし"] = wheelTrioDict[wheelCode]; di['ながし種別'] = di['ながし']; break;
-        case "9": di["ながし"] = wheelTrifectaDict[wheelCode]; di['ながし種別'] = di['ながし']!.contains('・') ? '軸2頭ながし' : '軸1頭ながし'; break;
-        default: di["ながし"] = "ながし";
+        case "6": di["ながし"] = wheelExactaDict[wheelCode]; method = 'ながし'; break;
+        case "8": di["ながし"] = wheelTrioDict[wheelCode]; method = di["ながし"]!; di['ながし種別'] = method; break;
+        case "9": di["ながし"] = wheelTrifectaDict[wheelCode]; method = di["ながし"]!; if (di["ながし"]!.contains('・')) method = '軸2頭ながし'; else method = '軸1頭ながし'; di['ながし種別'] = method; break;
+        default: di["ながし"] = "ながし"; method = 'ながし';
       }
-      if (bettingCode == "9") {
+      int count = 0;
+      if (bettingCode == "6" || bettingCode == "8") {
+        List<int> horseNumbers = [];
+        for (int j = 0; j < 2; j++) for (int i = 1; i <= 18; i++) if (itr.next() == "1") horseNumbers.add(i);
+        di["軸"] = horseNumbers;
+        List<int> innerList = [];
+        for (int i = 1; i <= 18; i++) if (itr.next() == "1") innerList.add(i);
+        di["相手"] = innerList;
+        count = innerList.length;
+      } else if (bettingCode == "9") {
         List<List<int>> horseNumbers = [];
         for (int j = 0; j < 3; j++) {
           List<int> innerList = [];
@@ -405,25 +439,55 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           horseNumbers.add(innerList);
         }
         di["馬番"] = horseNumbers;
+        if (method == '軸2頭ながし') count = horseNumbers.length > 2 ? horseNumbers[2].length : 0;
+        else if (method == '軸1頭ながし') count = horseNumbers.length > 1 ? horseNumbers[1].length : 0;
       } else {
-        List<int> axisHorses = [];
-        for (int j = 0; j < (bettingCode == "8" || bettingCode == "6" ? 2 : 1); j++) {
-          for (int i = 1; i <= 18; i++) if (itr.next() == "1") axisHorses.add(i);
-        }
-        di["軸"] = axisHorses;
-        List<int> opponentHorses = [];
-        for (int i = 1; i <= 18; i++) if (itr.next() == "1") opponentHorses.add(i);
-        di["相手"] = opponentHorses;
+        di["軸"] = int.parse(itr.next() + itr.next());
+        String purchaseAmountStr = "";
+        for (int i = 0; i < 5; i++) purchaseAmountStr += itr.next();
+        currentPurchaseAmount = int.parse("${purchaseAmountStr}00");
+        List<int> innerList = [];
+        for (int i = 1; i <= 18; i++) if (itr.next() == "1") innerList.add(i);
+        di["相手"] = innerList;
+        count = innerList.length;
       }
-      String purchaseAmountStr = "";
-      for (int i = 0; i < 5; i++) purchaseAmountStr += itr.next();
-      di["購入金額"] = int.parse("${purchaseAmountStr}00");
+      if (bettingCode == "8" || bettingCode == "9" || bettingCode == "6") {
+        String purchaseAmountStr = "";
+        for (int i = 0; i < 5; i++) purchaseAmountStr += itr.next();
+        currentPurchaseAmount = int.parse("${purchaseAmountStr}00");
+      }
+      di["購入金額"] = currentPurchaseAmount ?? 0;
       String multiCode = itr.next();
-      di["マルチ"] = multiCode == "1" ? "あり" : "なし";
+      if (multiCode == "1") {
+        di["マルチ"] = "あり";
+        if (bettingCode == "9") {
+          final horseGroups = (di["馬番"] as List).map((e) => (e as List).cast<int>()).toList();
+          if (method == '軸1頭ながし') {
+            method = '軸1頭マルチ';
+            final opponents = horseGroups.length > 1 ? horseGroups[1] : [];
+            final baseCombinations = _combinationsCount(opponents.length, 2);
+            di["組合せ数_表示用"] = '$baseCombinations × 6';
+          } else if (method == '軸2頭ながし') {
+            method = '軸2頭マルチ';
+            final opponents = horseGroups.length > 2 ? horseGroups[2] : [];
+            di["組合せ数_表示用"] = '${opponents.length} × 6';
+          }
+        } else if (bettingCode == "6") {
+          method = 'マルチ';
+          final opponents = (di["相手"] as List?)?.cast<int>() ?? [];
+          di["組合せ数_表示用"] = '${opponents.length} × 2';
+        }
+      } else { di["マルチ"] = "なし"; }
+      if (bettingCode == "9") {
+        final hg = (di["馬番"] as List).map((e) => (e as List).cast<int>()).toList();
+        if (method == '軸1頭ながし' || method == '軸1頭マルチ') di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: method, first: hg[0], second: hg.length > 1 ? hg[1] : hg[2]);
+        else if (method == '軸2頭ながし' || method == '軸2頭マルチ') di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: method, first: hg[0], second: hg[1], third: hg[2]);
+      } else if (bettingCode == "6" || bettingCode == "8") {
+        di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: method, first: (di["軸"] as List).cast<int>(), second: (di["相手"] as List).cast<int>());
+      } else {
+        di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: 'ながし', first: [di["軸"] as int], second: (di["相手"] as List).cast<int>());
+      }
 
-      _generateAndSetAllCombinations(di, d['方式'] as String);
-      di["組合せ数"] = (di['all_combinations'] as List).length;
-      totalAmount += (di["購入金額"] as int) * (di["組合せ数"] as int);
       (d["購入内容"] as List).add(di);
       break;
 
@@ -443,10 +507,12 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       for (int i = 0; i < 5; i++) if (itr.position < s.length) purchaseAmountStr += itr.next();
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
       itr.next();
+      List<int> f = [], s_ = [], t = [];
+      if (di["馬番"].length > 0) f = (di["馬番"][0] as List).cast<int>();
+      if (di["馬番"].length > 1) s_ = (di["馬番"][1] as List).cast<int>();
+      if (di["馬番"].length > 2) t = (di["馬番"][2] as List).cast<int>();
+      di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: 'フォーメーション', first: f, second: s_, third: t);
 
-      _generateAndSetAllCombinations(di, d['方式'] as String);
-      di["組合せ数"] = (di['all_combinations'] as List).length;
-      totalAmount += (di["購入金額"] as int) * (di["組合せ数"] as int);
       (d["購入内容"] as List).add(di);
       break;
 
@@ -458,13 +524,13 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       if (no != 0) d["軸"] = no;
       int positionSpecify = int.parse(itr.next());
       if (bettingCode == "6" || bettingCode == "9") d["着順指定"] = positionSpecify != 0 ? "$positionSpecify着指定" : "なし";
-      di["組合せ数"] = int.parse(itr.next() + itr.next());
+      d["組合せ数"] = int.parse(itr.next() + itr.next());
       String purchaseAmountStr = "";
       for (int i = 0; i < 5; i++) if (itr.position < s.length) purchaseAmountStr += itr.next();
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
       itr.move(2);
       List<List<int>> horseNumbersList = [];
-      for (int i = 0; i < di["組合せ数"]; i++) {
+      for (int i = 0; i < d["組合せ数"]; i++) {
         List<int> innerList = [];
         for (int j = 0; j < 3; j++) {
           int horseNum = int.parse(itr.next() + itr.next());
@@ -474,17 +540,34 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       }
       di["馬番"] = horseNumbersList;
 
-      _generateAndSetAllCombinations(di, d['方式'] as String);
-      // クイックピックは組合せ数がQRに含まれているので、再計算はしない
-      totalAmount += (di["購入金額"] as int) * (di["組合せ数"] as int);
       (d["購入内容"] as List).add(di);
       break;
-
     default:
       throw ArgumentError("Unknown type code: $typeCode");
   }
+  // ▲▲▲ ここまで復元 ▲▲▲
 
+  if (d.containsKey('購入内容') && d['購入内容'] is List) {
+    for (var detail in (d['購入内容'] as List)) {
+      if (detail is Map<String, dynamic>) {
+        final amount = detail['購入金額'] as int? ?? 0;
+        final combinations = detail['組合せ数'] as int? ?? 1;
+        totalAmount += amount * combinations;
+      }
+    }
+  }
   d['合計金額'] = totalAmount;
+
+  // ▼▼▼ 解析完了後に、安全に組み合わせリストを追加 ▼▼▼
+  if (d.containsKey('購入内容') && d['購入内容'] is List) {
+    for (var detail in (d['購入内容'] as List)) {
+      if (detail is Map<String, dynamic>) {
+        _generateAndSetAllCombinations(detail, d['方式'] as String);
+      }
+    }
+  }
+  // ▲▲▲ ここまで ▲▲▲
+
   d["下端番号"] = _joinWithSpaces(underDigits);
   return d;
 }
