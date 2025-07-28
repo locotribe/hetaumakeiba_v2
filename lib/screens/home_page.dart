@@ -2,9 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
-import 'package:hetaumakeiba_v2/models/home_page_data_model.dart';
+// ▼▼▼ home_page_data_model は不要になったため、featured_race_model をインポート ▼▼▼
+import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/widgets/featured_race_list_item.dart';
-import 'package:hetaumakeiba_v2/widgets/venue_races_card.dart';
+// ▼▼▼ venue_races_card は不要になったため削除 ▼▼▼
+// import 'package:hetaumakeiba_v2/widgets/venue_races_card.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -14,7 +16,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  HomePageData? _homePageData;
+  // ▼▼▼ State管理変数を2つのリストに変更 ▼▼▼
+  List<FeaturedRace> _weeklyGradedRaces = [];
+  List<FeaturedRace> _monthlyGradedRaces = [];
   bool _isLoading = true;
 
   @override
@@ -23,6 +27,7 @@ class _HomePageState extends State<HomePage> {
     _loadHomePageData();
   }
 
+  // ▼▼▼ データ読み込み処理を全面的に書き換え ▼▼▼
   Future<void> _loadHomePageData() async {
     if (!mounted) return;
     setState(() {
@@ -30,13 +35,22 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      final data = await ScraperService.scrapeHomePageData();
+      // 2つのスクレイピング処理を並行して実行
+      final results = await Future.wait([
+        ScraperService.scrapeFeaturedRaces(),      // 今週の重賞を取得
+        ScraperService.scrapeMonthlyGradedRaces(), // 今月の重賞を取得
+      ]);
 
-      // 重賞レースを日付でソート
-      data.gradedRaces.sort((a, b) => a.raceDate.compareTo(b.raceDate));
+      final weeklyRaces = results[0];
+      final monthlyRaces = results[1];
+
+      // 日付でソート
+      weeklyRaces.sort((a, b) => a.raceDate.compareTo(b.raceDate));
+      monthlyRaces.sort((a, b) => a.raceDate.compareTo(b.raceDate));
 
       setState(() {
-        _homePageData = data;
+        _weeklyGradedRaces = weeklyRaces;
+        _monthlyGradedRaces = monthlyRaces;
         _isLoading = false;
       });
     } catch (e) {
@@ -44,7 +58,8 @@ class _HomePageState extends State<HomePage> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _homePageData = HomePageData(gradedRaces: [], racesByVenue: []);
+          _weeklyGradedRaces = [];
+          _monthlyGradedRaces = [];
         });
       }
     }
@@ -63,7 +78,8 @@ class _HomePageState extends State<HomePage> {
         ),
         _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : (_homePageData == null || (_homePageData!.gradedRaces.isEmpty && _homePageData!.racesByVenue.isEmpty))
+        // ▼▼▼ データ存在チェックを2つのリストで行うように変更 ▼▼▼
+            : (_weeklyGradedRaces.isEmpty && _monthlyGradedRaces.isEmpty)
             ? Center(
           child: RefreshIndicator(
             onRefresh: _loadHomePageData,
@@ -94,7 +110,7 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // --- セクション1: 今週の重賞 ---
-                if (_homePageData!.gradedRaces.isNotEmpty) ...[
+                if (_weeklyGradedRaces.isNotEmpty) ...[
                   const Padding(
                     padding: EdgeInsets.only(top: 8.0, bottom: 4.0, left: 4.0),
                     child: Text(
@@ -106,11 +122,12 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ),
-                  ..._homePageData!.gradedRaces.map((race) {
+                  ..._weeklyGradedRaces.map((race) {
                     return FeaturedRaceListItem(
                       race: race,
                       onTap: () {
                         print('DEBUG: ${race.raceName} の詳細へ遷移: ${race.shutubaTableUrl}');
+                        // TODO: 詳細ページへの遷移
                       },
                     );
                   }).toList(),
@@ -118,12 +135,12 @@ class _HomePageState extends State<HomePage> {
 
                 const SizedBox(height: 24),
 
-                // --- セクション2: 開催場別レース一覧 ---
-                if (_homePageData!.racesByVenue.isNotEmpty) ...[
+                // --- セクション2: 今月の重賞レース一覧 ---
+                if (_monthlyGradedRaces.isNotEmpty) ...[
                   const Padding(
                     padding: EdgeInsets.only(bottom: 4.0, left: 4.0),
                     child: Text(
-                      '開催場別レース一覧',
+                      '今月の重賞レース', // ← タイトルを変更
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -131,8 +148,14 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ),
-                  ..._homePageData!.racesByVenue.map((venueRaces) {
-                    return VenueRacesCard(venueRaces: venueRaces);
+                  ..._monthlyGradedRaces.map((race) {
+                    return FeaturedRaceListItem(
+                      race: race,
+                      onTap: () {
+                        print('DEBUG: ${race.raceName} の詳細へ遷移: ${race.shutubaTableUrl}');
+                        // TODO: 詳細ページへの遷移
+                      },
+                    );
                   }).toList(),
                 ],
               ],

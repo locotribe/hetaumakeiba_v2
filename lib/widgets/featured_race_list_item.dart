@@ -85,12 +85,25 @@ class FeaturedRaceListItem extends StatelessWidget {
                   ),
                   const SizedBox(height: 4.0),
                   Text(
-                    '${race.raceDate} / ${race.venue} ${race.raceNumber}R',
+                    // ▼▼▼ 開催日時の表示を raceNumber がある場合とない場合で分ける ▼▼▼
+                    '${race.raceDate}'
+                        '${race.raceNumber.isNotEmpty ? ' / ${race.venue} ${race.raceNumber}R' : ' / ${race.venue}'}',
                     style: const TextStyle(
                       fontSize: 13,
                       color: Colors.black54,
                     ),
                   ),
+                  // ▼▼▼ ここから追加 ▼▼▼
+                  const SizedBox(height: 4.0),
+                  Text(
+                    '${race.distance} / ${race.conditions} / ${race.weight}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  // ▲▲▲ ここまで追加 ▲▲▲
                 ],
               ),
             ),

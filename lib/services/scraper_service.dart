@@ -7,9 +7,9 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:charset_converter/charset_converter.dart';
-// Step 1で作成した新しいデータモデルをインポート
-import 'package:hetaumakeiba_v2/models/home_page_data_model.dart';
 
+// ▼▼▼ 不要なインポートを削除 ▼▼▼
+// import 'package:hetaumakeiba_v2/models/home_page_data_model.dart';
 
 class ScraperService {
   // 既存の関数はここから (変更なし)
@@ -162,6 +162,10 @@ class ScraperService {
                 raceNumber: shutubaRace['raceNumber']!,
                 shutubaTableUrl: shutubaRace['shutubaTableUrl']!,
                 lastScraped: DateTime.now(),
+                // 新しいプロパティに空文字を設定
+                distance: shutubaRace['distance'] ?? '',
+                conditions: shutubaRace['conditions'] ?? '',
+                weight: shutubaRace['weight'] ?? '',
               ));
             }
           }
@@ -395,36 +399,26 @@ class ScraperService {
     }
     return laps;
   }
-  // 既存の関数はここまで (変更なし)
+  // 既存の関数はここまで
 
-  // ★★★★★ ここからが新規追加箇所 ★★★★★
+  // ▼▼▼ ここからが修正・変更箇所 ▼▼▼
 
-  /// ホームページに必要な「重賞レース」と「開催場別レース」の両方のデータを取得する新しいメイン関数
-  static Future<HomePageData> scrapeHomePageData() async {
+  /// ホームページに表示する「今月の重賞レース」データを取得する
+  static Future<List<FeaturedRace>> scrapeMonthlyGradedRaces() async {
     try {
-      // 2つのページから並行してデータを取得
-      final results = await Future.wait([
-        _scrapeGradedRacesFromSchedulePage(),
-        _scrapeRacesByVenueFromRaceListPage(),
-      ]);
-
-      // 取得したデータをHomePageDataモデルにまとめて返す
-      return HomePageData(
-        gradedRaces: results[0] as List<FeaturedRace>,
-        racesByVenue: results[1] as List<VenueRaces>,
-      );
+      return await _scrapeGradedRacesFromSchedulePage();
     } catch (e) {
       print('ホームページのデータ取得中にエラーが発生しました: $e');
-      // エラー時は空のデータを返す
-      return HomePageData(gradedRaces: [], racesByVenue: []);
+      return []; // エラー時は空のデータを返す
     }
   }
 
-  /// 「重賞日程」ページから今週のG1, G2, G3レースを取得するヘルパー関数
+  /// 「重賞日程」ページから今月の重賞レースを取得するヘルパー関数
   static Future<List<FeaturedRace>> _scrapeGradedRacesFromSchedulePage() async {
     const url = 'https://race.netkeiba.com/top/schedule.html';
     final List<FeaturedRace> gradedRaces = [];
     final now = DateTime.now();
+    final currentYear = now.year;
 
     final response = await http.get(Uri.parse(url));
     if (response.statusCode != 200) {
@@ -438,107 +432,47 @@ class ScraperService {
     final rows = document.querySelectorAll('table.race_table_01 tr');
     for (final row in rows) {
       final cells = row.querySelectorAll('td');
+      // ヘッダー行や不正な行をスキップ
       if (cells.length < 7) continue;
 
-      final dateStr = _safeGetText(cells[0]); // 例: 08/03(日)
-      final raceName = _safeGetText(cells[1].querySelector('a'));
-      final raceGrade = _safeGetText(cells[2]);
-      final venue = _safeGetText(cells[3]);
-      final link = cells[1].querySelector('a')?.attributes['href'];
-
-      if (link == null) continue;
-
-      // 今週のレースかどうかを判定 (月と日から)
       try {
-        final parts = dateStr.split('(')[0].split('/');
-        final month = int.parse(parts[0]);
-        final day = int.parse(parts[1]);
-        final raceDate = DateTime(now.year, month, day);
+        final dateStr = _safeGetText(cells[0]); // 例: 08/03(日)
+        final monthAndDay = dateStr.split('(')[0].split('/');
+        final month = int.parse(monthAndDay[0]);
 
-        // 今週の月曜日から来週の日曜日までの範囲で判定
-        final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-        final endOfWeek = startOfWeek.add(const Duration(days: 13));
+        // 今月のレースのみを抽出
+        if (month == now.month) {
+          final raceName = _safeGetText(cells[1].querySelector('a'));
+          final link = cells[1].querySelector('a')?.attributes['href'] ?? '';
 
-        if (raceDate.isAfter(startOfWeek.subtract(const Duration(days: 1))) && raceDate.isBefore(endOfWeek)) {
-          // netkeibaの特集ページリンクからrace_idを取得するのは困難なため、
-          // ここではダミーのIDとURLを設定します。詳細はhome_page側でハンドリング。
-          // TODO: race_idを特定するより高度なロジックが必要な場合は別途実装
-          final fullDate = '${now.year}年${month}月${day}日';
+          // このページからは詳細なrace_idが取得できないため、暫定IDを生成
+          final raceId = 'monthly_graded_${_safeGetText(cells[3])}_${raceName.replaceAll(' ', '_')}';
 
           gradedRaces.add(FeaturedRace(
-            raceId: 'graded_${venue}_${raceName}', //暫定ID
+            raceId: raceId,
             raceName: raceName,
-            raceGrade: raceGrade,
-            raceDate: fullDate,
-            venue: venue,
-            raceNumber: '', // このページからは取得不可
-            shutubaTableUrl: 'https://race.netkeiba.com$link',
+            raceGrade: _safeGetText(cells[2]),
+            venue: _safeGetText(cells[3]),
+            distance: _safeGetText(cells[4]),
+            conditions: _safeGetText(cells[5]),
+            weight: _safeGetText(cells[6]),
+            // YYYY年MM/DD(曜) 形式で日付を生成
+            raceDate: '$currentYear年$dateStr',
+            shutubaTableUrl: link.startsWith('http') ? link : 'https://race.netkeiba.com$link',
+            // このページからは取得不可のため、空文字を設定
+            raceNumber: '',
             lastScraped: DateTime.now(),
           ));
         }
       } catch (e) {
-        print('重賞日程の日付解析エラー: $dateStr, $e');
+        // 日付解析エラーなどは無視して次の行へ
+        print('重賞日程の行解析エラー: $e');
+        continue;
       }
     }
     return gradedRaces;
   }
 
-  /// 「今週のレース一覧」ページから開催場ごとの全レースを取得するヘルパー関数
-  static Future<List<VenueRaces>> _scrapeRacesByVenueFromRaceListPage() async {
-    const url = 'https://race.netkeiba.com/top/race_list.html';
-    final List<VenueRaces> venues = [];
-
-    final response = await http.get(Uri.parse(url));
-    if (response.statusCode != 200) {
-      print('今週のレース一覧ページの取得に失敗しました: Status code ${response.statusCode}');
-      return [];
-    }
-
-    final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
-    final document = html.parse(decodedBody);
-
-    final venueTabs = document.querySelectorAll('div.RaceList_Kaijou');
-    final dateTabs = document.querySelectorAll('#date_list_sub li');
-
-    for (int i = 0; i < venueTabs.length; i++) {
-      final venueTab = venueTabs[i];
-      final venueName = _safeGetText(venueTab.querySelector('.RaceList_Kaijou_Name'));
-      final date = (i < dateTabs.length) ? _safeGetText(dateTabs[i]) : '';
-
-      final List<SimpleRaceInfo> races = [];
-      final raceRows = venueTab.querySelectorAll('tr.RaceList_DataItem');
-
-      for (final row in raceRows) {
-        final raceNumEl = row.querySelector('td:nth-child(1) div.Race_Num');
-        final raceNameEl = row.querySelector('td:nth-child(2) div.RaceList_ItemTitle span.RaceName');
-        final conditionEl = row.querySelector('td:nth-child(2) div.RaceList_ItemTitle span.RaceData');
-        final linkEl = row.querySelector('a');
-
-        if (raceNumEl == null || raceNameEl == null || linkEl == null) continue;
-
-        final raceId = _extractRaceIdFromShutubaUrl(linkEl.attributes['href'] ?? '') ?? '';
-        if (raceId.isEmpty) continue;
-
-        final raceDataText = _safeGetText(conditionEl);
-        final parts = raceDataText.split(' ');
-
-        races.add(SimpleRaceInfo(
-          raceId: raceId,
-          raceNumber: _safeGetText(raceNumEl),
-          raceName: _safeGetText(raceNameEl),
-          distance: parts.isNotEmpty ? parts[0] : '',
-          conditions: parts.length > 1 ? parts.sublist(1).join(' ') : '',
-        ));
-      }
-
-      if (races.isNotEmpty) {
-        venues.add(VenueRaces(
-          venueName: venueName,
-          date: date,
-          races: races,
-        ));
-      }
-    }
-    return venues;
-  }
+// ▼▼▼ 不要になった関数を削除 ▼▼▼
+// static Future<List<VenueRaces>> _scrapeRacesByVenueFromRaceListPage() ...
 }
