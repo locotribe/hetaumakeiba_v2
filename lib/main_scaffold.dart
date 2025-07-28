@@ -13,72 +13,57 @@ class MainScaffold extends StatefulWidget {
   State<MainScaffold> createState() => _MainScaffoldState();
 }
 
-class _MainScaffoldState extends State<MainScaffold> {
+class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
-  // 各ページで共有するSavedTicketsListPageのGlobalKey
   final GlobalKey<SavedTicketsListPageState> _savedListKey = GlobalKey<SavedTicketsListPageState>();
 
-  // 表示するページのリスト
   late final List<Widget> _pages;
-
-  // 各ページのAppBarのタイトル
   static const List<String> _pageTitles = ['ホーム', '購入履歴', '集計'];
+
+  bool _isFabExpanded = false;
+  late AnimationController _animationController;
+  late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
-    // HomePageとSavedTicketsListPageのインスタンスをここで生成
     _pages = <Widget>[
       HomePage(savedListKey: _savedListKey),
       const SavedTicketsListPage(),
       const AnalyticsPage(),
     ];
+
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _animation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    );
   }
 
-  // タブがタップされたときの処理
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
   }
 
-  // QRスキャンオプションを表示する関数
-  void _showScanOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext bc) {
-        return SafeArea(
-          child: Wrap(
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('カメラでスキャン'),
-                onTap: () {
-                  Navigator.of(context).pop(); // ボトムシートを閉じる
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => QRScannerPage(savedListKey: _savedListKey),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('ギャラリーから選択'),
-                onTap: () {
-                  Navigator.of(context).pop(); // ボトムシートを閉じる
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => GalleryQrScannerPage(savedListKey: _savedListKey),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  void _toggleFab() {
+    setState(() {
+      _isFabExpanded = !_isFabExpanded;
+      if (_isFabExpanded) {
+        _animationController.forward();
+      } else {
+        _animationController.reverse();
+      }
+    });
   }
 
   @override
@@ -88,36 +73,96 @@ class _MainScaffoldState extends State<MainScaffold> {
         title: Text(_pageTitles[_selectedIndex]),
         automaticallyImplyLeading: false,
       ),
-      body: IndexedStack( // ページの状態を保持するためにIndexedStackを使用
+      body: IndexedStack(
         index: _selectedIndex,
         children: _pages,
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'ホーム',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.list_alt),
-            label: '履歴',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.analytics),
-            label: '集計',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ホーム'),
+          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '履歴'),
+          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'),
         ],
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showScanOptions(context),
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.qr_code_scanner),
+      // ▼▼▼ フローティングボタンの構造を以前のスタイルに戻す ▼▼▼
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (_isFabExpanded)
+            ScaleTransition(
+              scale: _animation,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: FloatingActionButton(
+                  heroTag: 'galleryFab',
+                  onPressed: () {
+                    _toggleFab();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => GalleryQrScannerPage(savedListKey: _savedListKey),
+                      ),
+                    );
+                  },
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: const CircleBorder(),
+                  child: const Icon(Icons.image),
+                ),
+              ),
+            ),
+          if (_isFabExpanded)
+            ScaleTransition(
+              scale: _animation,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: FloatingActionButton(
+                  heroTag: 'cameraFab',
+                  onPressed: () {
+                    _toggleFab();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => QRScannerPage(savedListKey: _savedListKey),
+                      ),
+                    );
+                  },
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: const CircleBorder(),
+                  child: const Icon(Icons.camera_alt),
+                ),
+              ),
+            ),
+          FloatingActionButton(
+            heroTag: 'mainFab',
+            onPressed: _toggleFab,
+            backgroundColor: _isFabExpanded ? Colors.grey : Colors.green,
+            foregroundColor: Colors.white,
+            shape: const CircleBorder(),
+            child: Align(
+              alignment: const Alignment(0.0, -0.4),
+              child: _isFabExpanded
+                  ? const Text(
+                'Ｘ',
+                style: TextStyle(
+                  fontSize: 26,
+                  color: Colors.black54,
+                ),
+              )
+                  : const Text(
+                '＋',
+                style: TextStyle(
+                  fontSize: 32,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
-      // ▼▼▼ ボタンの位置を中央から右下に変更 ▼▼▼
+      // ▲▲▲ ここまで変更 ▲▲▲
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
