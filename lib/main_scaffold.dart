@@ -117,7 +117,8 @@ class _MainScaffoldState extends State<MainScaffold> {
         shape: const CircleBorder(),
         child: const Icon(Icons.qr_code_scanner),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      // ▼▼▼ ボタンの位置を中央から右下に変更 ▼▼▼
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }

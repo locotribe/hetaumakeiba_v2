@@ -20,38 +20,22 @@ class HomePage extends StatelessWidget {
             fillColor: Color.fromRGBO(172, 234, 231, 1.0),
           ),
         ),
-        Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // このボタンは現在ナビゲーションバーと機能が重複するため、
-              // 将来的には別の機能（例：お知らせ、使い方ガイドなど）に置き換えるか、削除することを推奨します。
-              // ここではUIの確認のため一旦残します。
-              ElevatedButton.icon(
-                onPressed: () {
-                  // ボタンの動作は現状維持（ただし、BottomNavigationBarがあるため冗長）
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const SavedTicketsListPage(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.history, size: 28),
-                label: const Text(
-                  '購入履歴（リスト表示）',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
-                  elevation: 3,
-                ),
+        // ▼▼▼ ボタンを削除し、将来のコンテンツ用のプレースホルダーに変更 ▼▼▼
+        const Center(
+          child: Padding(
+            padding: EdgeInsets.all(20.0),
+            child: Text(
+              'ここにコンテンツが表示されます\n（例：今週の注目レース、レースカレンダーなど）',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.black54,
+                fontWeight: FontWeight.bold,
               ),
-            ],
+            ),
           ),
         ),
+        // ▲▲▲ ここまで変更 ▲▲▲
       ],
     );
   }

@@ -79,7 +79,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         final raceId = ScraperService.getRaceIdFromUrl(url)!;
         final raceResult = await _dbHelper.getRaceResult(raceId);
 
-        // ▼▼▼ 的中判定処理を追加 ▼▼▼
         HitResult? hitResult;
         if (raceResult != null) {
           hitResult = HitChecker.check(
@@ -87,13 +86,12 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             raceResult: raceResult,
           );
         }
-        // ▲▲▲ ここまで ▲▲▲
 
         tempItems.add(TicketListItem(
           qrData: qrData,
           parsedTicket: parsedTicket,
           raceResult: raceResult,
-          hitResult: hitResult, // 判定結果をセット
+          hitResult: hitResult,
           displayTitle: '',
           displaySubtitle: '',
         ));
@@ -112,7 +110,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     final List<TicketListItem> finalItems = [];
     for (final item in tempItems) {
       String title;
-      String line3; // 3行目
+      String line3;
 
       if (item.raceResult != null) {
         title = item.raceResult!.raceTitle;
@@ -158,7 +156,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         qrData: item.qrData,
         parsedTicket: item.parsedTicket,
         raceResult: item.raceResult,
-        hitResult: item.hitResult, // 判定結果を渡す
+        hitResult: item.hitResult,
         displayTitle: title,
         displaySubtitle: combinedSubtitle,
       ));
@@ -172,22 +170,18 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     }
   }
 
-  /// 購入内容のリストから、表示用の概要文字列を生成する
   String _formatPurchaseSummary(List<dynamic> purchases) {
     if (purchases.isEmpty) return '';
-
     try {
       final firstPurchase = purchases.first as Map<String, dynamic>;
       final amount = firstPurchase['購入金額'] ?? 0;
       String horseNumbersStr = '';
-
       if (firstPurchase.containsKey('all_combinations')) {
         final combinations = firstPurchase['all_combinations'] as List;
         if (combinations.isNotEmpty) {
           horseNumbersStr = (combinations.first as List).join('→');
         }
       }
-
       String summary = '$horseNumbersStr / ${amount}円';
       if (purchases.length > 1 || (firstPurchase['all_combinations'] as List).length > 1) {
         summary += ' ...他';
@@ -199,38 +193,29 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     }
   }
 
-
-  /// 購入内容から一意のキーを生成する
   String _generatePurchaseKey(Map<String, dynamic> parsedTicket) {
     try {
       final url = generateNetkeibaUrl(
         year: parsedTicket['年'].toString(),
-        racecourseCode: racecourseDict.entries
-            .firstWhere((entry) => entry.value == parsedTicket['開催場'])
-            .key,
+        racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
         round: parsedTicket['回'].toString(),
         day: parsedTicket['日'].toString(),
         race: parsedTicket['レース'].toString(),
       );
       final raceId = ScraperService.getRaceIdFromUrl(url)!;
-
       final purchaseMethod = parsedTicket['方式'] ?? '';
       final purchaseDetails = (parsedTicket['購入内容'] as List);
-
       final detailsString = purchaseDetails.map((p) {
         final detailMap = p as Map<String, dynamic>;
         final sortedKeys = detailMap.keys.toList()..sort();
         return sortedKeys.map((key) => '$key:${detailMap[key]}').join(';');
       }).join('|');
-
       return '$raceId-$purchaseMethod-$detailsString';
     } catch (e) {
-      final qrContent = parsedTicket['QR'] ?? parsedTicket.toString();
-      return qrContent;
+      return parsedTicket['QR'] ?? parsedTicket.toString();
     }
   }
 
-  /// 全データを削除する
   Future<void> _deleteAllData() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -238,179 +223,138 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         title: const Text('全データ削除'),
         content: const Text('本当にすべての保存データを削除しますか？'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('キャンセル'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('削除'),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('キャンセル')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('削除')),
         ],
       ),
     );
-
     if (confirm == true) {
       await _dbHelper.deleteAllData();
       await loadData();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('すべてのデータが削除されました。')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('すべてのデータが削除されました。')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: const Text('購入履歴'),
-      ),
-      body: Stack(
-        children: [
-          const Positioned.fill(
-            child: CustomBackground(
-              overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
-              stripeColor: Color.fromRGBO(219, 234, 234, 0.6),
-              fillColor: Color.fromRGBO(172, 234, 231, 1.0),
-            ),
+    // ▼▼▼ ScaffoldとAppBarを削除し、中身だけを返すように変更 ▼▼▼
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: CustomBackground(
+            overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
+            stripeColor: Color.fromRGBO(219, 234, 234, 0.6),
+            fillColor: Color.fromRGBO(172, 234, 231, 1.0),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                ElevatedButton(
-                  onPressed: _deleteAllData,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  child: const Text("全データを削除", style: TextStyle(color: Colors.white)),
-                ),
-                const SizedBox(height: 16),
-                const Text('購入履歴:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-                Expanded(
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : (_ticketListItems.isEmpty
-                      ? const Center(
-                    child: Text(
-                      'まだ読み込まれた馬券はありません。',
-                      style: TextStyle(color: Colors.black54),
-                    ),
-                  )
-                      : ListView.builder(
-                    itemCount: _ticketListItems.length,
-                    itemBuilder: (context, index) {
-                      final item = _ticketListItems[index];
-                      final totalAmount = item.parsedTicket['合計金額'] as int? ?? 0;
-                      final isHit = item.hitResult?.isHit ?? false;
-                      final payout = item.hitResult?.totalPayout ?? 0;
-                      final balance = payout - totalAmount;
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              ElevatedButton(
+                onPressed: _deleteAllData,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text("全データを削除", style: TextStyle(color: Colors.white)),
+              ),
+              const SizedBox(height: 16),
+              const Text('購入履歴:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : (_ticketListItems.isEmpty
+                    ? const Center(child: Text('まだ読み込まれた馬券はありません。', style: TextStyle(color: Colors.black54)))
+                    : ListView.builder(
+                  itemCount: _ticketListItems.length,
+                  itemBuilder: (context, index) {
+                    final item = _ticketListItems[index];
+                    final totalAmount = item.parsedTicket['合計金額'] as int? ?? 0;
+                    final isHit = item.hitResult?.isHit ?? false;
+                    final payout = item.hitResult?.totalPayout ?? 0;
+                    final balance = payout - totalAmount;
 
-                      return Dismissible(
-                        key: ValueKey(item.qrData.id),
-                        direction: DismissDirection.endToStart,
-                        confirmDismiss: (direction) async {
-                          return await showDialog<bool>(
-                            context: context,
-                            builder: (BuildContext context) {
-                              return AlertDialog(
-                                title: const Text('削除の確認'),
-                                content: const Text('この項目を本当に削除しますか？'),
-                                actions: <Widget>[
-                                  TextButton(
-                                    onPressed: () => Navigator.of(context).pop(false),
-                                    child: const Text('キャンセル'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => Navigator.of(context).pop(true),
-                                    child: const Text('削除', style: TextStyle(color: Colors.red)),
-                                  ),
-                                ],
-                              );
-                            },
-                          ) ?? false;
-                        },
-                        onDismissed: (direction) async {
-                          await _dbHelper.deleteQrData(item.qrData.id!);
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('「${item.displayTitle}」を削除しました。')),
+                    return Dismissible(
+                      key: ValueKey(item.qrData.id),
+                      direction: DismissDirection.endToStart,
+                      confirmDismiss: (direction) async {
+                        return await showDialog<bool>(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return AlertDialog(
+                              title: const Text('削除の確認'),
+                              content: const Text('この項目を本当に削除しますか？'),
+                              actions: <Widget>[
+                                TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('キャンセル')),
+                                TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('削除', style: TextStyle(color: Colors.red))),
+                              ],
                             );
-                            loadData();
-                          }
-                        },
-                        background: Container(
-                          color: Colors.red,
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                          child: const Icon(Icons.delete, color: Colors.white),
-                        ),
-                        child: Card(
-                          color: isHit ? Colors.red.shade50 : null,
-                          margin: const EdgeInsets.symmetric(vertical: 8.0),
-                          elevation: 2.0,
-                          child: ListTile(
-                            isThreeLine: true,
-                            title: Text(
-                              item.displayTitle,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: Text(item.displaySubtitle),
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
+                          },
+                        ) ?? false;
+                      },
+                      onDismissed: (direction) async {
+                        await _dbHelper.deleteQrData(item.qrData.id!);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('「${item.displayTitle}」を削除しました。')));
+                          loadData();
+                        }
+                      },
+                      background: Container(
+                        color: Colors.red,
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                        child: const Icon(Icons.delete, color: Colors.white),
+                      ),
+                      child: Card(
+                        color: isHit ? Colors.red.shade50 : null,
+                        margin: const EdgeInsets.symmetric(vertical: 8.0),
+                        elevation: 2.0,
+                        child: ListTile(
+                          isThreeLine: true,
+                          title: Text(item.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(item.displaySubtitle),
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '${totalAmount}円',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54, height: 1.2),
+                              ),
+                              if (item.raceResult != null) ...[
                                 Text(
-                                  '${totalAmount}円',
-                                  style: const TextStyle(
+                                  '${payout}円',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isHit ? Colors.green.shade700 : Colors.black, height: 1.2),
+                                ),
+                                Text(
+                                  '${balance >= 0 ? '+' : ''}$balance円',
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: Colors.black54,
-                                    height: 1.2, // 行の高さを調整
+                                    fontSize: 12,
+                                    color: balance > 0 ? Colors.blue.shade700 : (balance < 0 ? Colors.red.shade700 : Colors.black),
+                                    height: 1.2,
                                   ),
                                 ),
-                                if (item.raceResult != null) ...[
-                                  Text(
-                                    '${payout}円',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      // ▼▼▼ 的中時の色を緑に変更 ▼▼▼
-                                      color: isHit ? Colors.green.shade700 : Colors.black,
-                                      height: 1.2, // 行の高さを調整
-                                    ),
-                                  ),
-                                  Text(
-                                    '${balance >= 0 ? '+' : ''}$balance円',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: balance > 0 ? Colors.blue.shade700 : (balance < 0 ? Colors.red.shade700 : Colors.black),
-                                      height: 1.2, // 行の高さを調整
-                                    ),
-                                  ),
-                                ] else
-                                  const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                              ],
-                            ),
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: item.qrData)),
-                              );
-                              loadData();
-                            },
+                              ] else
+                                const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            ],
                           ),
+                          onTap: () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: item.qrData)),
+                            );
+                            loadData();
+                          },
                         ),
-                      );
-                    },
-                  )),
-                ),
-              ],
-            ),
+                      ),
+                    );
+                  },
+                )),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
