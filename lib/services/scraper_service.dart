@@ -8,9 +8,6 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:charset_converter/charset_converter.dart';
 
-// ▼▼▼ 不要なインポートを削除 ▼▼▼
-// import 'package:hetaumakeiba_v2/models/home_page_data_model.dart';
-
 class ScraperService {
   // 既存の関数はここから (変更なし)
   /// URLからレースIDを抽出するヘルパー関数
@@ -128,7 +125,7 @@ class ScraperService {
     }
   }
 
-  /// netkeiba.comのトップページから「今週のおすすめのレース」をスクレイピングします。(旧バージョン)
+  /// netkeiba.comのトップページから「今週の注目レース」を複数取得するよう修正
   static Future<List<FeaturedRace>> scrapeFeaturedRaces() async {
     final List<FeaturedRace> featuredRaces = [];
     try {
@@ -140,35 +137,39 @@ class ScraperService {
       }
 
       final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
-      final document = html.parse(decodedBody);
 
-      final featuredRaceLink = document.querySelector('ul.PickupRace_Other_Race li.PickupRaceMenu_Btn a');
+      final RegExp regExp = RegExp(
+        r"showRaceV3GradeList\s*\([^,]+,\s*'(\d+)'",
+        dotAll: true,
+      );
+      final matches = regExp.allMatches(decodedBody);
 
-      if (featuredRaceLink != null) {
-        final relativeUrl = featuredRaceLink.attributes['href'];
-        if (relativeUrl != null) {
-          final fullUrl = 'https://race.netkeiba.com${relativeUrl.replaceFirst('..', '')}';
-          final raceId = _extractRaceIdFromShutubaUrl(fullUrl);
+      final raceIds = matches.map((m) => m.group(1)!).toSet().toList();
 
-          if (raceId != null) {
-            final shutubaRace = await _scrapeShutubaPageDetails(raceId);
-            if (shutubaRace != null) {
-              featuredRaces.add(FeaturedRace(
-                raceId: shutubaRace['raceId']!,
-                raceName: shutubaRace['raceName']!,
-                raceGrade: shutubaRace['raceGrade']!,
-                raceDate: shutubaRace['raceDate']!,
-                venue: shutubaRace['venue']!,
-                raceNumber: shutubaRace['raceNumber']!,
-                shutubaTableUrl: shutubaRace['shutubaTableUrl']!,
-                lastScraped: DateTime.now(),
-                // 新しいプロパティに空文字を設定
-                distance: shutubaRace['distance'] ?? '',
-                conditions: shutubaRace['conditions'] ?? '',
-                weight: shutubaRace['weight'] ?? '',
-              ));
-            }
-          }
+      if (raceIds.isEmpty) {
+        print("DEBUG: scrapeFeaturedRaces - レースIDが見つかりませんでした。");
+      } else {
+        print("DEBUG: scrapeFeaturedRaces - 抽出したレースID: $raceIds");
+      }
+
+      for (final raceId in raceIds) {
+        final shutubaRace = await _scrapeShutubaPageDetails(raceId);
+        if (shutubaRace != null) {
+          featuredRaces.add(FeaturedRace(
+            raceId: shutubaRace['raceId']!,
+            raceName: shutubaRace['raceName']!,
+            raceGrade: shutubaRace['raceGrade']!,
+            raceDate: shutubaRace['raceDate']!,
+            venue: shutubaRace['venue']!,
+            raceNumber: shutubaRace['raceNumber']!,
+            shutubaTableUrl: shutubaRace['shutubaTableUrl']!,
+            lastScraped: DateTime.now(),
+            distance: '',
+            conditions: '',
+            weight: '',
+            raceDetails1: shutubaRace['raceDetails1'], // 詳細情報を追加
+            raceDetails2: shutubaRace['raceDetails2'], // 詳細情報を追加
+          ));
         }
       }
       return featuredRaces;
@@ -184,6 +185,7 @@ class ScraperService {
     return uri.queryParameters['race_id'];
   }
 
+  // ▼▼▼ ここから修正 ▼▼▼
   /// 出馬表ページをスクレイピングしてレース詳細情報を取得します。
   static Future<Map<String, String>?> _scrapeShutubaPageDetails(String raceId) async {
     try {
@@ -229,8 +231,16 @@ class ScraperService {
         final dateText = _safeGetText(dateElement);
         raceDate = dateText.split('(')[0];
         final currentYear = DateTime.now().year;
-        raceDate = '$currentYear年$raceDate';
+        raceDate = '$currentYear年$dateText'; // 曜日まで含めるように変更
       }
+
+      // 詳細情報1 (発走時間 / コース情報) を取得
+      final raceData1 = document.querySelector('div.RaceData01');
+      final details1 = raceData1?.text.replaceAll(RegExp(r'\s+'), ' ').trim() ?? '';
+
+      // 詳細情報2 (開催日 / 条件) を取得
+      final raceData2 = document.querySelector('div.RaceData02');
+      final details2 = raceData2?.text.replaceAll(RegExp(r'\s+'), ' ').trim() ?? '';
 
       return {
         'raceId': raceId,
@@ -240,12 +250,15 @@ class ScraperService {
         'venue': venue,
         'raceNumber': raceNumber,
         'shutubaTableUrl': url,
+        'raceDetails1': details1,
+        'raceDetails2': details2,
       };
     } catch (e) {
       print('出馬表ページ $raceId のスクレイピング中にエラーが発生しました: $e');
       return null;
     }
   }
+  // ▲▲▲ ここまで修正 ▲▲▲
 
   /// 出馬表ページから出走馬のホースIDのリストを抽出するヘルパー関数です。
   static Future<List<String>> extractHorseIdsFromShutubaPage(String shutubaTableUrl) async {
@@ -399,9 +412,6 @@ class ScraperService {
     }
     return laps;
   }
-  // 既存の関数はここまで
-
-  // ▼▼▼ ここからが修正・変更箇所 ▼▼▼
 
   /// ホームページに表示する「今月の重賞レース」データを取得する
   static Future<List<FeaturedRace>> scrapeMonthlyGradedRaces() async {
@@ -440,7 +450,7 @@ class ScraperService {
         final monthAndDay = dateStr.split('(')[0].split('/');
         final month = int.parse(monthAndDay[0]);
 
-        // 今月のレースのみを抽出
+        // 今月のレースのみを抽出する
         if (month == now.month) {
           final raceName = _safeGetText(cells[1].querySelector('a'));
           final link = cells[1].querySelector('a')?.attributes['href'] ?? '';
@@ -458,7 +468,7 @@ class ScraperService {
             weight: _safeGetText(cells[6]),
             // YYYY年MM/DD(曜) 形式で日付を生成
             raceDate: '$currentYear年$dateStr',
-            shutubaTableUrl: link.startsWith('http') ? link : 'https://race.netkeiba.com$link',
+            shutubaTableUrl: link, // ← URLの取得は不要とのことなので、そのまま格納
             // このページからは取得不可のため、空文字を設定
             raceNumber: '',
             lastScraped: DateTime.now(),
@@ -472,7 +482,4 @@ class ScraperService {
     }
     return gradedRaces;
   }
-
-// ▼▼▼ 不要になった関数を削除 ▼▼▼
-// static Future<List<VenueRaces>> _scrapeRacesByVenueFromRaceListPage() ...
 }

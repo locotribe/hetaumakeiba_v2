@@ -30,6 +30,9 @@ class FeaturedRaceListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final gradeColor = _getGradeColor(race.raceGrade);
 
+    // ▼▼▼ 詳細情報が存在するかどうかをチェック ▼▼▼
+    final bool hasDetails = race.raceDetails1 != null && race.raceDetails1!.isNotEmpty;
+
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -84,26 +87,47 @@ class FeaturedRaceListItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4.0),
-                  Text(
-                    // ▼▼▼ 開催日時の表示を raceNumber がある場合とない場合で分ける ▼▼▼
-                    '${race.raceDate}'
-                        '${race.raceNumber.isNotEmpty ? ' / ${race.venue} ${race.raceNumber}R' : ' / ${race.venue}'}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.black54,
+                  // ▼▼▼ ここから表示を修正 ▼▼▼
+                  if (hasDetails) ...[
+                    // --- 詳細情報がある場合の表示 (今週の重賞レース) ---
+                    Text(
+                      race.raceDetails1 ?? '',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  // ▼▼▼ ここから追加 ▼▼▼
-                  const SizedBox(height: 4.0),
-                  Text(
-                    '${race.distance} / ${race.conditions} / ${race.weight}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.black54,
+                    const SizedBox(height: 4.0),
+                    Text(
+                      race.raceDetails2 ?? '',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  // ▲▲▲ ここまで追加 ▲▲▲
+                  ] else ...[
+                    // --- 詳細情報がない場合の表示 (今月の重賞レース) ---
+                    Text(
+                      '${race.raceDate}'
+                          '${race.raceNumber.isNotEmpty ? ' / ${race.venue} ${race.raceNumber}R' : ' / ${race.venue}'}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 4.0),
+                    Text(
+                      '${race.distance} / ${race.conditions} / ${race.weight}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ]
+                  // ▲▲▲ ここまで表示を修正 ▲▲▲
                 ],
               ),
             ),

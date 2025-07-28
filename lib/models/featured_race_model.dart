@@ -13,10 +13,12 @@ class FeaturedRace {
   final String raceNumber; // レース番号 (例: '7R')
   final String shutubaTableUrl; // 出馬表ページへのURL
   final DateTime lastScraped; // 最終スクレイピング日時
-  // ▼▼▼ ここから追加 ▼▼▼
   final String distance; // 距離 (例: "芝2000m")
   final String conditions; // 条件 (例: "4歳上")
   final String weight; // 重量 (例: "ハンデ")
+  // ▼▼▼ ここから追加 ▼▼▼
+  final String? raceDetails1; // 詳細情報1 (発走時間 / コース情報など)
+  final String? raceDetails2; // 詳細情報2 (レース条件など)
   // ▲▲▲ ここまで追加 ▲▲▲
 
   FeaturedRace({
@@ -29,10 +31,12 @@ class FeaturedRace {
     required this.raceNumber,
     required this.shutubaTableUrl,
     required this.lastScraped,
-    // ▼▼▼ ここから追加 ▼▼▼
     required this.distance,
     required this.conditions,
     required this.weight,
+    // ▼▼▼ ここから追加 ▼▼▼
+    this.raceDetails1,
+    this.raceDetails2,
     // ▲▲▲ ここまで追加 ▲▲▲
   });
 
@@ -48,10 +52,12 @@ class FeaturedRace {
       raceNumber: map['race_number'] as String,
       shutubaTableUrl: map['shutuba_table_url'] as String,
       lastScraped: DateTime.parse(map['last_scraped'] as String),
-      // ▼▼▼ ここから追加 (DBにまだ列がない場合も考慮してnull許容で取得し、nullなら空文字を返す) ▼▼▼
       distance: map['distance'] as String? ?? '',
       conditions: map['conditions'] as String? ?? '',
       weight: map['weight'] as String? ?? '',
+      // ▼▼▼ ここから追加 ▼▼▼
+      raceDetails1: map['race_details_1'] as String?,
+      raceDetails2: map['race_details_2'] as String?,
       // ▲▲▲ ここまで追加 ▲▲▲
     );
   }
@@ -68,10 +74,12 @@ class FeaturedRace {
       'race_number': raceNumber,
       'shutuba_table_url': shutubaTableUrl,
       'last_scraped': lastScraped.toIso8601String(),
-      // ▼▼▼ ここから追加 ▼▼▼
       'distance': distance,
       'conditions': conditions,
       'weight': weight,
+      // ▼▼▼ ここから追加 ▼▼▼
+      'race_details_1': raceDetails1,
+      'race_details_2': raceDetails2,
       // ▲▲▲ ここまで追加 ▲▲▲
     };
   }

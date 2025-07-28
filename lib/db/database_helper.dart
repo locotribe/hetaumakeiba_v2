@@ -5,7 +5,7 @@ import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/featured_race_model.dart'; // ★★★★★ 追加：注目レースモデルをインポート ★★★★★
+import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -80,7 +80,7 @@ class DatabaseHelper {
             UNIQUE(horse_id, date) ON CONFLICT REPLACE
           )
         ''');
-        // ★★★★★ ここから追加：注目レースデータテーブルの作成 ★★★★★
+        // ▼▼▼ ここを修正 ▼▼▼
         await db.execute('''
           CREATE TABLE featured_races(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,10 +91,15 @@ class DatabaseHelper {
             venue TEXT,
             race_number TEXT,
             shutuba_table_url TEXT,
-            last_scraped TEXT
+            last_scraped TEXT,
+            distance TEXT,
+            conditions TEXT,
+            weight TEXT,
+            race_details_1 TEXT,
+            race_details_2 TEXT
           )
         ''');
-        // ★★★★★ ここまで追加 ★★★★★
+        // ▲▲▲ ここまで修正 ▲▲▲
       },
     );
   }
@@ -231,12 +236,16 @@ class DatabaseHelper {
     );
   }
 
-  // ★★★★★ ここから追加：FeaturedRaceデータ関連のメソッド ★★★★★
+  // FeaturedRaceデータ関連のメソッド
 
   /// 注目レースの単一のレコードをデータベースに挿入または更新します。
   /// race_idが重複する場合は既存のレコードを上書きします。
   Future<int> insertOrUpdateFeaturedRace(FeaturedRace featuredRace) async {
     final db = await database;
+    print('--- DBに保存するFeaturedRaceデータ ---');
+    // toMap()を使うことで、全てのプロパティを一度に確認できる
+    print(featuredRace.toMap());
+    print('------------------------------------');
     return await db.insert(
       'featured_races',
       featuredRace.toMap(),
@@ -274,15 +283,13 @@ class DatabaseHelper {
     return await db.delete('featured_races');
   }
 
-  // ★★★★★ ここまで追加 ★★★★★
-
   /// 全てのデータを削除します。
   Future<void> deleteAllData() async {
     final db = await database;
     await db.delete('qr_data');
     await db.delete('race_results');
     await db.delete('horse_performance');
-    await db.delete('featured_races'); // ★★★★★ 修正：注目レースデータも削除対象に追加 ★★★★★
+    await db.delete('featured_races');
     print('DEBUG: All data deleted from qr_data, race_results, horse_performance, and featured_races tables.');
   }
 }

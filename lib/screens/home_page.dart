@@ -2,11 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
-// ▼▼▼ home_page_data_model は不要になったため、featured_race_model をインポート ▼▼▼
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/widgets/featured_race_list_item.dart';
-// ▼▼▼ venue_races_card は不要になったため削除 ▼▼▼
-// import 'package:hetaumakeiba_v2/widgets/venue_races_card.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,7 +13,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // ▼▼▼ State管理変数を2つのリストに変更 ▼▼▼
   List<FeaturedRace> _weeklyGradedRaces = [];
   List<FeaturedRace> _monthlyGradedRaces = [];
   bool _isLoading = true;
@@ -27,7 +23,6 @@ class _HomePageState extends State<HomePage> {
     _loadHomePageData();
   }
 
-  // ▼▼▼ データ読み込み処理を全面的に書き換え ▼▼▼
   Future<void> _loadHomePageData() async {
     if (!mounted) return;
     setState(() {
@@ -78,7 +73,6 @@ class _HomePageState extends State<HomePage> {
         ),
         _isLoading
             ? const Center(child: CircularProgressIndicator())
-        // ▼▼▼ データ存在チェックを2つのリストで行うように変更 ▼▼▼
             : (_weeklyGradedRaces.isEmpty && _monthlyGradedRaces.isEmpty)
             ? Center(
           child: RefreshIndicator(
@@ -140,7 +134,7 @@ class _HomePageState extends State<HomePage> {
                   const Padding(
                     padding: EdgeInsets.only(bottom: 4.0, left: 4.0),
                     child: Text(
-                      '今月の重賞レース', // ← タイトルを変更
+                      '今月の重賞レース',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -151,10 +145,9 @@ class _HomePageState extends State<HomePage> {
                   ..._monthlyGradedRaces.map((race) {
                     return FeaturedRaceListItem(
                       race: race,
-                      onTap: () {
-                        print('DEBUG: ${race.raceName} の詳細へ遷移: ${race.shutubaTableUrl}');
-                        // TODO: 詳細ページへの遷移
-                      },
+                      // ▼▼▼ ここを修正 ▼▼▼
+                      onTap: () {}, // タップしても何もしないように空の関数を設定
+                      // ▲▲▲ ここまで修正 ▲▲▲
                     );
                   }).toList(),
                 ],
