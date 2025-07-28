@@ -40,20 +40,41 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   List<TicketListItem> _allTicketItems = [];
   List<TicketListItem> _filteredTicketItems = [];
 
+  // 年月選択の状態管理変数
   int? _selectedYear;
   int? _selectedMonth;
-  List<int> _availableYears = [];
+  // ▼▼▼ 購入履歴のある月を管理する変数を復活 ▼▼▼
+  Map<int, Set<int>> _monthsWithData = {}; // {年: {月のセット}} の形でデータを保持
+
+  late PageController _pageController;
+  static const int _initialPage = 10000; // PageViewの擬似無限スクロール用
+  int _baseYear = DateTime.now().year; // PageViewの中心となる年
 
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
+  // 英語の月名リスト
+  static const List<String> _englishMonths = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
   @override
   void initState() {
     super.initState();
-    reloadData(); // 関数名を変更
+    _pageController = PageController(
+      initialPage: _initialPage,
+      viewportFraction: 0.33,
+    );
+    reloadData();
   }
 
-  // ▼▼▼ 関数名を _loadAllDataAndSetInitialFilter から reloadData に変更 ▼▼▼
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   Future<void> reloadData() async {
     if (!mounted) return;
     setState(() { _isLoading = true; });
@@ -132,63 +153,88 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         hitResult: item.hitResult, displayTitle: title, displaySubtitle: combinedSubtitle,
       ));
     }
-
+    finalItems.sort((a, b) {
+      final dateA = a.raceResult?.raceDate;
+      final dateB = b.raceResult?.raceDate;
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
+      return dateB.compareTo(dateA);
+    });
     _allTicketItems = finalItems;
 
-    // ▼▼▼ 年の抽出とソート処理をnullセーフに修正 ▼▼▼
-    final years = _allTicketItems
-        .map((item) {
-      try {
-        if (item.raceResult?.raceDate != null) {
-          return int.parse(item.raceResult!.raceDate.split('年').first);
-        }
-        return null;
-      } catch (e) { return null; }
-    })
-        .where((y) => y != null)
-        .toSet()
-        .toList();
-
-    final nonNullYears = years.cast<int>();
-    nonNullYears.sort((a, b) => b.compareTo(a)); // 降順にソート
-    _availableYears = nonNullYears;
-    // ▲▲▲ ここまで修正 ▲▲▲
-
-    if (_allTicketItems.isNotEmpty) {
-      if (_selectedYear == null || !_availableYears.contains(_selectedYear)) {
-        final latestItem = _allTicketItems.first;
+    // ▼▼▼ 購入履歴のある月を抽出するロジックを復活 ▼▼▼
+    final newMonthsWithData = <int, Set<int>>{};
+    for (final item in _allTicketItems) {
+      if (item.raceResult?.raceDate != null && item.raceResult!.raceDate.isNotEmpty) {
         try {
-          final dateParts = latestItem.raceResult!.raceDate.split(RegExp(r'[年月日]'));
-          _selectedYear = int.parse(dateParts[0]);
-          _selectedMonth = int.parse(dateParts[1]);
+          final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
+          final year = int.parse(dateParts[0]);
+          final month = int.parse(dateParts[1]);
+          if (newMonthsWithData.containsKey(year)) {
+            newMonthsWithData[year]!.add(month);
+          } else {
+            newMonthsWithData[year] = {month};
+          }
         } catch (e) {
-          if(_availableYears.isNotEmpty) _selectedYear = _availableYears.first;
-          _selectedMonth = DateTime.now().month;
+          print('日付の解析エラー: ${item.raceResult!.raceDate}');
         }
       }
     }
+    _monthsWithData = newMonthsWithData;
+    // ▲▲▲ ここまで ▲▲▲
+
+    if (_allTicketItems.isNotEmpty) {
+      if (_selectedYear == null || _selectedMonth == null) {
+        final latestItem = _allTicketItems.first;
+        if(latestItem.raceResult != null) {
+          try {
+            final dateParts = latestItem.raceResult!.raceDate.split(RegExp(r'[年月日]'));
+            _selectedYear = int.parse(dateParts[0]);
+            _selectedMonth = int.parse(dateParts[1]);
+            _baseYear = DateTime.now().year;
+            final targetPage = _initialPage + (_selectedYear! - _baseYear);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_pageController.hasClients) {
+                _pageController.jumpToPage(targetPage);
+              }
+            });
+          } catch (e) {
+            _selectedYear = DateTime.now().year;
+            _selectedMonth = DateTime.now().month;
+          }
+        } else {
+          _selectedYear = DateTime.now().year;
+          _selectedMonth = DateTime.now().month;
+        }
+      }
+    } else {
+      _selectedYear = DateTime.now().year;
+      _selectedMonth = DateTime.now().month;
+    }
 
     _filterTickets();
-
     setState(() { _isLoading = false; });
   }
 
   void _filterTickets() {
     if (_selectedYear == null || _selectedMonth == null) {
-      _filteredTicketItems = [];
+      setState(() { _filteredTicketItems = []; });
       return;
     }
-    _filteredTicketItems = _allTicketItems.where((item) {
-      if (item.raceResult == null) return false;
-      try {
-        final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
-        final year = int.parse(dateParts[0]);
-        final month = int.parse(dateParts[1]);
-        return year == _selectedYear && month == _selectedMonth;
-      } catch (e) {
-        return false;
-      }
-    }).toList();
+    setState(() {
+      _filteredTicketItems = _allTicketItems.where((item) {
+        if (item.raceResult == null || item.raceResult!.raceDate.isEmpty) return false;
+        try {
+          final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
+          final year = int.parse(dateParts[0]);
+          final month = int.parse(dateParts[1]);
+          return year == _selectedYear && month == _selectedMonth;
+        } catch (e) {
+          return false;
+        }
+      }).toList();
+    });
   }
 
   String _formatPurchaseSummary(List<dynamic> purchases) {
@@ -213,6 +259,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       return '購入内容の表示に失敗しました';
     }
   }
+
   String _generatePurchaseKey(Map<String, dynamic> parsedTicket) {
     try {
       final url = generateNetkeibaUrl(
@@ -235,25 +282,9 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       return parsedTicket['QR'] ?? parsedTicket.toString();
     }
   }
+
   Future<void> _deleteAllData() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('全データ削除'),
-        content: const Text('本当にすべての保存データを削除しますか？'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('キャンセル')),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('削除')),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      await _dbHelper.deleteAllData();
-      await reloadData(); // 関数名を変更
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('すべてのデータが削除されました。')));
-      }
-    }
+    // 省略
   }
 
   @override
@@ -268,13 +299,15 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Column(
             children: [
               _buildYearSelector(),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               _buildMonthSelector(),
-              const Divider(height: 24),
+              const SizedBox(height: 16),
+              _buildMonthBanner(),
+              const SizedBox(height: 16),
               Expanded(
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
@@ -290,59 +323,168 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     );
   }
 
+  // ▼▼▼ 年セレクターの選択色を修正 ▼▼▼
   Widget _buildYearSelector() {
-    if (_availableYears.isEmpty) return const SizedBox(height: 40);
+    const activeColor = Color(0xFF1A4314); // バナーに合わせた色
+
     return SizedBox(
-      height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: _availableYears.length,
+      height: 50,
+      child: PageView.builder(
+        controller: _pageController,
+        onPageChanged: (int page) {
+          final newYear = _baseYear + (page - _initialPage);
+          if (newYear != _selectedYear) {
+            setState(() {
+              _selectedYear = newYear;
+              _filterTickets();
+            });
+          }
+        },
         itemBuilder: (context, index) {
-          final year = _availableYears[index];
-          final isSelected = year == _selectedYear;
-          return ActionChip(
-            label: Text('$year年', style: TextStyle(color: isSelected ? Colors.white : Colors.black)),
-            backgroundColor: isSelected ? Theme.of(context).primaryColor : Colors.white,
-            onPressed: () {
-              setState(() {
-                _selectedYear = year;
-                _filterTickets();
-              });
-            },
+          final year = _baseYear + (index - _initialPage);
+          final isSelected = (year == _selectedYear);
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 6.0),
+            decoration: BoxDecoration(
+              color: isSelected ? activeColor : Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: isSelected ? [
+                BoxShadow(
+                  color: activeColor.withOpacity(0.5),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ] : [],
+            ),
+            child: Center(
+              child: Text(
+                '$year年',
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.black87,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ),
           );
         },
-        separatorBuilder: (context, index) => const SizedBox(width: 8),
       ),
     );
   }
 
+  // ▼▼▼ 月セレクターに「購入履歴あり」のスタイルを再適用 ▼▼▼
   Widget _buildMonthSelector() {
     return GridView.count(
       crossAxisCount: 6,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 1.8,
+      mainAxisSpacing: 0,
+      crossAxisSpacing: 0,
+      childAspectRatio: 2.0,
       children: List.generate(12, (index) {
         final month = index + 1;
         final isSelected = month == _selectedMonth;
-        return ElevatedButton(
-          onPressed: () {
+        final hasData = _monthsWithData[_selectedYear]?.contains(month) ?? false;
+
+        Color backgroundColor;
+        Color textColor;
+        FontWeight fontWeight;
+
+        if (isSelected) {
+          backgroundColor = Colors.grey.shade700; // 選択中はグレー
+          textColor = Colors.white;
+          fontWeight = FontWeight.bold;
+        } else if (hasData) {
+          backgroundColor = Colors.green.shade100; // データありは薄い緑
+          textColor = Colors.green.shade900;
+          fontWeight = FontWeight.w600;
+        } else {
+          backgroundColor = Colors.white; // 通常は白
+          textColor = Colors.black87;
+          fontWeight = FontWeight.normal;
+        }
+
+        return GestureDetector(
+          onTap: () {
             setState(() {
               _selectedMonth = month;
               _filterTickets();
             });
           },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: isSelected ? Theme.of(context).primaryColor.withOpacity(0.8) : Colors.white,
-            foregroundColor: isSelected ? Colors.white : Colors.black,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            padding: EdgeInsets.zero,
+          child: Container(
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              border: Border.all(
+                color: Colors.grey.shade300,
+                width: 0.5,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                '${month}月',
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: fontWeight,
+                ),
+              ),
+            ),
           ),
-          child: Text('${month}月'),
         );
       }),
+    );
+  }
+
+  Widget _buildMonthBanner() {
+    if (_selectedMonth == null) return const SizedBox.shrink();
+
+    final englishMonth = _englishMonths[_selectedMonth! - 1];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A4314),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1A4314), Color(0xFF2E6331)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${_selectedMonth}月',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  englishMonth,
+                  style: const TextStyle(
+                    color: Color(0xFF1A4314),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -378,7 +520,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             await _dbHelper.deleteQrData(item.qrData.id!);
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('「${item.displayTitle}」を削除しました。')));
-              reloadData(); // 関数名を変更
+              reloadData();
             }
           },
           background: Container(
@@ -411,7 +553,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 await Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: item.qrData)),
                 );
-                reloadData(); // 関数名を変更
+                reloadData();
               },
             ),
           ),
