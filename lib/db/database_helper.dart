@@ -80,7 +80,7 @@ class DatabaseHelper {
             UNIQUE(horse_id, date) ON CONFLICT REPLACE
           )
         ''');
-        // ▼▼▼ ここを修正 ▼▼▼
+        // 注目レースデータテーブルの作成
         await db.execute('''
           CREATE TABLE featured_races(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,7 +99,6 @@ class DatabaseHelper {
             race_details_2 TEXT
           )
         ''');
-        // ▲▲▲ ここまで修正 ▲▲▲
       },
     );
   }
@@ -189,6 +188,10 @@ class DatabaseHelper {
   /// horse_idとdateが重複する場合は既存のレコードを上書きします。
   Future<int> insertOrUpdateHorsePerformance(HorseRaceRecord record) async {
     final db = await database;
+    // ▼▼▼ ここから追加 ▼▼▼
+    print('--- [DB Save] Horse Performance ---');
+    print('Horse ID: ${record.horseId}, Date: ${record.date}, Race: ${record.raceName}, Rank: ${record.rank}');
+    // ▲▲▲ ここまで追加 ▲▲▲
     return await db.insert(
       'horse_performance',
       record.toMap(),
