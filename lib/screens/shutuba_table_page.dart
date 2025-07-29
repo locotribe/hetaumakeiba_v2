@@ -177,6 +177,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         return Colors.white;
     }
   }
+// _buildHorseListメソッド全体をこちらのコードに置き換えてください
 
   Widget _buildHorseList(List<ShutubaHorseDetail> horses) {
     horses.sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
@@ -200,32 +201,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
               child: ExpansionTile(
                 title: Row(
                   children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: _getGateColor(horse.gateNumber),
-                        shape: BoxShape.circle,
-                        border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        horse.gateNumber.toString(),
-                        style: TextStyle(color: _getTextColorForGate(horse.gateNumber), fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(width: 30, child: Text('${horse.horseNumber}番')),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        horse.horseName,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    SizedBox(width: 80, child: Text('${horse.sexAndAge} / ${horse.carriedWeight}kg', textAlign: TextAlign.end,)),
-                    const SizedBox(width: 8),
+                    // ▼▼▼ 修正点①：「印」のドロップダウンをここに移動 ▼▼▼
                     FutureBuilder<UserMark?>(
                       future: _dbHelper.getUserMark(widget.raceId, horse.horseId),
                       builder: (context, markSnapshot) {
@@ -251,6 +227,35 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                         );
                       },
                     ),
+                    // ▼▼▼ 修正点②：右側とのスペースを追加 ▼▼▼
+                    const SizedBox(width: 8),
+
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: _getGateColor(horse.gateNumber),
+                        shape: BoxShape.circle,
+                        border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        horse.gateNumber.toString(),
+                        style: TextStyle(color: _getTextColorForGate(horse.gateNumber), fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(width: 30, child: Text('${horse.horseNumber}番')),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        horse.horseName,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    SizedBox(width: 80, child: Text('${horse.sexAndAge} / ${horse.carriedWeight}kg', textAlign: TextAlign.end,)),
+                    // 元の位置にあったFutureBuilderは削除
                   ],
                 ),
                 subtitle: Padding(
@@ -307,7 +312,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       },
     );
   }
-
   // ▼▼▼ 修正点：ご指摘に基づき、正しいプロパティを表示するように修正 ▼▼▼
   Widget _buildPastRaceRecord(HorseRaceRecord record) {
     Widget buildInfoRow(String label, String value) {
@@ -321,7 +325,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              width: 70,
+              width: 120,
               child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
             ),
             Expanded(
@@ -353,17 +357,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
             ),
           ),
           const SizedBox(height: 4),
-          buildInfoRow('開催', '${record.venue} ${record.raceNumber}R'),
-          buildInfoRow('条件', '${record.distance} / 天候:${record.weather}'),
-          buildInfoRow('馬場', record.trackCondition),
-          buildInfoRow('枠番', '${record.frameNumber} / 馬番:${record.horseNumber}'),
-          buildInfoRow('頭数', record.numberOfHorses),
+          buildInfoRow('開催/条件/馬場', '${record.venue} ${record.raceNumber}R / ${record.distance} / 天候:${record.weather} / 馬場:${record.trackCondition}'),
+          buildInfoRow('枠/馬番/頭数', '${record.frameNumber} / ${record.horseNumber} / ${record.numberOfHorses}'),
           buildInfoRow('騎手/斤量', '${record.jockey} / ${record.carriedWeight}kg'),
-          buildInfoRow('タイム', record.time),
-          buildInfoRow('着差', record.margin),
-          buildInfoRow('ペース', record.pace),
-          buildInfoRow('通過', record.cornerPassage),
-          buildInfoRow('上がり', record.agari),
+          buildInfoRow('タイム/着差/ペース', '${record.time} / ${record.margin} / ${record.pace}'),
+          buildInfoRow('通過', '${record.cornerPassage} / ${record.agari}'),
           buildInfoRow('人気/オッズ', '${record.popularity}番人気 / ${record.odds}倍'),
           buildInfoRow('馬体重', record.horseWeight),
           buildInfoRow('勝ち馬', record.winnerOrSecondHorse),
