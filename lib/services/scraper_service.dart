@@ -7,9 +7,16 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:charset_converter/charset_converter.dart';
+import 'package:hetaumakeiba_v2/db/database_helper.dart';
 
 class ScraperService {
-  // 既存の関数はここから (変更なし)
+
+  // ▼▼▼ 全てのHTTPリクエストで共通して使用するヘッダーを定義 ▼▼▼
+  static const Map<String, String> _headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+  };
+  // ▲▲▲ ここまで追加 ▲▲▲
+
   /// URLからレースIDを抽出するヘルパー関数
   static String? getRaceIdFromUrl(String url) {
     final uri = Uri.parse(url);
@@ -28,7 +35,8 @@ class ScraperService {
         throw Exception('無効なURLです: レースIDが取得できませんでした。');
       }
 
-      final response = await http.get(Uri.parse(url));
+      // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
+      final response = await http.get(Uri.parse(url), headers: _headers);
       if (response.statusCode != 200) {
         throw Exception('HTTPリクエストに失敗しました: Status code ${response.statusCode}');
       }
@@ -66,7 +74,8 @@ class ScraperService {
   static Future<List<HorseRaceRecord>> scrapeHorsePerformance(String horseId) async {
     try {
       final url = generateNetkeibaHorseUrl(horseId: horseId);
-      final response = await http.get(Uri.parse(url));
+      // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
+      final response = await http.get(Uri.parse(url), headers: _headers);
 
       if (response.statusCode != 200) {
         throw Exception('HTTPリクエストに失敗しました: Status code ${response.statusCode} for horse ID $horseId');
@@ -130,7 +139,8 @@ class ScraperService {
     final List<FeaturedRace> featuredRaces = [];
     try {
       const url = 'https://race.netkeiba.com/top/';
-      final response = await http.get(Uri.parse(url));
+      // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
+      final response = await http.get(Uri.parse(url), headers: _headers);
 
       if (response.statusCode != 200) {
         throw Exception('HTTPリクエストに失敗しました: Status code ${response.statusCode} for featured races.');
@@ -167,8 +177,8 @@ class ScraperService {
             distance: '',
             conditions: '',
             weight: '',
-            raceDetails1: shutubaRace['raceDetails1'], // 詳細情報を追加
-            raceDetails2: shutubaRace['raceDetails2'], // 詳細情報を追加
+            raceDetails1: shutubaRace['raceDetails1'],
+            raceDetails2: shutubaRace['raceDetails2'],
           ));
         }
       }
@@ -185,12 +195,12 @@ class ScraperService {
     return uri.queryParameters['race_id'];
   }
 
-  // ▼▼▼ ここから修正 ▼▼▼
   /// 出馬表ページをスクレイピングしてレース詳細情報を取得します。
   static Future<Map<String, String>?> _scrapeShutubaPageDetails(String raceId) async {
     try {
       final url = 'https://race.netkeiba.com/race/shutuba.html?race_id=$raceId';
-      final response = await http.get(Uri.parse(url));
+      // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
+      final response = await http.get(Uri.parse(url), headers: _headers);
 
       if (response.statusCode != 200) {
         print('HTTPリクエストに失敗しました: Status code ${response.statusCode} for shutuba page $raceId');
@@ -231,14 +241,12 @@ class ScraperService {
         final dateText = _safeGetText(dateElement);
         raceDate = dateText.split('(')[0];
         final currentYear = DateTime.now().year;
-        raceDate = '$currentYear年$dateText'; // 曜日まで含めるように変更
+        raceDate = '$currentYear年$dateText';
       }
 
-      // 詳細情報1 (発走時間 / コース情報) を取得
       final raceData1 = document.querySelector('div.RaceData01');
       final details1 = raceData1?.text.replaceAll(RegExp(r'\s+'), ' ').trim() ?? '';
 
-      // 詳細情報2 (開催日 / 条件) を取得
       final raceData2 = document.querySelector('div.RaceData02');
       final details2 = raceData2?.text.replaceAll(RegExp(r'\s+'), ' ').trim() ?? '';
 
@@ -258,13 +266,13 @@ class ScraperService {
       return null;
     }
   }
-  // ▲▲▲ ここまで修正 ▲▲▲
 
   /// 出馬表ページから出走馬のホースIDのリストを抽出するヘルパー関数です。
   static Future<List<String>> extractHorseIdsFromShutubaPage(String shutubaTableUrl) async {
     final List<String> horseIds = [];
     try {
-      final response = await http.get(Uri.parse(shutubaTableUrl));
+      // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
+      final response = await http.get(Uri.parse(shutubaTableUrl), headers: _headers);
 
       if (response.statusCode != 200) {
         print('HTTPリクエストに失敗しました: Status code ${response.statusCode} for shutuba page $shutubaTableUrl');
@@ -290,6 +298,29 @@ class ScraperService {
       print('出馬表ページからのホースID抽出中にエラーが発生しました: $e');
       return [];
     }
+  }
+
+  static Future<void> syncNewHorseData(List<FeaturedRace> races, DatabaseHelper dbHelper) async {
+    print('[Horse Data Sync Start] 新規登録馬のデータ取得を開始します...');
+    try {
+      for (final race in races) {
+        final horseIds = await extractHorseIdsFromShutubaPage(race.shutubaTableUrl);
+        for (final horseId in horseIds) {
+          final existingRecord = await dbHelper.getLatestHorsePerformanceRecord(horseId);
+          if (existingRecord == null) {
+            print('新規競走馬データ取得中... Horse ID: $horseId');
+            final newRecords = await scrapeHorsePerformance(horseId);
+            for (final record in newRecords) {
+              await dbHelper.insertOrUpdateHorsePerformance(record);
+            }
+            await Future.delayed(const Duration(milliseconds: 500));
+          }
+        }
+      }
+    } catch (e) {
+      print('[Horse Data Sync Error] 新規競走馬のデータ取得中にエラーが発生しました: $e');
+    }
+    print('[Horse Data Sync End] 新規登録馬のデータ取得が完了しました。');
   }
 
   static String _safeGetText(dom.Element? element) {
@@ -419,7 +450,7 @@ class ScraperService {
       return await _scrapeGradedRacesFromSchedulePage();
     } catch (e) {
       print('ホームページのデータ取得中にエラーが発生しました: $e');
-      return []; // エラー時は空のデータを返す
+      return [];
     }
   }
 
@@ -430,7 +461,8 @@ class ScraperService {
     final now = DateTime.now();
     final currentYear = now.year;
 
-    final response = await http.get(Uri.parse(url));
+    // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
+    final response = await http.get(Uri.parse(url), headers: _headers);
     if (response.statusCode != 200) {
       print('重賞日程ページの取得に失敗しました: Status code ${response.statusCode}');
       return [];
@@ -442,20 +474,17 @@ class ScraperService {
     final rows = document.querySelectorAll('table.race_table_01 tr');
     for (final row in rows) {
       final cells = row.querySelectorAll('td');
-      // ヘッダー行や不正な行をスキップ
       if (cells.length < 7) continue;
 
       try {
-        final dateStr = _safeGetText(cells[0]); // 例: 08/03(日)
+        final dateStr = _safeGetText(cells[0]);
         final monthAndDay = dateStr.split('(')[0].split('/');
         final month = int.parse(monthAndDay[0]);
 
-        // 今月のレースのみを抽出する
         if (month == now.month) {
           final raceName = _safeGetText(cells[1].querySelector('a'));
           final link = cells[1].querySelector('a')?.attributes['href'] ?? '';
 
-          // このページからは詳細なrace_idが取得できないため、暫定IDを生成
           final raceId = 'monthly_graded_${_safeGetText(cells[3])}_${raceName.replaceAll(' ', '_')}';
 
           gradedRaces.add(FeaturedRace(
@@ -466,16 +495,13 @@ class ScraperService {
             distance: _safeGetText(cells[4]),
             conditions: _safeGetText(cells[5]),
             weight: _safeGetText(cells[6]),
-            // YYYY年MM/DD(曜) 形式で日付を生成
             raceDate: '$currentYear年$dateStr',
-            shutubaTableUrl: link, // ← URLの取得は不要とのことなので、そのまま格納
-            // このページからは取得不可のため、空文字を設定
+            shutubaTableUrl: link,
             raceNumber: '',
             lastScraped: DateTime.now(),
           ));
         }
       } catch (e) {
-        // 日付解析エラーなどは無視して次の行へ
         print('重賞日程の行解析エラー: $e');
         continue;
       }

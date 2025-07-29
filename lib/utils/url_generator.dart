@@ -17,5 +17,5 @@ String generateNetkeibaUrl({
 String generateNetkeibaHorseUrl({
   required String horseId,
 }) {
-  return 'https://db.netkeiba.com/horse/$horseId';
+  return 'https://db.netkeiba.com/horse/result/$horseId';
 }

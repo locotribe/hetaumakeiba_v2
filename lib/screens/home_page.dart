@@ -1,9 +1,11 @@
 // lib/screens/home_page.dart
 import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/widgets/featured_race_list_item.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,6 +18,11 @@ class _HomePageState extends State<HomePage> {
   List<FeaturedRace> _weeklyGradedRaces = [];
   List<FeaturedRace> _monthlyGradedRaces = [];
   bool _isLoading = true;
+
+  // ▼▼▼ ここから新規追加 ▼▼▼
+  final DatabaseHelper _dbHelper = DatabaseHelper();
+  bool _isHorseDataSynced = false; // データ取得処理を一度しか実行しないためのフラグ
+  // ▲▲▲ ここまで新規追加 ▲▲▲
 
   @override
   void initState() {
@@ -48,6 +55,16 @@ class _HomePageState extends State<HomePage> {
         _monthlyGradedRaces = monthlyRaces;
         _isLoading = false;
       });
+
+      // ▼▼▼ ここから新規追加 ▼▼▼
+      // 初回読み込み時のみ、新規の競走馬データをバックグラウンドで取得
+      if (!_isHorseDataSynced && _weeklyGradedRaces.isNotEmpty) {
+        _isHorseDataSynced = true; // フラグを立てて再実行を防ぐ
+        // UIをブロックしないようにawaitなしで呼び出す
+        ScraperService.syncNewHorseData(_weeklyGradedRaces, _dbHelper);
+      }
+      // ▲▲▲ ここまで新規追加 ▲▲▲
+
     } catch (e) {
       print('ERROR: ホームページのデータロード中にエラーが発生しました: $e');
       if (mounted) {
@@ -119,10 +136,19 @@ class _HomePageState extends State<HomePage> {
                   ..._weeklyGradedRaces.map((race) {
                     return FeaturedRaceListItem(
                       race: race,
-                      onTap: () {
-                        print('DEBUG: ${race.raceName} の詳細へ遷移: ${race.shutubaTableUrl}');
-                        // TODO: 詳細ページへの遷移
+                      // ▼▼▼ ここから修正 ▼▼▼
+                      onTap: () async {
+                        final Uri url = Uri.parse(race.shutubaTableUrl);
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url);
+                        } else {
+                          // エラーハンドリング（例: SnackBarでユーザーに通知）
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('URLを開けませんでした: ${race.shutubaTableUrl}')),
+                          );
+                        }
                       },
+                      // ▲▲▲ ここまで修正 ▲▲▲
                     );
                   }).toList(),
                 ],
@@ -145,9 +171,7 @@ class _HomePageState extends State<HomePage> {
                   ..._monthlyGradedRaces.map((race) {
                     return FeaturedRaceListItem(
                       race: race,
-                      // ▼▼▼ ここを修正 ▼▼▼
                       onTap: () {}, // タップしても何もしないように空の関数を設定
-                      // ▲▲▲ ここまで修正 ▲▲▲
                     );
                   }).toList(),
                 ],
