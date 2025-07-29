@@ -17,8 +17,6 @@ class ScraperService {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
   };
 
-  static get records => null;
-
   static String? getRaceIdFromUrl(String url) {
     final uri = Uri.parse(url);
     final pathSegments = uri.pathSegments;
@@ -93,38 +91,35 @@ class ScraperService {
 
       for (final row in rows) {
         final cells = row.querySelectorAll('td');
-        // ▼▼▼ 修正点①：チェックする長さを修正 ▼▼▼
-        // 賞金(td[29] -> cells[28])に安全にアクセスするため、要素数が29以上であることを確認
         if (cells.length < 29) {
           continue;
         }
 
-        // ▼▼▼ 修正点②：ご提示のマッピングデータに合わせてインデックスを修正 ▼▼▼
         records.add(HorseRaceRecord(
           horseId: horseId,
-          date: _safeGetText(cells[0]),               // td[1]
-          venue: _safeGetText(cells[1]),              // td[2]
-          weather: _safeGetText(cells[2]),            // td[3]
-          raceNumber: _safeGetText(cells[3]),         // td[4]
-          raceName: _safeGetText(cells[4].querySelector('a')), // td[5]
-          numberOfHorses: _safeGetText(cells[6]),     // td[7]
-          frameNumber: _safeGetText(cells[7]),        // td[8]
-          horseNumber: _safeGetText(cells[8]),        // td[9]
-          odds: _safeGetText(cells[9]),               // td[10]
-          popularity: _safeGetText(cells[10]),          // td[11]
-          rank: _safeGetText(cells[11]),              // td[12]
-          jockey: _safeGetText(cells[12].querySelector('a')), // td[13]
-          carriedWeight: _safeGetText(cells[13]),     // td[14]
-          distance: _safeGetText(cells[14]),          // td[15]
-          trackCondition: _safeGetText(cells[16]),    // td[17]
-          time: _safeGetText(cells[18]),              // td[19]
-          margin: _safeGetText(cells[19]),            // td[20]
-          cornerPassage: _safeGetText(cells[21]),     // td[22]
-          pace: _safeGetText(cells[22]),              // td[23]
-          agari: _safeGetText(cells[23]),             // td[24]
-          horseWeight: _safeGetText(cells[24]),       // td[25]
-          winnerOrSecondHorse: _safeGetText(cells[27].querySelector('a')), // td[28]
-          prizeMoney: _safeGetText(cells[28]),          // td[29]
+          date: _safeGetText(cells[0]),
+          venue: _safeGetText(cells[1]),
+          weather: _safeGetText(cells[2]),
+          raceNumber: _safeGetText(cells[3]),
+          raceName: _safeGetText(cells[4].querySelector('a')),
+          numberOfHorses: _safeGetText(cells[6]),
+          frameNumber: _safeGetText(cells[7]),
+          horseNumber: _safeGetText(cells[8]),
+          odds: _safeGetText(cells[9]),
+          popularity: _safeGetText(cells[10]),
+          rank: _safeGetText(cells[11]),
+          jockey: _safeGetText(cells[12].querySelector('a')),
+          carriedWeight: _safeGetText(cells[13]),
+          distance: _safeGetText(cells[14]),
+          trackCondition: _safeGetText(cells[16]),
+          time: _safeGetText(cells[18]),
+          margin: _safeGetText(cells[19]),
+          cornerPassage: _safeGetText(cells[21]),
+          pace: _safeGetText(cells[22]),
+          agari: _safeGetText(cells[23]),
+          horseWeight: _safeGetText(cells[24]),
+          winnerOrSecondHorse: _safeGetText(cells[27].querySelector('a')),
+          prizeMoney: _safeGetText(cells[28]),
         ));
       }
       return records;
@@ -291,11 +286,6 @@ class ScraperService {
     }
   }
 
-  static String? _extractRaceIdFromShutubaUrl(String url) {
-    final uri = Uri.parse(url);
-    return uri.queryParameters['race_id'];
-  }
-
   static Future<List<String>> extractHorseIdsFromShutubaPage(String shutubaTableUrl) async {
     final List<String> horseIds = [];
     try {
@@ -355,20 +345,15 @@ class ScraperService {
 
   static List<HorseResult> _parseHorseResults(dom.Document document) {
     final List<HorseResult> results = [];
-    // レース結果テーブルを正しく選択
     final rows = document.querySelectorAll('table.race_table_01 tr');
 
-    // 最初の行はヘッダーなのでi=1から開始
     for (var i = 1; i < rows.length; i++) {
       final cells = rows[i].querySelectorAll('td');
-      // レース結果テーブルの列数に合わせてチェック（通常は21列以上）
       if (cells.length < 21) continue;
 
       final horseLink = cells[3].querySelector('a');
-      // レース結果ページのURLからhorseIdを取得
       final horseId = horseLink?.attributes['href']?.split('/')[4] ?? '';
 
-      // HorseResultモデルのプロパティに、正しいインデックスのセルを割り当て
       results.add(HorseResult(
         rank: _safeGetText(cells[0]),
         frameNumber: _safeGetText(cells[1]),
@@ -510,31 +495,5 @@ class ScraperService {
       }
     }
     return gradedRaces;
-  }
-
-  static DateTime _parseDateStringAsDateTime(String dateText) {
-    try {
-      final now = DateTime.now();
-      final parts = RegExp(r'(\d+)年(\d+)月(\d+)日').firstMatch(dateText);
-      if (parts != null) {
-        return DateTime(
-          int.parse(parts.group(1)!),
-          int.parse(parts.group(2)!),
-          int.parse(parts.group(3)!),
-        );
-      }
-      final monthDayParts = RegExp(r'(\d+)月(\d+)日').firstMatch(dateText);
-      if (monthDayParts != null) {
-        return DateTime(
-          now.year,
-          int.parse(monthDayParts.group(1)!),
-          int.parse(monthDayParts.group(2)!),
-        );
-      }
-      return now;
-    } catch (e) {
-      print('Date parsing error: $dateText, Error: $e');
-      return DateTime.now();
-    }
   }
 }

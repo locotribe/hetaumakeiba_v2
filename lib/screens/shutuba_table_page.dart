@@ -7,7 +7,6 @@ import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
-import 'package:intl/intl.dart';
 
 class ShutubaTablePage extends StatefulWidget {
   final String raceId;
