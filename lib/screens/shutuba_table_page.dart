@@ -7,7 +7,7 @@ import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
-import 'package:intl/intl.dart'; // 日付フォーマット用
+import 'package:intl/intl.dart';
 
 class ShutubaTablePage extends StatefulWidget {
   final String raceId;
@@ -53,7 +53,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   }
 
   Future<void> _refreshData() async {
-    // 1時間に1回しか更新できないようにするロジック
     if (_featuredRace != null && _featuredRace!.lastScraped.isAfter(DateTime.now().subtract(const Duration(hours: 1)))) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('データの更新は1時間に1回までです。')),
@@ -67,7 +66,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
     try {
       await ScraperService.scrapeFeaturedRaces(_dbHelper);
-      await _loadShutubaData(); // 再読み込み
+      await _loadShutubaData();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -126,12 +125,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   }
 
   Widget _buildRaceInfoCard(FeaturedRace race) {
-    // ▼▼▼ 修正点：グレードが空でない場合のみ()付きで表示する ▼▼▼
     String raceTitle = race.raceName;
     if (race.raceGrade.isNotEmpty) {
       raceTitle += ' (${race.raceGrade})';
     }
-    // ▲▲▲ 修正ここまで ▲▲▲
 
     return Card(
       margin: const EdgeInsets.all(8.0),
@@ -146,7 +143,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
             ),
             const SizedBox(height: 4),
             Text(
-              raceTitle, // 修正したタイトルを表示
+              raceTitle,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -166,7 +163,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       case 5: return Colors.yellow;
       case 6: return Colors.green;
       case 7: return Colors.orange;
-      case 8: return Colors.pink;
+      case 8: return Colors.pink.shade200;
       default: return Colors.grey;
     }
   }
@@ -270,25 +267,35 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                 ),
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('過去5走成績:', style: TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8.0, bottom: 4.0),
+                          child: Text('過去5走成績:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
                         if (snapshot.connectionState == ConnectionState.waiting)
                           const Center(child: CircularProgressIndicator())
                         else if (records.isEmpty)
-                          const Text('  過去の競走成績データがありません。')
+                          const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Text('過去の競走成績データがありません。'),
+                          )
                         else
-                          ...records.map((record) {
-                            try {
-                              final formattedDate = DateFormat('MM/dd').format(DateTime.parse(record.date.replaceAll('/', '-')));
-                              return Text('  $formattedDate ${record.raceName} (${record.distance}) ${record.rank}着');
-                            } catch (e) {
-                              return Text('  日付形式エラー: ${record.date}');
-                            }
-                          }).toList(),
+                          Column(
+                            children: records.asMap().entries.map((entry) {
+                              final record = entry.value;
+                              final isLast = entry.key == records.length - 1;
+                              return Column(
+                                children: [
+                                  _buildPastRaceRecord(record),
+                                  if (!isLast)
+                                    const Divider(height: 1),
+                                ],
+                              );
+                            }).toList(),
+                          )
                       ],
                     ),
                   ),
@@ -298,6 +305,71 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           },
         );
       },
+    );
+  }
+
+  // ▼▼▼ 修正点：ご指摘に基づき、正しいプロパティを表示するように修正 ▼▼▼
+  Widget _buildPastRaceRecord(HorseRaceRecord record) {
+    Widget buildInfoRow(String label, String value) {
+      // 値が空、または"-"の場合は行自体を表示しない
+      if (value.trim().isEmpty || value.trim() == '-') {
+        return const SizedBox.shrink();
+      }
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 70,
+              child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            ),
+            Expanded(
+              child: Text(value, style: const TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${record.date.replaceAll('/', '.')} ${record.raceName}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text('${record.rank}着', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          buildInfoRow('開催', '${record.venue} ${record.raceNumber}R'),
+          buildInfoRow('条件', '${record.distance} / 天候:${record.weather}'),
+          buildInfoRow('馬場', record.trackCondition),
+          buildInfoRow('枠番', '${record.frameNumber} / 馬番:${record.horseNumber}'),
+          buildInfoRow('頭数', record.numberOfHorses),
+          buildInfoRow('騎手/斤量', '${record.jockey} / ${record.carriedWeight}kg'),
+          buildInfoRow('タイム', record.time),
+          buildInfoRow('着差', record.margin),
+          buildInfoRow('ペース', record.pace),
+          buildInfoRow('通過', record.cornerPassage),
+          buildInfoRow('上がり', record.agari),
+          buildInfoRow('人気/オッズ', '${record.popularity}番人気 / ${record.odds}倍'),
+          buildInfoRow('馬体重', record.horseWeight),
+          buildInfoRow('勝ち馬', record.winnerOrSecondHorse),
+          buildInfoRow('賞金', record.prizeMoney),
+        ],
+      ),
     );
   }
 }

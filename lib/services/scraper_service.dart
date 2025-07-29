@@ -9,7 +9,7 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart'; // 追加
+import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 
 class ScraperService {
 
@@ -17,17 +17,15 @@ class ScraperService {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
   };
 
-  /// URLからレースIDを抽出するヘルパー関数
   static String? getRaceIdFromUrl(String url) {
     final uri = Uri.parse(url);
     final pathSegments = uri.pathSegments;
     if (pathSegments.isNotEmpty && pathSegments.first == 'race') {
       return pathSegments.last;
     }
-    return uri.queryParameters['race_id']; // ★クエリパラメータからも取得できるよう修正
+    return uri.queryParameters['race_id'];
   }
 
-  /// netkeiba.comのレース結果ページをスクレイピングし、RaceResultオブジェクトを返す
   static Future<RaceResult> scrapeRaceDetails(String url) async {
     try {
       final raceId = getRaceIdFromUrl(url);
@@ -43,10 +41,10 @@ class ScraperService {
       final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
       final document = html.parse(decodedBody);
 
-      final raceTitle = _safeGetText(document.querySelector('div.RaceName')); // ★セレクタ修正
-      final raceInfo = _safeGetText(document.querySelector('div.RaceData01')).replaceAll(RegExp(r'\s+'), ' '); // ★セレクタ修正
-      final raceDate = _safeGetText(document.querySelector('title')).split('|')[1].trim().split(' ')[0]; // ★セレクタ修正
-      final raceGrade = _safeGetText(document.querySelector('div.RaceData02')).replaceAll(RegExp(r'\s+'), ' '); // ★セレクタ修正
+      final raceTitle = _safeGetText(document.querySelector('div.RaceName'));
+      final raceInfo = _safeGetText(document.querySelector('div.RaceData01')).replaceAll(RegExp(r'\s+'), ' ');
+      final raceDate = _safeGetText(document.querySelector('title')).split('|')[1].trim().split(' ')[0];
+      final raceGrade = _safeGetText(document.querySelector('div.RaceData02')).replaceAll(RegExp(r'\s+'), ' ');
       final horseResults = _parseHorseResults(document);
       final refunds = _parseRefunds(document);
       final cornerPassages = _parseCornerPassages(document);
@@ -69,7 +67,6 @@ class ScraperService {
     }
   }
 
-  /// netkeiba.comの競走馬データベースページをスクレイピングし、競走成績のリストを返します。
   static Future<List<HorseRaceRecord>> scrapeHorsePerformance(String horseId) async {
     try {
       final url = generateNetkeibaHorseUrl(horseId: horseId);
@@ -94,10 +91,11 @@ class ScraperService {
 
       for (final row in rows) {
         final cells = row.querySelectorAll('td');
-        if (cells.length < 28) { // ★列数変更に対応
+        if (cells.length < 28) {
           continue;
         }
 
+        // ▼▼▼ 修正点：HTMLサンプルとモデル定義に基づき、正しいインデックスを再マッピング ▼▼▼
         records.add(HorseRaceRecord(
           horseId: horseId,
           date: _safeGetText(cells[0]),
@@ -105,6 +103,7 @@ class ScraperService {
           weather: _safeGetText(cells[2]),
           raceNumber: _safeGetText(cells[3]),
           raceName: _safeGetText(cells[4]),
+          // cells[5] は映像のためスキップ
           numberOfHorses: _safeGetText(cells[6]),
           frameNumber: _safeGetText(cells[7]),
           horseNumber: _safeGetText(cells[8]),
@@ -115,15 +114,20 @@ class ScraperService {
           carriedWeight: _safeGetText(cells[13]),
           distance: _safeGetText(cells[14]),
           trackCondition: _safeGetText(cells[15]),
+          // cells[16] は馬場指数のためスキップ
           time: _safeGetText(cells[17]),
           margin: _safeGetText(cells[18]),
+          // cells[19] はタイム指数のためスキップ
           cornerPassage: _safeGetText(cells[20]),
           pace: _safeGetText(cells[21]),
           agari: _safeGetText(cells[22]),
           horseWeight: _safeGetText(cells[23]),
+          // cells[24] は厩舎コメントのためスキップ
+          // cells[25] は備考のためスキップ
           winnerOrSecondHorse: _safeGetText(cells[26].querySelector('a')),
           prizeMoney: _safeGetText(cells[27]),
         ));
+        // ▲▲▲ 修正ここまで ▲▲▲
       }
       return records;
     } catch (e) {
@@ -132,8 +136,7 @@ class ScraperService {
     }
   }
 
-  /// netkeiba.comのトップページから「今週の注目レース」を複数取得するよう修正
-  static Future<List<FeaturedRace>> scrapeFeaturedRaces(DatabaseHelper dbHelper) async { // dbHelper を引数に追加
+  static Future<List<FeaturedRace>> scrapeFeaturedRaces(DatabaseHelper dbHelper) async {
     final List<FeaturedRace> featuredRaces = [];
     try {
       const url = 'https://race.netkeiba.com/top/';
@@ -161,7 +164,7 @@ class ScraperService {
 
       for (final raceId in raceIds) {
         final existingRace = await dbHelper.getFeaturedRace(raceId);
-        if (existingRace != null && existingRace.lastScraped.isAfter(DateTime.now().subtract(const Duration(hours: 1)))) { // 1時間キャッシュ
+        if (existingRace != null && existingRace.lastScraped.isAfter(DateTime.now().subtract(const Duration(hours: 1)))) {
           featuredRaces.add(existingRace);
           continue;
         }
@@ -179,7 +182,6 @@ class ScraperService {
     }
   }
 
-  /// 出馬表ページをスクレイピングして、レース詳細情報と出走馬リストを含むFeaturedRaceオブジェクトを取得します。
   static Future<FeaturedRace?> _scrapeShutubaPageDetails(String raceId) async {
     try {
       final url = 'https://race.netkeiba.com/race/shutuba.html?race_id=$raceId';
@@ -206,7 +208,6 @@ class ScraperService {
       final raceDetails1 = _safeGetText(raceNameBox?.querySelector('.RaceData01'));
       final raceDetails2 = _safeGetText(raceNameBox?.querySelector('.RaceData02')).replaceAll(RegExp(r'\s+'), ' ');
 
-      // ▼▼▼ 修正点：グレードアイコンのclass名からグレードを抽出するロジック ▼▼▼
       String raceGrade = '';
       final gradeElement = raceNameBox?.querySelector('.RaceName [class*="Icon_GradeType"]');
       if (gradeElement != null) {
@@ -223,14 +224,13 @@ class ScraperService {
           raceGrade = 'L';
         }
       }
-      // ▲▲▲ 修正ここまで ▲▲▲
 
       final shutubaHorses = await _scrapeShutubaHorses(document);
 
       return FeaturedRace(
         raceId: raceId,
         raceName: raceName,
-        raceGrade: raceGrade, // 抽出したグレードをセット
+        raceGrade: raceGrade,
         raceDate: raceDate,
         venue: _safeGetText(document.querySelector('.RaceKaisaiWrap .Active a')),
         raceNumber: _safeGetText(document.querySelector('.RaceNumWrap .Active a')).replaceAll('R', ''),
@@ -249,7 +249,6 @@ class ScraperService {
     }
   }
 
-  /// 出馬表から各出走馬の詳細情報をスクレイピングするメソッド
   static Future<List<ShutubaHorseDetail>> _scrapeShutubaHorses(dom.Document document) async {
     final List<ShutubaHorseDetail> horses = [];
     final horseRows = document.querySelectorAll('table.Shutuba_Table tr.HorseList');
@@ -281,13 +280,9 @@ class ScraperService {
     return horses;
   }
 
-  // ( ... 他に影響のない既存のメソッドは省略 ... )
-
   static String _safeGetText(dom.Element? element) {
     return element?.text.trim() ?? '';
   }
-
-  // ( ... ここから下のメソッドは一切変更ありません ... )
 
   static Future<List<FeaturedRace>> scrapeMonthlyGradedRaces() async {
     try {
@@ -298,11 +293,11 @@ class ScraperService {
     }
   }
 
-  // ( ... 以下、ファイル末尾まで他のメソッドは変更なし ...)
   static String? _extractRaceIdFromShutubaUrl(String url) {
     final uri = Uri.parse(url);
     return uri.queryParameters['race_id'];
   }
+
   static Future<List<String>> extractHorseIdsFromShutubaPage(String shutubaTableUrl) async {
     final List<String> horseIds = [];
     try {
@@ -333,8 +328,9 @@ class ScraperService {
       return [];
     }
   }
+
   static Future<void> syncNewHorseData(List<FeaturedRace> races, DatabaseHelper dbHelper) async {
-    print('[Horse Data Sync Start] 新規登録馬のデータ取得を開始します...');
+    print('[Horse Data Sync Start] 競走馬データの同期を開始します...');
     try {
       for (final race in races) {
         final List<String> horseIdsToSync = [];
@@ -345,22 +341,20 @@ class ScraperService {
         }
 
         for (final horseId in horseIdsToSync.toSet()) {
-          final existingRecord = await dbHelper.getLatestHorsePerformanceRecord(horseId);
-          if (existingRecord == null) {
-            print('新規競走馬データ取得中... Horse ID: $horseId');
-            final newRecords = await ScraperService.scrapeHorsePerformance(horseId);
-            for (final record in newRecords) {
-              await dbHelper.insertOrUpdateHorsePerformance(record);
-            }
-            await Future.delayed(const Duration(milliseconds: 500));
+          print('競走馬データ取得/更新中... Horse ID: $horseId');
+          final newRecords = await ScraperService.scrapeHorsePerformance(horseId);
+          for (final record in newRecords) {
+            await dbHelper.insertOrUpdateHorsePerformance(record);
           }
+          await Future.delayed(const Duration(milliseconds: 500));
         }
       }
     } catch (e) {
-      print('[Horse Data Sync Error] 新規競走馬のデータ取得中にエラーが発生しました: $e');
+      print('[Horse Data Sync Error] 競走馬のデータ同期中にエラーが発生しました: $e');
     }
-    print('[Horse Data Sync End] 新規登録馬のデータ取得が完了しました。');
+    print('[Horse Data Sync End] 競走馬データの同期が完了しました。');
   }
+
   static List<HorseResult> _parseHorseResults(dom.Document document) {
     final List<HorseResult> results = [];
     final rows = document.querySelectorAll('table.race_table_01 tr');
@@ -395,6 +389,7 @@ class ScraperService {
     }
     return results;
   }
+
   static List<Refund> _parseRefunds(dom.Document document) {
     final List<Refund> refundList = [];
     final payTables = document.querySelectorAll('dl.pay_block table.pay_table_01');
@@ -425,6 +420,7 @@ class ScraperService {
     }
     return refundList;
   }
+
   static List<String> _parseCornerPassages(dom.Document document) {
     final List<String> passages = [];
     final table = document.querySelector('table[summary="コーナー通過順位"]');
@@ -440,6 +436,7 @@ class ScraperService {
     }
     return passages;
   }
+
   static List<String> _parseLapTimes(dom.Document document) {
     final List<String> laps = [];
     final table = document.querySelector('table[summary="ラップタイム"]');
@@ -455,6 +452,7 @@ class ScraperService {
     }
     return laps;
   }
+
   static Future<List<FeaturedRace>> _scrapeGradedRacesFromSchedulePage() async {
     const url = 'https://race.netkeiba.com/top/schedule.html';
     final List<FeaturedRace> gradedRaces = [];
@@ -510,6 +508,7 @@ class ScraperService {
     }
     return gradedRaces;
   }
+
   static DateTime _parseDateStringAsDateTime(String dateText) {
     try {
       final now = DateTime.now();
