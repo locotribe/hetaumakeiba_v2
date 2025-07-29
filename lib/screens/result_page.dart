@@ -107,8 +107,8 @@ class _ResultPageState extends State<ResultPage> {
       }
 
       if (overallMethod == '応援馬券') {
-        shikibetsuToDisplay = '単勝＋複勝';
-        hoshikiToDisplay = 'がんばれ！';
+        shikibetsuToDisplay = '単勝+複勝';
+        hoshikiToDisplay = 'が　ん　ば　れ！';
 
         // 応援馬券のスタイル設定
         topWidget = const SizedBox(
@@ -342,15 +342,12 @@ class _ResultPageState extends State<ResultPage> {
                                   Container(
                                     width: double.infinity,
                                     color: topContainerColor, // 変数を適用
-                                    padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 2.0),
+                                    padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
                                     child: Center(
                                       child: topWidget, // 変数を適用
                                     ),
                                   ),
 
-                                  const SizedBox(height: 4),
-
-                                  // ### ここからが修正箇所 ###
                                   // Container 5: 左側コンテナの中央部分（式別の文字を表示）
                                   Expanded(
                                     child: Container(
@@ -391,7 +388,7 @@ class _ResultPageState extends State<ResultPage> {
                                             char,
                                             style: TextStyle(
                                               color: middleTextColor, // 変数を適用
-                                              fontSize: 28,
+                                              fontSize: 25,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           );
@@ -400,15 +397,12 @@ class _ResultPageState extends State<ResultPage> {
                                           : const SizedBox.shrink(),
                                     ),
                                   ),
-                                  // ### ここまでが修正箇所 ###
-
-                                  const SizedBox(height: 4),
 
                                   // Container 6: 左側コンテナ内の下部フッター
                                   Container(
                                     width: double.infinity,
                                     color: bottomContainerColor, // 変数を適用
-                                    padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 2.0),
+                                    padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
                                     child: Center(
                                       child: bottomWidget, // 変数を適用
                                     ),

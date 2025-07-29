@@ -1,4 +1,5 @@
 // lib/services/scraper_service.dart
+
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
@@ -8,14 +9,13 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart'; // 追加
 
 class ScraperService {
 
-  // ▼▼▼ 全てのHTTPリクエストで共通して使用するヘッダーを定義 ▼▼▼
   static const Map<String, String> _headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
   };
-  // ▲▲▲ ここまで追加 ▲▲▲
 
   /// URLからレースIDを抽出するヘルパー関数
   static String? getRaceIdFromUrl(String url) {
@@ -35,7 +35,6 @@ class ScraperService {
         throw Exception('無効なURLです: レースIDが取得できませんでした。');
       }
 
-      // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
       final response = await http.get(Uri.parse(url), headers: _headers);
       if (response.statusCode != 200) {
         throw Exception('HTTPリクエストに失敗しました: Status code ${response.statusCode}');
@@ -44,20 +43,21 @@ class ScraperService {
       final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
       final document = html.parse(decodedBody);
 
-      final raceTitle = _parseRaceTitle(document);
-      final raceInfo = _parseRaceInfo(document);
-      final raceDate = _parseRaceDate(document);
-      final raceGrade = _parseRaceGrade(document);
-      final horseResults = _parseHorseResults(document);
-      final refunds = _parseRefunds(document);
-      final cornerPassages = _parseCornerPassages(document);
-      final lapTimes = _parseLapTimes(document);
+      // ★ここから下のメソッド呼び出しがエラーになっていた部分です
+      final raceTitle = _safeGetText(document.querySelector('div.race_head h1'));
+      final raceInfo = _safeGetText(document.querySelector('div.data_intro p.diary_snap_cut span')).replaceAll(RegExp(r'\s+'), ' ');
+      final raceDate = _safeGetText(document.querySelector('p.smalltxt')).split(' ').first; // Stringのまま
+      final raceGrade = _safeGetText(document.querySelector('p.smalltxt')).split(' ').last;
+      final horseResults = _parseHorseResults(document); // ★再追加
+      final refunds = _parseRefunds(document);           // ★再追加
+      final cornerPassages = _parseCornerPassages(document); // ★再追加
+      final lapTimes = _parseLapTimes(document);         // ★再追加
 
       return RaceResult(
         raceId: raceId,
         raceTitle: raceTitle,
         raceInfo: raceInfo,
-        raceDate: raceDate,
+        raceDate: raceDate, // RaceResultではStringのまま
         raceGrade: raceGrade,
         horseResults: horseResults,
         refunds: refunds,
@@ -74,7 +74,6 @@ class ScraperService {
   static Future<List<HorseRaceRecord>> scrapeHorsePerformance(String horseId) async {
     try {
       final url = generateNetkeibaHorseUrl(horseId: horseId);
-      // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
       final response = await http.get(Uri.parse(url), headers: _headers);
 
       if (response.statusCode != 200) {
@@ -135,11 +134,10 @@ class ScraperService {
   }
 
   /// netkeiba.comのトップページから「今週の注目レース」を複数取得するよう修正
-  static Future<List<FeaturedRace>> scrapeFeaturedRaces() async {
+  static Future<List<FeaturedRace>> scrapeFeaturedRaces(DatabaseHelper dbHelper) async { // dbHelper を引数に追加
     final List<FeaturedRace> featuredRaces = [];
     try {
       const url = 'https://race.netkeiba.com/top/';
-      // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
       final response = await http.get(Uri.parse(url), headers: _headers);
 
       if (response.statusCode != 200) {
@@ -163,23 +161,43 @@ class ScraperService {
       }
 
       for (final raceId in raceIds) {
-        final shutubaRace = await _scrapeShutubaPageDetails(raceId);
-        if (shutubaRace != null) {
-          featuredRaces.add(FeaturedRace(
-            raceId: shutubaRace['raceId']!,
-            raceName: shutubaRace['raceName']!,
-            raceGrade: shutubaRace['raceGrade']!,
-            raceDate: shutubaRace['raceDate']!,
-            venue: shutubaRace['venue']!,
-            raceNumber: shutubaRace['raceNumber']!,
-            shutubaTableUrl: shutubaRace['shutubaTableUrl']!,
+        // DBに存在し、かつ最終スクレイピングから一定時間経過していない場合はスキップ
+        final existingRace = await dbHelper.getFeaturedRace(raceId);
+        // raceDate は String のままなので isAfter で比較する際は parse する必要がある
+        if (existingRace != null && existingRace.lastScraped.isAfter(DateTime.now().subtract(const Duration(minutes: 30)))) { // 30分キャッシュ
+          featuredRaces.add(existingRace);
+          continue;
+        }
+
+        final shutubaRaceDetails = await _scrapeShutubaPageDetails(raceId); // Map<String, String?>を返す
+        if (shutubaRaceDetails != null) {
+          List<ShutubaHorseDetail> shutubaHorses = [];
+          try {
+            // ここで出馬表URLを使って各馬の詳細をスクレイピング
+            shutubaHorses = await ScraperService._scrapeShutubaHorses(shutubaRaceDetails['shutubaTableUrl']!); // ★修正：クラス名で呼び出し
+          } catch (e) {
+            print('Error scraping shutuba horses for race $raceId: $e');
+          }
+
+          final featuredRace = FeaturedRace(
+            id: existingRace?.id, // IDを保持 (新規ならnull)
+            raceId: shutubaRaceDetails['raceId']!,
+            raceName: shutubaRaceDetails['raceName']!,
+            raceGrade: shutubaRaceDetails['raceGrade']!,
+            raceDate: shutubaRaceDetails['raceDate']!, // ★Stringのまま
+            venue: shutubaRaceDetails['venue']!,
+            raceNumber: shutubaRaceDetails['raceNumber']!,
+            shutubaTableUrl: shutubaRaceDetails['shutubaTableUrl']!,
             lastScraped: DateTime.now(),
-            distance: '',
-            conditions: '',
-            weight: '',
-            raceDetails1: shutubaRace['raceDetails1'],
-            raceDetails2: shutubaRace['raceDetails2'],
-          ));
+            distance: shutubaRaceDetails['distance'] ?? '',
+            conditions: shutubaRaceDetails['conditions'] ?? '',
+            weight: shutubaRaceDetails['weight'] ?? '',
+            raceDetails1: shutubaRaceDetails['raceDetails1'],
+            raceDetails2: shutubaRaceDetails['raceDetails2'],
+            shutubaHorses: shutubaHorses,
+          );
+          await dbHelper.insertOrUpdateFeaturedRace(featuredRace);
+          featuredRaces.add(featuredRace);
         }
       }
       return featuredRaces;
@@ -192,14 +210,17 @@ class ScraperService {
   /// 出馬表URLからraceIdを抽出するヘルパー関数
   static String? _extractRaceIdFromShutubaUrl(String url) {
     final uri = Uri.parse(url);
-    return uri.queryParameters['race_id'];
+    final pathSegments = uri.pathSegments; // 追加
+    if (pathSegments.isNotEmpty && pathSegments[pathSegments.length -1].startsWith('?race_id=')) { // URLの形式に合わせて修正
+      return uri.queryParameters['race_id'];
+    }
+    return null;
   }
 
   /// 出馬表ページをスクレイピングしてレース詳細情報を取得します。
-  static Future<Map<String, String>?> _scrapeShutubaPageDetails(String raceId) async {
+  static Future<Map<String, String?>?> _scrapeShutubaPageDetails(String raceId) async {
     try {
       final url = 'https://race.netkeiba.com/race/shutuba.html?race_id=$raceId';
-      // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
       final response = await http.get(Uri.parse(url), headers: _headers);
 
       if (response.statusCode != 200) {
@@ -239,16 +260,33 @@ class ScraperService {
       String raceDate = '';
       if (dateElement != null) {
         final dateText = _safeGetText(dateElement);
-        raceDate = dateText.split('(')[0];
+        final monthDay = dateText.split('(')[0];
         final currentYear = DateTime.now().year;
-        raceDate = '$currentYear年$dateText';
+        raceDate = '$currentYear年$monthDay';
       }
 
       final raceData1 = document.querySelector('div.RaceData01');
-      final details1 = raceData1?.text.replaceAll(RegExp(r'\s+'), ' ').trim() ?? '';
+      final details1 = raceData1?.text.replaceAll(RegExp(r'\s+'), ' ').trim();
 
       final raceData2 = document.querySelector('div.RaceData02');
-      final details2 = raceData2?.text.replaceAll(RegExp(r'\s+'), ' ').trim() ?? '';
+      final details2 = raceData2?.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+      String distance = '';
+      String conditions = '';
+      String weight = '';
+
+      if (details1 != null) {
+        final parts = details1.split(' ');
+        for (final part in parts) {
+          if (part.contains('m') && (part.contains('芝') || part.contains('ダ') || part.contains('障'))) {
+            distance = part;
+          } else if (part.contains('歳上') || part.contains('歳') || part.contains('クラス') || part.contains('G') || part.contains('OP') || part.contains('未勝利') || part.contains('新馬')) {
+            conditions = part;
+          } else if (part.contains('kg') || part.contains('斤')) {
+            weight = part;
+          }
+        }
+      }
 
       return {
         'raceId': raceId,
@@ -258,6 +296,9 @@ class ScraperService {
         'venue': venue,
         'raceNumber': raceNumber,
         'shutubaTableUrl': url,
+        'distance': distance,
+        'conditions': conditions,
+        'weight': weight,
         'raceDetails1': details1,
         'raceDetails2': details2,
       };
@@ -267,11 +308,86 @@ class ScraperService {
     }
   }
 
+  /// ★追加：出馬表から各出走馬の詳細情報をスクレイピングするプライベートメソッド
+  static Future<List<ShutubaHorseDetail>> _scrapeShutubaHorses(String shutubaUrl) async {
+    try {
+      final response = await http.get(Uri.parse(shutubaUrl));
+
+      if (response.statusCode == 200) {
+        final String decodedBody = await CharsetConverter.decode(
+          "EUC-JP",
+          response.bodyBytes,
+        );
+        final document = html.parse(decodedBody);
+        final List<ShutubaHorseDetail> horses = [];
+
+        // Netkeibaの出馬表テーブルの行セレクタは `HorseList` クラスを持つ `tr`
+        final horseRows = document.querySelectorAll('table.shutuba_table tr.HorseList');
+
+        for (final row in horseRows) {
+          // 馬ID、馬名、性齢は 'horse_info' td 内の a タグから取得
+          final horseInfoTd = row.querySelector('td.horse_info');
+          final horseLink = horseInfoTd?.querySelector('a[href*="/horse/"]');
+          final horseId = horseLink?.attributes['href']?.split('/').last;
+
+          if (horseId == null) {
+            print('Warning: Horse ID not found for a row in $shutubaUrl');
+            continue;
+          }
+
+          final horseName = horseLink?.text.trim() ?? '';
+          final sexAndAge = horseInfoTd?.querySelector('p.txt_info')?.text.trim() ?? '';
+
+          // 馬番と枠番は 'umaban' td から取得
+          // NetkeibaのHTML構造は頻繁に変わるため、より堅牢なセレクタを試す
+          final umabanTd = row.querySelector('td.umaban');
+          final horseNumber = int.tryParse(umabanTd?.querySelector('span.umaban')?.text.trim() ?? '0') ?? 0; // span.umabanを追加
+          final gateNumber = int.tryParse(umabanTd?.querySelector('p.wakuban')?.text.trim() ?? '0') ?? 0; // p.wakubanを追加
+
+
+          // 騎手と斤量
+          final jockeyTd = row.querySelector('td.jockey');
+          final jockey = jockeyTd?.querySelector('a')?.text.trim() ?? '';
+          final carriedWeight = double.tryParse(jockeyTd?.querySelector('span.jockey_weight')?.text.trim() ?? '0.0') ?? 0.0;
+
+          // オッズと人気
+          final oddsTd = row.querySelector('td.odds');
+          final odds = double.tryParse(oddsTd?.querySelector('span.Odds')?.text.trim() ?? '');
+          final popularity = int.tryParse(oddsTd?.querySelector('span.Popularity')?.text.trim().replaceAll('人気', '') ?? '');
+
+          // 出走取消は行全体に 'Cancel_Txt' または 'Disqualification' クラスが付与される
+          final isScratched = row.classes.contains('Cancel_Txt') || row.classes.contains('Disqualification');
+
+
+          horses.add(ShutubaHorseDetail(
+            horseId: horseId,
+            horseNumber: horseNumber,
+            gateNumber: gateNumber,
+            horseName: horseName,
+            sexAndAge: sexAndAge,
+            jockey: jockey,
+            carriedWeight: carriedWeight,
+            odds: odds,
+            popularity: popularity,
+            isScratched: isScratched,
+          ));
+        }
+        return horses;
+      } else {
+        print('Failed to load shutuba page: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('Error scraping shutuba horses: $e');
+      return [];
+    }
+  }
+
+
   /// 出馬表ページから出走馬のホースIDのリストを抽出するヘルパー関数です。
   static Future<List<String>> extractHorseIdsFromShutubaPage(String shutubaTableUrl) async {
     final List<String> horseIds = [];
     try {
-      // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
       final response = await http.get(Uri.parse(shutubaTableUrl), headers: _headers);
 
       if (response.statusCode != 200) {
@@ -282,7 +398,7 @@ class ScraperService {
       final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
       final document = html.parse(decodedBody);
 
-      final horseLinks = document.querySelectorAll('table.Shutuba_Table a[href*="/horse/"]');
+      final horseLinks = document.querySelectorAll('table.shutuba_table a[href*="/horse/"]'); // ここもshutuba_tableに修正
 
       for (final link in horseLinks) {
         final href = link.attributes['href'];
@@ -304,16 +420,24 @@ class ScraperService {
     print('[Horse Data Sync Start] 新規登録馬のデータ取得を開始します...');
     try {
       for (final race in races) {
-        final horseIds = await extractHorseIdsFromShutubaPage(race.shutubaTableUrl);
-        for (final horseId in horseIds) {
+        final List<String> horseIdsToSync = [];
+        if (race.shutubaHorses != null && race.shutubaHorses!.isNotEmpty) {
+          horseIdsToSync.addAll(race.shutubaHorses!.map((h) => h.horseId));
+        } else {
+          horseIdsToSync.addAll(await ScraperService.extractHorseIdsFromShutubaPage(race.shutubaTableUrl));
+        }
+
+        for (final horseId in horseIdsToSync.toSet()) {
           final existingRecord = await dbHelper.getLatestHorsePerformanceRecord(horseId);
           if (existingRecord == null) {
             print('新規競走馬データ取得中... Horse ID: $horseId');
-            final newRecords = await scrapeHorsePerformance(horseId);
+            final newRecords = await ScraperService.scrapeHorsePerformance(horseId);
             for (final record in newRecords) {
               await dbHelper.insertOrUpdateHorsePerformance(record);
             }
             await Future.delayed(const Duration(milliseconds: 500));
+          } else {
+            print('DEBUG: 競走馬ID ${horseId} の最新成績は既に存在します。スキップします。');
           }
         }
       }
@@ -327,25 +451,7 @@ class ScraperService {
     return element?.text.trim() ?? '';
   }
 
-  static String _parseRaceTitle(dom.Document document) {
-    return _safeGetText(document.querySelector('div.race_head h1'));
-  }
-
-  static String _parseRaceInfo(dom.Document document) {
-    final infoElement = document.querySelector('div.data_intro p.diary_snap_cut span');
-    return _safeGetText(infoElement).replaceAll(RegExp(r'\s+'), ' ');
-  }
-
-  static String _parseRaceDate(dom.Document document) {
-    final smallTxt = _safeGetText(document.querySelector('p.smalltxt'));
-    return smallTxt.split(' ').first;
-  }
-
-  static String _parseRaceGrade(dom.Document document) {
-    final smallTxt = _safeGetText(document.querySelector('p.smalltxt'));
-    return smallTxt.split(' ').last;
-  }
-
+  // ★以下のプライベートメソッドを再追加
   static List<HorseResult> _parseHorseResults(dom.Document document) {
     final List<HorseResult> results = [];
     final rows = document.querySelectorAll('table.race_table_01 tr');
@@ -445,7 +551,7 @@ class ScraperService {
   }
 
   /// ホームページに表示する「今月の重賞レース」データを取得する
-  static Future<List<FeaturedRace>> scrapeMonthlyGradedRaces() async {
+  static Future<List<FeaturedRace>> scrapeMonthlyGradedRaces() async { // ★再追加
     try {
       return await _scrapeGradedRacesFromSchedulePage();
     } catch (e) {
@@ -458,10 +564,7 @@ class ScraperService {
   static Future<List<FeaturedRace>> _scrapeGradedRacesFromSchedulePage() async {
     const url = 'https://race.netkeiba.com/top/schedule.html';
     final List<FeaturedRace> gradedRaces = [];
-    final now = DateTime.now();
-    final currentYear = now.year;
 
-    // ▼▼▼ http.getにヘッダーを追加 ▼▼▼
     final response = await http.get(Uri.parse(url), headers: _headers);
     if (response.statusCode != 200) {
       print('重賞日程ページの取得に失敗しました: Status code ${response.statusCode}');
@@ -481,13 +584,14 @@ class ScraperService {
         final monthAndDay = dateStr.split('(')[0].split('/');
         final month = int.parse(monthAndDay[0]);
 
-        if (month == now.month) {
+        if (month == DateTime.now().month) {
           final raceName = _safeGetText(cells[1].querySelector('a'));
           final link = cells[1].querySelector('a')?.attributes['href'] ?? '';
 
-          final raceId = 'monthly_graded_${_safeGetText(cells[3])}_${raceName.replaceAll(' ', '_')}';
+          final raceId = 'monthly_graded_${dateStr.replaceAll(RegExp(r'[/\(\)]'), '')}_${raceName.replaceAll(' ', '')}';
 
           gradedRaces.add(FeaturedRace(
+            id: null, // id は AUTOINCREMENT なので null を渡す
             raceId: raceId,
             raceName: raceName,
             raceGrade: _safeGetText(cells[2]),
@@ -495,10 +599,13 @@ class ScraperService {
             distance: _safeGetText(cells[4]),
             conditions: _safeGetText(cells[5]),
             weight: _safeGetText(cells[6]),
-            raceDate: '$currentYear年$dateStr',
+            raceDate: dateStr, // Stringのまま
             shutubaTableUrl: link,
             raceNumber: '',
             lastScraped: DateTime.now(),
+            raceDetails1: '',
+            raceDetails2: '',
+            shutubaHorses: null,
           ));
         }
       } catch (e) {
@@ -507,5 +614,31 @@ class ScraperService {
       }
     }
     return gradedRaces;
+  }
+
+  // _parseDateStringAsDateTime は FeaturedRace モデルの raceDate が String 型なので String のまま返す。
+  // ただし、DateFomat などで使うために DateTime に変換したい場合は、呼び出し側で変換する。
+  // このメソッドは元々プライベートとして存在。
+  static DateTime _parseDateStringAsDateTime(String dateText) { // 新しいヘルパー関数
+    try {
+      final parts = RegExp(r'(\d+)年(\d+)月(\d+)日').firstMatch(dateText);
+      if (parts != null && parts.groupCount >= 3) {
+        final year = int.parse(parts.group(1)!);
+        final month = int.parse(parts.group(2)!);
+        final day = int.parse(parts.group(3)!);
+        return DateTime(year, month, day);
+      }
+      final currentYear = DateTime.now().year;
+      final monthDayParts = RegExp(r'(\d+)月(\d+)日').firstMatch(dateText);
+      if (monthDayParts != null && monthDayParts.groupCount >= 2) {
+        final month = int.parse(monthDayParts.group(1)!);
+        final day = int.parse(monthDayParts.group(2)!);
+        return DateTime(currentYear, month, day);
+      }
+      return DateTime.now();
+    } catch (e) {
+      print('Date parsing error: $dateText, Error: $e');
+      return DateTime.now();
+    }
   }
 }

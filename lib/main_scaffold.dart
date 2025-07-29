@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/screens/analytics_page.dart';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/settings_page.dart';
+import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart'; // ★追加
 
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -16,11 +17,10 @@ class MainScaffold extends StatefulWidget {
 
 class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
-  // ▼▼▼ 履歴ページの状態を管理するためのGlobalKey ▼▼▼
   final GlobalKey<SavedTicketsListPageState> _savedListKey = GlobalKey<SavedTicketsListPageState>();
 
   late final List<Widget> _pages;
-  static const List<String> _pageTitles = ['ホーム', '購入履歴', '集計'];
+  static const List<String> _pageTitles = ['ホーム', '購入履歴', '出馬表', '集計']; // ★修正：'出馬表'を追加
 
   bool _isFabExpanded = false;
   late AnimationController _animationController;
@@ -30,10 +30,14 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _pages = <Widget>[
-      // ▼▼▼ HomePageから不要なキーの受け渡しを削除 ▼▼▼
       const HomePage(),
-      // ▼▼▼ SavedTicketsListPageにGlobalKeyを正しく設定 ▼▼▼
       SavedTicketsListPage(key: _savedListKey),
+      // ★修正：出馬表タブのページは、直接開くことを想定しないため、
+      // ここではRaceSelectionPageのようなものを置くか、
+      // あるいはダミーとしてHomePageなどを置いておき、
+      // ユーザーがホームからレースを選択する導線をメインにする。
+      // 今回は、HomePageを置いたままとし、Homeから遷移するようにする。
+      const HomePage(), // ここは便宜上HomePageを配置。本来は特定のレースIDを必要とする。
       const AnalyticsPage(),
     ];
 
@@ -54,10 +58,12 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
   }
 
   void _onItemTapped(int index) {
-    // 履歴タブがタップされたときに、リストをリフレッシュする
-    if (index == 1) {
+    if (index == 1) { // 購入履歴タブがタップされたらリロード
       _savedListKey.currentState?.reloadData();
     }
+    // 出馬表タブ (index 2) がタップされた際の特別なロジックは、この時点では特に記述しない。
+    // メインの遷移はHomePageから行う。
+
     setState(() {
       _selectedIndex = index;
     });
@@ -87,7 +93,6 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (context) => const SettingsPage()),
               ).then((_) {
-                // 設定ページから戻ってきたときに履歴をリロードする
                 _savedListKey.currentState?.reloadData();
               });
             },
@@ -102,7 +107,8 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ホーム'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '履歴'),
-          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '出馬表'), // ★修正：アイコンをreceipt_longに、ラベルを'出馬表'に
+          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'), // ★修正：インデックスをずらす
         ],
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,

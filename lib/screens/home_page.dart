@@ -1,11 +1,13 @@
 // lib/screens/home_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
-import 'package:hetaumakeiba_v2/widgets/featured_race_list_item.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart'; // ★追加
+import 'package:hetaumakeiba_v2/widgets/featured_race_list_item.dart'; // ★追加
+import 'package:intl/intl.dart'; // ★追加
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,11 +20,8 @@ class _HomePageState extends State<HomePage> {
   List<FeaturedRace> _weeklyGradedRaces = [];
   List<FeaturedRace> _monthlyGradedRaces = [];
   bool _isLoading = true;
-
-  // ▼▼▼ ここから新規追加 ▼▼▼
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  bool _isHorseDataSynced = false; // データ取得処理を一度しか実行しないためのフラグ
-  // ▲▲▲ ここまで新規追加 ▲▲▲
+  bool _isHorseDataSynced = false;
 
   @override
   void initState() {
@@ -39,7 +38,7 @@ class _HomePageState extends State<HomePage> {
     try {
       // 2つのスクレイピング処理を並行して実行
       final results = await Future.wait([
-        ScraperService.scrapeFeaturedRaces(),      // 今週の重賞を取得
+        ScraperService.scrapeFeaturedRaces(_dbHelper),      // ★修正：dbHelperを渡す
         ScraperService.scrapeMonthlyGradedRaces(), // 今月の重賞を取得
       ]);
 
@@ -47,8 +46,8 @@ class _HomePageState extends State<HomePage> {
       final monthlyRaces = results[1];
 
       // 日付でソート
-      weeklyRaces.sort((a, b) => a.raceDate.compareTo(b.raceDate));
-      monthlyRaces.sort((a, b) => a.raceDate.compareTo(b.raceDate));
+      weeklyRaces.sort((a, b) => _parseDateStringAsDateTime(a.raceDate).compareTo(_parseDateStringAsDateTime(b.raceDate))); // ★修正：StringをDateTimeに変換して比較
+      monthlyRaces.sort((a, b) => _parseDateStringAsDateTime(a.raceDate).compareTo(_parseDateStringAsDateTime(b.raceDate))); // ★修正：StringをDateTimeに変換して比較
 
       setState(() {
         _weeklyGradedRaces = weeklyRaces;
@@ -56,14 +55,11 @@ class _HomePageState extends State<HomePage> {
         _isLoading = false;
       });
 
-      // ▼▼▼ ここから新規追加 ▼▼▼
-      // 初回読み込み時のみ、新規の競走馬データをバックグラウンドで取得
       if (!_isHorseDataSynced && _weeklyGradedRaces.isNotEmpty) {
-        _isHorseDataSynced = true; // フラグを立てて再実行を防ぐ
+        _isHorseDataSynced = true;
         // UIをブロックしないようにawaitなしで呼び出す
         ScraperService.syncNewHorseData(_weeklyGradedRaces, _dbHelper);
       }
-      // ▲▲▲ ここまで新規追加 ▲▲▲
 
     } catch (e) {
       print('ERROR: ホームページのデータロード中にエラーが発生しました: $e');
@@ -74,6 +70,30 @@ class _HomePageState extends State<HomePage> {
           _monthlyGradedRaces = [];
         });
       }
+    }
+  }
+
+  // ★追加：String形式の日付をDateTimeに変換するヘルパーメソッド
+  DateTime _parseDateStringAsDateTime(String dateText) {
+    try {
+      final parts = RegExp(r'(\d+)年(\d+)月(\d+)日').firstMatch(dateText);
+      if (parts != null && parts.groupCount >= 3) {
+        final year = int.parse(parts.group(1)!);
+        final month = int.parse(parts.group(2)!);
+        final day = int.parse(parts.group(3)!);
+        return DateTime(year, month, day);
+      }
+      final currentYear = DateTime.now().year;
+      final monthDayParts = RegExp(r'(\d+)月(\d+)日').firstMatch(dateText);
+      if (monthDayParts != null && monthDayParts.groupCount >= 2) {
+        final month = int.parse(monthDayParts.group(1)!);
+        final day = int.parse(monthDayParts.group(2)!);
+        return DateTime(currentYear, month, day);
+      }
+      return DateTime.now();
+    } catch (e) {
+      print('Date parsing error in HomePage: $dateText, Error: $e');
+      return DateTime.now();
     }
   }
 
@@ -134,21 +154,17 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   ..._weeklyGradedRaces.map((race) {
-                    return FeaturedRaceListItem(
+                    return FeaturedRaceListItem( // ★修正：FeaturedRaceListItemを使用
                       race: race,
-                      // ▼▼▼ ここから修正 ▼▼▼
-                      onTap: () async {
-                        final Uri url = Uri.parse(race.shutubaTableUrl);
-                        if (await canLaunchUrl(url)) {
-                          await launchUrl(url);
-                        } else {
-                          // エラーハンドリング（例: SnackBarでユーザーに通知）
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('URLを開けませんでした: ${race.shutubaTableUrl}')),
-                          );
-                        }
+                      onTap: () {
+                        // ★修正：出馬表ページへの遷移
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ShutubaTablePage(raceId: race.raceId),
+                          ),
+                        );
                       },
-                      // ▲▲▲ ここまで修正 ▲▲▲
                     );
                   }).toList(),
                 ],
@@ -169,7 +185,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   ..._monthlyGradedRaces.map((race) {
-                    return FeaturedRaceListItem(
+                    return FeaturedRaceListItem( // ★修正：FeaturedRaceListItemを使用
                       race: race,
                       onTap: () {}, // タップしても何もしないように空の関数を設定
                     );

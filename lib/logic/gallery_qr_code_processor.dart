@@ -9,8 +9,9 @@ import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart'; // ★★★★★ 追加：競走馬成績モデルをインポート ★★★★★
-import 'package:hetaumakeiba_v2/models/race_result_model.dart'; // ★★★★★ 追加：RaceResultモデルをインポート ★★★★★
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/models/featured_race_model.dart'; // FeaturedRaceモデルをインポート
 
 
 class GalleryQrCodeProcessor {
@@ -165,55 +166,13 @@ class GalleryQrCodeProcessor {
         );
         await _dbHelper.insertQrData(qrDataToSave);
 
-        // ▼▼▼ 関数名を loadData から reloadData に変更 ▼▼▼
         savedListKey.currentState?.reloadData();
 
-        RaceResult? raceResult; // レース結果を保持する変数
-        try {
-          final String year = parsedData['年'].toString();
-          final String racecourseCode = racecourseDict.entries.firstWhere((entry) => entry.value == parsedData['開催場']).key;
-          final String round = parsedData['回'].toString();
-          final String day = parsedData['日'].toString();
-          final String race = parsedData['レース'].toString();
-          final String raceUrl = generateNetkeibaUrl(year: year, racecourseCode: racecourseCode, round: round, day: day, race: race);
-          final String? raceId = ScraperService.getRaceIdFromUrl(raceUrl);
-          if (raceId != null) {
-            final existingRaceResult = await _dbHelper.getRaceResult(raceId);
-            if (existingRaceResult == null) {
-              raceResult = await ScraperService.scrapeRaceDetails(raceUrl); // スクレイピング結果を代入
-              await _dbHelper.insertOrUpdateRaceResult(raceResult!);
-            } else {
-              raceResult = existingRaceResult; // 既存の結果があればそれを使用
-            }
+        // スクレイピング処理を非同期で開始し、awaitしない
+        _performBackgroundScraping(parsedData).catchError((e) {
+          print('ERROR: バックグラウンドスクレイピング中にエラーが発生しました: $e');
+        });
 
-            // ★★★★★ ここから追加：競走馬成績のスクレイピングと保存 ★★★★★
-            if (raceResult != null) {
-              for (final horse in raceResult.horseResults) {
-                // 同じhorseIdとdateのデータが既に存在するかチェック
-                final latestRecord = await _dbHelper.getLatestHorsePerformanceRecord(horse.horseId);
-                // 最新のデータがまだ存在しない、または日付が異なる場合にのみスクレイピング
-                if (latestRecord == null || latestRecord.date != raceResult.raceDate) {
-                  try {
-                    final horseRecords = await ScraperService.scrapeHorsePerformance(horse.horseId);
-                    for (final record in horseRecords) {
-                      await _dbHelper.insertOrUpdateHorsePerformance(record);
-                    }
-                    // 過度なリクエストを防ぐため、各馬のスクレイピング後に短い遅延を入れる
-                    await Future.delayed(const Duration(milliseconds: 500));
-                  } catch (e) {
-                    print('ERROR: 競走馬ID ${horse.horseId} の成績スクレイピングまたは保存中にエラーが発生しました: $e');
-                  }
-                } else {
-                  print('DEBUG: 競走馬ID ${horse.horseId} の最新成績は既に存在します。スキップします。');
-                }
-              }
-            }
-            // ★★★★★ ここまで追加 ★★★★★
-
-          }
-        } catch (e) {
-          print('ERROR: Gallery: レースデータのスクレイピングまたは保存中にエラーが発生しました: $e');
-        }
       } else {
         parsedData = {'エラー': '解析結果にQRデータが含まれていません。', '詳細': '不明な解析結果'};
       }
@@ -225,7 +184,63 @@ class GalleryQrCodeProcessor {
       onProcessingComplete({'isNotTicket': true, 'エラー': '解析失敗', '詳細': e.toString()});
       return;
     }
-
+    // スクレイピングが終わるのを待たずに、すぐにUIを更新
     onProcessingComplete(parsedData);
+  }
+
+  // スクレイピングとデータベース保存のロジックを非同期で実行する新しいプライベートメソッド
+  Future<void> _performBackgroundScraping(Map<String, dynamic> parsedData) async {
+    try {
+      final String year = parsedData['年'].toString();
+      final String racecourseCode = racecourseDict.entries.firstWhere((entry) => entry.value == parsedData['開催場']).key;
+      final String round = parsedData['回'].toString();
+      final String day = parsedData['日'].toString();
+      final String race = parsedData['レース'].toString();
+      final String raceUrl = generateNetkeibaUrl(year: year, racecourseCode: racecourseCode, round: round, day: day, race: race);
+      final String? raceId = ScraperService.getRaceIdFromUrl(raceUrl);
+
+      if (raceId != null) {
+        final existingRaceResult = await _dbHelper.getRaceResult(raceId);
+        if (existingRaceResult == null) {
+          final raceResult = await ScraperService.scrapeRaceDetails(raceUrl);
+          await _dbHelper.insertOrUpdateRaceResult(raceResult);
+
+          for (final horse in raceResult.horseResults) {
+            final latestRecord = await _dbHelper.getLatestHorsePerformanceRecord(horse.horseId);
+            if (latestRecord == null || latestRecord.date != raceResult.raceDate) {
+              try {
+                final horseRecords = await ScraperService.scrapeHorsePerformance(horse.horseId);
+                for (final record in horseRecords) {
+                  await _dbHelper.insertOrUpdateHorsePerformance(record);
+                }
+                await Future.delayed(const Duration(milliseconds: 500));
+              } catch (e) {
+                print('ERROR: 競走馬ID ${horse.horseId} の成績スクレイピングまたは保存中にエラーが発生しました: $e');
+              }
+            } else {
+              print('DEBUG: 競走馬ID ${horse.horseId} の最新成績は既に存在します。スキップします。');
+            }
+          }
+                } else {
+          // 既存のレース結果がある場合も、その出走馬の成績を同期する
+          final featuredRacePlaceholder = FeaturedRace(
+            raceId: existingRaceResult.raceId,
+            raceName: existingRaceResult.raceTitle,
+            raceGrade: existingRaceResult.raceGrade,
+            raceDate: existingRaceResult.raceDate,
+            venue: parsedData['開催場'], // 解析データから取得
+            raceNumber: parsedData['レース'].toString(), // 解析データから取得
+            shutubaTableUrl: raceUrl, // レース結果ページのURLで代替
+            lastScraped: DateTime.now(),
+            distance: '', conditions: '', weight: '', // これらの情報はexistingRaceResultから取得することも可能
+            raceDetails1: existingRaceResult.raceInfo,
+            raceDetails2: existingRaceResult.raceGrade,
+          );
+          await ScraperService.syncNewHorseData([featuredRacePlaceholder], _dbHelper);
+        }
+      }
+    } catch (e) {
+      print('ERROR: バックグラウンドスクレイピング処理全体でエラーが発生しました: $e');
+    }
   }
 }

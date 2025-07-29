@@ -1,6 +1,7 @@
 // lib/models/featured_race_model.dart
 
 import 'dart:convert';
+import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart'; // ★追加
 
 /// 今週の注目レースの情報を保持するデータモデルクラスです。
 class FeaturedRace {
@@ -16,10 +17,9 @@ class FeaturedRace {
   final String distance; // 距離 (例: "芝2000m")
   final String conditions; // 条件 (例: "4歳上")
   final String weight; // 重量 (例: "ハンデ")
-  // ▼▼▼ ここから追加 ▼▼▼
   final String? raceDetails1; // 詳細情報1 (発走時間 / コース情報など)
   final String? raceDetails2; // 詳細情報2 (レース条件など)
-  // ▲▲▲ ここまで追加 ▲▲▲
+  final List<ShutubaHorseDetail>? shutubaHorses; // ★追加：出馬表の馬詳細リスト
 
   FeaturedRace({
     this.id,
@@ -34,14 +34,18 @@ class FeaturedRace {
     required this.distance,
     required this.conditions,
     required this.weight,
-    // ▼▼▼ ここから追加 ▼▼▼
     this.raceDetails1,
     this.raceDetails2,
-    // ▲▲▲ ここまで追加 ▲▲▲
+    this.shutubaHorses, // ★追加
   });
 
   /// MapからFeaturedRaceオブジェクトを生成するファクトリコンストラクタです。
   factory FeaturedRace.fromMap(Map<String, dynamic> map) {
+    List<ShutubaHorseDetail>? horses;
+    if (map['shutubaHorsesJson'] != null) { // ★追加：JSONデコード
+      final List<dynamic> jsonList = json.decode(map['shutubaHorsesJson'] as String);
+      horses = jsonList.map((e) => ShutubaHorseDetail.fromMap(e as Map<String, dynamic>)).toList();
+    }
     return FeaturedRace(
       id: map['id'] as int?,
       raceId: map['race_id'] as String,
@@ -55,10 +59,9 @@ class FeaturedRace {
       distance: map['distance'] as String? ?? '',
       conditions: map['conditions'] as String? ?? '',
       weight: map['weight'] as String? ?? '',
-      // ▼▼▼ ここから追加 ▼▼▼
       raceDetails1: map['race_details_1'] as String?,
       raceDetails2: map['race_details_2'] as String?,
-      // ▲▲▲ ここまで追加 ▲▲▲
+      shutubaHorses: horses, // ★追加
     );
   }
 
@@ -77,10 +80,11 @@ class FeaturedRace {
       'distance': distance,
       'conditions': conditions,
       'weight': weight,
-      // ▼▼▼ ここから追加 ▼▼▼
       'race_details_1': raceDetails1,
       'race_details_2': raceDetails2,
-      // ▲▲▲ ここまで追加 ▲▲▲
+      'shutubaHorsesJson': shutubaHorses != null // ★追加：JSONエンコード
+          ? json.encode(shutubaHorses!.map((e) => e.toMap()).toList())
+          : null,
     };
   }
 
