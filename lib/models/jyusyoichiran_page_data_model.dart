@@ -1,15 +1,15 @@
-// lib/models/home_page_data_model.dart
+// lib/models/jyusyoichiran_page_data_model.dart
 
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 
 /// ホームページに表示する全てのデータを保持するためのコンテナクラス
-class HomePageData {
+class JyusyoIchiranPageData {
   // 上部に表示する重賞レースのリスト
   final List<FeaturedRace> gradedRaces;
   // 下部に表示する開催場ごとのレースリスト
   final List<VenueRaces> racesByVenue;
 
-  HomePageData({
+  JyusyoIchiranPageData({
     required this.gradedRaces,
     required this.racesByVenue,
   });

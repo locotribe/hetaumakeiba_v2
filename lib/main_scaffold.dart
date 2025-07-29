@@ -6,7 +6,8 @@ import 'package:hetaumakeiba_v2/screens/analytics_page.dart';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/settings_page.dart';
-import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart'; // ★追加
+import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
+import 'package:hetaumakeiba_v2/screens/jyusyoichiran_page.dart'; // ★追加
 
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -32,12 +33,7 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
     _pages = <Widget>[
       const HomePage(),
       SavedTicketsListPage(key: _savedListKey),
-      // ★修正：出馬表タブのページは、直接開くことを想定しないため、
-      // ここではRaceSelectionPageのようなものを置くか、
-      // あるいはダミーとしてHomePageなどを置いておき、
-      // ユーザーがホームからレースを選択する導線をメインにする。
-      // 今回は、HomePageを置いたままとし、Homeから遷移するようにする。
-      const HomePage(), // ここは便宜上HomePageを配置。本来は特定のレースIDを必要とする。
+      const JyusyoIchiranPage(),
       const AnalyticsPage(),
     ];
 
@@ -61,8 +57,6 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
     if (index == 1) { // 購入履歴タブがタップされたらリロード
       _savedListKey.currentState?.reloadData();
     }
-    // 出馬表タブ (index 2) がタップされた際の特別なロジックは、この時点では特に記述しない。
-    // メインの遷移はHomePageから行う。
 
     setState(() {
       _selectedIndex = index;
@@ -107,7 +101,7 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ホーム'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '履歴'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '出馬表'), // ★修正：アイコンをreceipt_longに、ラベルを'出馬表'に
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞'), // ★修正：アイコンをreceipt_longに、ラベルを'出馬表'に
           BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'), // ★修正：インデックスをずらす
         ],
         currentIndex: _selectedIndex,
