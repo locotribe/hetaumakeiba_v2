@@ -331,6 +331,10 @@ class ScraperService {
         }
 
         for (final horseId in horseIdsToSync.toSet()) {
+          final existingRecord = await dbHelper.getLatestHorsePerformanceRecord(horseId);
+          if (existingRecord != null) {
+            continue;
+          }
           print('競走馬データ取得/更新中... Horse ID: $horseId');
           final newRecords = await ScraperService.scrapeHorsePerformance(horseId);
           for (final record in newRecords) {
