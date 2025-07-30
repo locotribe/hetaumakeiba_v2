@@ -16,7 +16,7 @@ class ScraperService {
   static const Map<String, String> _headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
   };
-
+  /// URLからレースIDを抽出するヘルパー関数
   static String? getRaceIdFromUrl(String url) {
     final uri = Uri.parse(url);
     final pathSegments = uri.pathSegments;
@@ -25,7 +25,7 @@ class ScraperService {
     }
     return uri.queryParameters['race_id'];
   }
-
+  /// netkeiba.comのレース結果ページをスクレイピングし、RaceResultオブジェクトを返す
   static Future<RaceResult> scrapeRaceDetails(String url) async {
     try {
       final raceId = getRaceIdFromUrl(url);
@@ -41,10 +41,12 @@ class ScraperService {
       final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
       final document = html.parse(decodedBody);
 
-      final raceTitle = _safeGetText(document.querySelector('div.RaceName'));
-      final raceInfo = _safeGetText(document.querySelector('div.RaceData01')).replaceAll(RegExp(r'\s+'), ' ');
-      final raceDate = _safeGetText(document.querySelector('title')).split('|')[1].trim().split(' ')[0];
-      final raceGrade = _safeGetText(document.querySelector('div.RaceData02')).replaceAll(RegExp(r'\s+'), ' ');
+      final raceTitle = _safeGetText(document.querySelector('div.race_head h1'));
+      final raceInfoSpan = document.querySelector('div.data_intro p diary_snap_cut span');
+      final raceInfo = _safeGetText(raceInfoSpan).replaceAll(RegExp(r'\s+'), ' ');
+      final smallTxt = _safeGetText(document.querySelector('p.smalltxt'));
+      final raceDate = smallTxt.split(' ').first;
+      final raceGrade = smallTxt.split(' ').last;
       final horseResults = _parseHorseResults(document);
       final refunds = _parseRefunds(document);
       final cornerPassages = _parseCornerPassages(document);
@@ -66,7 +68,7 @@ class ScraperService {
       rethrow;
     }
   }
-
+  /// netkeiba.comの競走馬データベースページをスクレイピングし、競走成績のリストを返します。
   static Future<List<HorseRaceRecord>> scrapeHorsePerformance(String horseId) async {
     try {
       final url = generateNetkeibaHorseUrl(horseId: horseId);
@@ -352,7 +354,7 @@ class ScraperService {
       if (cells.length < 21) continue;
 
       final horseLink = cells[3].querySelector('a');
-      final horseId = horseLink?.attributes['href']?.split('/')[4] ?? '';
+      final horseId = horseLink?.attributes['href']?.split('/').lastWhere((part) => part.isNotEmpty, orElse: () => '') ?? '';
 
       results.add(HorseResult(
         rank: _safeGetText(cells[0]),

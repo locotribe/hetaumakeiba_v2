@@ -28,7 +28,16 @@ dependencies:
   http: ^1.2.0
   html: ^0.15.4
   url_launcher: ^6.3.0
-  charset_converter: ^2.1.1 # ★★★★★ この行を追加 ★★★★★
+  charset_converter: ^2.1.1
+
+  # --- ▼▼▼ Step 1 で追加 ▼▼▼ ---
+  # Chart/Graph
+  fl_chart: ^0.68.0
+
+  # Local Storage
+  shared_preferences: ^2.2.3
+  # --- ▲▲▲ Step 1 で追加 ▲▲▲ ---
+
 
 dev_dependencies:
   flutter_test:

@@ -7,7 +7,7 @@ import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/settings_page.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
-import 'package:hetaumakeiba_v2/screens/jyusyoichiran_page.dart'; // ★追加
+import 'package:hetaumakeiba_v2/screens/jyusyoichiran_page.dart';
 
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -21,7 +21,7 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
   final GlobalKey<SavedTicketsListPageState> _savedListKey = GlobalKey<SavedTicketsListPageState>();
 
   late final List<Widget> _pages;
-  static const List<String> _pageTitles = ['ホーム', '購入履歴', '出馬表', '集計']; // ★修正：'出馬表'を追加
+  static const List<String> _pageTitles = ['ホーム', '購入履歴', '重賞', '集計']; // ラベルを'重賞'に変更
 
   bool _isFabExpanded = false;
   late AnimationController _animationController;
@@ -54,7 +54,7 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
   }
 
   void _onItemTapped(int index) {
-    if (index == 1) { // 購入履歴タブがタップされたらリロード
+    if (index == 1) {
       _savedListKey.currentState?.reloadData();
     }
 
@@ -76,8 +76,17 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    // --- ▼▼▼ Step 4 で変更 ▼▼▼ ---
+    // 集計ページ(index: 3)が選択されているかどうか
+    final bool isAnalyticsPageSelected = _selectedIndex == 3;
+    // --- ▲▲▲ Step 4 で変更 ▲▲▲ ---
+
     return Scaffold(
-      appBar: AppBar(
+      // --- ▼▼▼ Step 4 で変更 ▼▼▼ ---
+      // 集計ページ以外でのみAppBarを表示する
+      appBar: isAnalyticsPageSelected
+          ? null
+          : AppBar(
         title: Text(_pageTitles[_selectedIndex]),
         automaticallyImplyLeading: false,
         actions: [
@@ -93,6 +102,7 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
           ),
         ],
       ),
+      // --- ▲▲▲ Step 4 で変更 ▲▲▲ ---
       body: IndexedStack(
         index: _selectedIndex,
         children: _pages,
@@ -101,8 +111,8 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ホーム'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '履歴'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞'), // ★修正：アイコンをreceipt_longに、ラベルを'出馬表'に
-          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'), // ★修正：インデックスをずらす
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞'),
+          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'),
         ],
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
