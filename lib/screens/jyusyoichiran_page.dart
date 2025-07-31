@@ -7,6 +7,9 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/widgets/featured_race_list_item.dart';
+// ▼▼▼ ステップ4でインポートを追加 ▼▼▼
+import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
+// ▲▲▲ ステップ4でインポートを追加 ▲▲▲
 import 'package:intl/intl.dart';
 
 class JyusyoIchiranPage extends StatefulWidget {
@@ -17,19 +20,14 @@ class JyusyoIchiranPage extends StatefulWidget {
 }
 
 class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
-  // --- State Variables ---
   List<FeaturedRace> _weeklyGradedRaces = [];
-  // ★ RENAME: 月間から年間に変更
   List<FeaturedRace> _yearlyGradedRaces = [];
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
   bool _isHorseDataSynced = false;
 
-  // ★ ADD: PageView制御用
   PageController _pageController = PageController();
-  // ★ ADD: 表示中の月
   late int _currentMonth;
-  // ★ ADD: データが存在する月のリスト
   List<int> _availableMonths = [];
 
 
@@ -53,42 +51,32 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     });
 
     try {
-      // 2つのスクレイピング処理を並行して実行
       final results = await Future.wait([
         ScraperService.scrapeFeaturedRaces(_dbHelper),
-        // ★ CHANGE: 年間データを取得する（関数名は変更なし）
         ScraperService.scrapeMonthlyGradedRaces(),
       ]);
 
       final weeklyRaces = results[0];
-      // ★ CHANGE: 年間データを格納
       final yearlyRaces = results[1];
 
-      // 日付でソート
       weeklyRaces.sort((a, b) => _parseDateStringAsDateTime(a.raceDate).compareTo(_parseDateStringAsDateTime(b.raceDate)));
       yearlyRaces.sort((a, b) => _parseDateStringAsDateTime(a.raceDate).compareTo(_parseDateStringAsDateTime(b.raceDate)));
 
-      // ★ ADD: 利用可能な月を抽出してソート
       final availableMonths = yearlyRaces.map((race) => _parseDateStringAsDateTime(race.raceDate).month).toSet().toList();
       availableMonths.sort();
 
-      // ★ ADD: 現在の月に最も近い初期ページを計算
       int initialPage = availableMonths.indexOf(_currentMonth);
       if (initialPage == -1) {
-        initialPage = 0; // 現在の月のデータがない場合は最初の月を表示
+        initialPage = 0;
       }
 
-      // ★ ADD: PageControllerを初期化
       _pageController = PageController(initialPage: initialPage);
-
 
       if (!mounted) return;
       setState(() {
         _weeklyGradedRaces = weeklyRaces;
-        // ★ CHANGE: Stateを更新
         _yearlyGradedRaces = yearlyRaces;
         _availableMonths = availableMonths;
-        // 最初のページに対応する月をセット
         if (_availableMonths.isNotEmpty) {
           _currentMonth = _availableMonths[initialPage];
         }
@@ -100,9 +88,15 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         ScraperService.syncNewHorseData(_weeklyGradedRaces, _dbHelper);
       }
 
-      // ★★★ Step 2: ADD LOGIC INVOCATION ★★★
-      // UIの表示をブロックせず、バックグラウンドで過去レースの結果を同期する
-      ScraperService.syncPastMonthlyRaceResults(_yearlyGradedRaces, _dbHelper);
+      // 未来のレースは除外して同期処理に渡す
+      final today = DateTime.now();
+      final pastRaces = _yearlyGradedRaces.where((race) {
+        final raceDate = _parseDateStringAsDateTime(race.raceDate);
+        // レース開催日が今日より前の場合のみ同期対象とする
+        return raceDate.isBefore(DateTime(today.year, today.month, today.day));
+      }).toList();
+
+      ScraperService.syncPastMonthlyRaceResults(pastRaces, _dbHelper);
 
     } catch (e) {
       print('ERROR: 重賞一覧ページのデータロード中にエラーが発生しました: $e');
@@ -116,10 +110,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     }
   }
 
-  // ★ UPDATE: 'M/d' 形式の日付文字列もパースできるように修正
   DateTime _parseDateStringAsDateTime(String dateText) {
     try {
-      // "yyyy年M月d日" 形式
       final yearMonthDayMatch = RegExp(r'(\d+)年(\d+)月(\d+)日').firstMatch(dateText);
       if (yearMonthDayMatch != null) {
         final year = int.parse(yearMonthDayMatch.group(1)!);
@@ -127,14 +119,12 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         final day = int.parse(yearMonthDayMatch.group(3)!);
         return DateTime(year, month, day);
       }
-      // "M月d日" 形式
       final monthDayMatch = RegExp(r'(\d+)月(\d+)日').firstMatch(dateText);
       if (monthDayMatch != null) {
         final month = int.parse(monthDayMatch.group(1)!);
         final day = int.parse(monthDayMatch.group(2)!);
         return DateTime(DateTime.now().year, month, day);
       }
-      // "M/d(曜日)" 形式
       final slashDateMatch = RegExp(r'(\d+)/(\d+)').firstMatch(dateText);
       if (slashDateMatch != null) {
         final month = int.parse(slashDateMatch.group(1)!);
@@ -148,7 +138,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     }
   }
 
-  // ★★★ UI BUILD METHOD ★★★
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -172,12 +161,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- セクション1: 今週の重賞 (変更なし) ---
                 _buildWeeklyRaces(),
-
                 const SizedBox(height: 24),
-
-                // --- ★★★ セクション2: 月別重賞レース一覧 (新UI) ★★★ ---
                 if (_yearlyGradedRaces.isNotEmpty)
                   _buildMonthlyRacesPageView(),
               ],
@@ -212,7 +197,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     );
   }
 
-  // 「今週の重賞」を構築するウィジェット (変更なし)
   Widget _buildWeeklyRaces() {
     if (_weeklyGradedRaces.isEmpty) return const SizedBox.shrink();
 
@@ -247,17 +231,14 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     );
   }
 
-  // ★★★ ADD: 月別重賞レースの新しいUIを構築するウィジェット ★★★
   Widget _buildMonthlyRacesPageView() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ヘッダー (月表示とナビゲーション)
         _buildMonthSelectorHeader(),
         const SizedBox(height: 8),
-        // PageView
         SizedBox(
-          height: 400, // 高さを指定 (必要に応じて調整)
+          height: 400,
           child: PageView.builder(
             controller: _pageController,
             itemCount: _availableMonths.length,
@@ -276,7 +257,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     );
   }
 
-  // ★ ADD: 月選択ヘッダー
   Widget _buildMonthSelectorHeader() {
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 4.0),
@@ -329,7 +309,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     );
   }
 
-  // ★ ADD: 特定の月のレースリストを構築
   Widget _buildMonthlyRaceList(int month) {
     final racesForMonth = _yearlyGradedRaces.where((race) {
       return _parseDateStringAsDateTime(race.raceDate).month == month;
@@ -347,7 +326,49 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         final race = racesForMonth[index];
         return FeaturedRaceListItem(
           race: race,
-          onTap: () {}, // タップしても何もしない
+          // ▼▼▼ ステップ4でonTapのロジックを実装 ▼▼▼
+          onTap: () async {
+            final today = DateTime.now();
+            final raceDate = _parseDateStringAsDateTime(race.raceDate);
+            // 未来のレース（今日以降）はタップしても何もしない
+            if (!raceDate.isBefore(DateTime(today.year, today.month, today.day))) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('このレースはまだ確定していません。')),
+              );
+              return;
+            }
+            if (race.shutubaTableUrl.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('このレースの詳細情報はありません。')),
+              );
+              return;
+            }
+
+            // 処理中であることをユーザーに示す（任意）
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('レース結果を取得中...')),
+            );
+
+            // 正式なレースIDを取得
+            final officialRaceId = await ScraperService.getOfficialRaceId(race.shutubaTableUrl);
+
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+            if (mounted && officialRaceId != null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  // 馬券データ(qrData)は渡さずにページを開く
+                  builder: (context) => RaceResultPage(raceId: officialRaceId),
+                ),
+              );
+            } else if(mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('レース結果の取得に失敗しました。')),
+              );
+            }
+          },
+          // ▲▲▲ ステップ4でonTapのロジックを実装 ▲▲▲
         );
       },
     );

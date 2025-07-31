@@ -6,12 +6,16 @@ import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/screens/saved_ticket_detail_page.dart';
+// ▼▼▼ ステップ3でインポート先を変更 ▼▼▼
+import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
+// ▲▲▲ ステップ3でインポート先を変更 ▲▲▲
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 
+// ▼▼▼ ステップ3でraceIdを追加 ▼▼▼
 class TicketListItem {
+  final String raceId;
   final QrData qrData;
   final Map<String, dynamic> parsedTicket;
   final RaceResult? raceResult;
@@ -20,6 +24,7 @@ class TicketListItem {
   final String displaySubtitle;
 
   TicketListItem({
+    required this.raceId,
     required this.qrData,
     required this.parsedTicket,
     this.raceResult,
@@ -28,6 +33,7 @@ class TicketListItem {
     required this.displaySubtitle,
   });
 }
+// ▲▲▲ ステップ3でraceIdを追加 ▲▲▲
 
 class SavedTicketsListPage extends StatefulWidget {
   const SavedTicketsListPage({super.key});
@@ -43,7 +49,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   // 年月選択の状態管理変数
   int? _selectedYear;
   int? _selectedMonth;
-  // ▼▼▼ 購入履歴のある月を管理する変数を復活 ▼▼▼
   Map<int, Set<int>> _monthsWithData = {}; // {年: {月のセット}} の形でデータを保持
 
   late PageController _pageController;
@@ -101,10 +106,13 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
         }
 
+        // ▼▼▼ ステップ3でraceIdを渡すように変更 ▼▼▼
         tempItems.add(TicketListItem(
+          raceId: raceId,
           qrData: qrData, parsedTicket: parsedTicket, raceResult: raceResult, hitResult: hitResult,
           displayTitle: '', displaySubtitle: '',
         ));
+        // ▲▲▲ ステップ3でraceIdを渡すように変更 ▲▲▲
       } catch (e) {
         print('購入履歴のデータ処理中にエラーが発生しました: ${qrData.id} - $e');
       }
@@ -119,7 +127,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     final List<TicketListItem> finalItems = [];
     for (final item in tempItems) {
       String title;
-      if (item.raceResult != null) {
+      if (item.raceResult != null && !item.raceResult!.isIncomplete) {
         title = item.raceResult!.raceTitle;
       } else {
         final venue = item.parsedTicket['開催場'] ?? '不明';
@@ -148,62 +156,50 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       final line3 = _formatPurchaseSummary(item.parsedTicket['購入内容'] as List<dynamic>);
       final combinedSubtitle = '$line2\n$line3';
 
+      // ▼▼▼ ステップ3でraceIdを渡すように変更 ▼▼▼
       finalItems.add(TicketListItem(
+        raceId: item.raceId,
         qrData: item.qrData, parsedTicket: item.parsedTicket, raceResult: item.raceResult,
         hitResult: item.hitResult, displayTitle: title, displaySubtitle: combinedSubtitle,
       ));
+      // ▲▲▲ ステップ3でraceIdを渡すように変更 ▲▲▲
     }
     finalItems.sort((a, b) {
-      final dateA = a.raceResult?.raceDate;
-      final dateB = b.raceResult?.raceDate;
-      if (dateA == null && dateB == null) return 0;
-      if (dateA == null) return 1;
-      if (dateB == null) return -1;
-      return dateB.compareTo(dateA);
+      // タイムスタンプでソートするように変更
+      return b.qrData.timestamp.compareTo(a.qrData.timestamp);
     });
     _allTicketItems = finalItems;
 
-    // ▼▼▼ 購入履歴のある月を抽出するロジックを復活 ▼▼▼
     final newMonthsWithData = <int, Set<int>>{};
     for (final item in _allTicketItems) {
-      if (item.raceResult?.raceDate != null && item.raceResult!.raceDate.isNotEmpty) {
-        try {
-          final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
-          final year = int.parse(dateParts[0]);
-          final month = int.parse(dateParts[1]);
-          if (newMonthsWithData.containsKey(year)) {
-            newMonthsWithData[year]!.add(month);
-          } else {
-            newMonthsWithData[year] = {month};
-          }
-        } catch (e) {
-          print('日付の解析エラー: ${item.raceResult!.raceDate}');
+      try {
+        final year = item.qrData.timestamp.year;
+        final month = item.qrData.timestamp.month;
+        if (newMonthsWithData.containsKey(year)) {
+          newMonthsWithData[year]!.add(month);
+        } else {
+          newMonthsWithData[year] = {month};
         }
+      } catch (e) {
+        print('日付の解析エラー: ${item.qrData.timestamp}');
       }
     }
     _monthsWithData = newMonthsWithData;
-    // ▲▲▲ ここまで ▲▲▲
 
     if (_allTicketItems.isNotEmpty) {
       if (_selectedYear == null || _selectedMonth == null) {
         final latestItem = _allTicketItems.first;
-        if(latestItem.raceResult != null) {
-          try {
-            final dateParts = latestItem.raceResult!.raceDate.split(RegExp(r'[年月日]'));
-            _selectedYear = int.parse(dateParts[0]);
-            _selectedMonth = int.parse(dateParts[1]);
-            _baseYear = DateTime.now().year;
-            final targetPage = _initialPage + (_selectedYear! - _baseYear);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_pageController.hasClients) {
-                _pageController.jumpToPage(targetPage);
-              }
-            });
-          } catch (e) {
-            _selectedYear = DateTime.now().year;
-            _selectedMonth = DateTime.now().month;
-          }
-        } else {
+        try {
+          _selectedYear = latestItem.qrData.timestamp.year;
+          _selectedMonth = latestItem.qrData.timestamp.month;
+          _baseYear = DateTime.now().year;
+          final targetPage = _initialPage + (_selectedYear! - _baseYear);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_pageController.hasClients) {
+              _pageController.jumpToPage(targetPage);
+            }
+          });
+        } catch (e) {
           _selectedYear = DateTime.now().year;
           _selectedMonth = DateTime.now().month;
         }
@@ -224,11 +220,9 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     }
     setState(() {
       _filteredTicketItems = _allTicketItems.where((item) {
-        if (item.raceResult == null || item.raceResult!.raceDate.isEmpty) return false;
         try {
-          final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
-          final year = int.parse(dateParts[0]);
-          final month = int.parse(dateParts[1]);
+          final year = item.qrData.timestamp.year;
+          final month = item.qrData.timestamp.month;
           return year == _selectedYear && month == _selectedMonth;
         } catch (e) {
           return false;
@@ -323,7 +317,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     );
   }
 
-  // ▼▼▼ 年セレクターの選択色を修正 ▼▼▼
   Widget _buildYearSelector() {
     const activeColor = Color(0xFF1A4314); // バナーに合わせた色
 
@@ -373,7 +366,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     );
   }
 
-  // ▼▼▼ 月セレクターに「購入履歴あり」のスタイルを再適用 ▼▼▼
   Widget _buildMonthSelector() {
     return GridView.count(
       crossAxisCount: 6,
@@ -549,12 +541,19 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                     const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
+              // ▼▼▼ ステップ3で画面遷移のロジックを変更 ▼▼▼
               onTap: () async {
                 await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => SavedTicketDetailPage(qrData: item.qrData)),
+                  MaterialPageRoute(
+                    builder: (_) => RaceResultPage(
+                      raceId: item.raceId,
+                      qrData: item.qrData,
+                    ),
+                  ),
                 );
                 reloadData();
               },
+              // ▲▲▲ ステップ3で画面遷移のロジックを変更 ▲▲▲
             ),
           ),
         );

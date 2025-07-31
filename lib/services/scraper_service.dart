@@ -287,7 +287,6 @@ class ScraperService {
 
   static Future<List<FeaturedRace>> scrapeMonthlyGradedRaces() async {
     try {
-      // ★関数名を変更せず、内部実装のみ変更
       return await _scrapeGradedRacesFromSchedulePage();
     } catch (e) {
       print('ホームページのデータ取得中にエラーが発生しました: $e');
@@ -508,40 +507,32 @@ class ScraperService {
   static Future<void> syncPastMonthlyRaceResults(List<FeaturedRace> races, DatabaseHelper dbHelper) async {
     print('[Past Race Sync Start] 過去の重賞レース結果の同期を開始します...');
     for (final race in races) {
-      // b. リンクが存在する（開催済み）かチェック
       if (race.shutubaTableUrl.isNotEmpty) {
         try {
-          // c, d. 正式なレースIDを取得
-          final officialRaceId = await _getOfficialRaceId(race.shutubaTableUrl);
+          // ▼▼▼ ステップ4で関数名を変更 ▼▼▼
+          final officialRaceId = await getOfficialRaceId(race.shutubaTableUrl);
           if (officialRaceId == null) {
-            // print('INFO: ${race.raceName} の公式レースIDが見つかりませんでした。スキップします。');
             continue;
           }
 
-          // e. DBに結果が存在するか確認
           final existingResult = await dbHelper.getRaceResult(officialRaceId);
 
-          // f. DBに存在しない場合のみスクレイピングして保存
           if (existingResult == null) {
             print('DBに存在しないため、結果を取得します: ${race.raceName} (ID: $officialRaceId)');
             final resultUrl = 'https://db.netkeiba.com/race/$officialRaceId';
             final raceResult = await scrapeRaceDetails(resultUrl);
 
-            // ▼▼▼ ここからprint文を追加 ▼▼▼
             print('-----------------------------------------');
             print('【保存されるレース結果データ】');
             print('レース名: ${raceResult.raceTitle}');
             print('レースID: ${raceResult.raceId}');
             print('開催日: ${raceResult.raceDate}');
             print('コース情報: ${raceResult.raceInfo}');
-            // 全容がわかるようにJSON形式で出力
             print('詳細データ (JSON): ${raceResultToJson(raceResult)}');
             print('-----------------------------------------');
-            // ▲▲▲ ここまでprint文を追加 ▲▲▲
 
             await dbHelper.insertOrUpdateRaceResult(raceResult);
             print('結果をDBに保存しました: ${race.raceName}');
-            // サーバー負荷軽減のための待機
             await Future.delayed(const Duration(milliseconds: 500));
           }
         } catch (e) {
@@ -552,10 +543,9 @@ class ScraperService {
     print('[Past Race Sync End] 過去の重賞レース結果の同期が完了しました。');
   }
 
-  // ★★★ URL生成ロジックを修正 ★★★
-  static Future<String?> _getOfficialRaceId(String relativeUrl) async {
+  // ▼▼▼ ステップ4で関数名を変更 (_getOfficialRaceId -> getOfficialRaceId) ▼▼▼
+  static Future<String?> getOfficialRaceId(String relativeUrl) async {
     try {
-      // ベースURLと相対URLを安全に結合
       final baseUrl = Uri.parse('https://race.netkeiba.com');
       final url = baseUrl.resolve(relativeUrl);
 
@@ -568,13 +558,11 @@ class ScraperService {
       final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
       final document = html.parse(decodedBody);
 
-      // 「結果払戻」リンクを堅牢なセレクタで探す
       final resultLink = document.querySelector('a[href*="/race/result.html?race_id="]');
 
       if (resultLink != null) {
         final href = resultLink.attributes['href'];
         if (href != null) {
-          // 既存のヘルパー関数を再利用してIDを抽出
           return getRaceIdFromUrl(href);
         }
       }

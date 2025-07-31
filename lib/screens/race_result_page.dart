@@ -1,4 +1,4 @@
-// lib/screens/saved_ticket_detail_page.dart
+// lib/screens/race_result_page.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
@@ -8,33 +8,42 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart'; // PurchaseDetailsCardをインポート
+import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 
-// ページのロードに必要なデータをまとめるためのヘルパークラス（簡素化）
+// ▼▼▼ ステップ2で変更 ▼▼▼
+// PageDataクラスを修正し、parsedTicketをnull許容にする
 class PageData {
-  final Map<String, dynamic> parsedTicket;
-  final RaceResult? raceResult; // レース結果は存在しない場合もある
+  final Map<String, dynamic>? parsedTicket; // 馬券データは存在しない場合がある
+  final RaceResult? raceResult;
 
   PageData({
-    required this.parsedTicket,
+    this.parsedTicket,
     this.raceResult,
   });
 }
+// ▲▲▲ ステップ2で変更 ▲▲▲
 
-class SavedTicketDetailPage extends StatefulWidget {
-  final QrData qrData;
+class RaceResultPage extends StatefulWidget {
+  // ▼▼▼ ステップ2で変更 ▼▼▼
+  // raceIdを必須とし、qrDataを任意（null許容）にする
+  final String raceId;
+  final QrData? qrData;
 
-  const SavedTicketDetailPage({super.key, required this.qrData});
+  const RaceResultPage({
+    super.key,
+    required this.raceId,
+    this.qrData,
+  });
+  // ▲▲▲ ステップ2で変更 ▲▲▲
 
   @override
-  State<SavedTicketDetailPage> createState() => _SavedTicketDetailPageState();
+  State<RaceResultPage> createState() => _RaceResultPageState();
 }
 
-class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
+class _RaceResultPageState extends State<RaceResultPage> {
   late Future<PageData> _pageDataFuture;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  // 枠番の色を定義するMap
   final Map<String, Color> _frameColors = {
     '1': Colors.white,
     '2': Colors.black,
@@ -46,13 +55,12 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     '8': Colors.pink.shade200,
   };
 
-  // 背景色に応じて文字色を返すヘルパー関数
   Color _getTextColorForFrame(String frameNumber) {
     switch (frameNumber) {
-      case '1': // White
-      case '5': // Yellow
+      case '1':
+      case '5':
         return Colors.black;
-      default: // Black, Red, Blue, Green, Orange, Pink
+      default:
         return Colors.white;
     }
   }
@@ -63,23 +71,18 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     _pageDataFuture = _loadPageData();
   }
 
-  // DBからデータを読み込むだけのシンプルな処理
+  // ▼▼▼ ステップ2で変更 ▼▼▼
+  // データ読み込みロジックを修正
   Future<PageData> _loadPageData() async {
     try {
-      final parsedTicket = json.decode(widget.qrData.parsedDataJson) as Map<String, dynamic>;
+      // qrDataがnullかどうかで処理を分岐
+      Map<String, dynamic>? parsedTicket;
+      if (widget.qrData != null) {
+        parsedTicket = json.decode(widget.qrData!.parsedDataJson) as Map<String, dynamic>;
+      }
 
-      final url = generateNetkeibaUrl(
-        year: parsedTicket['年'].toString(),
-        racecourseCode: racecourseDict.entries
-            .firstWhere((entry) => entry.value == parsedTicket['開催場'])
-            .key,
-        round: parsedTicket['回'].toString(),
-        day: parsedTicket['日'].toString(),
-        race: parsedTicket['レース'].toString(),
-      );
-      final raceId = ScraperService.getRaceIdFromUrl(url)!;
-
-      RaceResult? raceResult = await _dbHelper.getRaceResult(raceId);
+      // raceIdは常にwidgetから取得
+      RaceResult? raceResult = await _dbHelper.getRaceResult(widget.raceId);
 
       return PageData(
         parsedTicket: parsedTicket,
@@ -91,21 +94,11 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     }
   }
 
-  // ▼▼▼ ステップ2で追加 ▼▼▼
   /// ページが手動で更新されたときに呼び出される関数
   Future<void> _handleRefresh() async {
     try {
-      final parsedTicket = json.decode(widget.qrData.parsedDataJson) as Map<String, dynamic>;
-      final url = generateNetkeibaUrl(
-        year: parsedTicket['年'].toString(),
-        racecourseCode: racecourseDict.entries
-            .firstWhere((e) => e.value == parsedTicket['開催場'])
-            .key,
-        round: parsedTicket['回'].toString(),
-        day: parsedTicket['日'].toString(),
-        race: parsedTicket['レース'].toString(),
-      );
-      final raceId = ScraperService.getRaceIdFromUrl(url)!;
+      // raceIdは常にwidgetから取得
+      final raceId = widget.raceId;
 
       // 最新のレース結果をスクレイピング
       print('DEBUG: Refreshing race data for raceId: $raceId');
@@ -135,14 +128,16 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
       _pageDataFuture = _loadPageData();
     });
   }
-  // ▲▲▲ ステップ2で追加 ▲▲▲
+  // ▲▲▲ ステップ2で変更 ▲▲▲
 
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('購入馬券の詳細'),
+        // ▼▼▼ ステップ2でタイトルを汎用的なものに変更 ▼▼▼
+        title: const Text('レース結果'),
+        // ▲▲▲ ステップ2でタイトルを汎用的なものに変更 ▲▲▲
       ),
       body: Stack(
         children: [
@@ -176,8 +171,10 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                 final parsedTicket = pageData.parsedTicket;
                 final raceResult = pageData.raceResult;
 
+                // ▼▼▼ ステップ2で変更 ▼▼▼
+                // parsedTicketがnullでない場合のみ組み合わせを計算
                 final Set<String> userCombinations = {};
-                if (parsedTicket['購入内容'] != null) {
+                if (parsedTicket != null && parsedTicket['購入内容'] != null) {
                   final purchaseDetails = parsedTicket['購入内容'] as List;
                   for (var detail in purchaseDetails) {
                     if (detail['all_combinations'] != null) {
@@ -192,16 +189,16 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                   }
                 }
 
-                // ▼▼▼ ステップ2で変更 ▼▼▼
-                // RefreshIndicatorでListViewをラップ
                 return RefreshIndicator(
                   onRefresh: _handleRefresh,
                   child: ListView(
                     padding: const EdgeInsets.all(8.0),
                     children: [
-                      _buildUserTicketCard(parsedTicket),
+                      // parsedTicketがnullでない場合のみ購入内容カードを表示
+                      if (parsedTicket != null)
+                        _buildUserTicketCard(parsedTicket),
+                      // ▲▲▲ ステップ2で変更 ▲▲▲
                       if (raceResult != null) ...[
-                        // データが不完全かどうかに基づいて表示を切り替える
                         if (raceResult.isIncomplete)
                           _buildIncompleteRaceDataCard()
                         else ...[
@@ -215,7 +212,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                     ],
                   ),
                 );
-                // ▲▲▲ ステップ2で変更 ▲▲▲
               }
               return const Center(child: Text('データがありません。'));
             },
@@ -225,7 +221,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     );
   }
 
-  // ▼▼▼ ステップ2で追加 ▼▼▼
   /// レース結果が不完全な場合に表示するカード
   Widget _buildIncompleteRaceDataCard() {
     return Card(
@@ -257,7 +252,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
       ),
     );
   }
-  // ▲▲▲ ステップ2で追加 ▲▲▲
 
   // レース情報がなかった場合に表示するカード
   Widget _buildNoRaceDataCard() {
