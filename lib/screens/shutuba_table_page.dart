@@ -196,8 +196,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
             }
 
             return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+              margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
               child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 4.0),
                 title: Row(
                   children: [
                     // ▼▼▼ 修正点①：「印」のドロップダウンをここに移動 ▼▼▼
@@ -208,8 +209,14 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                           value: markSnapshot.data?.mark,
                           hint: const Text('印'),
                           underline: const SizedBox(),
-                          items: <String>['◎', '〇', '▲', '△', '×', '消'].map((String value) {
-                            return DropdownMenuItem<String>(value: value, child: Text(value));
+                          items: <String>['◎', '〇', '▲', '△', '✕', '消', '　'].map((String value) {
+                            return DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(
+                                    value,
+                                  style: const TextStyle(fontSize: 20.0),
+                                )
+                            );
                           }).toList(),
                           onChanged: (String? newValue) async {
                             if (newValue != null) {
@@ -249,11 +256,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                     Expanded(
                       child: Text(
                         horse.horseName,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    SizedBox(width: 80, child: Text('${horse.sexAndAge} / ${horse.carriedWeight}kg', textAlign: TextAlign.end,)),
+                    SizedBox(width: 60, child: Text('${horse.sexAndAge} / ${horse.carriedWeight}kg', textAlign: TextAlign.end,)),
                     // 元の位置にあったFutureBuilderは削除
                   ],
                 ),
