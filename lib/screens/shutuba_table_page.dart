@@ -85,6 +85,19 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     }
   }
 
+  // ▼▼▼ グレード表示用のヘルパー関数を追加 ▼▼▼
+  Color _getGradeColor(String grade) {
+    if (grade.contains('G1')) return Colors.blue.shade700;
+    if (grade.contains('G2')) return Colors.red.shade700;
+    if (grade.contains('G3')) return Colors.green.shade700;
+    return Colors.blueGrey; // デフォルト色
+  }
+
+  Color _getGradeTextColor(String grade) {
+    return Colors.white;
+  }
+  // ▲▲▲ ヘルパー関数の追加ここまで ▲▲▲
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -123,12 +136,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     );
   }
 
+  // ▼▼▼ グレード表示の修正を適用したメソッド ▼▼▼
   Widget _buildRaceInfoCard(FeaturedRace race) {
-    String raceTitle = race.raceName;
-    if (race.raceGrade.isNotEmpty) {
-      raceTitle += ' (${race.raceGrade})';
-    }
-
     return Card(
       margin: const EdgeInsets.all(8.0),
       child: Padding(
@@ -140,10 +149,39 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
               '${race.raceDate} ${race.venue} ${race.raceNumber}R',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 4),
-            Text(
-              raceTitle,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            const SizedBox(height: 8),
+            Row( // グレードとレース名を横に並べるためにRowを使用
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // グレードが存在する場合のみ四角いアイコンを表示
+                if (race.raceGrade.isNotEmpty) ...[
+                  Container(
+                    width: 40,
+                    height: 25,
+                    decoration: BoxDecoration(
+                      color: _getGradeColor(race.raceGrade),
+                    ),
+                    child: Center(
+                      child: Text(
+                        race.raceGrade,
+                        style: TextStyle(
+                          color: _getGradeTextColor(race.raceGrade),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12), // アイコンとレース名の間隔
+                ],
+                // レース名
+                Expanded( // 長いレース名でも表示が崩れないようにExpandedで囲む
+                  child: Text(
+                    race.raceName,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             Text(race.raceDetails1 ?? ''),
@@ -152,6 +190,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       ),
     );
   }
+  // ▲▲▲ _buildRaceInfoCardの修正ここまで ▲▲▲
 
   Color _getGateColor(int gateNumber) {
     switch (gateNumber) {

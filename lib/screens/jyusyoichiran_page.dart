@@ -7,9 +7,7 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/widgets/featured_race_list_item.dart';
-// ▼▼▼ ステップ4でインポートを追加 ▼▼▼
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
-// ▲▲▲ ステップ4でインポートを追加 ▲▲▲
 import 'package:intl/intl.dart';
 
 class JyusyoIchiranPage extends StatefulWidget {
@@ -368,7 +366,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
               );
             }
           },
-          // ▲▲▲ ステップ4でonTapのロジックを実装 ▲▲▲
         );
       },
     );

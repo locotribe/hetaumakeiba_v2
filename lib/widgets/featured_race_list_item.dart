@@ -116,7 +116,7 @@ class FeaturedRaceListItem extends StatelessWidget {
           children: [
             // 左側: グレードアイコン
             Container(
-              width: 30,
+              width: 40,
               height: 25,
               decoration: BoxDecoration(
                 color: gradeColor,
@@ -162,7 +162,7 @@ class FeaturedRaceListItem extends StatelessWidget {
                     Text(
                       race.raceDetails2 ?? '',
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 10,
                         color: Colors.black54,
                       ),
                       overflow: TextOverflow.ellipsis,
