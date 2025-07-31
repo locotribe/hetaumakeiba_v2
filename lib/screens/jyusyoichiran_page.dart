@@ -100,6 +100,10 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         ScraperService.syncNewHorseData(_weeklyGradedRaces, _dbHelper);
       }
 
+      // ★★★ Step 2: ADD LOGIC INVOCATION ★★★
+      // UIの表示をブロックせず、バックグラウンドで過去レースの結果を同期する
+      ScraperService.syncPastMonthlyRaceResults(_yearlyGradedRaces, _dbHelper);
+
     } catch (e) {
       print('ERROR: 重賞一覧ページのデータロード中にエラーが発生しました: $e');
       if (mounted) {
