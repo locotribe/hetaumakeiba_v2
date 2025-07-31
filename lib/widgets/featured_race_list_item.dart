@@ -3,6 +3,36 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 
+// ▼▼▼ 日付をパースするためのヘルパー関数を追加 ▼▼▼
+DateTime _parseDateStringAsDateTime(String dateText) {
+  try {
+    final yearMonthDayMatch = RegExp(r'(\d+)年(\d+)月(\d+)日').firstMatch(dateText);
+    if (yearMonthDayMatch != null) {
+      final year = int.parse(yearMonthDayMatch.group(1)!);
+      final month = int.parse(yearMonthDayMatch.group(2)!);
+      final day = int.parse(yearMonthDayMatch.group(3)!);
+      return DateTime(year, month, day);
+    }
+    final monthDayMatch = RegExp(r'(\d+)月(\d+)日').firstMatch(dateText);
+    if (monthDayMatch != null) {
+      final month = int.parse(monthDayMatch.group(1)!);
+      final day = int.parse(monthDayMatch.group(2)!);
+      return DateTime(DateTime.now().year, month, day);
+    }
+    final slashDateMatch = RegExp(r'(\d+)/(\d+)').firstMatch(dateText);
+    if (slashDateMatch != null) {
+      final month = int.parse(slashDateMatch.group(1)!);
+      final day = int.parse(slashDateMatch.group(2)!);
+      return DateTime(DateTime.now().year, month, day);
+    }
+    return DateTime.now();
+  } catch (e) {
+    print('Date parsing error in FeaturedRaceListItem: $dateText, Error: $e');
+    return DateTime.now();
+  }
+}
+// ▲▲▲ ヘルパー関数の追加ここまで ▲▲▲
+
 class FeaturedRaceListItem extends StatelessWidget {
   final FeaturedRace race;
   final VoidCallback onTap;
@@ -29,9 +59,41 @@ class FeaturedRaceListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gradeColor = _getGradeColor(race.raceGrade);
-
-    // ▼▼▼ 詳細情報が存在するかどうかをチェック ▼▼▼
     final bool hasDetails = race.raceDetails1 != null && race.raceDetails1!.isNotEmpty;
+
+    // ▼▼▼ 表示を「>」アイコンから「確/未」表示に切り替えるロジック ▼▼▼
+    Widget buildStatusWidget() {
+      // 月別一覧のレース（詳細情報がないレース）かどうかを判定
+      final bool isMonthlyRace = !hasDetails;
+
+      if (isMonthlyRace) {
+        final raceDate = _parseDateStringAsDateTime(race.raceDate);
+        // レース開催日の16時を「終了時刻」と定義
+        final raceFinishTime = raceDate.add(const Duration(hours: 16));
+        final bool isConfirmed = DateTime.now().isAfter(raceFinishTime);
+
+        return Container(
+          width: 28.0,
+          height: 28.0,
+          color: isConfirmed ? Colors.red : Colors.grey,
+          child: Center(
+            child: Text(
+              isConfirmed ? '確' : '未',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        );
+      } else {
+        // 今週の重賞レースの場合は、元の「>」アイコンを表示
+        return const Icon(Icons.chevron_right, color: Colors.grey);
+      }
+    }
+    // ▲▲▲ ロジックの追加ここまで ▲▲▲
+
 
     return InkWell(
       onTap: onTap,
@@ -54,11 +116,11 @@ class FeaturedRaceListItem extends StatelessWidget {
           children: [
             // 左側: グレードアイコン
             Container(
-              width: 50,
-              height: 50,
+              width: 30,
+              height: 25,
               decoration: BoxDecoration(
                 color: gradeColor,
-                shape: BoxShape.circle,
+               // shape: BoxShape.circle,
               ),
               child: Center(
                 child: Text(
@@ -87,9 +149,7 @@ class FeaturedRaceListItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4.0),
-                  // ▼▼▼ ここから表示を修正 ▼▼▼
                   if (hasDetails) ...[
-                    // --- 詳細情報がある場合の表示 (今週の重賞レース) ---
                     Text(
                       race.raceDetails1 ?? '',
                       style: const TextStyle(
@@ -108,7 +168,6 @@ class FeaturedRaceListItem extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ] else ...[
-                    // --- 詳細情報がない場合の表示 (今月の重賞レース) ---
                     Text(
                       '${race.raceDate}'
                           '${race.raceNumber.isNotEmpty ? ' / ${race.venue} ${race.raceNumber}R' : ' / ${race.venue}'}',
@@ -127,12 +186,12 @@ class FeaturedRaceListItem extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ]
-                  // ▲▲▲ ここまで表示を修正 ▲▲▲
                 ],
               ),
             ),
-            // 右側: アクションアイコン
-            const Icon(Icons.chevron_right, color: Colors.grey),
+            // ▼▼▼ 右側の表示を新しいウィジェットに置き換え ▼▼▼
+            buildStatusWidget(),
+            // ▲▲▲ ここまで ▲▲▲
           ],
         ),
       ),

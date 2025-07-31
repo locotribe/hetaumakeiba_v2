@@ -234,7 +234,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                       height: 24,
                       decoration: BoxDecoration(
                         color: _getGateColor(horse.gateNumber),
-                        shape: BoxShape.circle,
+                       // shape: BoxShape.circle,
                         border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
                       ),
                       alignment: Alignment.center,
