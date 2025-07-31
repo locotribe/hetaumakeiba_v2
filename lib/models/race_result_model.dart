@@ -17,6 +17,18 @@ class RaceResult {
   final List<String> cornerPassages; // コーナー通過順位
   final List<String> lapTimes; // ラップタイム
 
+  // ▼▼▼ ステップ1で追加 ▼▼▼
+  /// データが不完全（未来のレースなどで、まだ結果が取得できていない状態）かどうかを判定します。
+  bool get isIncomplete {
+    // レースタイトルが空、または開催日が初期値（1970年）の場合、不完全とみなす
+    final bool isInfoMissing = (raceTitle.trim().isEmpty || raceDate.startsWith('1970'));
+    // 馬の着順情報が空の場合も不完全とみなす
+    final bool hasNoResults = horseResults.isEmpty;
+
+    return isInfoMissing || hasNoResults;
+  }
+  // ▲▲▲ ステップ1で追加 ▲▲▲
+
   RaceResult({
     required this.raceId,
     required this.raceTitle,
@@ -78,111 +90,111 @@ class HorseResult {
   final String prizeMoney; // 賞金(万円)
 
   HorseResult({
-  required this.rank,
-  required this.frameNumber,
-  required this.horseNumber,
-  required this.horseName,
-  required this.horseId,
-  required this.sexAndAge,
-  required this.weightCarried,
-  required this.jockeyName,
-  required this.time,
-  required this.margin,
-  required this.cornerRanking,
-  required this.agari,
-  required this.odds,
-  required this.popularity,
-  required this.horseWeight,
-  required this.trainerName,
-  required this.ownerName,
-  required this.prizeMoney,
-});
+    required this.rank,
+    required this.frameNumber,
+    required this.horseNumber,
+    required this.horseName,
+    required this.horseId,
+    required this.sexAndAge,
+    required this.weightCarried,
+    required this.jockeyName,
+    required this.time,
+    required this.margin,
+    required this.cornerRanking,
+    required this.agari,
+    required this.odds,
+    required this.popularity,
+    required this.horseWeight,
+    required this.trainerName,
+    required this.ownerName,
+    required this.prizeMoney,
+  });
 
-factory HorseResult.fromJson(Map<String, dynamic> json) => HorseResult(
-rank: json["rank"],
-frameNumber: json["frameNumber"],
-horseNumber: json["horseNumber"],
-horseName: json["horseName"],
-horseId: json["horseId"],
-sexAndAge: json["sexAndAge"],
-weightCarried: json["weightCarried"],
-jockeyName: json["jockeyName"],
-time: json["time"],
-margin: json["margin"],
-cornerRanking: json["cornerRanking"],
-agari: json["agari"],
-odds: json["odds"],
-popularity: json["popularity"],
-horseWeight: json["horseWeight"],
-trainerName: json["trainerName"],
-ownerName: json["ownerName"],
-prizeMoney: json["prizeMoney"],
-);
+  factory HorseResult.fromJson(Map<String, dynamic> json) => HorseResult(
+    rank: json["rank"],
+    frameNumber: json["frameNumber"],
+    horseNumber: json["horseNumber"],
+    horseName: json["horseName"],
+    horseId: json["horseId"],
+    sexAndAge: json["sexAndAge"],
+    weightCarried: json["weightCarried"],
+    jockeyName: json["jockeyName"],
+    time: json["time"],
+    margin: json["margin"],
+    cornerRanking: json["cornerRanking"],
+    agari: json["agari"],
+    odds: json["odds"],
+    popularity: json["popularity"],
+    horseWeight: json["horseWeight"],
+    trainerName: json["trainerName"],
+    ownerName: json["ownerName"],
+    prizeMoney: json["prizeMoney"],
+  );
 
-Map<String, dynamic> toJson() => {
-"rank": rank,
-"frameNumber": frameNumber,
-"horseNumber": horseNumber,
-"horseName": horseName,
-"horseId": horseId,
-"sexAndAge": sexAndAge,
-"weightCarried": weightCarried,
-"jockeyName": jockeyName,
-"time": time,
-"margin": margin,
-"cornerRanking": cornerRanking,
-"agari": agari,
-"odds": odds,
-"popularity": popularity,
-"horseWeight": horseWeight,
-"trainerName": trainerName,
-"ownerName": ownerName,
-"prizeMoney": prizeMoney,
-};
+  Map<String, dynamic> toJson() => {
+    "rank": rank,
+    "frameNumber": frameNumber,
+    "horseNumber": horseNumber,
+    "horseName": horseName,
+    "horseId": horseId,
+    "sexAndAge": sexAndAge,
+    "weightCarried": weightCarried,
+    "jockeyName": jockeyName,
+    "time": time,
+    "margin": margin,
+    "cornerRanking": cornerRanking,
+    "agari": agari,
+    "odds": odds,
+    "popularity": popularity,
+    "horseWeight": horseWeight,
+    "trainerName": trainerName,
+    "ownerName": ownerName,
+    "prizeMoney": prizeMoney,
+  };
 }
 
 /// 払戻情報を保持するクラス
 class Refund {
-final String ticketType; // 券種 (例: 単勝, 複勝, 馬連)
-final List<Payout> payouts; // 払戻の組み合わせリスト
+  final String ticketType; // 券種 (例: 単勝, 複勝, 馬連)
+  final List<Payout> payouts; // 払戻の組み合わせリスト
 
-Refund({
-required this.ticketType,
-required this.payouts,
-});
+  Refund({
+    required this.ticketType,
+    required this.payouts,
+  });
 
-factory Refund.fromJson(Map<String, dynamic> json) => Refund(
-ticketType: json["ticketType"],
-payouts: List<Payout>.from(json["payouts"].map((x) => Payout.fromJson(x))),
-);
+  factory Refund.fromJson(Map<String, dynamic> json) => Refund(
+    ticketType: json["ticketType"],
+    payouts: List<Payout>.from(json["payouts"].map((x) => Payout.fromJson(x))),
+  );
 
-Map<String, dynamic> toJson() => {
-"ticketType": ticketType,
-"payouts": List<dynamic>.from(payouts.map((x) => x.toJson())),
-};
+  Map<String, dynamic> toJson() => {
+    "ticketType": ticketType,
+    "payouts": List<dynamic>.from(payouts.map((x) => x.toJson())),
+  };
 }
 
 /// 個々の払戻の組み合わせを保持するクラス
 class Payout {
-final String combination; // 馬番の組み合わせ (例: 6 - 7)
-final String amount; // 払戻金額 (円)
-final String popularity; // 人気
+  final String combination; // 馬番の組み合わせ (例: 6 - 7)
+  final String amount; // 払戻金額 (円)
+  final String popularity; // 人気
 
-Payout({
-required this.combination,
-required this.amount,
-required this.popularity,
-});
+  Payout({
+    required this.combination,
+    required this.amount,
+    required this.popularity,
+  });
 
-factory Payout.fromJson(Map<String, dynamic> json) => Payout(
-combination: json["combination"],
-amount: json["amount"],
-popularity: json["popularity"],
-);
+  factory Payout.fromJson(Map<String, dynamic> json) => Payout(
+    combination: json["combination"],
+    amount: json["amount"],
+    popularity: json["popularity"],
+  );
 
-Map<String, dynamic> toJson() => {
-"combination": combination,
-"amount": amount,
-"popularity": popularity,
-};
+  Map<String, dynamic> toJson() => {
+    "combination": combination,
+    "amount": amount,
+    "popularity": popularity,
+  };
 }

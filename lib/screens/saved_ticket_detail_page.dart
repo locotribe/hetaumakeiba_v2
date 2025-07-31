@@ -91,6 +91,53 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     }
   }
 
+  // ▼▼▼ ステップ2で追加 ▼▼▼
+  /// ページが手動で更新されたときに呼び出される関数
+  Future<void> _handleRefresh() async {
+    try {
+      final parsedTicket = json.decode(widget.qrData.parsedDataJson) as Map<String, dynamic>;
+      final url = generateNetkeibaUrl(
+        year: parsedTicket['年'].toString(),
+        racecourseCode: racecourseDict.entries
+            .firstWhere((e) => e.value == parsedTicket['開催場'])
+            .key,
+        round: parsedTicket['回'].toString(),
+        day: parsedTicket['日'].toString(),
+        race: parsedTicket['レース'].toString(),
+      );
+      final raceId = ScraperService.getRaceIdFromUrl(url)!;
+
+      // 最新のレース結果をスクレイピング
+      print('DEBUG: Refreshing race data for raceId: $raceId');
+      final newRaceResult = await ScraperService.scrapeRaceDetails(
+          'https://db.netkeiba.com/race/$raceId'
+      );
+
+      // データベースを更新（上書き）
+      await _dbHelper.insertOrUpdateRaceResult(newRaceResult);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('レース結果を更新しました。')),
+        );
+      }
+    } catch (e) {
+      print('ERROR: Failed to refresh race data: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('更新に失敗しました: $e')),
+        );
+      }
+    }
+
+    // UIを再描画するために、再度DBからデータを読み込む
+    setState(() {
+      _pageDataFuture = _loadPageData();
+    });
+  }
+  // ▲▲▲ ステップ2で追加 ▲▲▲
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -129,7 +176,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                 final parsedTicket = pageData.parsedTicket;
                 final raceResult = pageData.raceResult;
 
-                // ▼▼▼ ユーザーが購入した全組み合わせのSetを作成 ▼▼▼
                 final Set<String> userCombinations = {};
                 if (parsedTicket['購入内容'] != null) {
                   final purchaseDetails = parsedTicket['購入内容'] as List;
@@ -145,23 +191,31 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
                     }
                   }
                 }
-                // ▲▲▲ ここまで追加 ▲▲▲
 
-                return ListView(
-                  padding: const EdgeInsets.all(8.0),
-                  children: [
-                    _buildUserTicketCard(parsedTicket),
-                    if (raceResult != null) ...[
-                      _buildRaceInfoCard(raceResult),
-                      _buildFullResultsCard(raceResult),
-                      // ▼▼▼ 作成した組み合わせのSetを払戻カードに渡す ▼▼▼
-                      _buildRefundsCard(raceResult, userCombinations),
-                      // ▲▲▲ ここまで修正 ▲▲▲
-                    ] else ...[
-                      _buildNoRaceDataCard(),
-                    ]
-                  ],
+                // ▼▼▼ ステップ2で変更 ▼▼▼
+                // RefreshIndicatorでListViewをラップ
+                return RefreshIndicator(
+                  onRefresh: _handleRefresh,
+                  child: ListView(
+                    padding: const EdgeInsets.all(8.0),
+                    children: [
+                      _buildUserTicketCard(parsedTicket),
+                      if (raceResult != null) ...[
+                        // データが不完全かどうかに基づいて表示を切り替える
+                        if (raceResult.isIncomplete)
+                          _buildIncompleteRaceDataCard()
+                        else ...[
+                          _buildRaceInfoCard(raceResult),
+                          _buildFullResultsCard(raceResult),
+                          _buildRefundsCard(raceResult, userCombinations),
+                        ]
+                      ] else ...[
+                        _buildNoRaceDataCard(),
+                      ]
+                    ],
+                  ),
                 );
+                // ▲▲▲ ステップ2で変更 ▲▲▲
               }
               return const Center(child: Text('データがありません。'));
             },
@@ -170,6 +224,40 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
       ),
     );
   }
+
+  // ▼▼▼ ステップ2で追加 ▼▼▼
+  /// レース結果が不完全な場合に表示するカード
+  Widget _buildIncompleteRaceDataCard() {
+    return Card(
+      elevation: 2,
+      color: Colors.amber.shade50,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700, size: 32),
+              const SizedBox(height: 12),
+              const Text(
+                'このレースはまだ結果を取得していません。',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'レース確定後に、画面を下に引っ張って更新してください。',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  // ▲▲▲ ステップ2で追加 ▲▲▲
 
   // レース情報がなかった場合に表示するカード
   Widget _buildNoRaceDataCard() {
@@ -333,7 +421,6 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
     );
   }
 
-  // ▼▼▼ _buildRefundsCard全体を修正 ▼▼▼
   // 払戻情報カード
   Widget _buildRefundsCard(RaceResult raceResult, Set<String> userCombinations) {
     return Card(
@@ -377,7 +464,7 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
 
                           // 的中している場合のデコレーション
                           final hitDecoration = BoxDecoration(
-                              color: Colors.red.shade50,
+                            color: Colors.red.shade50,
                           );
 
                           return Container(
@@ -399,5 +486,4 @@ class _SavedTicketDetailPageState extends State<SavedTicketDetailPage> {
       ),
     );
   }
-// ▲▲▲ ここまで修正 ▲▲▲
 }

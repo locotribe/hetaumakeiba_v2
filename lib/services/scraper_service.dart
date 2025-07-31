@@ -524,8 +524,21 @@ class ScraperService {
           // f. DBに存在しない場合のみスクレイピングして保存
           if (existingResult == null) {
             print('DBに存在しないため、結果を取得します: ${race.raceName} (ID: $officialRaceId)');
-            final resultUrl = 'https://race.netkeiba.com/race/result.html?race_id=$officialRaceId';
+            final resultUrl = 'https://db.netkeiba.com/race/$officialRaceId';
             final raceResult = await scrapeRaceDetails(resultUrl);
+
+            // ▼▼▼ ここからprint文を追加 ▼▼▼
+            print('-----------------------------------------');
+            print('【保存されるレース結果データ】');
+            print('レース名: ${raceResult.raceTitle}');
+            print('レースID: ${raceResult.raceId}');
+            print('開催日: ${raceResult.raceDate}');
+            print('コース情報: ${raceResult.raceInfo}');
+            // 全容がわかるようにJSON形式で出力
+            print('詳細データ (JSON): ${raceResultToJson(raceResult)}');
+            print('-----------------------------------------');
+            // ▲▲▲ ここまでprint文を追加 ▲▲▲
+
             await dbHelper.insertOrUpdateRaceResult(raceResult);
             print('結果をDBに保存しました: ${race.raceName}');
             // サーバー負荷軽減のための待機
