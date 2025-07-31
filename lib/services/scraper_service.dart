@@ -281,6 +281,7 @@ class ScraperService {
 
   static Future<List<FeaturedRace>> scrapeMonthlyGradedRaces() async {
     try {
+      // ★関数名を変更せず、内部実装のみ変更
       return await _scrapeGradedRacesFromSchedulePage();
     } catch (e) {
       print('ホームページのデータ取得中にエラーが発生しました: $e');
@@ -447,6 +448,7 @@ class ScraperService {
     return laps;
   }
 
+  // ★★★ 修正箇所 ★★★
   static Future<List<FeaturedRace>> _scrapeGradedRacesFromSchedulePage() async {
     const url = 'https://race.netkeiba.com/top/schedule.html';
     final List<FeaturedRace> gradedRaces = [];
@@ -461,7 +463,7 @@ class ScraperService {
     final document = html.parse(decodedBody);
 
     final rows = document.querySelectorAll('table.race_table_01 tr');
-    final currentMonth = DateTime.now().month;
+    // final currentMonth = DateTime.now().month; // ← この行を削除
 
     for (final row in rows) {
       final cells = row.querySelectorAll('td');
@@ -469,32 +471,34 @@ class ScraperService {
 
       try {
         final dateStr = _safeGetText(cells[0]);
-        final monthAndDay = dateStr.split('(')[0].split('/');
-        final month = int.parse(monthAndDay[0]);
+        // final monthAndDay = dateStr.split('(')[0].split('/'); // ← この行は不要
+        // final month = int.parse(monthAndDay[0]); // ← この行は不要
 
-        if (month == currentMonth) {
-          final raceName = _safeGetText(cells[1].querySelector('a'));
-          final link = cells[1].querySelector('a')?.attributes['href'] ?? '';
+        // if (month == currentMonth) { // ← このif文を削除
+        final raceNameElement = cells[1].querySelector('a');
+        final raceName = raceNameElement != null ? _safeGetText(raceNameElement) : _safeGetText(cells[1]);
+        final link = cells[1].querySelector('a')?.attributes['href'] ?? '';
 
-          final raceId = 'monthly_${dateStr.replaceAll(RegExp(r'[/\(\)]'), '')}_${raceName.replaceAll(' ', '')}';
+        // raceIdは一意であれば何でも良いため、日付とレース名から生成
+        final raceId = 'monthly_${dateStr.replaceAll(RegExp(r'[/\(\)]'), '')}_${raceName.replaceAll(' ', '')}';
 
-          gradedRaces.add(FeaturedRace(
-            raceId: raceId,
-            raceName: raceName,
-            raceGrade: _safeGetText(cells[2]),
-            venue: _safeGetText(cells[3]),
-            distance: _safeGetText(cells[4]),
-            conditions: _safeGetText(cells[5]),
-            weight: _safeGetText(cells[6]),
-            raceDate: dateStr,
-            shutubaTableUrl: link,
-            raceNumber: '',
-            lastScraped: DateTime.now(),
-            raceDetails1: '',
-            raceDetails2: '',
-            shutubaHorses: null,
-          ));
-        }
+        gradedRaces.add(FeaturedRace(
+          raceId: raceId,
+          raceName: raceName,
+          raceGrade: _safeGetText(cells[2]),
+          venue: _safeGetText(cells[3]),
+          distance: _safeGetText(cells[4]),
+          conditions: _safeGetText(cells[5]),
+          weight: _safeGetText(cells[6]),
+          raceDate: dateStr,
+          shutubaTableUrl: link,
+          raceNumber: '',
+          lastScraped: DateTime.now(),
+          raceDetails1: '',
+          raceDetails2: '',
+          shutubaHorses: null,
+        ));
+        // } // ← このif文の閉じ括弧を削除
       } catch (e) {
         print('重賞日程の行解析エラー: $e');
         continue;
