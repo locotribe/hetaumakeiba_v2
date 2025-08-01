@@ -6,16 +6,13 @@ import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
-// ▼▼▼ ステップ3でインポート先を変更 ▼▼▼
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
-// ▲▲▲ ステップ3でインポート先を変更 ▲▲▲
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 
-// ▼▼▼ ステップ3でraceIdを追加 ▼▼▼
 class TicketListItem {
-  final String raceId;
+  final String raceId; // 新しいアーキテクチャで必要なraceId
   final QrData qrData;
   final Map<String, dynamic> parsedTicket;
   final RaceResult? raceResult;
@@ -33,7 +30,6 @@ class TicketListItem {
     required this.displaySubtitle,
   });
 }
-// ▲▲▲ ステップ3でraceIdを追加 ▲▲▲
 
 class SavedTicketsListPage extends StatefulWidget {
   const SavedTicketsListPage({super.key});
@@ -46,19 +42,17 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   List<TicketListItem> _allTicketItems = [];
   List<TicketListItem> _filteredTicketItems = [];
 
-  // 年月選択の状態管理変数
   int? _selectedYear;
   int? _selectedMonth;
-  Map<int, Set<int>> _monthsWithData = {}; // {年: {月のセット}} の形でデータを保持
+  Map<int, Set<int>> _monthsWithData = {};
 
   late PageController _pageController;
-  static const int _initialPage = 10000; // PageViewの擬似無限スクロール用
-  int _baseYear = DateTime.now().year; // PageViewの中心となる年
+  static const int _initialPage = 10000;
+  int _baseYear = DateTime.now().year;
 
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  // 英語の月名リスト
   static const List<String> _englishMonths = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
@@ -106,13 +100,11 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
         }
 
-        // ▼▼▼ ステップ3でraceIdを渡すように変更 ▼▼▼
         tempItems.add(TicketListItem(
-          raceId: raceId,
+          raceId: raceId, // raceIdを保持
           qrData: qrData, parsedTicket: parsedTicket, raceResult: raceResult, hitResult: hitResult,
           displayTitle: '', displaySubtitle: '',
         ));
-        // ▲▲▲ ステップ3でraceIdを渡すように変更 ▲▲▲
       } catch (e) {
         print('購入履歴のデータ処理中にエラーが発生しました: ${qrData.id} - $e');
       }
@@ -127,7 +119,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     final List<TicketListItem> finalItems = [];
     for (final item in tempItems) {
       String title;
-      if (item.raceResult != null && !item.raceResult!.isIncomplete) {
+      if (item.raceResult != null) {
         title = item.raceResult!.raceTitle;
       } else {
         final venue = item.parsedTicket['開催場'] ?? '不明';
@@ -156,32 +148,39 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       final line3 = _formatPurchaseSummary(item.parsedTicket['購入内容'] as List<dynamic>);
       final combinedSubtitle = '$line2\n$line3';
 
-      // ▼▼▼ ステップ3でraceIdを渡すように変更 ▼▼▼
       finalItems.add(TicketListItem(
-        raceId: item.raceId,
+        raceId: item.raceId, // raceIdを保持
         qrData: item.qrData, parsedTicket: item.parsedTicket, raceResult: item.raceResult,
         hitResult: item.hitResult, displayTitle: title, displaySubtitle: combinedSubtitle,
       ));
-      // ▲▲▲ ステップ3でraceIdを渡すように変更 ▲▲▲
     }
+
+    // ▼▼▼ 日付処理：ここから旧バージョンの安定したロジックを使用 ▼▼▼
     finalItems.sort((a, b) {
-      // タイムスタンプでソートするように変更
-      return b.qrData.timestamp.compareTo(a.qrData.timestamp);
+      final dateA = a.raceResult?.raceDate;
+      final dateB = b.raceResult?.raceDate;
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
+      return dateB.compareTo(dateA);
     });
     _allTicketItems = finalItems;
 
     final newMonthsWithData = <int, Set<int>>{};
     for (final item in _allTicketItems) {
-      try {
-        final year = item.qrData.timestamp.year;
-        final month = item.qrData.timestamp.month;
-        if (newMonthsWithData.containsKey(year)) {
-          newMonthsWithData[year]!.add(month);
-        } else {
-          newMonthsWithData[year] = {month};
+      if (item.raceResult?.raceDate != null && item.raceResult!.raceDate.isNotEmpty) {
+        try {
+          final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
+          final year = int.parse(dateParts[0]);
+          final month = int.parse(dateParts[1]);
+          if (newMonthsWithData.containsKey(year)) {
+            newMonthsWithData[year]!.add(month);
+          } else {
+            newMonthsWithData[year] = {month};
+          }
+        } catch (e) {
+          print('日付の解析エラー: ${item.raceResult!.raceDate}');
         }
-      } catch (e) {
-        print('日付の解析エラー: ${item.qrData.timestamp}');
       }
     }
     _monthsWithData = newMonthsWithData;
@@ -189,17 +188,23 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     if (_allTicketItems.isNotEmpty) {
       if (_selectedYear == null || _selectedMonth == null) {
         final latestItem = _allTicketItems.first;
-        try {
-          _selectedYear = latestItem.qrData.timestamp.year;
-          _selectedMonth = latestItem.qrData.timestamp.month;
-          _baseYear = DateTime.now().year;
-          final targetPage = _initialPage + (_selectedYear! - _baseYear);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_pageController.hasClients) {
-              _pageController.jumpToPage(targetPage);
-            }
-          });
-        } catch (e) {
+        if(latestItem.raceResult != null && latestItem.raceResult!.raceDate.isNotEmpty) {
+          try {
+            final dateParts = latestItem.raceResult!.raceDate.split(RegExp(r'[年月日]'));
+            _selectedYear = int.parse(dateParts[0]);
+            _selectedMonth = int.parse(dateParts[1]);
+            _baseYear = DateTime.now().year;
+            final targetPage = _initialPage + (_selectedYear! - _baseYear);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_pageController.hasClients) {
+                _pageController.jumpToPage(targetPage);
+              }
+            });
+          } catch (e) {
+            _selectedYear = DateTime.now().year;
+            _selectedMonth = DateTime.now().month;
+          }
+        } else {
           _selectedYear = DateTime.now().year;
           _selectedMonth = DateTime.now().month;
         }
@@ -220,9 +225,11 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     }
     setState(() {
       _filteredTicketItems = _allTicketItems.where((item) {
+        if (item.raceResult == null || item.raceResult!.raceDate.isEmpty) return false;
         try {
-          final year = item.qrData.timestamp.year;
-          final month = item.qrData.timestamp.month;
+          final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
+          final year = int.parse(dateParts[0]);
+          final month = int.parse(dateParts[1]);
           return year == _selectedYear && month == _selectedMonth;
         } catch (e) {
           return false;
@@ -230,6 +237,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       }).toList();
     });
   }
+  // ▲▲▲ 日付処理：ここまで旧バージョンの安定したロジックを使用 ▲▲▲
 
   String _formatPurchaseSummary(List<dynamic> purchases) {
     if (purchases.isEmpty) return '';
@@ -318,7 +326,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   }
 
   Widget _buildYearSelector() {
-    const activeColor = Color(0xFF1A4314); // バナーに合わせた色
+    const activeColor = Color(0xFF1A4314);
 
     return SizedBox(
       height: 50,
@@ -384,15 +392,15 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         FontWeight fontWeight;
 
         if (isSelected) {
-          backgroundColor = Colors.grey.shade700; // 選択中はグレー
+          backgroundColor = Colors.grey.shade700;
           textColor = Colors.white;
           fontWeight = FontWeight.bold;
         } else if (hasData) {
-          backgroundColor = Colors.green.shade100; // データありは薄い緑
+          backgroundColor = Colors.green.shade100;
           textColor = Colors.green.shade900;
           fontWeight = FontWeight.w600;
         } else {
-          backgroundColor = Colors.white; // 通常は白
+          backgroundColor = Colors.white;
           textColor = Colors.black87;
           fontWeight = FontWeight.normal;
         }
@@ -429,9 +437,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
   Widget _buildMonthBanner() {
     if (_selectedMonth == null) return const SizedBox.shrink();
-
     final englishMonth = _englishMonths[_selectedMonth! - 1];
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -450,12 +456,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             children: [
               Text(
                 '${_selectedMonth}月',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  height: 1.1,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, height: 1.1),
               ),
               const SizedBox(height: 2),
               Container(
@@ -466,11 +467,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 ),
                 child: Text(
                   englishMonth,
-                  style: const TextStyle(
-                    color: Color(0xFF1A4314),
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(color: Color(0xFF1A4314), fontSize: 11, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -541,7 +538,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                     const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
-              // ▼▼▼ ステップ3で画面遷移のロジックを変更 ▼▼▼
               onTap: () async {
                 await Navigator.of(context).push(
                   MaterialPageRoute(
@@ -553,7 +549,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 );
                 reloadData();
               },
-              // ▲▲▲ ステップ3で画面遷移のロジックを変更 ▲▲▲
             ),
           ),
         );
