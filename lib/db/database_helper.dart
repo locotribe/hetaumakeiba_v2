@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
+import 'package:hetaumakeiba_v2/models/ticket_status_enum.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'dart:convert';
@@ -172,7 +173,7 @@ class DatabaseHelper {
     final maps = await db.query(
       'qr_data',
       where: 'status = ?',
-      whereArgs: ['unsettled'],
+      whereArgs: [TicketStatus.unsettled.name],
     );
     return List.generate(maps.length, (i) {
       return QrData.fromMap(maps[i]);

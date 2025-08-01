@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
+import 'package:hetaumakeiba_v2/models/ticket_status_enum.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 // ▼▼▼ ★ 修正: 不足していたimport文を2つ追加 ▼▼▼
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
@@ -35,7 +36,7 @@ class AnalyticsLogic {
   Future<AnalyticsData> calculateAnalyticsData() async {
     // ステータスが 'settled' のデータのみを集計対象とする
     final allQrData = await _dbHelper.getAllQrData();
-    final settledQrData = allQrData.where((qr) => qr.status == 'settled').toList();
+    final settledQrData = allQrData.where((qr) => qr.status == TicketStatus.settled).toList();
 
     final Map<int, YearlySummary> yearlySummaries = {};
     final Map<String, CategorySummary> gradeSummaries = {};

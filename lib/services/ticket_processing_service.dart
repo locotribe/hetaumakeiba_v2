@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/models/ticket_status_enum.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
@@ -28,7 +29,7 @@ class TicketProcessingService {
           qrCode: parsedData['QR'] as String,
           timestamp: DateTime.now(),
           parsedDataJson: json.encode(parsedData),
-          status: 'processing', // ステータスを「処理中」に設定
+          status: TicketStatus.processing, // ステータスを「処理中」に設定
           isHit: null,
           payout: null,
           hitDetails: null,
@@ -79,7 +80,7 @@ class TicketProcessingService {
           qrCode: qrData.qrCode,
           timestamp: qrData.timestamp,
           parsedDataJson: qrData.parsedDataJson,
-          status: 'settled',
+          status: TicketStatus.settled,
           isHit: hitResult.isHit,
           payout: hitResult.totalPayout,
           hitDetails: json.encode(hitResult.hitDetails),
@@ -92,7 +93,7 @@ class TicketProcessingService {
           qrCode: qrData.qrCode,
           timestamp: qrData.timestamp,
           parsedDataJson: qrData.parsedDataJson,
-          status: 'unsettled',
+          status: TicketStatus.unsettled,
           isHit: null,
           payout: null,
           hitDetails: null,
@@ -107,7 +108,7 @@ class TicketProcessingService {
         qrCode: qrData.qrCode,
         timestamp: qrData.timestamp,
         parsedDataJson: qrData.parsedDataJson,
-        status: 'unsettled', // エラー時は未確定として扱う
+        status: TicketStatus.unsettled, // エラー時は未確定として扱う
       );
       await _dbHelper.updateQrData(updatedQrData);
     }

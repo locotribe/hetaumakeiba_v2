@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/models/ticket_status_enum.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
@@ -93,7 +94,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         if (parsedTicket.isEmpty) continue;
 
         String title = '';
-        if (qrData.status == 'settled' || qrData.status == 'unsettled') {
+        if (qrData.status == TicketStatus.settled || qrData.status == TicketStatus.unsettled) {
           final url = generateNetkeibaUrl(
             year: parsedTicket['年'].toString(),
             racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
@@ -522,10 +523,10 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 children: [
                   Text('${totalAmount}円', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54, height: 1.2)),
                   // ▼▼▼ ★ 修正: if-else文の構文エラーを修正 ▼▼▼
-                  if (item.qrData.status == 'settled') ...[
+                  if (item.qrData.status == TicketStatus.settled) ...[
                     Text('${payout}円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isHit ? Colors.green.shade700 : Colors.black, height: 1.2)),
                     Text('${balance >= 0 ? '+' : ''}$balance円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: balance > 0 ? Colors.blue.shade700 : (balance < 0 ? Colors.red.shade700 : Colors.black), height: 1.2)),
-                  ] else if (item.qrData.status == 'processing')
+                  ] else if (item.qrData.status == TicketStatus.processing)
                     const Text('判定中...', style: TextStyle(fontSize: 12, color: Colors.grey))
                   else // 'unsettled' or null status
                     const Text('(未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
