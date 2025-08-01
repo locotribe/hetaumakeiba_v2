@@ -81,7 +81,6 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
         }
         break;
       case 'ながし':
-      // ▼▼▼ ながしで'軸'がintの場合とListの場合がある問題に対応 ▼▼▼
         List<int> axis;
         if (di['軸'] is List) {
           axis = (di['軸'] as List).cast<int>();
@@ -90,7 +89,6 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
         } else {
           axis = [];
         }
-        // ▲▲▲ ここまで修正 ▲▲▲
         final opponents = (di['相手'] as List? ?? []).cast<int>();
         final isMulti = di['マルチ'] == 'あり';
         switch (ticketType) {
@@ -119,7 +117,29 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
             final firstAxis = horseGroups.isNotEmpty ? horseGroups[0] : <int>[];
             final secondAxis = horseGroups.length > 1 ? horseGroups[1] : <int>[];
             final thirdAxis = horseGroups.length > 2 ? horseGroups[2] : <int>[];
-            if (!isMulti) {
+
+            // ▼▼▼ ここからが「3連単マルチ」の修正箇所 ▼▼▼
+            if (isMulti) {
+              if (di['ながし種別'] == '軸1頭ながし') {
+                final axisHorse = firstAxis.first;
+                final opponentHorses = secondAxis.isNotEmpty ? secondAxis : thirdAxis;
+                // 相手から2頭選ぶ組み合わせを全て作る
+                final opponentCombos = _combinations(opponentHorses, 2);
+                for (final combo in opponentCombos) {
+                  // 「軸1頭」と「相手2頭」の組み合わせ(合計3頭)で、全順列(6通り)を生成
+                  allCombinations.addAll(_permutations([axisHorse, ...combo], 3));
+                }
+              } else if (di['ながし種別'] == '軸2頭ながし') {
+                final axis1 = firstAxis.first;
+                final axis2 = secondAxis.first;
+                final opponentHorses = thirdAxis;
+                // 相手を1頭ずつループ
+                for (final opponent in opponentHorses) {
+                  // 「軸2頭」と「相手1頭」の組み合わせ(合計3頭)で、全順列(6通り)を生成
+                  allCombinations.addAll(_permutations([axis1, axis2, opponent], 3));
+                }
+              }
+            } else { // マルチではない通常のながし
               if (di['ながし種別'] == '軸1頭ながし') {
                 final nagashiType = di['ながし'];
                 final otherHorses = secondAxis.isNotEmpty ? secondAxis : thirdAxis;
@@ -130,19 +150,19 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
                 }
               } else if (di['ながし種別'] == '軸2頭ながし') {
                 final nagashiType = di['ながし'];
-                final axisHorses = firstAxis;
-                final opponentHorses = secondAxis.isNotEmpty ? secondAxis : thirdAxis;
-                for(final ap in _permutations(axisHorses, 2)) for(final o in opponentHorses) if(o != ap[0] && o != ap[1]) {
-                  if(nagashiType == '1・2着ながし') allCombinations.add([ap[0], ap[1], o]);
-                  if(nagashiType == '1・3着ながし') allCombinations.add([ap[0], o, ap[1]]);
-                  if(nagashiType == '2・3着ながし') allCombinations.add([o, ap[0], ap[1]]);
+                final axisHorses = firstAxis; // 軸は1頭ずつのはず
+                final opponentHorses = secondAxis; // 2頭軸の場合の相手
+                final thirdOpponents = thirdAxis; // 1-2着流しなどの相手
+                for(final ap in _permutations([...axisHorses, ...opponentHorses], 2)) {
+                  for(final o in thirdOpponents) {
+                    if(!ap.contains(o)) {
+                      if(nagashiType == '1・2着ながし') allCombinations.add([ap[0], ap[1], o]);
+                      if(nagashiType == '1・3着ながし') allCombinations.add([ap[0], o, ap[1]]);
+                      if(nagashiType == '2・3着ながし') allCombinations.add([o, ap[0], ap[1]]);
+                    }
+                  }
                 }
               }
-            } else {
-              List<int> multiHorses = [];
-              if (di['ながし種別']?.contains('1頭')) multiHorses = [firstAxis.first, ...(secondAxis.isNotEmpty ? secondAxis : thirdAxis)];
-              else if (di['ながし種別']?.contains('2頭')) multiHorses = [...firstAxis, ...secondAxis, ...thirdAxis];
-              if (multiHorses.isNotEmpty) allCombinations = _permutations(multiHorses.toSet().toList(), 3).toList();
             }
             break;
         }
@@ -228,7 +248,7 @@ int calculatePoints({
         case '軸2頭ながし':
           return t.length * 2;
         case '軸2頭マルチ':
-          return s.length * 6;
+          return t.length * 6;
         default:
           return 0;
       }
