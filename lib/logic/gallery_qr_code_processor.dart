@@ -7,14 +7,14 @@ import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
-import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart'; // ★ 新しくインポート
+import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart';
 
 class GalleryQrCodeProcessor {
   final DatabaseHelper _dbHelper;
   final Function(bool status, String? message) onWarningStatusChanged;
   final Function(Map<String, dynamic> parsedData) onProcessingComplete;
   final GlobalKey<SavedTicketsListPageState> savedListKey;
-  final TicketProcessingService _ticketProcessingService; // ★ 新しいサービスを追加
+  final TicketProcessingService _ticketProcessingService;
 
   final MobileScannerController _scannerController = MobileScannerController();
 
@@ -34,7 +34,6 @@ class GalleryQrCodeProcessor {
     required this.onProcessingComplete,
     required this.savedListKey,
   })  : _dbHelper = dbHelper,
-  // ★ コンストラクタでサービスを初期化
         _ticketProcessingService = TicketProcessingService(dbHelper: dbHelper);
 
   void _setWarningStatus(bool status, String? message) {
@@ -152,36 +151,28 @@ class GalleryQrCodeProcessor {
     }
   }
 
-  // ▼▼▼ ★★★ ここからが修正箇所 ★★★ ▼▼▼
-  /// 解析、DB保存、スクレイピング実行のロジックをTicketProcessingServiceに委譲
+  // ▼▼▼ Step 2でロジックを修正 ▼▼▼
   Future<void> _processCombinedQrCode(String qrCode) async {
-    // サービスを呼び出してQRコードの処理と保存を行う
-    final parsedData = await _ticketProcessingService.processAndSaveTicket(qrCode, savedListKey);
+    final newQrData = await _ticketProcessingService.processAndSaveTicket(qrCode, savedListKey);
 
-    // サービスからの戻り値をチェック
-    if (parsedData.containsKey('エラー')) {
-      // エラーがあった場合、UIに警告を表示し、エラー情報と共に処理完了を通知
+    if (newQrData == null) {
       _setWarningStatus(true, '馬券の解析に失敗しました');
       await Future.delayed(const Duration(seconds: 3));
       _setWarningStatus(false, null);
       onProcessingComplete({
-        'isNotTicket': true, // UI側でエラーとして扱うためのフラグ
+        'isNotTicket': true,
         'エラー': '解析失敗',
-        '詳細': parsedData['詳細'] ?? '不明'
+        '詳細': 'QRコードの解析中に不明なエラーが発生しました。'
       });
       return;
     }
 
-    // 成功した場合、UIを更新し、バックグラウンド処理を開始
-    onProcessingComplete(parsedData);
+    // UIは即座に更新
+    onProcessingComplete(json.decode(newQrData.parsedDataJson));
 
-    // スクレイピングはawaitせずに実行（Fire-and-forget）
-    _ticketProcessingService.triggerBackgroundScraping(parsedData, _dbHelper).catchError((e) {
-      // バックグラウンド処理のエラーはコンソールに出力するのみ
-      print('ERROR: バックグラウンドスクレイピング中にエラーが発生しました: $e');
+    // バックグラウンド処理を開始（awaitしない）
+    _ticketProcessingService.handleSettlement(newQrData).catchError((e) {
+      print('ERROR: バックグラウンド処理(handleSettlement)でエラーが発生しました: $e');
     });
   }
-// ▲▲▲ ★★★ ここまでが修正箇所 ★★★ ▲▲▲
-
-// _performBackgroundScraping メソッドは削除されました
 }

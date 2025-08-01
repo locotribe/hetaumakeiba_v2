@@ -2,30 +2,24 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 
 class TicketListItem {
-  final String raceId; // 新しいアーキテクチャで必要なraceId
   final QrData qrData;
   final Map<String, dynamic> parsedTicket;
-  final RaceResult? raceResult;
-  final HitResult? hitResult;
   final String displayTitle;
   final String displaySubtitle;
 
   TicketListItem({
-    required this.raceId,
     required this.qrData,
     required this.parsedTicket,
-    this.raceResult,
-    this.hitResult,
     required this.displayTitle,
     required this.displaySubtitle,
   });
@@ -52,6 +46,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  late TicketProcessingService _ticketProcessingService;
 
   static const List<String> _englishMonths = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -61,6 +56,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   @override
   void initState() {
     super.initState();
+    _ticketProcessingService = TicketProcessingService(dbHelper: _dbHelper);
     _pageController = PageController(
       initialPage: _initialPage,
       viewportFraction: 0.33,
@@ -78,108 +74,99 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     if (!mounted) return;
     setState(() { _isLoading = true; });
 
+    final unsettledTickets = await _dbHelper.getUnsettledQrData();
+    if (unsettledTickets.isNotEmpty) {
+      for (final ticket in unsettledTickets) {
+        _ticketProcessingService.handleSettlement(ticket);
+      }
+    }
+
     final allQrData = await _dbHelper.getAllQrData();
     final List<TicketListItem> tempItems = [];
+
+    // ▼▼▼ ★ 修正: マップのキーをString型に変更 ▼▼▼
+    final Map<String, RaceResult> raceResultCache = {};
+
     for (final qrData in allQrData) {
       try {
         final parsedTicket = jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>;
         if (parsedTicket.isEmpty) continue;
 
-        final url = generateNetkeibaUrl(
-          year: parsedTicket['年'].toString(),
-          racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
-          round: parsedTicket['回'].toString(),
-          day: parsedTicket['日'].toString(),
-          race: parsedTicket['レース'].toString(),
-        );
-        final raceId = ScraperService.getRaceIdFromUrl(url)!;
-        final raceResult = await _dbHelper.getRaceResult(raceId);
+        String title = '';
+        if (qrData.status == 'settled' || qrData.status == 'unsettled') {
+          final url = generateNetkeibaUrl(
+            year: parsedTicket['年'].toString(),
+            racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
+            round: parsedTicket['回'].toString(),
+            day: parsedTicket['日'].toString(),
+            race: parsedTicket['レース'].toString(),
+          );
+          final raceId = ScraperService.getRaceIdFromUrl(url)!;
 
-        HitResult? hitResult;
-        if (raceResult != null) {
-          hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
+          if(!raceResultCache.containsKey(raceId)) {
+            final result = await _dbHelper.getRaceResult(raceId);
+            if (result != null) {
+              raceResultCache[raceId] = result;
+            }
+          }
+          title = raceResultCache[raceId]?.raceTitle ?? 'レース情報取得中...';
         }
 
+        if (title.isEmpty) {
+          final venue = parsedTicket['開催場'] ?? '不明';
+          final raceNum = parsedTicket['レース'] ?? '??';
+          title = '$venue ${raceNum}R';
+        }
+
+        String purchaseMethodDisplay = parsedTicket['方式'] ?? '';
+        if (purchaseMethodDisplay == 'ながし') {
+          final purchaseContents = parsedTicket['購入内容'] as List<dynamic>?;
+          if (purchaseContents != null && purchaseContents.isNotEmpty) {
+            final firstPurchase = purchaseContents.first as Map<String, dynamic>;
+            purchaseMethodDisplay = firstPurchase['ながし種別'] as String? ?? purchaseMethodDisplay;
+            if (firstPurchase.containsKey('マルチ') && firstPurchase['マルチ'] == 'あり') {
+              purchaseMethodDisplay += 'マルチ';
+            }
+          }
+        }
+        final purchaseDetails = (parsedTicket['購入内容'] as List).map((p) => p['式別']).where((p) => p != null).toSet().join(', ');
+        String line2 = '$purchaseDetails $purchaseMethodDisplay';
+        final line3 = _formatPurchaseSummary(parsedTicket['購入内容'] as List<dynamic>);
+        final combinedSubtitle = '$line2\n$line3';
+
         tempItems.add(TicketListItem(
-          raceId: raceId, // raceIdを保持
-          qrData: qrData, parsedTicket: parsedTicket, raceResult: raceResult, hitResult: hitResult,
-          displayTitle: '', displaySubtitle: '',
+          qrData: qrData,
+          parsedTicket: parsedTicket,
+          displayTitle: title,
+          displaySubtitle: combinedSubtitle,
         ));
       } catch (e) {
         print('購入履歴のデータ処理中にエラーが発生しました: ${qrData.id} - $e');
       }
     }
-
-    final Map<String, int> duplicateCounter = {};
-    for (final item in tempItems) {
-      final key = _generatePurchaseKey(item.parsedTicket);
-      duplicateCounter[key] = (duplicateCounter[key] ?? 0) + 1;
-    }
-    final Map<String, int> currentDuplicateIndex = {};
-    final List<TicketListItem> finalItems = [];
-    for (final item in tempItems) {
-      String title;
-      if (item.raceResult != null) {
-        title = item.raceResult!.raceTitle;
-      } else {
-        final venue = item.parsedTicket['開催場'] ?? '不明';
-        final raceNum = item.parsedTicket['レース'] ?? '??';
-        title = '$venue ${raceNum}R';
-      }
-      String purchaseMethodDisplay = item.parsedTicket['方式'] ?? '';
-      if (purchaseMethodDisplay == 'ながし') {
-        final purchaseContents = item.parsedTicket['購入内容'] as List<dynamic>?;
-        if (purchaseContents != null && purchaseContents.isNotEmpty) {
-          final firstPurchase = purchaseContents.first as Map<String, dynamic>;
-          purchaseMethodDisplay = firstPurchase['ながし種別'] as String? ?? purchaseMethodDisplay;
-          if (firstPurchase.containsKey('マルチ') && firstPurchase['マルチ'] == 'あり') {
-            purchaseMethodDisplay += 'マルチ';
-          }
-        }
-      }
-      final purchaseDetails = (item.parsedTicket['購入内容'] as List).map((p) => p['式別']).where((p) => p != null).toSet().join(', ');
-      String line2 = '$purchaseDetails $purchaseMethodDisplay';
-      final key = _generatePurchaseKey(item.parsedTicket);
-      if (duplicateCounter[key]! > 1) {
-        final index = (currentDuplicateIndex[key] ?? 0) + 1;
-        line2 += ' ($index)';
-        currentDuplicateIndex[key] = index;
-      }
-      final line3 = _formatPurchaseSummary(item.parsedTicket['購入内容'] as List<dynamic>);
-      final combinedSubtitle = '$line2\n$line3';
-
-      finalItems.add(TicketListItem(
-        raceId: item.raceId, // raceIdを保持
-        qrData: item.qrData, parsedTicket: item.parsedTicket, raceResult: item.raceResult,
-        hitResult: item.hitResult, displayTitle: title, displaySubtitle: combinedSubtitle,
-      ));
-    }
-
-    // ▼▼▼ 日付処理：ここから旧バージョンの安定したロジックを使用 ▼▼▼
-    finalItems.sort((a, b) {
-      final dateA = a.raceResult?.raceDate;
-      final dateB = b.raceResult?.raceDate;
-      if (dateA == null && dateB == null) return 0;
-      if (dateA == null) return 1;
-      if (dateB == null) return -1;
-      return dateB.compareTo(dateA);
-    });
-    _allTicketItems = finalItems;
+    _allTicketItems = tempItems;
 
     final newMonthsWithData = <int, Set<int>>{};
     for (final item in _allTicketItems) {
-      if (item.raceResult?.raceDate != null && item.raceResult!.raceDate.isNotEmpty) {
-        try {
-          final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
-          final year = int.parse(dateParts[0]);
-          final month = int.parse(dateParts[1]);
-          if (newMonthsWithData.containsKey(year)) {
-            newMonthsWithData[year]!.add(month);
-          } else {
-            newMonthsWithData[year] = {month};
-          }
-        } catch (e) {
-          print('日付の解析エラー: ${item.raceResult!.raceDate}');
+      final parsed = jsonDecode(item.qrData.parsedDataJson);
+      final year = 2000 + (parsed['年'] as int);
+      final url = generateNetkeibaUrl(
+        year: parsed['年'].toString(),
+        racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsed['開催場']).key,
+        round: parsed['回'].toString(),
+        day: parsed['日'].toString(),
+        race: parsed['レース'].toString(),
+      );
+      final raceId = ScraperService.getRaceIdFromUrl(url)!;
+      final raceResult = await _dbHelper.getRaceResult(raceId);
+
+      if(raceResult != null){
+        final dateParts = raceResult.raceDate.split(RegExp(r'[年月日]'));
+        final month = int.parse(dateParts[1]);
+        if (newMonthsWithData.containsKey(year)) {
+          newMonthsWithData[year]!.add(month);
+        } else {
+          newMonthsWithData[year] = {month};
         }
       }
     }
@@ -188,25 +175,27 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     if (_allTicketItems.isNotEmpty) {
       if (_selectedYear == null || _selectedMonth == null) {
         final latestItem = _allTicketItems.first;
-        if(latestItem.raceResult != null && latestItem.raceResult!.raceDate.isNotEmpty) {
-          try {
-            final dateParts = latestItem.raceResult!.raceDate.split(RegExp(r'[年月日]'));
-            _selectedYear = int.parse(dateParts[0]);
-            _selectedMonth = int.parse(dateParts[1]);
-            _baseYear = DateTime.now().year;
-            final targetPage = _initialPage + (_selectedYear! - _baseYear);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_pageController.hasClients) {
-                _pageController.jumpToPage(targetPage);
-              }
-            });
-          } catch (e) {
-            _selectedYear = DateTime.now().year;
-            _selectedMonth = DateTime.now().month;
-          }
-        } else {
-          _selectedYear = DateTime.now().year;
-          _selectedMonth = DateTime.now().month;
+        final parsed = jsonDecode(latestItem.qrData.parsedDataJson);
+        final url = generateNetkeibaUrl(
+          year: parsed['年'].toString(),
+          racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsed['開催場']).key,
+          round: parsed['回'].toString(),
+          day: parsed['日'].toString(),
+          race: parsed['レース'].toString(),
+        );
+        final raceId = ScraperService.getRaceIdFromUrl(url)!;
+        final raceResult = await _dbHelper.getRaceResult(raceId);
+        if(raceResult != null){
+          final dateParts = raceResult.raceDate.split(RegExp(r'[年月日]'));
+          _selectedYear = int.parse(dateParts[0]);
+          _selectedMonth = int.parse(dateParts[1]);
+          _baseYear = DateTime.now().year;
+          final targetPage = _initialPage + (_selectedYear! - _baseYear);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_pageController.hasClients) {
+              _pageController.jumpToPage(targetPage);
+            }
+          });
         }
       }
     } else {
@@ -214,43 +203,67 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       _selectedMonth = DateTime.now().month;
     }
 
+
     _filterTickets();
-    setState(() { _isLoading = false; });
+    if(mounted){
+      setState(() { _isLoading = false; });
+    }
   }
 
   void _filterTickets() {
     if (_selectedYear == null || _selectedMonth == null) {
-      setState(() { _filteredTicketItems = []; });
+      if(mounted){
+        setState(() { _filteredTicketItems = []; });
+      }
       return;
     }
-    setState(() {
-      _filteredTicketItems = _allTicketItems.where((item) {
-        if (item.raceResult == null || item.raceResult!.raceDate.isEmpty) return false;
-        try {
-          final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
-          final year = int.parse(dateParts[0]);
-          final month = int.parse(dateParts[1]);
-          return year == _selectedYear && month == _selectedMonth;
-        } catch (e) {
-          return false;
-        }
-      }).toList();
-    });
-  }
-  // ▲▲▲ 日付処理：ここまで旧バージョンの安定したロジックを使用 ▲▲▲
+    _filteredTicketItems = _allTicketItems.where((item) {
+      final parsed = jsonDecode(item.qrData.parsedDataJson);
+      final year = 2000 + (parsed['年'] as int);
+      return year == _selectedYear;
+    }).toList();
 
-  // ▼▼▼ 買い目サマリーの表示ロジックを修正 ▼▼▼
+    _filterByMonthAsync();
+  }
+
+  Future<void> _filterByMonthAsync() async {
+    List<TicketListItem> monthlyFiltered = [];
+    for(var item in _filteredTicketItems){
+      final parsed = jsonDecode(item.qrData.parsedDataJson);
+      final url = generateNetkeibaUrl(
+        year: parsed['年'].toString(),
+        racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsed['開催場']).key,
+        round: parsed['回'].toString(),
+        day: parsed['日'].toString(),
+        race: parsed['レース'].toString(),
+      );
+      final raceId = ScraperService.getRaceIdFromUrl(url)!;
+      final raceResult = await _dbHelper.getRaceResult(raceId);
+      if(raceResult != null){
+        final dateParts = raceResult.raceDate.split(RegExp(r'[年月日]'));
+        final month = int.parse(dateParts[1]);
+        if(month == _selectedMonth){
+          monthlyFiltered.add(item);
+        }
+      }
+    }
+    if(mounted){
+      setState(() {
+        _filteredTicketItems = monthlyFiltered;
+      });
+    }
+  }
+
   String _formatPurchaseSummary(List<dynamic> purchases) {
     if (purchases.isEmpty) return '';
     try {
       final firstPurchase = purchases.first as Map<String, dynamic>;
-      final ticketType = firstPurchase['式別'] as String?; // 式別を取得
+      final ticketType = firstPurchase['式別'] as String?;
       final amount = firstPurchase['購入金額'] ?? 0;
       String horseNumbersStr = '';
       if (firstPurchase.containsKey('all_combinations')) {
         final combinations = firstPurchase['all_combinations'] as List;
         if (combinations.isNotEmpty) {
-          // 式別に応じて区切り文字を変更
           final separator = (ticketType == '馬単' || ticketType == '3連単') ? '→' : '-';
           horseNumbersStr = (combinations.first as List).join(separator);
         }
@@ -264,34 +277,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       print('Error in _formatPurchaseSummary: $e');
       return '購入内容の表示に失敗しました';
     }
-  }
-  // ▲▲▲ 修正ここまで ▲▲▲
-
-  String _generatePurchaseKey(Map<String, dynamic> parsedTicket) {
-    try {
-      final url = generateNetkeibaUrl(
-        year: parsedTicket['年'].toString(),
-        racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
-        round: parsedTicket['回'].toString(),
-        day: parsedTicket['日'].toString(),
-        race: parsedTicket['レース'].toString(),
-      );
-      final raceId = ScraperService.getRaceIdFromUrl(url)!;
-      final purchaseMethod = parsedTicket['方式'] ?? '';
-      final purchaseDetails = (parsedTicket['購入内容'] as List);
-      final detailsString = purchaseDetails.map((p) {
-        final detailMap = p as Map<String, dynamic>;
-        final sortedKeys = detailMap.keys.toList()..sort();
-        return sortedKeys.map((key) => '$key:${detailMap[key]}').join(';');
-      }).join('|');
-      return '$raceId-$purchaseMethod-$detailsString';
-    } catch (e) {
-      return parsedTicket['QR'] ?? parsedTicket.toString();
-    }
-  }
-
-  Future<void> _deleteAllData() async {
-    // 省略
   }
 
   @override
@@ -488,8 +473,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       itemBuilder: (context, index) {
         final item = _filteredTicketItems[index];
         final totalAmount = item.parsedTicket['合計金額'] as int? ?? 0;
-        final isHit = item.hitResult?.isHit ?? false;
-        final payout = item.hitResult?.totalPayout ?? 0;
+        final isHit = item.qrData.isHit ?? false;
+        final payout = item.qrData.payout ?? 0;
         final balance = payout - totalAmount;
 
         return Dismissible(
@@ -536,18 +521,30 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text('${totalAmount}円', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54, height: 1.2)),
-                  if (item.raceResult != null) ...[
+                  // ▼▼▼ ★ 修正: if-else文の構文エラーを修正 ▼▼▼
+                  if (item.qrData.status == 'settled') ...[
                     Text('${payout}円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isHit ? Colors.green.shade700 : Colors.black, height: 1.2)),
                     Text('${balance >= 0 ? '+' : ''}$balance円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: balance > 0 ? Colors.blue.shade700 : (balance < 0 ? Colors.red.shade700 : Colors.black), height: 1.2)),
-                  ] else
-                    const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  ] else if (item.qrData.status == 'processing')
+                    const Text('判定中...', style: TextStyle(fontSize: 12, color: Colors.grey))
+                  else // 'unsettled' or null status
+                    const Text('(未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
               onTap: () async {
+                final url = generateNetkeibaUrl(
+                  year: item.parsedTicket['年'].toString(),
+                  racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == item.parsedTicket['開催場']).key,
+                  round: item.parsedTicket['回'].toString(),
+                  day: item.parsedTicket['日'].toString(),
+                  race: item.parsedTicket['レース'].toString(),
+                );
+                final raceId = ScraperService.getRaceIdFromUrl(url)!;
+
                 await Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => RaceResultPage(
-                      raceId: item.raceId,
+                      raceId: raceId,
                       qrData: item.qrData,
                     ),
                   ),

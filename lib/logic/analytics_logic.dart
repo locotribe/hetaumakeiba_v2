@@ -2,14 +2,13 @@
 
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart';
-import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
-
+// ▼▼▼ ★ 修正: 不足していたimport文を2つ追加 ▼▼▼
+import 'package:hetaumakeiba_v2/utils/url_generator.dart';
+import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+// ▲▲▲ ★ 修正 ▲▲▲
 
 class AnalyticsLogic {
   final DatabaseHelper _dbHelper = DatabaseHelper();
@@ -34,7 +33,9 @@ class AnalyticsLogic {
   }
 
   Future<AnalyticsData> calculateAnalyticsData() async {
+    // ステータスが 'settled' のデータのみを集計対象とする
     final allQrData = await _dbHelper.getAllQrData();
+    final settledQrData = allQrData.where((qr) => qr.status == 'settled').toList();
 
     final Map<int, YearlySummary> yearlySummaries = {};
     final Map<String, CategorySummary> gradeSummaries = {};
@@ -44,8 +45,13 @@ class AnalyticsLogic {
     final Map<String, CategorySummary> ticketTypeSummaries = {};
     final Map<String, CategorySummary> purchaseMethodSummaries = {};
 
-    for (final QrData qrData in allQrData) {
+    for (final QrData qrData in settledQrData) {
       final parsedTicket = json.decode(qrData.parsedDataJson) as Map<String, dynamic>;
+
+      final int totalInvestment = parsedTicket['合計金額'] as int? ?? 0;
+      final int totalPayout = qrData.payout ?? 0;
+      final bool isHit = qrData.isHit ?? false;
+      final hitDetails = qrData.hitDetails != null ? json.decode(qrData.hitDetails!) as List : [];
 
       final url = generateNetkeibaUrl(
         year: parsedTicket['年'].toString(),
@@ -54,16 +60,9 @@ class AnalyticsLogic {
         day: parsedTicket['日'].toString(),
         race: parsedTicket['レース'].toString(),
       );
-      final raceId = ScraperService.getRaceIdFromUrl(url);
-      if (raceId == null) continue;
-
+      final raceId = ScraperService.getRaceIdFromUrl(url)!;
       final raceResult = await _dbHelper.getRaceResult(raceId);
       if (raceResult == null) continue;
-
-      final hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
-      final int totalInvestment = parsedTicket['合計金額'] as int? ?? 0;
-      final int totalPayout = hitResult.totalPayout;
-      final bool isHit = hitResult.isHit;
 
       try {
         final dateParts = raceResult.raceDate.split(RegExp(r'[年月日]'));
@@ -113,11 +112,8 @@ class AnalyticsLogic {
       }
       _updateCategorySummary(summaryMap: purchaseMethodSummaries, key: purchaseMethod, investment: totalInvestment, payout: totalPayout, isHit: isHit);
 
-      // --- ▼▼▼ Step 5 で修正 ▼▼▼ ---
-      // 式別の投資額と払戻額を正確に集計するロジック
       final purchaseDetails = parsedTicket['購入内容'] as List? ?? [];
 
-      // まず、各券種の投資額を集計
       for (var detail in purchaseDetails) {
         if (detail is Map<String, dynamic>) {
           final ticketType = detail['式別'] as String? ?? '不明';
@@ -126,31 +122,26 @@ class AnalyticsLogic {
           ticketTypeSummaries.putIfAbsent(ticketType, () => CategorySummary(name: ticketType));
           final summary = ticketTypeSummaries[ticketType]!;
           summary.investment += investment;
-          summary.betCount += 1; // ここでは馬券の枚数ではなく、券種ごとの購入回数をカウント
+          summary.betCount += 1;
         }
       }
 
-      // 次に、的中詳細から払戻額を各券種に加算
       if (isHit) {
-        for (final hitDetailString in hitResult.hitDetails) {
-          // '馬連 的中！ ... -> 500円' のような文字列を解析
-          final match = RegExp(r'(.+?)\s*的中！.* -> (\d+)円').firstMatch(hitDetailString);
+        for (final hitDetailString in hitDetails) {
+          final match = RegExp(r'(.+?)\s*的中！.* -> (\d+)円').firstMatch(hitDetailString as String);
           if (match != null && match.groupCount >= 2) {
             final ticketType = match.group(1)!.trim();
-            final payout = int.tryParse(match.group(2)!) ?? 0;
+            final payoutForType = int.tryParse(match.group(2)!) ?? 0;
 
             if (ticketTypeSummaries.containsKey(ticketType)) {
               final summary = ticketTypeSummaries[ticketType]!;
-              summary.payout += payout;
-              summary.hitCount += 1; // 的中した券種のみカウント
+              summary.payout += payoutForType;
+              summary.hitCount += 1;
             }
           }
         }
       }
-      // --- ▲▲▲ Step 5 で修正 ▲▲▲ ---
     }
-
-    // 不要になった按分ロジックは削除
 
     return AnalyticsData(
       yearlySummaries: yearlySummaries,

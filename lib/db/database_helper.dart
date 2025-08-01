@@ -6,9 +6,9 @@ import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
-import 'package:hetaumakeiba_v2/models/user_mark_model.dart'; // ★追加
-import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart'; // ★追加
-import 'dart:convert'; // ★追加
+import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
+import 'dart:convert';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -34,7 +34,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2, // ★バージョンを1から2に更新
+      version: 3, // ★バージョンを2から3に更新
       onCreate: (db, version) async {
         // QRコードデータテーブルの作成
         await db.execute('''
@@ -100,10 +100,10 @@ class DatabaseHelper {
             weight TEXT,
             race_details_1 TEXT,
             race_details_2 TEXT,
-            shutubaHorsesJson TEXT  -- ★追加
+            shutubaHorsesJson TEXT
           )
         ''');
-        // ★追加：user_marks データテーブルの作成
+        // user_marks データテーブルの作成
         await db.execute('''
           CREATE TABLE user_marks(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,11 +116,8 @@ class DatabaseHelper {
         ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        // ★onUpgrade メソッドを追加/修正
         if (oldVersion < 2) {
-          // featured_races テーブルに shutubaHorsesJson カラムを追加
           await db.execute('ALTER TABLE featured_races ADD COLUMN shutubaHorsesJson TEXT');
-          // user_marks テーブルを作成
           await db.execute('''
             CREATE TABLE IF NOT EXISTS user_marks(
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,6 +129,14 @@ class DatabaseHelper {
             )
           ''');
         }
+        // --- ▼▼▼ Step 1 で追加 ▼▼▼ ---
+        if (oldVersion < 3) {
+          await db.execute('ALTER TABLE qr_data ADD COLUMN status TEXT');
+          await db.execute('ALTER TABLE qr_data ADD COLUMN isHit INTEGER');
+          await db.execute('ALTER TABLE qr_data ADD COLUMN payout INTEGER');
+          await db.execute('ALTER TABLE qr_data ADD COLUMN hitDetails TEXT');
+        }
+        // --- ▲▲▲ Step 1 で追加 ▲▲▲ ---
       },
     );
   }
@@ -162,6 +167,18 @@ class DatabaseHelper {
     return null;
   }
 
+  Future<List<QrData>> getUnsettledQrData() async {
+    final db = await database;
+    final maps = await db.query(
+      'qr_data',
+      where: 'status = ?',
+      whereArgs: ['unsettled'],
+    );
+    return List.generate(maps.length, (i) {
+      return QrData.fromMap(maps[i]);
+    });
+  }
+
   Future<List<QrData>> getAllQrData() async {
     final db = await database;
     final maps = await db.query('qr_data', orderBy: 'timestamp DESC');
@@ -176,6 +193,16 @@ class DatabaseHelper {
       'qr_data',
       qrData.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<int> updateQrData(QrData qrData) async {
+    final db = await database;
+    return await db.update(
+      'qr_data',
+      qrData.toMap(),
+      where: 'id = ?',
+      whereArgs: [qrData.id],
     );
   }
 
@@ -217,41 +244,37 @@ class DatabaseHelper {
 
   // HorsePerformanceデータ関連のメソッド
 
-  /// 競走馬の単一の競走成績をデータベースに挿入または更新します。
-  /// horse_idとdateが重複する場合は既存のレコードを上書きします。
   Future<int> insertOrUpdateHorsePerformance(HorseRaceRecord record) async {
     final db = await database;
-    print('--- [DB Save] Horse Performance ---'); //
-    print('Horse ID: ${record.horseId}, Date: ${record.date}, Race: ${record.raceName}, Rank: ${record.rank}'); //
+    print('--- [DB Save] Horse Performance ---');
+    print('Horse ID: ${record.horseId}, Date: ${record.date}, Race: ${record.raceName}, Rank: ${record.rank}');
     return await db.insert(
       'horse_performance',
       record.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace, // 重複した場合は更新
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  /// 特定の競走馬の全ての競走成績を取得します。
   Future<List<HorseRaceRecord>> getHorsePerformanceRecords(String horseId) async {
     final db = await database;
     final maps = await db.query(
       'horse_performance',
       where: 'horse_id = ?',
       whereArgs: [horseId],
-      orderBy: 'date DESC', // 日付の新しい順にソート
+      orderBy: 'date DESC',
     );
     return List.generate(maps.length, (i) {
       return HorseRaceRecord.fromMap(maps[i]);
     });
   }
 
-  /// 特定の競走馬の最新の競走成績を1件取得します。
   Future<HorseRaceRecord?> getLatestHorsePerformanceRecord(String horseId) async {
     final db = await database;
     final maps = await db.query(
       'horse_performance',
       where: 'horse_id = ?',
       whereArgs: [horseId],
-      orderBy: 'date DESC', // 日付の新しい順にソート
+      orderBy: 'date DESC',
       limit: 1,
     );
     if (maps.isNotEmpty) {
@@ -260,7 +283,6 @@ class DatabaseHelper {
     return null;
   }
 
-  /// 特定の競走馬の全ての競走成績を削除します。
   Future<int> deleteHorsePerformance(String horseId) async {
     final db = await database;
     return await db.delete(
@@ -272,31 +294,26 @@ class DatabaseHelper {
 
   // FeaturedRaceデータ関連のメソッド
 
-  /// 注目レースの単一のレコードをデータベースに挿入または更新します。
-  /// race_idが重複する場合は既存のレコードを上書きします。
   Future<int> insertOrUpdateFeaturedRace(FeaturedRace featuredRace) async {
     final db = await database;
-    print('--- DBに保存するFeaturedRaceデータ ---'); //
-    // toMap()を使うことで、全てのプロパティを一度に確認できる
-    print(featuredRace.toMap()); //
-    print('------------------------------------'); //
+    print('--- DBに保存するFeaturedRaceデータ ---');
+    print(featuredRace.toMap());
+    print('------------------------------------');
     return await db.insert(
       'featured_races',
       featuredRace.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace, // 重複した場合は更新
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  /// データベースに保存されている全ての注目レースを取得します。
   Future<List<FeaturedRace>> getAllFeaturedRaces() async {
     final db = await database;
-    final maps = await db.query('featured_races', orderBy: 'last_scraped DESC'); // 最新のスクレイピング日時でソート
+    final maps = await db.query('featured_races', orderBy: 'last_scraped DESC');
     return List.generate(maps.length, (i) {
       return FeaturedRace.fromMap(maps[i]);
     });
   }
 
-  /// 特定の注目レースをraceIdで取得します。
   Future<FeaturedRace?> getFeaturedRace(String raceId) async {
     final db = await database;
     final maps = await db.query(
@@ -311,13 +328,12 @@ class DatabaseHelper {
     return null;
   }
 
-  /// 全ての注目レースデータを削除します。
   Future<int> deleteAllFeaturedRaces() async {
     final db = await database;
     return await db.delete('featured_races');
   }
 
-  // ★追加：UserMark 関連のメソッド
+  // UserMark 関連のメソッド
   Future<int> insertOrUpdateUserMark(UserMark mark) async {
     final db = await database;
     return await db.insert(
@@ -362,14 +378,13 @@ class DatabaseHelper {
     );
   }
 
-  /// 全てのデータを削除します。
   Future<void> deleteAllData() async {
     final db = await database;
     await db.delete('qr_data');
     await db.delete('race_results');
     await db.delete('horse_performance');
     await db.delete('featured_races');
-    await db.delete('user_marks'); // ★追加
+    await db.delete('user_marks');
     print('DEBUG: All data deleted from qr_data, race_results, horse_performance, featured_races, and user_marks tables.');
   }
 }
