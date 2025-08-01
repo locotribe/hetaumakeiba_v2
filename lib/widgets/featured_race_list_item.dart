@@ -159,14 +159,32 @@ class FeaturedRaceListItem extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4.0),
-                    Text(
-                      race.raceDetails2 ?? '',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Colors.black54,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    Builder(
+                        builder: (context) {
+                          String formattedDetails2 = race.raceDetails2 ?? '';
+                          // 「(」の位置を探す
+                          final parenIndex = formattedDetails2.indexOf('頭');
+
+                          // 「(」が見つかり、かつその位置が2文字目以降の場合
+                          if (parenIndex >= 2) {
+                            // 「(」の2文字前の位置を計算
+                            final breakIndex = parenIndex - 2;
+                            // 計算した位置で文字列を分割し、間に改行コードを入れる
+                            final part1 = formattedDetails2.substring(0, breakIndex);
+                            final part2 = formattedDetails2.substring(breakIndex);
+                            formattedDetails2 = '$part1\n$part2';
+                          }
+
+                          return Text(
+                            formattedDetails2,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.black54,
+                            ),
+                          );
+                        }
                     ),
+                    // ▲▲▲ 修正ここまで ▲▲▲
                   ] else ...[
                     Text(
                       '${race.raceDate}'
