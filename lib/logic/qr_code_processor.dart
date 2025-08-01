@@ -6,12 +6,7 @@ import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart';
-import 'package:hetaumakeiba_v2/utils/url_generator.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/models/featured_race_model.dart'; // FeaturedRaceモデルをインポート
-
+import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart'; // ★ 新しくインポート
 
 class QrCodeProcessor {
   final DatabaseHelper _dbHelper;
@@ -19,6 +14,7 @@ class QrCodeProcessor {
   final Function(bool) onScannerControl;
   final Function(Map<String, dynamic> parsedData) onProcessingComplete;
   final GlobalKey<SavedTicketsListPageState> savedListKey;
+  final TicketProcessingService _ticketProcessingService; // ★ 新しいサービスを追加
 
   final List<String> _qrResults = [];
 
@@ -30,7 +26,9 @@ class QrCodeProcessor {
     required this.onScannerControl,
     required this.onProcessingComplete,
     required this.savedListKey,
-  }) : _dbHelper = dbHelper;
+  })  : _dbHelper = dbHelper,
+  // ★ コンストラクタでサービスを初期化
+        _ticketProcessingService = TicketProcessingService(dbHelper: dbHelper);
 
   void _setWarningStatus(bool status, String? message) {
     if (_isShowingDuplicateMessageInternal != status) {
@@ -135,96 +133,33 @@ class QrCodeProcessor {
     }
   }
 
+  // ▼▼▼ ★★★ ここからが修正箇所 ★★★ ▼▼▼
+  /// 解析、DB保存、スクレイピング実行のロジックをTicketProcessingServiceに委譲
   Future<void> _processCombinedQrCode(String qrCode) async {
-    Map<String, dynamic> parsedData;
-    try {
-      parsedData = parseHorseracingTicketQr(qrCode);
-      if (parsedData['QR'] != null) {
-        final qrDataToSave = QrData(
-          qrCode: parsedData['QR'] as String,
-          timestamp: DateTime.now(),
-          parsedDataJson: json.encode(parsedData),
-        );
-        await _dbHelper.insertQrData(qrDataToSave);
+    // サービスを呼び出してQRコードの処理と保存を行う
+    final parsedData = await _ticketProcessingService.processAndSaveTicket(qrCode, savedListKey);
 
-        savedListKey.currentState?.reloadData();
-
-        // スクレイピング処理を非同期で開始し、awaitしない
-        _performBackgroundScraping(parsedData).catchError((e) {
-          print('ERROR: バックグラウンドスクレイピング中にエラーが発生しました: $e');
-        });
-
-      } else {
-        parsedData = {'エラー': '解析結果にQRデータが含まれていません。', '詳細': '不明な解析結果'};
-      }
-    } catch (e) {
-      parsedData = {'エラー': '解析に失敗しました', '詳細': e.toString()};
+    // サービスからの戻り値をチェック
+    if (parsedData.containsKey('エラー')) {
+      // エラーがあった場合、UIに警告を表示して処理を中断
       _setWarningStatus(true, '馬券の解析に失敗しました');
-      _qrResults.clear();
+      _qrResults.clear(); // このクリアは念のため
       await Future.delayed(const Duration(seconds: 3));
       _setWarningStatus(false, null);
       onScannerControl(true);
       return;
     }
-    // スクレイピングが終わるのを待たずに、すぐにUIを更新
+
+    // 成功した場合、UIを更新し、バックグラウンド処理を開始
     onProcessingComplete(parsedData);
+
+    // スクレイピングはawaitせずに実行（Fire-and-forget）
+    _ticketProcessingService.triggerBackgroundScraping(parsedData, _dbHelper).catchError((e) {
+      // バックグラウンド処理のエラーはコンソールに出力するのみ
+      print('ERROR: バックグラウンドスクレイピング中にエラーが発生しました: $e');
+    });
   }
+// ▲▲▲ ★★★ ここまでが修正箇所 ★★★ ▲▲▲
 
-  // スクレイピングとデータベース保存のロジックを非同期で実行する新しいプライベートメソッド
-  Future<void> _performBackgroundScraping(Map<String, dynamic> parsedData) async {
-    try {
-      final String year = parsedData['年'].toString();
-      final String racecourseCode = racecourseDict.entries.firstWhere((entry) => entry.value == parsedData['開催場']).key;
-      final String round = parsedData['回'].toString();
-      final String day = parsedData['日'].toString();
-      final String race = parsedData['レース'].toString();
-      final String raceUrl = generateNetkeibaUrl(year: year, racecourseCode: racecourseCode, round: round, day: day, race: race);
-      final String? raceId = ScraperService.getRaceIdFromUrl(raceUrl);
-
-      if (raceId != null) {
-        final existingRaceResult = await _dbHelper.getRaceResult(raceId);
-        if (existingRaceResult == null) {
-          final raceResult = await ScraperService.scrapeRaceDetails(raceUrl);
-          await _dbHelper.insertOrUpdateRaceResult(raceResult);
-
-          for (final horse in raceResult.horseResults) {
-            final latestRecord = await _dbHelper.getLatestHorsePerformanceRecord(horse.horseId);
-            if (latestRecord == null || latestRecord.date != raceResult.raceDate) {
-              try {
-                final horseRecords = await ScraperService.scrapeHorsePerformance(horse.horseId);
-                for (final record in horseRecords) {
-                  await _dbHelper.insertOrUpdateHorsePerformance(record);
-                }
-                await Future.delayed(const Duration(milliseconds: 500));
-              } catch (e) {
-                print('ERROR: 競走馬ID ${horse.horseId} の成績スクレイピングまたは保存中にエラーが発生しました: $e');
-              }
-            } else {
-              print('DEBUG: 競走馬ID ${horse.horseId} の最新成績は既に存在します。スキップします。');
-            }
-          }
-                } else {
-          // 既存のレース結果がある場合も、その出走馬の成績を同期する
-          // home_pageから呼ばれるsyncNewHorseDataと同様のロジック
-          // ただし、特定のレースの馬のみを同期するように調整
-          final featuredRacePlaceholder = FeaturedRace(
-            raceId: existingRaceResult.raceId,
-            raceName: existingRaceResult.raceTitle,
-            raceGrade: existingRaceResult.raceGrade,
-            raceDate: existingRaceResult.raceDate,
-            venue: parsedData['開催場'], // 解析データから取得
-            raceNumber: parsedData['レース'].toString(), // 解析データから取得
-            shutubaTableUrl: raceUrl, // レース結果ページのURLで代替
-            lastScraped: DateTime.now(),
-            distance: '', conditions: '', weight: '', // これらの情報はexistingRaceResultから取得することも可能
-            raceDetails1: existingRaceResult.raceInfo,
-            raceDetails2: existingRaceResult.raceGrade,
-          );
-          await ScraperService.syncNewHorseData([featuredRacePlaceholder], _dbHelper);
-        }
-      }
-    } catch (e) {
-      print('ERROR: バックグラウンドスクレイピング処理全体でエラーが発生しました: $e');
-    }
-  }
+// _performBackgroundScraping メソッドは削除されました
 }
