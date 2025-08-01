@@ -239,20 +239,24 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   }
   // ▲▲▲ 日付処理：ここまで旧バージョンの安定したロジックを使用 ▲▲▲
 
+  // ▼▼▼ 買い目サマリーの表示ロジックを修正 ▼▼▼
   String _formatPurchaseSummary(List<dynamic> purchases) {
     if (purchases.isEmpty) return '';
     try {
       final firstPurchase = purchases.first as Map<String, dynamic>;
+      final ticketType = firstPurchase['式別'] as String?; // 式別を取得
       final amount = firstPurchase['購入金額'] ?? 0;
       String horseNumbersStr = '';
       if (firstPurchase.containsKey('all_combinations')) {
         final combinations = firstPurchase['all_combinations'] as List;
         if (combinations.isNotEmpty) {
-          horseNumbersStr = (combinations.first as List).join('→');
+          // 式別に応じて区切り文字を変更
+          final separator = (ticketType == '馬単' || ticketType == '3連単') ? '→' : '-';
+          horseNumbersStr = (combinations.first as List).join(separator);
         }
       }
       String summary = '$horseNumbersStr / ${amount}円';
-      if (purchases.length > 1 || (firstPurchase['all_combinations'] as List).length > 1) {
+      if (purchases.length > 1 || (firstPurchase.containsKey('all_combinations') && (firstPurchase['all_combinations'] as List).length > 1)) {
         summary += ' ...他';
       }
       return summary;
@@ -261,6 +265,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       return '購入内容の表示に失敗しました';
     }
   }
+  // ▲▲▲ 修正ここまで ▲▲▲
 
   String _generatePurchaseKey(Map<String, dynamic> parsedTicket) {
     try {

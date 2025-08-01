@@ -10,10 +10,8 @@ import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 
-// ▼▼▼ ステップ2で変更 ▼▼▼
-// PageDataクラスを修正し、parsedTicketをnull許容にする
 class PageData {
-  final Map<String, dynamic>? parsedTicket; // 馬券データは存在しない場合がある
+  final Map<String, dynamic>? parsedTicket;
   final RaceResult? raceResult;
 
   PageData({
@@ -21,11 +19,8 @@ class PageData {
     this.raceResult,
   });
 }
-// ▲▲▲ ステップ2で変更 ▲▲▲
 
 class RaceResultPage extends StatefulWidget {
-  // ▼▼▼ ステップ2で変更 ▼▼▼
-  // raceIdを必須とし、qrDataを任意（null許容）にする
   final String raceId;
   final QrData? qrData;
 
@@ -34,7 +29,6 @@ class RaceResultPage extends StatefulWidget {
     required this.raceId,
     this.qrData,
   });
-  // ▲▲▲ ステップ2で変更 ▲▲▲
 
   @override
   State<RaceResultPage> createState() => _RaceResultPageState();
@@ -71,17 +65,13 @@ class _RaceResultPageState extends State<RaceResultPage> {
     _pageDataFuture = _loadPageData();
   }
 
-  // ▼▼▼ ステップ2で変更 ▼▼▼
-  // データ読み込みロジックを修正
   Future<PageData> _loadPageData() async {
     try {
-      // qrDataがnullかどうかで処理を分岐
       Map<String, dynamic>? parsedTicket;
       if (widget.qrData != null) {
         parsedTicket = json.decode(widget.qrData!.parsedDataJson) as Map<String, dynamic>;
       }
 
-      // raceIdは常にwidgetから取得
       RaceResult? raceResult = await _dbHelper.getRaceResult(widget.raceId);
 
       return PageData(
@@ -94,19 +84,13 @@ class _RaceResultPageState extends State<RaceResultPage> {
     }
   }
 
-  /// ページが手動で更新されたときに呼び出される関数
   Future<void> _handleRefresh() async {
     try {
-      // raceIdは常にwidgetから取得
       final raceId = widget.raceId;
-
-      // 最新のレース結果をスクレイピング
       print('DEBUG: Refreshing race data for raceId: $raceId');
       final newRaceResult = await ScraperService.scrapeRaceDetails(
           'https://db.netkeiba.com/race/$raceId'
       );
-
-      // データベースを更新（上書き）
       await _dbHelper.insertOrUpdateRaceResult(newRaceResult);
 
       if (mounted) {
@@ -123,21 +107,17 @@ class _RaceResultPageState extends State<RaceResultPage> {
       }
     }
 
-    // UIを再描画するために、再度DBからデータを読み込む
     setState(() {
       _pageDataFuture = _loadPageData();
     });
   }
-  // ▲▲▲ ステップ2で変更 ▲▲▲
 
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // ▼▼▼ ステップ2でタイトルを汎用的なものに変更 ▼▼▼
         title: const Text('レース結果'),
-        // ▲▲▲ ステップ2でタイトルを汎用的なものに変更 ▲▲▲
       ),
       body: Stack(
         children: [
@@ -171,40 +151,43 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 final parsedTicket = pageData.parsedTicket;
                 final raceResult = pageData.raceResult;
 
-                // ▼▼▼ ステップ2で変更 ▼▼▼
-                // parsedTicketがnullでない場合のみ組み合わせを計算
-                final Set<String> userCombinations = {};
+                // ▼▼▼ ユーザーの組み合わせを、式別ごとに分類して保持するMapに変更 ▼▼▼
+                final Map<String, Set<String>> userCombinationsByType = {};
                 if (parsedTicket != null && parsedTicket['購入内容'] != null) {
                   final purchaseDetails = parsedTicket['購入内容'] as List;
                   for (var detail in purchaseDetails) {
-                    if (detail['all_combinations'] != null) {
+                    final ticketType = detail['式別'] as String?;
+                    if (ticketType != null && detail['all_combinations'] != null) {
+                      // この式別のセットがまだMapになければ初期化
+                      userCombinationsByType.putIfAbsent(ticketType, () => <String>{});
+
                       final combinations = detail['all_combinations'] as List;
                       for (var c in combinations) {
                         if (c is List) {
+                          // 組み合わせはソートされていないので、-で連結するだけ
                           final combinationString = c.join('-');
-                          userCombinations.add(combinationString);
+                          userCombinationsByType[ticketType]!.add(combinationString);
                         }
                       }
                     }
                   }
                 }
+                // ▲▲▲ 修正ここまで ▲▲▲
 
                 return RefreshIndicator(
                   onRefresh: _handleRefresh,
                   child: ListView(
                     padding: const EdgeInsets.all(8.0),
                     children: [
-                      // parsedTicketがnullでない場合のみ購入内容カードを表示
                       if (parsedTicket != null)
                         _buildUserTicketCard(parsedTicket),
-                      // ▲▲▲ ステップ2で変更 ▲▲▲
                       if (raceResult != null) ...[
                         if (raceResult.isIncomplete)
                           _buildIncompleteRaceDataCard()
                         else ...[
                           _buildRaceInfoCard(raceResult),
                           _buildFullResultsCard(raceResult),
-                          _buildRefundsCard(raceResult, userCombinations),
+                          _buildRefundsCard(raceResult, userCombinationsByType), // 修正したMapを渡す
                         ]
                       ] else ...[
                         _buildNoRaceDataCard(),
@@ -221,7 +204,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  /// レース結果が不完全な場合に表示するカード
   Widget _buildIncompleteRaceDataCard() {
     return Card(
       elevation: 2,
@@ -253,7 +235,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  // レース情報がなかった場合に表示するカード
   Widget _buildNoRaceDataCard() {
     return Card(
       elevation: 2,
@@ -272,7 +253,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  // ユーザーの購入内容カード
   Widget _buildUserTicketCard(Map<String, dynamic> parsedTicket) {
     final purchaseDetails = parsedTicket['購入内容'] as List;
     final totalAmount = parsedTicket['合計金額'] ?? 0;
@@ -326,7 +306,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  // レース情報カード
   Widget _buildRaceInfoCard(RaceResult raceResult) {
     return Card(
       elevation: 2,
@@ -350,7 +329,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  // レース全着順カード
   Widget _buildFullResultsCard(RaceResult raceResult) {
     return Card(
       elevation: 2,
@@ -415,8 +393,22 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  // 払戻情報カード
-  Widget _buildRefundsCard(RaceResult raceResult, Set<String> userCombinations) {
+  // ▼▼▼ 払戻情報カードの判定ロジックを全面的に修正 ▼▼▼
+  Widget _buildRefundsCard(RaceResult raceResult, Map<String, Set<String>> userCombinationsByType) {
+    // 文字列を正規化・ソートして比較可能な canonical（正準）形式にするヘルパー関数
+    String createCanonicalString(String combo, String type) {
+      // スペースを削除し、矢印をハイフンに統一
+      String normalized = combo.replaceAll(' ', '').replaceAll('→', '-');
+      // 馬連、ワイド、3連複、枠連は数字をソートして順序を不問にする
+      if (type == '馬連' || type == 'ワイド' || type == '3連複' || type == '枠連') {
+        var parts = normalized.split('-');
+        // 数字として正しくソートするためにintに変換
+        parts.sort((a, b) => (int.tryParse(a) ?? 0).compareTo(int.tryParse(b) ?? 0));
+        return parts.join('-');
+      }
+      return normalized;
+    }
+
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -447,22 +439,24 @@ class _RaceResultPageState extends State<RaceResultPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: refund.payouts.map((payout) {
-                          // 的中しているか判定
-                          final isHit = userCombinations.contains(payout.combination);
+                          // 現在の払戻情報の式別に対応する、ユーザーの組み合わせセットを取得
+                          final userCombosForThisType = userCombinationsByType[refund.ticketType] ?? const <String>{};
 
-                          // 的中している場合のスタイル
-                          final hitTextStyle = TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red.shade700,
-                          );
+                          // 払戻情報の組み合わせを正準形式に変換
+                          final canonicalPayoutCombination = createCanonicalString(payout.combination, refund.ticketType);
 
-                          // 的中している場合のデコレーション
-                          final hitDecoration = BoxDecoration(
-                            color: Colors.red.shade50,
-                          );
+                          // ユーザーの組み合わせセットの中に、一致するものが存在するかチェック
+                          bool isHit = userCombosForThisType.any((userCombo) {
+                            final canonicalUserCombo = createCanonicalString(userCombo, refund.ticketType);
+                            return canonicalUserCombo == canonicalPayoutCombination;
+                          });
+
+                          final hitTextStyle = TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700);
+                          final hitDecoration = BoxDecoration(color: Colors.red.shade50);
 
                           return Container(
                             decoration: isHit ? hitDecoration : null,
+                            padding: isHit ? const EdgeInsets.symmetric(horizontal: 4.0, vertical: 1.0) : null,
                             child: Text(
                               '${payout.combination} : ${payout.amount}円 (${payout.popularity}人気)',
                               style: isHit ? hitTextStyle : null,

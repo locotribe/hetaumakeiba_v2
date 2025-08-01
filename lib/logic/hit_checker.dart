@@ -61,9 +61,12 @@ class HitChecker {
     for (var purchase in (parsedTicket['購入内容'] as List<dynamic>)) {
       final String ticketType = purchase['式別'];
 
-      final int combinationCount = purchase['組合せ数'] ?? 1;
+      // all_combinationsが存在しない場合はスキップ
+      if (purchase['all_combinations'] == null) continue;
+
+      final int combinationCount = (purchase['all_combinations'] as List).length;
       final int amountPerBet = (combinationCount > 0)
-          ? (purchase['購入金額'] as int) ~/ combinationCount
+          ? (purchase['購入金額'] as int)
           : (purchase['購入金額'] as int);
 
       // 保存済みの組み合わせリストを直接利用
@@ -154,42 +157,57 @@ class HitChecker {
     }
   }
 
+  // ▼▼▼ 払戻金を探すロジックを全面的に修正 ▼▼▼
   static int _findPayout(List<Refund> refunds, String ticketType, String combinationKey) {
     try {
       final refundInfo = refunds.firstWhere((r) => r.ticketType == ticketType);
 
-      if (ticketType == '馬単' || ticketType == '3連単') {
-        final payout = refundInfo.payouts.firstWhere((p) => p.combination == combinationKey, orElse: () => Payout(combination: '', amount: '0', popularity: ''));
-        return int.tryParse(payout.amount.replaceAll(',', '')) ?? 0;
-      } else {
-        final combinationSet = combinationKey.split(RegExp(r'\s*-\s*')).toSet();
-        for (var payout in refundInfo.payouts) {
-          final payoutSet = payout.combination.split(RegExp(r'\s*-\s*')).toSet();
-          if (payoutSet.length == combinationSet.length && payoutSet.difference(combinationSet).isEmpty) {
-            return int.tryParse(payout.amount.replaceAll(',', '')) ?? 0;
-          }
+      // 文字列を正規化し、順序不問の券種はソートして「正準（canonical）」な比較用文字列を生成する
+      String createCanonicalString(String combo, String type) {
+        // スペースを削除し、矢印をハイフンに統一
+        String normalized = combo.replaceAll(' ', '').replaceAll('→', '-');
+
+        // 馬連、ワイド、3連複、枠連は数字をソートして順序を不問にする
+        if (type == '馬連' || type == 'ワイド' || type == '3連複' || type == '枠連') {
+          var parts = normalized.split('-');
+          // 数字として正しくソートするためにintに変換
+          parts.sort((a, b) => (int.tryParse(a) ?? 0).compareTo(int.tryParse(b) ?? 0));
+          return parts.join('-');
         }
+        return normalized;
       }
-      return 0;
+
+      // ユーザーの組み合わせを正準形式に変換
+      final canonicalUserCombo = createCanonicalString(combinationKey, ticketType);
+
+      // 払戻情報の中に一致するものがあるか探す
+      final payout = refundInfo.payouts.firstWhere(
+            (p) => createCanonicalString(p.combination, ticketType) == canonicalUserCombo,
+        orElse: () => Payout(combination: '', amount: '0', popularity: ''),
+      );
+
+      return int.tryParse(payout.amount.replaceAll(',', '')) ?? 0;
     } catch (e) {
       return 0;
     }
   }
 
+  // ▼▼▼ 組み合わせキーの生成ロジックをシンプルに修正 ▼▼▼
   static String _formatCombinationToString(String ticketType, List<int> combination, List<String> winners) {
+    // 常に数字の小さい順でソートして返すことで比較の一貫性を保つ
+    final sortedCombination = List<int>.from(combination)..sort((a, b) => a.compareTo(b));
+
     switch (ticketType) {
       case '単勝':
       case '複勝':
         return combination.first.toString();
       case '馬単':
       case '3連単':
-        return combination.join(' → ');
-      case 'ワイド':
-        final winningInts = winners.map((e) => int.parse(e)).toSet();
-        final hitCombo = combination.where((h) => winningInts.contains(h)).toList()..sort();
-        return hitCombo.join(' - ');
-      default: // 馬連, 3連複, 枠連
-        return (combination..sort()).join(' - ');
+      // 着順が重要な券種は、元の順序のまま返す
+        return combination.join('→');
+      default: // 馬連, 3連複, 枠連, ワイド
+      // 着順が関係ない券種は、ソートしたものを返す
+        return sortedCombination.join('-');
     }
   }
 }
