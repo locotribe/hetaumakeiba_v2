@@ -137,7 +137,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           }
         }
       }
-      final purchaseDetails = (item.parsedTicket['購入内容'] as List).map((p) => p['式別']).where((p) => p != null).toSet().join(', ');
+      final purchaseDetails = (item.parsedTicket['購入内容'] as List).map((p) => bettingDict[p['式別']] ?? '').where((name) => name.isNotEmpty).toSet().join(', ');
       String line2 = '$purchaseDetails $purchaseMethodDisplay';
       final key = _generatePurchaseKey(item.parsedTicket);
       if (duplicateCounter[key]! > 1) {
@@ -244,7 +244,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     if (purchases.isEmpty) return '';
     try {
       final firstPurchase = purchases.first as Map<String, dynamic>;
-      final ticketType = firstPurchase['式別'] as String?; // 式別を取得
+      final ticketTypeId = firstPurchase['式別'] as String?; // 式別を取得
+      final ticketType = bettingDict[ticketTypeId] ?? '';
       final amount = firstPurchase['購入金額'] ?? 0;
       String horseNumbersStr = '';
       if (firstPurchase.containsKey('all_combinations')) {

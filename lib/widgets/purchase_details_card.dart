@@ -1,6 +1,7 @@
 // lib/widgets/purchase_details_card.dart
 
 import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 
 class PurchaseDetailsCard extends StatelessWidget {
   final Map<String, dynamic> parsedResult; // 全体の解析結果を渡す
@@ -195,7 +196,8 @@ class PurchaseDetailsCard extends StatelessWidget {
       ];
     } else {
       return purchaseDetails.map((detail) {
-        String shikibetsu = detail['式別'] ?? '';
+        final String shikibetsuId = detail['式別'] ?? '';
+        final String shikibetsu = bettingDict[shikibetsuId] ?? '';
         int? kingaku = detail['購入金額'];
         String uraDisplay = (detail['ウラ'] == 'あり') ? 'ウラ: あり' : '';
         int combinations = detail['組合せ数'] as int? ?? 0;

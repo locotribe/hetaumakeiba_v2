@@ -3,6 +3,7 @@
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
@@ -401,10 +402,14 @@ class ScraperService {
         final tds = row.querySelectorAll('td');
         if (th == null || tds.isEmpty) continue;
 
-        String ticketType = _safeGetText(th);
-        if (ticketType == '三連複') {
-          ticketType = '3連複';
+        String ticketTypeName = _safeGetText(th);
+        if (ticketTypeName == '三連複') {
+          ticketTypeName = '3連複';
         }
+
+        String ticketTypeId = bettingDict.entries
+            .firstWhere((entry) => entry.value == ticketTypeName, orElse: () => const MapEntry('', ''))
+            .key;
 
         final payouts = <Payout>[];
 
@@ -419,7 +424,7 @@ class ScraperService {
               .map((m) => int.parse(m.group(0)!))
               .toList();
 
-          if (['馬連', 'ワイド', '3連複', '枠連'].contains(ticketType)) {
+          if (['馬連', 'ワイド', '3連複', '枠連'].contains(ticketTypeName)) {
             combinationNumbers.sort();
           }
 
@@ -430,7 +435,7 @@ class ScraperService {
             combinationNumbers: combinationNumbers,
           ));
         }
-        refundList.add(Refund(ticketType: ticketType, payouts: payouts));
+        refundList.add(Refund(ticketTypeId: ticketTypeId, payouts: payouts));
       }
     }
     return refundList;

@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
@@ -102,7 +103,8 @@ class _ResultPageState extends State<ResultPage> {
       if (_parsedResult!.containsKey('購入内容')) {
         purchaseDetails = (_parsedResult!['購入内容'] as List).cast<Map<String, dynamic>>();
         if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
-          primaryShikibetsuFromDetails = purchaseDetails[0]['式別'];
+          final shikibetsuId = purchaseDetails[0]['式別'];
+          primaryShikibetsuFromDetails = bettingDict[shikibetsuId] ?? '';
         }
       }
 
@@ -131,7 +133,7 @@ class _ResultPageState extends State<ResultPage> {
 
       } else {
         if (overallMethod == '通常') {
-          shikibetsuToDisplay = purchaseDetails.map((p) => p['式別']).toSet().join(',');
+          shikibetsuToDisplay = purchaseDetails.map((p) => bettingDict[p['式別']] ?? '').toSet().join(',');
           hoshikiToDisplay = '';
         } else {
           shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;

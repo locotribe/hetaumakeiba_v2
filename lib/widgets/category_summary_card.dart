@@ -1,6 +1,7 @@
 // lib/widgets/category_summary_card.dart
 
 import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
 import 'package:intl/intl.dart';
 
@@ -56,8 +57,12 @@ class CategorySummaryCard extends StatelessWidget {
                   if (profit > 0) profitColor = Colors.blue.shade700;
                   if (profit < 0) profitColor = Colors.red.shade700;
 
+                  final String displayName = title == '式別 収支'
+                      ? (bettingDict[summary.name] ?? summary.name)
+                      : summary.name;
+
                   return DataRow(cells: [
-                    DataCell(Text(summary.name)),
+                    DataCell(Text(displayName)),
                     DataCell(Text('${summary.recoveryRate.toStringAsFixed(1)}%')),
                     DataCell(Text(
                       currencyFormatter.format(profit),

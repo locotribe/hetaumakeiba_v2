@@ -155,21 +155,21 @@ class HorseResult {
 
 /// 払戻情報を保持するクラス
 class Refund {
-  final String ticketType; // 券種 (例: 単勝, 複勝, 馬連)
+  final String ticketTypeId; // 券種 (例: 単勝, 複勝, 馬連)
   final List<Payout> payouts; // 払戻の組み合わせリスト
 
   Refund({
-    required this.ticketType,
+    required this.ticketTypeId,
     required this.payouts,
   });
 
   factory Refund.fromJson(Map<String, dynamic> json) => Refund(
-    ticketType: json["ticketType"],
+    ticketTypeId: json["ticketTypeId"],
     payouts: List<Payout>.from(json["payouts"].map((x) => Payout.fromJson(x))),
   );
 
   Map<String, dynamic> toJson() => {
-    "ticketType": ticketType,
+    "ticketTypeId": ticketTypeId,
     "payouts": List<dynamic>.from(payouts.map((x) => x.toJson())),
   };
 }

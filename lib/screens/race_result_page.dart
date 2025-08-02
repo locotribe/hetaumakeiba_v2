@@ -157,15 +157,15 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 if (parsedTicket != null && parsedTicket['購入内容'] != null) {
                   final purchaseDetails = parsedTicket['購入内容'] as List;
                   for (var detail in purchaseDetails) {
-                    final ticketType = detail['式別'] as String?;
-                    if (ticketType != null && detail['all_combinations'] != null) {
+                    final ticketTypeId = detail['式別'] as String?;
+                    if (ticketTypeId != null && detail['all_combinations'] != null) {
                       // この式別のセットがまだMapになければ初期化
-                      userCombinationsByType.putIfAbsent(ticketType, () => []);
+                      userCombinationsByType.putIfAbsent(ticketTypeId, () => []);
 
                       final combinations = detail['all_combinations'] as List;
                       for (var c in combinations) {
                         if (c is List) {
-                          userCombinationsByType[ticketType]!.add(c.cast<int>());
+                          userCombinationsByType[ticketTypeId]!.add(c.cast<int>());
                         }
                       }
                     }
@@ -280,13 +280,15 @@ class _RaceResultPageState extends State<RaceResultPage> {
             ),
             const SizedBox(height: 8),
             ...purchaseDetails.map((detail) {
+              final ticketTypeId = detail['式別'] as String?;
+              final ticketTypeName = bettingDict[ticketTypeId] ?? '';
               final combination = (detail['all_combinations'] as List?)
                   ?.map((c) => (c as List).join('-'))
                   .join(', ');
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8.0, left: 8.0),
                 child: Text(
-                  '${detail['式別']}: ${combination ?? "組み合わせなし"}',
+                  '$ticketTypeName: ${combination ?? "組み合わせなし"}',
                   style: const TextStyle(fontSize: 14),
                 ),
               );
@@ -408,6 +410,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
             ),
             const SizedBox(height: 8),
             ...raceResult.refunds.map((refund) {
+              final ticketTypeName = bettingDict[refund.ticketTypeId] ?? '';
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4.0),
                 child: Row(
@@ -416,7 +419,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     SizedBox(
                       width: 60,
                       child: Text(
-                        refund.ticketType,
+                        ticketTypeName,
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -424,9 +427,9 @@ class _RaceResultPageState extends State<RaceResultPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: refund.payouts.map((payout) {
-                          final userCombosForThisType = userCombinationsByType[refund.ticketType] ?? [];
+                          final userCombosForThisType = userCombinationsByType[refund.ticketTypeId] ?? [];
                           bool isHit = userCombosForThisType.any((userCombo) {
-                            switch (refund.ticketType) {
+                            switch (ticketTypeName) {
                               case '馬連':
                               case 'ワイド':
                               case '3連複':

@@ -120,11 +120,11 @@ class AnalyticsLogic {
       // まず、各券種の投資額を集計
       for (var detail in purchaseDetails) {
         if (detail is Map<String, dynamic>) {
-          final ticketType = detail['式別'] as String? ?? '不明';
+          final ticketTypeId = detail['式別'] as String? ?? '不明';
           final investment = detail['購入金額'] as int? ?? 0;
 
-          ticketTypeSummaries.putIfAbsent(ticketType, () => CategorySummary(name: ticketType));
-          final summary = ticketTypeSummaries[ticketType]!;
+          ticketTypeSummaries.putIfAbsent(ticketTypeId, () => CategorySummary(name: ticketTypeId));
+          final summary = ticketTypeSummaries[ticketTypeId]!;
           summary.investment += investment;
           summary.betCount += 1; // ここでは馬券の枚数ではなく、券種ごとの購入回数をカウント
         }
@@ -132,15 +132,17 @@ class AnalyticsLogic {
 
       // 次に、的中詳細から払戻額を各券種に加算
       if (isHit) {
+        final reversedBettingDict = {for (var e in bettingDict.entries) e.value: e.key};
         for (final hitDetailString in hitResult.hitDetails) {
           // '馬連 的中！ ... -> 500円' のような文字列を解析
           final match = RegExp(r'(.+?)\s*的中！.* -> (\d+)円').firstMatch(hitDetailString);
           if (match != null && match.groupCount >= 2) {
-            final ticketType = match.group(1)!.trim();
+            final ticketTypeName = match.group(1)!.trim();
+            final ticketTypeId = reversedBettingDict[ticketTypeName];
             final payout = int.tryParse(match.group(2)!) ?? 0;
 
-            if (ticketTypeSummaries.containsKey(ticketType)) {
-              final summary = ticketTypeSummaries[ticketType]!;
+            if (ticketTypeId != null && ticketTypeSummaries.containsKey(ticketTypeId)) {
+              final summary = ticketTypeSummaries[ticketTypeId]!;
               summary.payout += payout;
               summary.hitCount += 1; // 的中した券種のみカウント
             }

@@ -62,7 +62,7 @@ Iterable<List<T>> _permutations<T>(List<T> elements, int k) sync* {
   }
 }
 void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMethod) {
-  final String ticketType = di['式別'];
+  final String ticketType = bettingDict[di['式別']]!;
   List<List<int>> allCombinations = [];
   di['方式'] = bettingMethod;
 
@@ -386,7 +386,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         if (itr.peek(0) == "0") { itr.next(); break; }
         String bettingCode = itr.next();
         Map<String, dynamic> di = {};
-        di["式別"] = bettingDict[bettingCode];
+        di["式別"] = bettingCode;
         int count;
         switch (bettingCode) {
           case "1": case "2": count = 1; break;
@@ -413,7 +413,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
     case "1": // ボックス
       Map<String, dynamic> di = {};
       String bettingCode = itr.next();
-      di["式別"] = bettingDict[bettingCode];
+      di["式別"] = bettingCode;
       List<int> nos = [];
       String purchaseAmountStr = "";
       for (int i = 0; i < 5; i++) nos.add(int.parse(itr.next() + itr.next()));
@@ -440,7 +440,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
     case "2": // ながし
       Map<String, dynamic> di = {};
       String bettingCode = itr.next();
-      di["式別"] = bettingDict[bettingCode];
+      di["式別"] = bettingCode;
       String method = '';
       String wheelCode = itr.next();
       int? currentPurchaseAmount;
@@ -522,7 +522,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
     case "3": // フォーメーション
       Map<String, dynamic> di = {};
       String bettingCode = itr.next();
-      di["式別"] = bettingDict[bettingCode];
+      di["式別"] = bettingCode;
       itr.next();
       List<List<int>> horseNumbers = [];
       for (int j = 0; j < 3; j++) {
@@ -547,7 +547,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
     case "4": // クイックピック
       Map<String, dynamic> di = {};
       String bettingCode = itr.next();
-      di["式別"] = bettingDict[bettingCode];
+      di["式別"] = bettingCode;
       int no = int.parse(itr.next() + itr.next());
       if (no != 0) d["軸"] = no;
       int positionSpecify = int.parse(itr.next());

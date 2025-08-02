@@ -1,5 +1,6 @@
 // lib/logic/hit_checker.dart
 import 'package:flutter/foundation.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
 // itertoolsパッケージの代替となる、組み合わせ計算の関数
@@ -57,7 +58,7 @@ class HitChecker {
     List<String> hitDetails = [];
 
     for (var purchase in (parsedTicket['購入内容'] as List<dynamic>)) {
-      final String ticketType = purchase['式別'];
+      final String ticketTypeId = purchase['式別'];
 
       if (purchase['all_combinations'] == null) continue;
 
@@ -72,27 +73,28 @@ class HitChecker {
           .toList();
 
       final refundInfo = raceResult.refunds.firstWhere(
-            (r) => r.ticketType == ticketType,
-        orElse: () => Refund(ticketType: '', payouts: []),
+            (r) => r.ticketTypeId == ticketTypeId,
+        orElse: () => Refund(ticketTypeId: '', payouts: []),
       );
       if (refundInfo.payouts.isEmpty) continue;
 
       final Map<String, Payout> uniqueHits = {};
 
       for (final userCombo in allUserCombinations) {
-        final matchingPayout = _findPayout(userCombo, refundInfo.payouts, ticketType);
+        final matchingPayout = _findPayout(userCombo, refundInfo.payouts, ticketTypeId);
         if (matchingPayout != null) {
           uniqueHits[matchingPayout.combination] = matchingPayout;
         }
       }
 
       if (uniqueHits.isNotEmpty) {
+        final String ticketTypeName = bettingDict[ticketTypeId] ?? '不明';
         for (final hitPayout in uniqueHits.values) {
           final payout = int.tryParse(hitPayout.amount.replaceAll(',', '')) ?? 0;
           if (payout > 0) {
             final payoutAmount = (payout * amountPerBet) ~/ 100;
             totalPayout += payoutAmount;
-            hitDetails.add('$ticketType 的中！ ${hitPayout.combination} -> ${payoutAmount}円');
+            hitDetails.add('$ticketTypeName 的中！ ${hitPayout.combination} -> ${payoutAmount}円');
           }
         }
       }
@@ -105,64 +107,13 @@ class HitChecker {
     );
   }
 
-  static List<String> _getWinningHorses(RaceResult raceResult) {
-    final top3 = raceResult.horseResults
-        .where((h) {
-      final rank = int.tryParse(h.rank);
-      return rank != null && rank >= 1 && rank <= 3;
-    })
-        .toList()
-      ..sort((a, b) => int.parse(a.rank).compareTo(int.parse(b.rank)));
+  static Payout? _findPayout(List<int> userCombo, List<Payout> payouts, String ticketTypeId) {
+    final String? ticketTypeName = bettingDict[ticketTypeId];
+    if (ticketTypeName == null) return null;
 
-    return top3.map((h) => h.horseNumber).toList();
-  }
-
-  static bool _isCombinationHit(String ticketType, List<int> userCombo, List<String> winners) {
-    if (winners.isEmpty) return false;
-    final winningInts = winners.map((e) => int.parse(e)).toList();
-    final userSet = userCombo.toSet();
-
-    switch (ticketType) {
-      case '単勝':
-        if (winningInts.isEmpty) return false;
-        return userCombo.first == winningInts[0];
-      case '複勝':
-        if (winningInts.length < 3) return false;
-        return winningInts.sublist(0,3).contains(userCombo.first);
-      case '馬連':
-      case '枠連':
-        if (winners.length < 2) return false;
-        final winningPair = {winningInts[0], winningInts[1]};
-        return winningPair.difference(userSet).isEmpty;
-      case 'ワイド':
-        if (winners.length < 3) return false;
-        final winningPairs = [
-          {winningInts[0], winningInts[1]},
-          {winningInts[0], winningInts[2]},
-          {winningInts[1], winningInts[2]},
-        ];
-        return winningPairs.any((pair) => pair.difference(userSet).isEmpty);
-      case '馬単':
-        if (winners.length < 2) return false;
-        return userCombo[0] == winningInts[0] && userCombo[1] == winningInts[1];
-      case '3連複':
-        if (winners.length < 3) return false;
-        final winningTrio = {winningInts[0], winningInts[1], winningInts[2]};
-        return winningTrio.difference(userSet).isEmpty;
-      case '3連単':
-        if (winners.length < 3) return false;
-        return userCombo[0] == winningInts[0] &&
-            userCombo[1] == winningInts[1] &&
-            userCombo[2] == winningInts[2];
-      default:
-        return false;
-    }
-  }
-
-  static Payout? _findPayout(List<int> userCombo, List<Payout> payouts, String ticketType) {
     for (final payout in payouts) {
       bool isMatch = false;
-      switch (ticketType) {
+      switch (ticketTypeName) {
         case '馬連':
         case 'ワイド':
         case '3連複':
