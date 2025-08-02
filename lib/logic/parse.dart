@@ -118,7 +118,6 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
             final secondAxis = horseGroups.length > 1 ? horseGroups[1] : <int>[];
             final thirdAxis = horseGroups.length > 2 ? horseGroups[2] : <int>[];
 
-            // ▼▼▼ ここからが「3連単マルチ」の修正箇所 ▼▼▼
             if (isMulti) {
               if (di['ながし種別'] == '軸1頭ながし') {
                 final axisHorse = firstAxis.first;
@@ -190,6 +189,10 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
         allCombinations = (di['馬番'] as List).map((c) => (c as List).cast<int>()).toList();
         break;
     }
+    // ▼▼▼ ここに追加 ▼▼▼
+    print('DEBUG: 生成直後の組み合わせ (ソート前): $allCombinations');
+    // ▲▲▲ ここまで ▲▲▲
+
     if (['馬連', 'ワイド', '枠連', '3連複'].contains(ticketType)) {
       final unique = <String, List<int>>{};
       for (final combo in allCombinations) {
@@ -197,15 +200,20 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
         unique[sorted.join('-')] = sorted;
       }
       di['all_combinations'] = unique.values.toList();
+      // ▼▼▼ ここに追加 ▼▼▼
+      print('DEBUG: DB保存直前の組み合わせ (3連複など): ${di['all_combinations']}');
+      // ▲▲▲ ここまで ▲▲▲
     } else {
       di['all_combinations'] = allCombinations;
+      // ▼▼▼ ここに追加 ▼▼▼
+      print('DEBUG: DB保存直前の組み合わせ (3連単など): ${di['all_combinations']}');
+      // ▲▲▲ ここまで ▲▲▲
     }
   } catch (e) {
     print('Error generating combinations for $ticketType ($bettingMethod): $e');
     di['all_combinations'] = [];
   }
 }
-// ▲▲▲ ここまで ▲▲▲
 
 
 // ▼▼▼ `calculatePoints`関数を元の状態に復元 ▼▼▼

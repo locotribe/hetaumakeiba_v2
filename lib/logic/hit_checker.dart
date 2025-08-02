@@ -1,4 +1,5 @@
 // lib/logic/hit_checker.dart
+import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
 // itertoolsパッケージの代替となる、組み合わせ計算の関数
@@ -55,13 +56,9 @@ class HitChecker {
     int totalPayout = 0;
     List<String> hitDetails = [];
 
-    final winners = _getWinningHorses(raceResult);
-    if (winners.isEmpty) return HitResult();
-
     for (var purchase in (parsedTicket['購入内容'] as List<dynamic>)) {
       final String ticketType = purchase['式別'];
 
-      // all_combinationsが存在しない場合はスキップ
       if (purchase['all_combinations'] == null) continue;
 
       final int combinationCount = (purchase['all_combinations'] as List).length;
@@ -69,28 +66,33 @@ class HitChecker {
           ? (purchase['購入金額'] as int)
           : (purchase['購入金額'] as int);
 
-      // 保存済みの組み合わせリストを直接利用
       final List<List<int>> allUserCombinations =
       (purchase['all_combinations'] as List)
           .map((combo) => (combo as List).cast<int>())
           .toList();
 
-      final Set<String> hitCombinationStrings = {};
+      final refundInfo = raceResult.refunds.firstWhere(
+            (r) => r.ticketType == ticketType,
+        orElse: () => Refund(ticketType: '', payouts: []),
+      );
+      if (refundInfo.payouts.isEmpty) continue;
+
+      final Map<String, Payout> uniqueHits = {};
 
       for (final userCombo in allUserCombinations) {
-        if (_isCombinationHit(ticketType, userCombo, winners)) {
-          final combinationKey = _formatCombinationToString(ticketType, userCombo, winners);
-          hitCombinationStrings.add(combinationKey);
+        final matchingPayout = _findPayout(userCombo, refundInfo.payouts, ticketType);
+        if (matchingPayout != null) {
+          uniqueHits[matchingPayout.combination] = matchingPayout;
         }
       }
 
-      if (hitCombinationStrings.isNotEmpty) {
-        for (final hitComboStr in hitCombinationStrings) {
-          final payout = _findPayout(raceResult.refunds, ticketType, hitComboStr);
+      if (uniqueHits.isNotEmpty) {
+        for (final hitPayout in uniqueHits.values) {
+          final payout = int.tryParse(hitPayout.amount.replaceAll(',', '')) ?? 0;
           if (payout > 0) {
             final payoutAmount = (payout * amountPerBet) ~/ 100;
             totalPayout += payoutAmount;
-            hitDetails.add('$ticketType 的中！ $hitComboStr -> ${payoutAmount}円');
+            hitDetails.add('$ticketType 的中！ ${hitPayout.combination} -> ${payoutAmount}円');
           }
         }
       }
@@ -157,57 +159,29 @@ class HitChecker {
     }
   }
 
-  // ▼▼▼ 払戻金を探すロジックを全面的に修正 ▼▼▼
-  static int _findPayout(List<Refund> refunds, String ticketType, String combinationKey) {
-    try {
-      final refundInfo = refunds.firstWhere((r) => r.ticketType == ticketType);
-
-      // 文字列を正規化し、順序不問の券種はソートして「正準（canonical）」な比較用文字列を生成する
-      String createCanonicalString(String combo, String type) {
-        // スペースを削除し、矢印をハイフンに統一
-        String normalized = combo.replaceAll(' ', '').replaceAll('→', '-');
-
-        // 馬連、ワイド、3連複、枠連は数字をソートして順序を不問にする
-        if (type == '馬連' || type == 'ワイド' || type == '3連複' || type == '枠連') {
-          var parts = normalized.split('-');
-          // 数字として正しくソートするためにintに変換
-          parts.sort((a, b) => (int.tryParse(a) ?? 0).compareTo(int.tryParse(b) ?? 0));
-          return parts.join('-');
-        }
-        return normalized;
+  static Payout? _findPayout(List<int> userCombo, List<Payout> payouts, String ticketType) {
+    for (final payout in payouts) {
+      bool isMatch = false;
+      switch (ticketType) {
+        case '馬連':
+        case 'ワイド':
+        case '3連複':
+        case '枠連':
+        // 順序不問の券種はSetで比較
+          isMatch = setEquals(userCombo.toSet(), payout.combinationNumbers.toSet());
+          break;
+        case '単勝':
+        case '複勝':
+        case '馬単':
+        case '3連単':
+        // 順序が重要な券種はListで比較
+          isMatch = listEquals(userCombo, payout.combinationNumbers);
+          break;
       }
-
-      // ユーザーの組み合わせを正準形式に変換
-      final canonicalUserCombo = createCanonicalString(combinationKey, ticketType);
-
-      // 払戻情報の中に一致するものがあるか探す
-      final payout = refundInfo.payouts.firstWhere(
-            (p) => createCanonicalString(p.combination, ticketType) == canonicalUserCombo,
-        orElse: () => Payout(combination: '', amount: '0', popularity: ''),
-      );
-
-      return int.tryParse(payout.amount.replaceAll(',', '')) ?? 0;
-    } catch (e) {
-      return 0;
+      if (isMatch) {
+        return payout;
+      }
     }
-  }
-
-  // ▼▼▼ 組み合わせキーの生成ロジックをシンプルに修正 ▼▼▼
-  static String _formatCombinationToString(String ticketType, List<int> combination, List<String> winners) {
-    // 常に数字の小さい順でソートして返すことで比較の一貫性を保つ
-    final sortedCombination = List<int>.from(combination)..sort((a, b) => a.compareTo(b));
-
-    switch (ticketType) {
-      case '単勝':
-      case '複勝':
-        return combination.first.toString();
-      case '馬単':
-      case '3連単':
-      // 着順が重要な券種は、元の順序のまま返す
-        return combination.join('→');
-      default: // 馬連, 3連複, 枠連, ワイド
-      // 着順が関係ない券種は、ソートしたものを返す
-        return sortedCombination.join('-');
-    }
+    return null;
   }
 }

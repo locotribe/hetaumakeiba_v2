@@ -401,7 +401,11 @@ class ScraperService {
         final tds = row.querySelectorAll('td');
         if (th == null || tds.isEmpty) continue;
 
-        final ticketType = _safeGetText(th);
+        String ticketType = _safeGetText(th);
+        if (ticketType == '三連複') {
+          ticketType = '3連複';
+        }
+
         final payouts = <Payout>[];
 
         final combinations = tds[0].innerHtml.split('<br>').map((e) => e.trim()).toList();
@@ -409,10 +413,21 @@ class ScraperService {
         final popularities = tds.length > 2 ? tds[2].innerHtml.split('<br>').map((e) => e.trim()).toList() : [];
 
         for (int i = 0; i < combinations.length; i++) {
+          final combinationStr = combinations[i].replaceAll(RegExp(r'\s*→\s*'), '→');
+          final combinationNumbers = RegExp(r'\d+')
+              .allMatches(combinationStr)
+              .map((m) => int.parse(m.group(0)!))
+              .toList();
+
+          if (['馬連', 'ワイド', '3連複', '枠連'].contains(ticketType)) {
+            combinationNumbers.sort();
+          }
+
           payouts.add(Payout(
-            combination: combinations[i].replaceAll(RegExp(r'\s*→\s*'), '→'),
+            combination: combinationStr,
             amount: i < amounts.length ? amounts[i] : '',
             popularity: i < popularities.length ? popularities[i] : '',
+            combinationNumbers: combinationNumbers,
           ));
         }
         refundList.add(Refund(ticketType: ticketType, payouts: payouts));

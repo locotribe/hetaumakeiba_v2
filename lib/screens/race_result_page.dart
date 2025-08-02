@@ -1,5 +1,6 @@
 // lib/screens/race_result_page.dart
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
@@ -152,21 +153,19 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 final raceResult = pageData.raceResult;
 
                 // ▼▼▼ ユーザーの組み合わせを、式別ごとに分類して保持するMapに変更 ▼▼▼
-                final Map<String, Set<String>> userCombinationsByType = {};
+                final Map<String, List<List<int>>> userCombinationsByType = {};
                 if (parsedTicket != null && parsedTicket['購入内容'] != null) {
                   final purchaseDetails = parsedTicket['購入内容'] as List;
                   for (var detail in purchaseDetails) {
                     final ticketType = detail['式別'] as String?;
                     if (ticketType != null && detail['all_combinations'] != null) {
                       // この式別のセットがまだMapになければ初期化
-                      userCombinationsByType.putIfAbsent(ticketType, () => <String>{});
+                      userCombinationsByType.putIfAbsent(ticketType, () => []);
 
                       final combinations = detail['all_combinations'] as List;
                       for (var c in combinations) {
                         if (c is List) {
-                          // 組み合わせはソートされていないので、-で連結するだけ
-                          final combinationString = c.join('-');
-                          userCombinationsByType[ticketType]!.add(combinationString);
+                          userCombinationsByType[ticketType]!.add(c.cast<int>());
                         }
                       }
                     }
@@ -394,21 +393,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   // ▼▼▼ 払戻情報カードの判定ロジックを全面的に修正 ▼▼▼
-  Widget _buildRefundsCard(RaceResult raceResult, Map<String, Set<String>> userCombinationsByType) {
-    // 文字列を正規化・ソートして比較可能な canonical（正準）形式にするヘルパー関数
-    String createCanonicalString(String combo, String type) {
-      // スペースを削除し、矢印をハイフンに統一
-      String normalized = combo.replaceAll(' ', '').replaceAll('→', '-');
-      // 馬連、ワイド、3連複、枠連は数字をソートして順序を不問にする
-      if (type == '馬連' || type == 'ワイド' || type == '3連複' || type == '枠連') {
-        var parts = normalized.split('-');
-        // 数字として正しくソートするためにintに変換
-        parts.sort((a, b) => (int.tryParse(a) ?? 0).compareTo(int.tryParse(b) ?? 0));
-        return parts.join('-');
-      }
-      return normalized;
-    }
-
+  Widget _buildRefundsCard(RaceResult raceResult, Map<String, List<List<int>>> userCombinationsByType) {
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -439,16 +424,17 @@ class _RaceResultPageState extends State<RaceResultPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: refund.payouts.map((payout) {
-                          // 現在の払戻情報の式別に対応する、ユーザーの組み合わせセットを取得
-                          final userCombosForThisType = userCombinationsByType[refund.ticketType] ?? const <String>{};
-
-                          // 払戻情報の組み合わせを正準形式に変換
-                          final canonicalPayoutCombination = createCanonicalString(payout.combination, refund.ticketType);
-
-                          // ユーザーの組み合わせセットの中に、一致するものが存在するかチェック
+                          final userCombosForThisType = userCombinationsByType[refund.ticketType] ?? [];
                           bool isHit = userCombosForThisType.any((userCombo) {
-                            final canonicalUserCombo = createCanonicalString(userCombo, refund.ticketType);
-                            return canonicalUserCombo == canonicalPayoutCombination;
+                            switch (refund.ticketType) {
+                              case '馬連':
+                              case 'ワイド':
+                              case '3連複':
+                              case '枠連':
+                                return setEquals(userCombo.toSet(), payout.combinationNumbers.toSet());
+                              default:
+                                return listEquals(userCombo, payout.combinationNumbers);
+                            }
                           });
 
                           final hitTextStyle = TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700);

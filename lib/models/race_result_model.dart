@@ -179,22 +179,26 @@ class Payout {
   final String combination; // 馬番の組み合わせ (例: 6 - 7)
   final String amount; // 払戻金額 (円)
   final String popularity; // 人気
+  final List<int> combinationNumbers;
 
   Payout({
     required this.combination,
     required this.amount,
     required this.popularity,
+    required this.combinationNumbers,
   });
 
   factory Payout.fromJson(Map<String, dynamic> json) => Payout(
     combination: json["combination"],
     amount: json["amount"],
     popularity: json["popularity"],
+    combinationNumbers: List<int>.from(json["combinationNumbers"].map((x) => x)),
   );
 
   Map<String, dynamic> toJson() => {
     "combination": combination,
     "amount": amount,
     "popularity": popularity,
+    "combinationNumbers": List<dynamic>.from(combinationNumbers.map((x) => x)),
   };
 }
