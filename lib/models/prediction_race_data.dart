@@ -1,0 +1,72 @@
+// lib/models/prediction_race_data.dart
+
+import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
+import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
+
+/// レース全体の予想データを保持するコンテナです。
+class PredictionRaceData {
+  final String raceId;
+  final String raceName;
+  final String raceDate;
+  final String venue;
+  final String raceNumber;
+  final String shutubaTableUrl;
+  final String raceGrade;
+  final String? raceDetails1;
+  final List<PredictionHorseDetail> horses;
+
+  PredictionRaceData({
+    required this.raceId,
+    required this.raceName,
+    required this.raceDate,
+    required this.venue,
+    required this.raceNumber,
+    required this.shutubaTableUrl,
+    required this.raceGrade,
+    this.raceDetails1,
+    required this.horses,
+  });
+}
+
+/// 各出走馬の予想に必要な詳細情報（特に動的な情報）を保持します。
+class PredictionHorseDetail {
+  final String horseId;
+  final int horseNumber;
+  final int gateNumber;
+  final String horseName;
+  final String sexAndAge;
+  final String jockey;
+  final double carriedWeight;
+  double? odds;
+  int? popularity;
+  String? horseWeight;
+  UserMark? userMark;
+
+  PredictionHorseDetail({
+    required this.horseId,
+    required this.horseNumber,
+    required this.gateNumber,
+    required this.horseName,
+    required this.sexAndAge,
+    required this.jockey,
+    required this.carriedWeight,
+    this.odds,
+    this.popularity,
+    this.horseWeight,
+    this.userMark,
+  });
+
+  factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
+    return PredictionHorseDetail(
+      horseId: detail.horseId,
+      horseNumber: detail.horseNumber,
+      gateNumber: detail.gateNumber,
+      horseName: detail.horseName,
+      sexAndAge: detail.sexAndAge,
+      jockey: detail.jockey,
+      carriedWeight: detail.carriedWeight,
+      odds: detail.odds,
+      popularity: detail.popularity,
+    );
+  }
+}

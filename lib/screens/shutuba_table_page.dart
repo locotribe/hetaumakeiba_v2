@@ -2,11 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
-import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
 
 class ShutubaTablePage extends StatefulWidget {
   final String raceId;
@@ -18,8 +17,7 @@ class ShutubaTablePage extends StatefulWidget {
 }
 
 class _ShutubaTablePageState extends State<ShutubaTablePage> {
-  FeaturedRace? _featuredRace;
-  bool _isLoading = true;
+  late Future<PredictionRaceData?> _predictionRaceDataFuture;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   @override
@@ -30,114 +28,91 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
   Future<void> _loadShutubaData() async {
     setState(() {
-      _isLoading = true;
+      _predictionRaceDataFuture = _fetchPredictionData();
     });
+  }
+
+  Future<PredictionRaceData?> _fetchPredictionData() async {
     try {
       final race = await _dbHelper.getFeaturedRace(widget.raceId);
-      setState(() {
-        _featuredRace = race;
-        _isLoading = false;
-      });
-    } catch (e) {
-      print('Error loading shutuba data: $e');
-      setState(() {
-        _isLoading = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('出馬表データの読み込みに失敗しました: $e')),
-        );
+      if (race == null) {
+        throw Exception('データベースからレース情報が見つかりませんでした。');
       }
+      final predictionData = await ScraperService.scrapePredictionRaceData(race);
+      final userMarks = await _dbHelper.getAllUserMarksForRace(widget.raceId);
+      final markMap = {for (var mark in userMarks) mark.horseId: mark};
+
+      for (var horse in predictionData.horses) {
+        horse.userMark = markMap[horse.horseId];
+      }
+      return predictionData;
+    } catch (e) {
+      print('Error fetching prediction data: $e');
+      rethrow;
     }
   }
 
   Future<void> _refreshData() async {
-    if (_featuredRace != null && _featuredRace!.lastScraped.isAfter(DateTime.now().subtract(const Duration(hours: 1)))) {
+    await _loadShutubaData();
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('データの更新は1時間に1回までです。')),
+        const SnackBar(content: Text('出馬表データを更新しました')),
       );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      await ScraperService.scrapeFeaturedRaces(_dbHelper);
-      await _loadShutubaData();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('出馬表データを更新しました')),
-        );
-      }
-    } catch (e) {
-      print('Error refreshing shutuba data: $e');
-      setState(() {
-        _isLoading = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('出馬表データの更新に失敗しました: $e')),
-        );
-      }
     }
   }
 
-  // ▼▼▼ グレード表示用のヘルパー関数を追加 ▼▼▼
   Color _getGradeColor(String grade) {
     if (grade.contains('G1')) return Colors.blue.shade700;
     if (grade.contains('G2')) return Colors.red.shade700;
     if (grade.contains('G3')) return Colors.green.shade700;
-    return Colors.blueGrey; // デフォルト色
+    return Colors.blueGrey;
   }
 
   Color _getGradeTextColor(String grade) {
     return Colors.white;
   }
-  // ▲▲▲ ヘルパー関数の追加ここまで ▲▲▲
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('出馬表')),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_featuredRace == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('出馬表')),
-        body: Center(child: Text('レース情報が見つかりませんでした。ID: ${widget.raceId}')),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(_featuredRace!.raceName),
+        title: const Text('出馬表'),
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshData,
-        child: ListView(
-          children: [
-            _buildRaceInfoCard(_featuredRace!),
-            if (_featuredRace!.shutubaHorses != null && _featuredRace!.shutubaHorses!.isNotEmpty)
-              _buildHorseList(_featuredRace!.shutubaHorses!),
-            if (_featuredRace!.shutubaHorses == null || _featuredRace!.shutubaHorses!.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(child: Text('出走馬情報がありません。')),
-              ),
-          ],
-        ),
+      body: FutureBuilder<PredictionRaceData?>(
+        future: _predictionRaceDataFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('エラー: ${snapshot.error}'));
+          }
+          if (!snapshot.hasData || snapshot.data == null) {
+            return Center(child: Text('レース情報が見つかりませんでした。ID: ${widget.raceId}'));
+          }
+
+          final predictionData = snapshot.data!;
+          return RefreshIndicator(
+            onRefresh: _refreshData,
+            child: ListView(
+              children: [
+                _buildRaceInfoCard(predictionData),
+                if (predictionData.horses.isNotEmpty)
+                  _buildHorseList(predictionData.horses),
+                if (predictionData.horses.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Center(child: Text('出走馬情報がありません。')),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  // ▼▼▼ グレード表示の修正を適用したメソッド ▼▼▼
-  Widget _buildRaceInfoCard(FeaturedRace race) {
+  Widget _buildRaceInfoCard(PredictionRaceData race) {
     return Card(
       margin: const EdgeInsets.all(8.0),
       child: Padding(
@@ -150,10 +125,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Row( // グレードとレース名を横に並べるためにRowを使用
+            Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // グレードが存在する場合のみ四角いアイコンを表示
                 if (race.raceGrade.isNotEmpty) ...[
                   Container(
                     width: 40,
@@ -172,10 +146,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12), // アイコンとレース名の間隔
+                  const SizedBox(width: 12),
                 ],
-                // レース名
-                Expanded( // 長いレース名でも表示が崩れないようにExpandedで囲む
+                Expanded(
                   child: Text(
                     race.raceName,
                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -190,7 +163,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       ),
     );
   }
-  // ▲▲▲ _buildRaceInfoCardの修正ここまで ▲▲▲
 
   Color _getGateColor(int gateNumber) {
     switch (gateNumber) {
@@ -215,9 +187,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         return Colors.white;
     }
   }
-// _buildHorseListメソッド全体をこちらのコードに置き換えてください
 
-  Widget _buildHorseList(List<ShutubaHorseDetail> horses) {
+  Widget _buildHorseList(List<PredictionHorseDetail> horses) {
     horses.sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
 
     return ListView.builder(
@@ -240,39 +211,34 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                 tilePadding: const EdgeInsets.symmetric(horizontal: 4.0),
                 title: Row(
                   children: [
-                    // ▼▼▼ 修正点①：「印」のドロップダウンをここに移動 ▼▼▼
-                    FutureBuilder<UserMark?>(
-                      future: _dbHelper.getUserMark(widget.raceId, horse.horseId),
-                      builder: (context, markSnapshot) {
-                        return DropdownButton<String>(
-                          value: markSnapshot.data?.mark,
-                          hint: const Text('印'),
-                          underline: const SizedBox(),
-                          items: <String>['◎', '〇', '▲', '△', '✕', '消', '　'].map((String value) {
-                            return DropdownMenuItem<String>(
-                                value: value,
-                                child: Text(
-                                    value,
-                                  style: const TextStyle(fontSize: 20.0),
-                                )
-                            );
-                          }).toList(),
-                          onChanged: (String? newValue) async {
-                            if (newValue != null) {
-                              final userMark = UserMark(
-                                raceId: widget.raceId,
-                                horseId: horse.horseId,
-                                mark: newValue,
-                                timestamp: DateTime.now(),
-                              );
-                              await _dbHelper.insertOrUpdateUserMark(userMark);
-                              setState(() {});
-                            }
-                          },
+                    DropdownButton<String>(
+                      value: horse.userMark?.mark,
+                      hint: const Text('印'),
+                      underline: const SizedBox(),
+                      items: <String>['◎', '〇', '▲', '△', '✕', '消', '　'].map((String value) {
+                        return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(
+                              value,
+                              style: const TextStyle(fontSize: 20.0),
+                            )
                         );
+                      }).toList(),
+                      onChanged: (String? newValue) async {
+                        if (newValue != null) {
+                          final userMark = UserMark(
+                            raceId: widget.raceId,
+                            horseId: horse.horseId,
+                            mark: newValue,
+                            timestamp: DateTime.now(),
+                          );
+                          await _dbHelper.insertOrUpdateUserMark(userMark);
+                          setState(() {
+                            horse.userMark = userMark;
+                          });
+                        }
                       },
                     ),
-                    // ▼▼▼ 修正点②：右側とのスペースを追加 ▼▼▼
                     const SizedBox(width: 8),
 
                     Container(
@@ -280,7 +246,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                       height: 24,
                       decoration: BoxDecoration(
                         color: _getGateColor(horse.gateNumber),
-                       // shape: BoxShape.circle,
                         border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
                       ),
                       alignment: Alignment.center,
@@ -300,7 +265,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                       ),
                     ),
                     SizedBox(width: 60, child: Text('${horse.sexAndAge} / ${horse.carriedWeight}kg', textAlign: TextAlign.end,)),
-                    // 元の位置にあったFutureBuilderは削除
                   ],
                 ),
                 subtitle: Padding(
@@ -310,8 +274,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                     children: [
                       Text('騎手: ${horse.jockey}'),
                       Text('オッズ: ${horse.odds?.toStringAsFixed(1) ?? '--'} / ${horse.popularity ?? '--'}人気'),
-                      if (horse.isScratched)
-                        const Text('出走取消', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -357,10 +319,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       },
     );
   }
-  // ▼▼▼ 修正点：ご指摘に基づき、正しいプロパティを表示するように修正 ▼▼▼
   Widget _buildPastRaceRecord(HorseRaceRecord record) {
     Widget buildInfoRow(String label, String value) {
-      // 値が空、または"-"の場合は行自体を表示しない
       if (value.trim().isEmpty || value.trim() == '-') {
         return const SizedBox.shrink();
       }
