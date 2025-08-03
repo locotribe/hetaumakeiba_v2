@@ -29,6 +29,43 @@ class TicketProcessingService {
         );
         await _dbHelper.insertQrData(qrDataToSave);
 
+        // --- ▼▼▼ ここからが追加箇所 ▼▼▼ ---
+        // キャッシュ無効化ロジック
+        final now = DateTime.now();
+        final currentYear = now.year;
+        final currentMonth = now.month;
+
+        final url = generateNetkeibaUrl(
+          year: parsedData['年'].toString(),
+          racecourseCode: racecourseDict.entries
+              .firstWhere((entry) => entry.value == parsedData['開催場'])
+              .key,
+          round: parsedData['回'].toString(),
+          day: parsedData['日'].toString(),
+          race: parsedData['レース'].toString(),
+        );
+        final raceId = ScraperService.getRaceIdFromUrl(url);
+
+        if (raceId != null) {
+          final raceResult = await _dbHelper.getRaceResult(raceId);
+          if (raceResult != null) {
+            try {
+              final dateParts = raceResult.raceDate.split(RegExp(r'[年月日]'));
+              final year = int.parse(dateParts[0]);
+              final month = int.parse(dateParts[1]);
+
+              if (year < currentYear || (year == currentYear && month < currentMonth)) {
+                final period = "$year-${month.toString().padLeft(2, '0')}";
+                await _dbHelper.deleteSummary(period);
+                print('DEBUG: Cache invalidated for period $period due to new ticket addition.');
+              }
+            } catch (e) {
+              print('Error during cache invalidation logic: $e');
+            }
+          }
+        }
+        // --- ▲▲▲ ここまでが追加箇所 ▲▲▲ ---
+
         savedListKey.currentState?.reloadData();
       } else {
         parsedData = {'エラー': '解析結果にQRデータが含まれていません。', '詳細': '不明な解析結果'};

@@ -9,6 +9,7 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart'; // ★追加
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart'; // ★追加
 import 'dart:convert'; // ★追加
+import 'package:hetaumakeiba_v2/models/analytics_summary_model.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -34,7 +35,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2, // ★バージョンを1から2に更新
+      version: 3, // ★バージョンを2から3に更新
       onCreate: (db, version) async {
         // QRコードデータテーブルの作成
         await db.execute('''
@@ -129,6 +130,18 @@ class DatabaseHelper {
               mark TEXT NOT NULL,
               timestamp TEXT NOT NULL,
               UNIQUE(raceId, horseId) ON CONFLICT REPLACE
+            )
+          ''');
+        }
+        if (oldVersion < 3) {
+          await db.execute('''
+            CREATE TABLE analytics_summaries(
+              period TEXT PRIMARY KEY,
+              totalInvestment INTEGER,
+              totalPayout INTEGER,
+              hitCount INTEGER,
+              betCount INTEGER,
+              lastCalculated TEXT
             )
           ''');
         }
@@ -276,10 +289,9 @@ class DatabaseHelper {
   /// race_idが重複する場合は既存のレコードを上書きします。
   Future<int> insertOrUpdateFeaturedRace(FeaturedRace featuredRace) async {
     final db = await database;
-    print('--- DBに保存するFeaturedRaceデータ ---'); //
-    // toMap()を使うことで、全てのプロパティを一度に確認できる
-    print(featuredRace.toMap()); //
-    print('------------------------------------'); //
+    print('--- DBに保存するFeaturedRaceデータ ---');
+    print('[DB Save] 注目レース: ${featuredRace.raceName}');
+    print('------------------------------------');
     return await db.insert(
       'featured_races',
       featuredRace.toMap(),
@@ -362,6 +374,39 @@ class DatabaseHelper {
     );
   }
 
+  // AnalyticsSummary (キャッシュ) 関連のメソッド
+  Future<void> insertOrUpdateSummary(AnalyticsSummary summary) async {
+    final db = await database;
+    await db.insert(
+      'analytics_summaries',
+      summary.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<AnalyticsSummary?> getSummary(String period) async {
+    final db = await database;
+    final maps = await db.query(
+      'analytics_summaries',
+      where: 'period = ?',
+      whereArgs: [period],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return AnalyticsSummary.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<void> deleteSummary(String period) async {
+    final db = await database;
+    await db.delete(
+      'analytics_summaries',
+      where: 'period = ?',
+      whereArgs: [period],
+    );
+  }
+
   /// 全てのデータを削除します。
   Future<void> deleteAllData() async {
     final db = await database;
@@ -370,6 +415,7 @@ class DatabaseHelper {
     await db.delete('horse_performance');
     await db.delete('featured_races');
     await db.delete('user_marks'); // ★追加
-    print('DEBUG: All data deleted from qr_data, race_results, horse_performance, featured_races, and user_marks tables.');
+    await db.delete('analytics_summaries');
+    print('DEBUG: All data deleted from qr_data, race_results, horse_performance, featured_races, user_marks, and analytics_summaries tables.');
   }
 }

@@ -71,7 +71,7 @@ class ScraperService {
         lapTimes: lapTimes,
       );
     } catch (e) {
-      print('スクレイピングエラー: $e');
+      print('[ERROR]スクレイピングエラー: $e');
       rethrow;
     }
   }
@@ -133,7 +133,7 @@ class ScraperService {
       }
       return records;
     } catch (e) {
-      print('競走馬ID $horseId の競走成績スクレイピング中にエラーが発生しました: $e');
+      print('[ERROR]競走馬ID $horseId の競走成績スクレイピング中にエラーが発生しました: $e');
       rethrow;
     }
   }
@@ -179,7 +179,7 @@ class ScraperService {
       }
       return featuredRaces;
     } catch (e) {
-      print('注目レースのスクレイピング中にエラーが発生しました: $e');
+      print('[ERROR]注目レースのスクレイピング中にエラーが発生しました: $e');
       return [];
     }
   }
@@ -190,7 +190,7 @@ class ScraperService {
       final response = await http.get(Uri.parse(url), headers: _headers);
 
       if (response.statusCode != 200) {
-        print('HTTPリクエストに失敗しました: Status code ${response.statusCode} for shutuba page $raceId');
+        print('[ERROR]HTTPリクエストに失敗しました: Status code ${response.statusCode} for shutuba page $raceId');
         return null;
       }
 
@@ -246,7 +246,7 @@ class ScraperService {
         shutubaHorses: shutubaHorses,
       );
     } catch (e) {
-      print('出馬表ページ $raceId のスクレイピング中にエラーが発生しました: $e');
+      print('[ERROR]出馬表ページ $raceId のスクレイピング中にエラーが発生しました: $e');
       return null;
     }
   }
@@ -290,7 +290,7 @@ class ScraperService {
     try {
       return await _scrapeGradedRacesFromSchedulePage();
     } catch (e) {
-      print('ホームページのデータ取得中にエラーが発生しました: $e');
+      print('[ERROR]ホームページのデータ取得中にエラーが発生しました: $e');
       return [];
     }
   }
@@ -321,7 +321,7 @@ class ScraperService {
       }
       return horseIds.toSet().toList();
     } catch (e) {
-      print('出馬表ページからのホースID抽出中にエラーが発生しました: $e');
+      print('[ERROR]出馬表ページからのホースID抽出中にエラーが発生しました: $e');
       return [];
     }
   }
@@ -517,7 +517,7 @@ class ScraperService {
           shutubaHorses: null,
         ));
       } catch (e) {
-        print('重賞日程の行解析エラー: $e');
+        print('[ERROR]重賞日程の行解析エラー: $e');
         continue;
       }
     }
@@ -548,7 +548,6 @@ class ScraperService {
             print('レースID: ${raceResult.raceId}');
             print('開催日: ${raceResult.raceDate}');
             print('コース情報: ${raceResult.raceInfo}');
-            print('詳細データ (JSON): ${raceResultToJson(raceResult)}');
             print('-----------------------------------------');
 
             await dbHelper.insertOrUpdateRaceResult(raceResult);
@@ -556,7 +555,7 @@ class ScraperService {
             await Future.delayed(const Duration(milliseconds: 500));
           }
         } catch (e) {
-          print('過去レース (${race.raceName}) の同期中にエラーが発生しました: $e');
+          print('[ERROR]過去レース (${race.raceName}) の同期中にエラーが発生しました: $e');
         }
       }
     }
@@ -588,7 +587,7 @@ class ScraperService {
       }
       return null;
     } catch (e) {
-      print('公式レースIDの取得中にエラー: $e');
+      print('[ERROR]公式レースIDの取得中にエラー: $e');
       return null;
     }
   }

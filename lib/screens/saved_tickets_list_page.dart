@@ -512,6 +512,29 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             ) ?? false;
           },
           onDismissed: (direction) async {
+            // --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
+            final raceResult = item.raceResult;
+            if (raceResult != null) {
+              final now = DateTime.now();
+              final currentYear = now.year;
+              final currentMonth = now.month;
+
+              try {
+                final dateParts = raceResult.raceDate.split(RegExp(r'[年月日]'));
+                final year = int.parse(dateParts[0]);
+                final month = int.parse(dateParts[1]);
+
+                if (year < currentYear || (year == currentYear && month < currentMonth)) {
+                  final period = "$year-${month.toString().padLeft(2, '0')}";
+                  await _dbHelper.deleteSummary(period);
+                  print('DEBUG: Cache invalidated for period $period due to ticket deletion.');
+                }
+              } catch (e) {
+                print('Error during cache invalidation on delete: $e');
+              }
+            }
+            // --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
+
             await _dbHelper.deleteQrData(item.qrData.id!);
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('「${item.displayTitle}」を削除しました。')));
