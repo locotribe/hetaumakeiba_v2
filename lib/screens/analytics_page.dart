@@ -1,4 +1,5 @@
 // lib/screens/analytics_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analytics_logic.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
@@ -136,7 +137,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
-  // --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
   Widget _buildBody() {
     // RefreshIndicatorを最上位に配置し、常にスワイプ可能にする
     return RefreshIndicator(
@@ -171,50 +171,56 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildDataView() {
     final selectedYearSummary = _analysisData!.yearlySummaries[_selectedYear!];
 
-    final Map<String, Widget> allWidgets = {
-      'yearly_summary': selectedYearSummary != null
-          ? YearlySummaryCard(
-        yearlySummary: selectedYearSummary,
-        availableYears: _availableYears,
-        selectedYear: _selectedYear!,
-        onYearChanged: _onYearChanged,
-      )
-          : const SizedBox.shrink(),
-      'grade_summary': CategorySummaryCard(
-        title: 'グレード別 収支',
-        summaries: _analysisData!.gradeSummaries,
-      ),
-      'venue_summary': CategorySummaryCard(
-        title: '競馬場別 収支',
-        summaries: _analysisData!.venueSummaries,
-      ),
-      'distance_summary': CategorySummaryCard(
-        title: '距離別 収支',
-        summaries: _analysisData!.distanceSummaries,
-      ),
-      'track_summary': CategorySummaryCard(
-        title: '馬場状態別 収支',
-        summaries: _analysisData!.trackSummaries,
-      ),
-      'ticket_type_summary': CategorySummaryCard(
-        title: '式別 収支',
-        summaries: _analysisData!.ticketTypeSummaries,
-      ),
-      'purchase_method_summary': CategorySummaryCard(
-        title: '方式別 収支',
-        summaries: _analysisData!.purchaseMethodSummaries,
-      ),
-    };
-
-    final List<Widget> cardsToShow = _visibleCards
-        .where((key) => allWidgets.containsKey(key))
-        .map((key) => allWidgets[key]!)
-        .toList();
+    // _visibleCardsリストの順序に従って、表示するウィジェットのリストを直接構築する
+    final List<Widget> cardsToShow = _visibleCards.map((key) {
+      switch (key) {
+        case 'yearly_summary':
+          return selectedYearSummary != null
+              ? YearlySummaryCard(
+            yearlySummary: selectedYearSummary,
+            availableYears: _availableYears,
+            selectedYear: _selectedYear!,
+            onYearChanged: _onYearChanged,
+          )
+              : const SizedBox.shrink();
+        case 'grade_summary':
+          return CategorySummaryCard(
+            title: 'グレード別 収支',
+            summaries: _analysisData!.gradeSummaries,
+          );
+        case 'venue_summary':
+          return CategorySummaryCard(
+            title: '競馬場別 収支',
+            summaries: _analysisData!.venueSummaries,
+          );
+        case 'distance_summary':
+          return CategorySummaryCard(
+            title: '距離別 収支',
+            summaries: _analysisData!.distanceSummaries,
+          );
+        case 'track_summary':
+          return CategorySummaryCard(
+            title: '馬場状態別 収-支',
+            summaries: _analysisData!.trackSummaries,
+          );
+        case 'ticket_type_summary':
+          return CategorySummaryCard(
+            title: '式別 収支',
+            summaries: _analysisData!.ticketTypeSummaries,
+          );
+        case 'purchase_method_summary':
+          return CategorySummaryCard(
+            title: '方式別 収支',
+            summaries: _analysisData!.purchaseMethodSummaries,
+          );
+        default:
+          return const SizedBox.shrink(); // 不明なキーの場合は何も表示しない
+      }
+    }).toList();
 
     return ListView(
       padding: const EdgeInsets.all(8.0),
       children: cardsToShow,
     );
   }
-// --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
 }

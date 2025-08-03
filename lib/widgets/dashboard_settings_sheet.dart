@@ -29,18 +29,31 @@ class DashboardSettingsSheet extends StatefulWidget {
 }
 
 class _DashboardSettingsSheetState extends State<DashboardSettingsSheet> {
-  late List<String> _currentVisibleCards;
+  // --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
+  late List<String> _cardOrder;
+  late Set<String> _visibleKeys;
 
   @override
   void initState() {
     super.initState();
-    _currentVisibleCards = List.from(widget.visibleCards);
+    _visibleKeys = widget.visibleCards.toSet();
+
+    // 表示されているカード順を優先しつつ、全カードの順序リストを作成
+    _cardOrder = List.from(widget.visibleCards);
+    for (final key in availableCards.keys) {
+      if (!_cardOrder.contains(key)) {
+        _cardOrder.add(key);
+      }
+    }
   }
 
   Future<void> _saveSettings() async {
+    // 現在の順序リストから、表示がオンになっているものだけを抽出
+    final newVisibleCards = _cardOrder.where((key) => _visibleKeys.contains(key)).toList();
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('dashboard_visible_cards', _currentVisibleCards);
-    widget.onSettingsChanged(_currentVisibleCards);
+    await prefs.setStringList('dashboard_visible_cards', newVisibleCards);
+    widget.onSettingsChanged(newVisibleCards);
   }
 
   @override
@@ -63,15 +76,15 @@ class _DashboardSettingsSheetState extends State<DashboardSettingsSheet> {
                   if (newIndex > oldIndex) {
                     newIndex -= 1;
                   }
-                  final item = _currentVisibleCards.removeAt(oldIndex);
-                  _currentVisibleCards.insert(newIndex, item);
+                  final item = _cardOrder.removeAt(oldIndex);
+                  _cardOrder.insert(newIndex, item);
                   _saveSettings();
                 });
               },
-              children: availableCards.entries.map((entry) {
-                final key = entry.key;
-                final title = entry.value;
-                final isVisible = _currentVisibleCards.contains(key);
+              // 表示するリストの元を、状態として管理している `_cardOrder` に変更
+              children: _cardOrder.map((key) {
+                final title = availableCards[key] ?? '不明';
+                final isVisible = _visibleKeys.contains(key);
 
                 return SwitchListTile(
                   key: ValueKey(key),
@@ -80,11 +93,9 @@ class _DashboardSettingsSheetState extends State<DashboardSettingsSheet> {
                   onChanged: (bool value) {
                     setState(() {
                       if (value) {
-                        if (!_currentVisibleCards.contains(key)) {
-                          _currentVisibleCards.add(key);
-                        }
+                        _visibleKeys.add(key);
                       } else {
-                        _currentVisibleCards.remove(key);
+                        _visibleKeys.remove(key);
                       }
                       _saveSettings();
                     });
@@ -98,4 +109,5 @@ class _DashboardSettingsSheetState extends State<DashboardSettingsSheet> {
       ),
     );
   }
+// --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
 }
