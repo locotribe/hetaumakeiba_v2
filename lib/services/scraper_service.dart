@@ -1,5 +1,4 @@
 // lib/services/scraper_service.dart
-
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
@@ -143,30 +142,67 @@ class ScraperService {
   static Future<List<FeaturedRace>> scrapeFeaturedRaces(DatabaseHelper dbHelper) async {
     final List<FeaturedRace> featuredRaces = [];
     try {
-      const url = 'https://race.netkeiba.com/top/';
+      const url = 'https://tospo-keiba.jp/';
       final response = await http.get(Uri.parse(url), headers: _headers);
 
       if (response.statusCode != 200) {
         throw Exception('HTTPリクエストに失敗しました: Status code ${response.statusCode} for featured races.');
       }
 
-      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
+      final document = html.parse(response.body);
 
-      final RegExp regExp = RegExp(
-        r"showRaceV3GradeList\s*\([^,]+,\s*'(\d+)'",
-        dotAll: true,
-      );
-      final matches = regExp.allMatches(decodedBody);
+      final raceIds = <String>{};
 
-      final raceIds = matches.map((m) => m.group(1)!).toSet().toList();
+      final topMainElement = document.querySelector('top-main');
+      if (topMainElement != null) {
+        final sideDataAttribute = topMainElement.attributes[':side'];
+        if (sideDataAttribute != null) {
+          try {
+            final sideData = json.decode(sideDataAttribute);
+            final gradedRaceInfoList = sideData['raceData']['gradedRaceInfo'] as List<dynamic>?;
 
-      if (raceIds.isEmpty) {
-        print("DEBUG: scrapeFeaturedRaces - レースIDが見つかりませんでした。");
-      } else {
-        print("DEBUG: scrapeFeaturedRaces - 抽出したレースID: $raceIds");
+            if (gradedRaceInfoList != null) {
+              for (final raceInfo in gradedRaceInfoList) {
+                final raceIdObject = raceInfo['id'];
+                if (raceIdObject != null) {
+                  raceIds.add(raceIdObject.toString());
+                }
+              }
+            }
+          } catch (e) {
+            print("DEBUG: scrapeFeaturedRaces - JSONのパースに失敗しました。: $e");
+          }
+        }
       }
 
-      for (final raceId in raceIds) {
+      if (raceIds.isEmpty) {
+        print("DEBUG: scrapeFeaturedRaces - JSONからのレースID抽出に失敗またはデータが空です。HTMLのリンクから抽出を試みます。");
+        final raceLinks = document.querySelectorAll('a[href*="/race/"]');
+        final raceIdPattern = RegExp(r'/race/(\d{12})');
+
+        for (final link in raceLinks) {
+          final href = link.attributes['href'];
+          if (href != null) {
+            final match = raceIdPattern.firstMatch(href);
+            if (match != null) {
+              final raceId = match.group(1);
+              if (raceId != null) {
+                raceIds.add(raceId);
+              }
+            }
+          }
+        }
+      }
+
+      final uniqueRaceIds = raceIds.toList();
+
+      if (uniqueRaceIds.isEmpty) {
+        print("DEBUG: scrapeFeaturedRaces - レースIDが見つかりませんでした。");
+      } else {
+        print("DEBUG: scrapeFeaturedRaces - 抽出したレースID: $uniqueRaceIds");
+      }
+
+      for (final raceId in uniqueRaceIds) {
         final existingRace = await dbHelper.getFeaturedRace(raceId);
         if (existingRace != null && existingRace.lastScraped.isAfter(DateTime.now().subtract(const Duration(hours: 1)))) {
           featuredRaces.add(existingRace);
