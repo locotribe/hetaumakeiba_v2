@@ -561,75 +561,108 @@ class ScraperService {
     }
   }
 
-  static List<PredictionHorseDetail> _scrapeUmaXShutubaData(dom.Document document) {
-    final List<PredictionHorseDetail> horses = [];
+  static Map<String, dynamic> _scrapeUmaXShutubaData(dom.Document document) {
+    final Map<String, Map<String, dynamic>> horseDataMap = {};
     final table = document.querySelector('section.race_data > div.table-wrapper > div.table-body > table.race_data_tbl');
-    if (table == null) return [];
+    if (table == null) return {};
 
     final rows = table.querySelectorAll('tbody > tr');
 
     for (final row in rows) {
       final cells = row.querySelectorAll('td');
-      if (cells.length < 10) continue;
+      if (cells.length < 4) continue;
 
       try {
-        final horseLink = cells[2].querySelector('a');
+        final horseLink = cells[0].querySelector('a');
         if (horseLink == null) continue;
 
         final horseId = horseLink.attributes['href']?.split('/').last ?? '';
-        final horseName = _safeGetText(horseLink);
-        final horseNumber = int.tryParse(_safeGetText(cells[0])) ?? 0;
+        if (horseId.isEmpty) continue;
 
-        final wakuClass = cells[1].className; // "waku waku1"
-        final gateNumber = int.tryParse(wakuClass.replaceAll('waku', '').trim()) ?? 0;
+        final popularityText = _safeGetText(cells[2]);
+        final oddsText = _safeGetText(cells[3].querySelector('div.relative'));
 
-        final carriedWeightText = _safeGetText(cells[3]);
-        final carriedWeight = double.tryParse(carriedWeightText) ?? 0.0;
+        final popularity = int.tryParse(popularityText);
+        final odds = double.tryParse(oddsText);
 
-        final jockey = _safeGetText(cells[4].querySelector('a'));
-        final sexAndAge = _safeGetText(cells[2].querySelector('span.sfont')); // "牡3"など
-        final odds = double.tryParse(_safeGetText(cells[8]));
-        final popularity = int.tryParse(_safeGetText(cells[9]));
-
-        horses.add(PredictionHorseDetail(
-          horseId: horseId,
-          horseNumber: horseNumber,
-          gateNumber: gateNumber,
-          horseName: horseName,
-          sexAndAge: sexAndAge,
-          jockey: jockey,
-          carriedWeight: carriedWeight,
-          odds: odds,
-          popularity: popularity,
-          // userMark と horseWeight は後で設定するため、ここではnull
-        ));
+        horseDataMap[horseId] = {
+          'popularity': popularity,
+          'odds': odds,
+        };
       } catch (e) {
         print('[ERROR] _scrapeUmaXShutubaData parsing error: $e');
         continue;
       }
+    }
+    return horseDataMap;
+  }
+
+  static Future<List<ShutubaHorseDetail>> _scrapeNetkeibaShutubaData(String url) async {
+    final List<ShutubaHorseDetail> horses = [];
+    try {
+      final response = await http.get(Uri.parse(url), headers: _headers);
+      if (response.statusCode != 200) {
+        throw Exception('netkeiba出馬表の取得に失敗: Status code ${response.statusCode}');
+      }
+      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
+      final document = html.parse(decodedBody);
+
+      final rows = document.querySelectorAll('table.Shutuba_Table tr.HorseList');
+      for (final row in rows) {
+        final horseInfoCell = row.querySelector('td.HorseInfo');
+        final horseLink = horseInfoCell?.querySelector('a');
+        final horseId = horseLink?.attributes['href']?.split('/').lastWhere((p) => p.isNotEmpty, orElse: () => '') ?? '';
+
+        if (horseId.isEmpty) continue;
+
+        final isScratched = _safeGetText(row.querySelector('td.Cancel_Txt')).isNotEmpty;
+
+        horses.add(ShutubaHorseDetail(
+          horseId: horseId,
+          gateNumber: int.tryParse(_safeGetText(row.querySelector('td.Waku > div'))) ?? 0,
+          horseNumber: int.tryParse(_safeGetText(row.querySelector('td.Umaban'))) ?? 0,
+          horseName: _safeGetText(horseLink),
+          sexAndAge: _safeGetText(horseInfoCell?.querySelector('span')),
+          carriedWeight: double.tryParse(_safeGetText(row.querySelector('td.Jockey > p.Txt_C'))) ?? 0.0,
+          jockey: _safeGetText(row.querySelector('td.Jockey > a')),
+          isScratched: isScratched,
+        ));
+      }
+    } catch (e) {
+      print('[ERROR] netkeiba出馬表のスクレイピング中にエラー: $e');
     }
     return horses;
   }
 
   static Future<PredictionRaceData> scrapePredictionRaceData(FeaturedRace featuredRace) async {
     try {
-      // ステップ1で作成した関数を使い、uma-x.jpのURLを生成
-      final url = generateUmaXShutubaUrl(
+      // 1. netkeibaから基本情報を取得
+      final netkeibaHorses = await _scrapeNetkeibaShutubaData(featuredRace.shutubaTableUrl);
+
+      // 2. Uma-Xからオッズ・人気情報を取得
+      final umaXUrl = generateUmaXShutubaUrl(
         raceId: featuredRace.raceId,
         raceDate: featuredRace.raceDate,
         venue: featuredRace.venue,
       );
-
-      final response = await http.get(Uri.parse(url), headers: _headers);
+      final response = await http.get(Uri.parse(umaXUrl), headers: _headers);
       if (response.statusCode != 200) {
         throw Exception('uma-x.jpの出馬表ページ取得に失敗: Status code ${response.statusCode}');
       }
+      final umaXDocument = html.parse(response.body);
+      final umaXData = _scrapeUmaXShutubaData(umaXDocument);
 
-      // UMarkXはUTF-8なので文字コード変換は不要
-      final document = html.parse(response.body);
-
-      // ステップ2で作成した関数でHTMLを解析
-      final horses = _scrapeUmaXShutubaData(document);
+      // 3. データをマージ
+      final List<PredictionHorseDetail> finalHorses = [];
+      for (final netkeibaHorse in netkeibaHorses) {
+        final predictionHorse = PredictionHorseDetail.fromShutubaHorseDetail(netkeibaHorse);
+        if (umaXData.containsKey(netkeibaHorse.horseId)) {
+          final oddsPopularity = umaXData[netkeibaHorse.horseId]!;
+          predictionHorse.odds = oddsPopularity['odds'];
+          predictionHorse.popularity = oddsPopularity['popularity'];
+        }
+        finalHorses.add(predictionHorse);
+      }
 
       return PredictionRaceData(
         raceId: featuredRace.raceId,
@@ -637,10 +670,10 @@ class ScraperService {
         raceDate: featuredRace.raceDate,
         venue: featuredRace.venue,
         raceNumber: featuredRace.raceNumber,
-        shutubaTableUrl: featuredRace.shutubaTableUrl, // これは元のnetkeibaのURLのまま
+        shutubaTableUrl: featuredRace.shutubaTableUrl,
         raceGrade: featuredRace.raceGrade,
         raceDetails1: featuredRace.raceDetails1,
-        horses: horses,
+        horses: finalHorses,
       );
     } catch (e) {
       print('[ERROR] 予想データのスクレイピング中にエラー: $e');

@@ -110,8 +110,8 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ホーム'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '履歴'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞'),
+          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '履歴'),
           BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'),
         ],
         currentIndex: _selectedIndex,

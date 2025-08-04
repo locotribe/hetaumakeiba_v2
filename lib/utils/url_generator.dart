@@ -40,9 +40,22 @@ String generateUmaXShutubaUrl({
   required String venue,    // "新潟" の形式
 }) {
   final venueCode = umaXVenueCodes[venue] ?? '';
-  // "2025年8月3日" -> "20250803"
-  final formattedDate = raceDate.replaceAll(RegExp(r'[年月]'), '').replaceAll('日', '').padLeft(8, '0');
 
-  final umaXRaceId = '$venueCode$raceId$formattedDate';
-  return 'https://uma-x.jp/race_result/$umaXRaceId';
+  // "2025年8月3日" -> "20250803"
+  final dateParts = RegExp(r'(\d+)年(\d+)月(\d+)日').firstMatch(raceDate);
+  String formattedDate = '';
+  if (dateParts != null) {
+    final year = dateParts.group(1)!;
+    final month = dateParts.group(2)!.padLeft(2, '0');
+    final day = dateParts.group(3)!.padLeft(2, '0');
+    formattedDate = '$year$month$day';
+  }
+
+  // netkeibaの12桁IDからround部分(7-8文字目)を削除して10桁にする
+  final raceIdWithoutRound = raceId.length == 12
+      ? raceId.substring(0, 6) + raceId.substring(8)
+      : raceId; // Fallback in case the ID format is unexpected
+
+  final umaXRaceId = '$venueCode$raceIdWithoutRound$formattedDate';
+  return 'https://uma-x.jp/race_card/$umaXRaceId';
 }
