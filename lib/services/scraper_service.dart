@@ -466,7 +466,6 @@ class ScraperService {
         final raceNameElement = cells[1].querySelector('a');
         final raceName = raceNameElement != null ? _safeGetText(raceNameElement) : _safeGetText(cells[1]);
         final link = cells[1].querySelector('a')?.attributes['href'] ?? '';
-
         final raceId = 'monthly_${dateStr.replaceAll(RegExp(r'[/\(\)]'), '')}_${raceName.replaceAll(' ', '')}';
 
         gradedRaces.add(FeaturedRace(
@@ -609,6 +608,9 @@ class ScraperService {
 
       final rows = document.querySelectorAll('table.Shutuba_Table tr.HorseList');
       for (final row in rows) {
+        final cells = row.querySelectorAll('td');
+        if (cells.length < 9) continue;
+
         final horseInfoCell = row.querySelector('td.HorseInfo');
         final horseLink = horseInfoCell?.querySelector('a');
         final horseId = horseLink?.attributes['href']?.split('/').lastWhere((p) => p.isNotEmpty, orElse: () => '') ?? '';
@@ -617,14 +619,17 @@ class ScraperService {
 
         final isScratched = _safeGetText(row.querySelector('td.Cancel_Txt')).isNotEmpty;
 
+
         horses.add(ShutubaHorseDetail(
           horseId: horseId,
-          gateNumber: int.tryParse(_safeGetText(row.querySelector('td.Waku > div'))) ?? 0,
+          gateNumber: int.tryParse(_safeGetText(row.querySelector('td.Waku'))) ?? 0,
           horseNumber: int.tryParse(_safeGetText(row.querySelector('td.Umaban'))) ?? 0,
           horseName: _safeGetText(horseLink),
-          sexAndAge: _safeGetText(horseInfoCell?.querySelector('span')),
-          carriedWeight: double.tryParse(_safeGetText(row.querySelector('td.Jockey > p.Txt_C'))) ?? 0.0,
-          jockey: _safeGetText(row.querySelector('td.Jockey > a')),
+          sexAndAge: _safeGetText(row.querySelector('td.Barei')),
+          carriedWeight: double.tryParse(_safeGetText(cells[5])) ?? 0.0,
+          jockey: _safeGetText(row.querySelector('td.Jockey a')),
+          trainer: _safeGetText(row.querySelector('td.Trainer a')),
+          horseWeight: _safeGetText(row.querySelector('td.Weight')),
           isScratched: isScratched,
         ));
       }
@@ -655,13 +660,12 @@ class ScraperService {
       // 3. データをマージ
       final List<PredictionHorseDetail> finalHorses = [];
       for (final netkeibaHorse in netkeibaHorses) {
-        final predictionHorse = PredictionHorseDetail.fromShutubaHorseDetail(netkeibaHorse);
         if (umaXData.containsKey(netkeibaHorse.horseId)) {
           final oddsPopularity = umaXData[netkeibaHorse.horseId]!;
-          predictionHorse.odds = oddsPopularity['odds'];
-          predictionHorse.popularity = oddsPopularity['popularity'];
+          netkeibaHorse.odds = oddsPopularity['odds'];
+          netkeibaHorse.popularity = oddsPopularity['popularity'];
         }
-        finalHorses.add(predictionHorse);
+        finalHorses.add(PredictionHorseDetail.fromShutubaHorseDetail(netkeibaHorse));
       }
 
       return PredictionRaceData(

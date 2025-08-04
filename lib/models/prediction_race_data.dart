@@ -37,6 +37,7 @@ class PredictionHorseDetail {
   final String sexAndAge;
   final String jockey;
   final double carriedWeight;
+  final String trainer;
   double? odds;
   int? popularity;
   String? horseWeight;
@@ -50,6 +51,7 @@ class PredictionHorseDetail {
     required this.sexAndAge,
     required this.jockey,
     required this.carriedWeight,
+    required this.trainer,
     this.odds,
     this.popularity,
     this.horseWeight,
@@ -65,6 +67,8 @@ class PredictionHorseDetail {
       sexAndAge: detail.sexAndAge,
       jockey: detail.jockey,
       carriedWeight: detail.carriedWeight,
+      trainer: detail.trainer,
+      horseWeight: detail.horseWeight,
       odds: detail.odds,
       popularity: detail.popularity,
     );

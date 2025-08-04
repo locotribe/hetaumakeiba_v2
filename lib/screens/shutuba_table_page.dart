@@ -258,21 +258,43 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                     SizedBox(width: 30, child: Text('${horse.horseNumber}番')),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        horse.horseName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            horse.horseName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
-                    SizedBox(width: 60, child: Text('${horse.sexAndAge} / ${horse.carriedWeight}kg', textAlign: TextAlign.end,)),
+                    SizedBox(
+                      width: 60,
+                      child: Text.rich(
+                        TextSpan(
+                          text: '${horse.sexAndAge} \n',
+                          style: TextStyle(fontSize: 14),
+                          children: [
+                            TextSpan(
+                              text: horse.horseWeight != null && horse.horseWeight!.isNotEmpty
+                                  ? horse.horseWeight!
+                                  : '計不',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        textAlign: TextAlign.end,
+                      ),
+                    )
                   ],
                 ),
                 subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
+                  padding: const EdgeInsets.only(top: 4.0, left: 42.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('騎手: ${horse.jockey}'),
+                      Text('斤量 ${horse.carriedWeight.toStringAsFixed(1)}/ 騎手 ${horse.jockey}/ 調教師 ${horse.trainer}'),
                       Text('オッズ: ${horse.odds?.toStringAsFixed(1) ?? '--'} / ${horse.popularity ?? '--'}人気'),
                     ],
                   ),

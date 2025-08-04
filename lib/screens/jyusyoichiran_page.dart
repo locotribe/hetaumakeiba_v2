@@ -8,7 +8,6 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/widgets/featured_race_list_item.dart';
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
-import 'package:intl/intl.dart';
 
 class JyusyoIchiranPage extends StatefulWidget {
   const JyusyoIchiranPage({super.key});
