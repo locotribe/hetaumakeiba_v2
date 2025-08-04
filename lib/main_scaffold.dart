@@ -21,7 +21,7 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
   final GlobalKey<SavedTicketsListPageState> _savedListKey = GlobalKey<SavedTicketsListPageState>();
 
   late final List<Widget> _pages;
-  static const List<String> _pageTitles = ['ホーム', '購入履歴', '重賞', '集計']; // ラベルを'重賞'に変更
+  static const List<String> _pageTitles = ['ホーム', '重賞', '購入履歴', '集計'];
 
   bool _isFabExpanded = false;
   late AnimationController _animationController;
@@ -31,10 +31,10 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _pages = <Widget>[
-      const HomePage(),
-      SavedTicketsListPage(key: _savedListKey),
-      const JyusyoIchiranPage(),
-      const AnalyticsPage(),
+      const HomePage(), // 0: ホーム
+      const JyusyoIchiranPage(), // 1: 重賞
+      SavedTicketsListPage(key: _savedListKey), // 2: 履歴
+      const AnalyticsPage(), // 3: 集計
     ];
 
     _animationController = AnimationController(
@@ -54,7 +54,7 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
   }
 
   void _onItemTapped(int index) {
-    if (index == 1) {
+    if (index == 2) { // 「履歴」ページの新しいインデックスである 2 に修正
       _savedListKey.currentState?.reloadData();
     }
 
@@ -110,8 +110,8 @@ class _MainScaffoldState extends State<MainScaffold> with SingleTickerProviderSt
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ホーム'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '履歴'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '履歴'),
+          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '重賞'),
           BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'),
         ],
         currentIndex: _selectedIndex,
