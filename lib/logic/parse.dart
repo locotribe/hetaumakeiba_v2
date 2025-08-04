@@ -1,5 +1,4 @@
 // lib/logic/parse.dart
-import 'dart:math';
 
 // --- 定数定義 (変更なし) ---
 const Map<String, String> racecourseDict = {

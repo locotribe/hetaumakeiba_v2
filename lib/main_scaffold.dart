@@ -1,4 +1,5 @@
 // lib/main_scaffold.dart
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/screens/home_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
@@ -6,7 +7,6 @@ import 'package:hetaumakeiba_v2/screens/analytics_page.dart';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/settings_page.dart';
-import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/screens/jyusyoichiran_page.dart';
 
 class MainScaffold extends StatefulWidget {

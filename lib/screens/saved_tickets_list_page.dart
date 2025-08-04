@@ -155,7 +155,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       ));
     }
 
-    // ▼▼▼ 日付処理：ここから旧バージョンの安定したロジックを使用 ▼▼▼
     finalItems.sort((a, b) {
       final dateA = a.raceResult?.raceDate;
       final dateB = b.raceResult?.raceDate;
@@ -237,9 +236,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       }).toList();
     });
   }
-  // ▲▲▲ 日付処理：ここまで旧バージョンの安定したロジックを使用 ▲▲▲
 
-  // ▼▼▼ 買い目サマリーの表示ロジックを修正 ▼▼▼
   String _formatPurchaseSummary(List<dynamic> purchases) {
     if (purchases.isEmpty) return '';
     try {
@@ -266,7 +263,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       return '購入内容の表示に失敗しました';
     }
   }
-  // ▲▲▲ 修正ここまで ▲▲▲
 
   String _generatePurchaseKey(Map<String, dynamic> parsedTicket) {
     try {
@@ -292,7 +288,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   }
 
   Future<void> _deleteAllData() async {
-    // 省略
   }
 
   @override
@@ -533,7 +528,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 print('Error during cache invalidation on delete: $e');
               }
             }
-            // --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
 
             await _dbHelper.deleteQrData(item.qrData.id!);
             if (mounted) {

@@ -7,16 +7,14 @@ import 'package:intl/intl.dart';
 class MonthlyDetailsPopup extends StatelessWidget {
   final int year;
   final int month;
-  // --- ▼▼▼ Step 4 で変更 ▼▼▼ ---
   // ダミーデータではなく、実際の購入履歴リストを受け取る
   final List<MonthlyPurchaseDetail> purchaseDetails;
-  // --- ▲▲▲ Step 4 で変更 ▲▲▲ ---
 
   const MonthlyDetailsPopup({
     super.key,
     required this.year,
     required this.month,
-    required this.purchaseDetails, // Step 4 で変更
+    required this.purchaseDetails,
   });
 
   @override
@@ -25,7 +23,6 @@ class MonthlyDetailsPopup extends StatelessWidget {
 
     return AlertDialog(
       title: Text('$year年$month月の購入履歴'),
-      // --- ▼▼▼ Step 4 で変更 ▼▼▼ ---
       // 実際のデータリストを表示するロジックに変更
       content: SizedBox(
         width: double.maxFinite,
@@ -54,7 +51,6 @@ class MonthlyDetailsPopup extends StatelessWidget {
           },
         ),
       ),
-      // --- ▲▲▲ Step 4 で変更 ▲▲▲ ---
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),

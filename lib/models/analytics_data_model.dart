@@ -1,6 +1,5 @@
 // lib/models/analytics_data_model.dart
 
-// --- ▼▼▼ Step 4 で追加 ▼▼▼ ---
 // 月ごとの詳細な購入履歴1件分のデータ
 class MonthlyPurchaseDetail {
   final int month;
@@ -17,7 +16,6 @@ class MonthlyPurchaseDetail {
 
   int get profit => payout - investment;
 }
-// --- ▲▲▲ Step 4 で追加 ▲▲▲ ---
 
 class CategorySummary {
   final String name;
@@ -52,9 +50,7 @@ class MonthlyDataPoint {
 class YearlySummary {
   final int year;
   final List<MonthlyDataPoint> monthlyData;
-  // --- ▼▼▼ Step 4 で追加 ▼▼▼ ---
-  final List<MonthlyPurchaseDetail> monthlyPurchaseDetails; // 詳細な購入履歴リスト
-  // --- ▲▲▲ Step 4 で追加 ▲▲▲ ---
+  final List<MonthlyPurchaseDetail> monthlyPurchaseDetails;
   int totalInvestment = 0;
   int totalPayout = 0;
   int totalHitCount = 0;
@@ -62,7 +58,7 @@ class YearlySummary {
 
   YearlySummary({required this.year})
       : monthlyData = List.generate(12, (i) => MonthlyDataPoint(month: i + 1)),
-        monthlyPurchaseDetails = []; // Step 4 で初期化を追加
+        monthlyPurchaseDetails = [];
 
   int get totalProfit => totalPayout - totalInvestment;
   double get totalRecoveryRate => totalInvestment == 0 ? 0.0 : (totalPayout / totalInvestment) * 100;

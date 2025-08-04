@@ -566,7 +566,6 @@ class ScraperService {
     print('[Past Race Sync End] 過去の重賞レース結果の同期が完了しました。');
   }
 
-  // ▼▼▼ ステップ4で関数名を変更 (_getOfficialRaceId -> getOfficialRaceId) ▼▼▼
   static Future<String?> getOfficialRaceId(String relativeUrl) async {
     try {
       final baseUrl = Uri.parse('https://race.netkeiba.com');

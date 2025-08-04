@@ -1,6 +1,5 @@
 // lib/services/qr_camera_service.dart
 
-import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 class QrCameraService {

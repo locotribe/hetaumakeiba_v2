@@ -323,7 +323,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         final race = racesForMonth[index];
         return FeaturedRaceListItem(
           race: race,
-          // ▼▼▼ ステップ4でonTapのロジックを実装 ▼▼▼
           onTap: () async {
             final today = DateTime.now();
             final raceDate = _parseDateStringAsDateTime(race.raceDate);

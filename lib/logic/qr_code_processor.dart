@@ -1,12 +1,9 @@
 // lib/logic/qr_code_processor.dart
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
-import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart'; // ★ 新しくインポート
+import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart';
 
 class QrCodeProcessor {
   final DatabaseHelper _dbHelper;

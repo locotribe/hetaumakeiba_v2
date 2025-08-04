@@ -1,4 +1,5 @@
 // lib/logic/hit_checker.dart
+
 import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';

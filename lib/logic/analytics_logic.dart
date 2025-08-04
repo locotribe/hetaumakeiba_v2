@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
-import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';

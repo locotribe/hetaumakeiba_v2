@@ -1,7 +1,6 @@
 // lib/screens/qr_scanner_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/screens/result_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';

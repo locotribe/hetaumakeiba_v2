@@ -1,4 +1,5 @@
 // lib/models/analytics_summary_model.dart
+
 class AnalyticsSummary {
   final String period; // 'YYYY-MM'形式
   final int totalInvestment;

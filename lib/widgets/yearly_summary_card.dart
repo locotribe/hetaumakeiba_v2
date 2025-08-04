@@ -26,8 +26,6 @@ class YearlySummaryCard extends StatelessWidget {
     final detailsForMonth = yearlySummary.monthlyPurchaseDetails
         .where((detail) => detail.month == month)
         .toList();
-    // --- ▲▲▲ Step 4 で変更 ▲▲▲ ---
-
     showDialog(
       context: context,
       builder: (context) {

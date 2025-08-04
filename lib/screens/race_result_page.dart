@@ -7,7 +7,6 @@ import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
-import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 
@@ -152,7 +151,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 final parsedTicket = pageData.parsedTicket;
                 final raceResult = pageData.raceResult;
 
-                // ▼▼▼ ユーザーの組み合わせを、式別ごとに分類して保持するMapに変更 ▼▼▼
                 final Map<String, List<List<int>>> userCombinationsByType = {};
                 if (parsedTicket != null && parsedTicket['購入内容'] != null) {
                   final purchaseDetails = parsedTicket['購入内容'] as List;
@@ -171,7 +169,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     }
                   }
                 }
-                // ▲▲▲ 修正ここまで ▲▲▲
 
                 return RefreshIndicator(
                   onRefresh: _handleRefresh,
@@ -394,7 +391,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  // ▼▼▼ 払戻情報カードの判定ロジックを全面的に修正 ▼▼▼
   Widget _buildRefundsCard(RaceResult raceResult, Map<String, List<List<int>>> userCombinationsByType) {
     return Card(
       elevation: 2,

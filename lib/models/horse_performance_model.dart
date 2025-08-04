@@ -1,6 +1,6 @@
 // lib/models/horse_performance_model.dart
 
-import 'dart:convert'; // JSONエンコード/デコードのために必要
+import 'dart:convert';
 
 /// 競走馬の個々の競走成績を保持するデータモデルクラスです。
 class HorseRaceRecord {

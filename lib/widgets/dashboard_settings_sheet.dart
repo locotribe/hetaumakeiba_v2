@@ -29,7 +29,6 @@ class DashboardSettingsSheet extends StatefulWidget {
 }
 
 class _DashboardSettingsSheetState extends State<DashboardSettingsSheet> {
-  // --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
   late List<String> _cardOrder;
   late Set<String> _visibleKeys;
 
@@ -109,5 +108,4 @@ class _DashboardSettingsSheetState extends State<DashboardSettingsSheet> {
       ),
     );
   }
-// --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
 }

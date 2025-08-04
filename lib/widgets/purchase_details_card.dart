@@ -437,7 +437,6 @@ class PurchaseDetailsCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    // ★★★ 修正: 計算ループを削除し、パーサーからの値を直接利用 ★★★
     final int totalAmount = parsedResult['合計金額'] as int? ?? 0;
 
     String totalStars = _getTotalAmountStars(totalAmount);

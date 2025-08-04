@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 
-// ▼▼▼ 日付をパースするためのヘルパー関数を追加 ▼▼▼
 DateTime _parseDateStringAsDateTime(String dateText) {
   try {
     final yearMonthDayMatch = RegExp(r'(\d+)年(\d+)月(\d+)日').firstMatch(dateText);
@@ -31,7 +30,6 @@ DateTime _parseDateStringAsDateTime(String dateText) {
     return DateTime.now();
   }
 }
-// ▲▲▲ ヘルパー関数の追加ここまで ▲▲▲
 
 class FeaturedRaceListItem extends StatelessWidget {
   final FeaturedRace race;
@@ -92,7 +90,6 @@ class FeaturedRaceListItem extends StatelessWidget {
         return const Icon(Icons.chevron_right, color: Colors.grey);
       }
     }
-    // ▲▲▲ ロジックの追加ここまで ▲▲▲
 
 
     return InkWell(
@@ -184,7 +181,6 @@ class FeaturedRaceListItem extends StatelessWidget {
                           );
                         }
                     ),
-                    // ▲▲▲ 修正ここまで ▲▲▲
                   ] else ...[
                     Text(
                       '${race.raceDate}'
@@ -207,9 +203,7 @@ class FeaturedRaceListItem extends StatelessWidget {
                 ],
               ),
             ),
-            // ▼▼▼ 右側の表示を新しいウィジェットに置き換え ▼▼▼
             buildStatusWidget(),
-            // ▲▲▲ ここまで ▲▲▲
           ],
         ),
       ),

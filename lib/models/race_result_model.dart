@@ -1,4 +1,5 @@
 // lib/models/race_result_model.dart
+
 import 'dart:convert';
 
 // JSON文字列とRaceResultオブジェクトを相互変換するためのトップレベル関数
@@ -17,7 +18,6 @@ class RaceResult {
   final List<String> cornerPassages; // コーナー通過順位
   final List<String> lapTimes; // ラップタイム
 
-  // ▼▼▼ ステップ1で追加 ▼▼▼
   /// データが不完全（未来のレースなどで、まだ結果が取得できていない状態）かどうかを判定します。
   bool get isIncomplete {
     // レースタイトルが空、または開催日が初期値（1970年）の場合、不完全とみなす
@@ -27,7 +27,6 @@ class RaceResult {
 
     return isInfoMissing || hasNoResults;
   }
-  // ▲▲▲ ステップ1で追加 ▲▲▲
 
   RaceResult({
     required this.raceId,

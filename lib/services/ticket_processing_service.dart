@@ -29,7 +29,6 @@ class TicketProcessingService {
         );
         await _dbHelper.insertQrData(qrDataToSave);
 
-        // --- ▼▼▼ ここからが追加箇所 ▼▼▼ ---
         // キャッシュ無効化ロジック
         final now = DateTime.now();
         final currentYear = now.year;
@@ -64,7 +63,6 @@ class TicketProcessingService {
             }
           }
         }
-        // --- ▲▲▲ ここまでが追加箇所 ▲▲▲ ---
 
         savedListKey.currentState?.reloadData();
       } else {

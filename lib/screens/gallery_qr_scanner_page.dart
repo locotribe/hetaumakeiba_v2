@@ -7,8 +7,7 @@ import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/result_page.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:mobile_scanner/mobile_scanner.dart'; // analyzeImageのために必要だが、直接は使わない
-import 'package:hetaumakeiba_v2/db/database_helper.dart'; // DatabaseHelper をインポート
+import 'package:hetaumakeiba_v2/db/database_helper.dart';
 
 // 新しく分離したギャラリーQRデータ処理ロジックをインポート
 import 'package:hetaumakeiba_v2/logic/gallery_qr_code_processor.dart';

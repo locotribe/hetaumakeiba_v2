@@ -1,7 +1,7 @@
 // lib/models/featured_race_model.dart
 
 import 'dart:convert';
-import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart'; // ★追加
+import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 
 /// 今週の注目レースの情報を保持するデータモデルクラスです。
 class FeaturedRace {
@@ -36,13 +36,13 @@ class FeaturedRace {
     required this.weight,
     this.raceDetails1,
     this.raceDetails2,
-    this.shutubaHorses, // ★追加
+    this.shutubaHorses,
   });
 
   /// MapからFeaturedRaceオブジェクトを生成するファクトリコンストラクタです。
   factory FeaturedRace.fromMap(Map<String, dynamic> map) {
     List<ShutubaHorseDetail>? horses;
-    if (map['shutubaHorsesJson'] != null) { // ★追加：JSONデコード
+    if (map['shutubaHorsesJson'] != null) {
       final List<dynamic> jsonList = json.decode(map['shutubaHorsesJson'] as String);
       horses = jsonList.map((e) => ShutubaHorseDetail.fromMap(e as Map<String, dynamic>)).toList();
     }
@@ -61,7 +61,7 @@ class FeaturedRace {
       weight: map['weight'] as String? ?? '',
       raceDetails1: map['race_details_1'] as String?,
       raceDetails2: map['race_details_2'] as String?,
-      shutubaHorses: horses, // ★追加
+      shutubaHorses: horses,
     );
   }
 
