@@ -160,6 +160,28 @@ class FeaturedRaceListItem extends StatelessWidget {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 4.0),
+                  Container(
+                    width: 40,  // 上のコンテナと幅を合わせる
+                    height: 25, // 上のコンテナと高さを合わせる
+                    decoration: BoxDecoration(
+                      // 背景色(color)は指定せず、borderプロパティで縁取りを定義
+                      border: Border.all(
+                        color: Colors.grey.shade600, // 縁の色
+                        width: 2,                  // 縁の太さ
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        race.venue,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -215,23 +237,7 @@ class FeaturedRaceListItem extends StatelessWidget {
                         }
                     ),
                   ] else ...[
-                    Text(
-                      '${race.raceDate}'
-                          '${race.raceNumber.isNotEmpty ? ' / ${race.venue} ${race.raceNumber}R' : ' / ${race.venue}'}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.black54,
-                      ),
-                    ),
                     const SizedBox(height: 4.0),
-                    Text(
-                      '${race.distance} / ${race.conditions} / ${race.weight}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.black54,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
                   ]
                 ],
               ),

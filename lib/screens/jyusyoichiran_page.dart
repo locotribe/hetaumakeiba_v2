@@ -336,9 +336,10 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       itemCount: racesForMonth.length,
       itemBuilder: (context, index) {
         final race = racesForMonth[index];
+        final dayOfWeek = _getDayOfWeek(race); // 曜日を取得する処理を追加
         return FeaturedRaceListItem(
           race: race,
-          // ★ dayOfWeekパラメータを渡さないように修正
+          dayOfWeek: dayOfWeek, // 取得した曜日をパラメータとして渡す
           onTap: () async {
             final today = DateTime.now();
             final raceDate = _parseDateStringAsDateTime(race.raceDate);
