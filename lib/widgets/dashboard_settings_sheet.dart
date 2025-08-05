@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 // 設定可能なカードのキーと表示名のマップ
 const Map<String, String> availableCards = {
-  'yearly_summary': '年間収支',
+  'yearly_summary': '収支分析',
   'grade_summary': 'グレード別収支',
   'venue_summary': '競馬場別収支',
   'distance_summary': '距離別収支',

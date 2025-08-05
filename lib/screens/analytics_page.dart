@@ -164,13 +164,26 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
           ),
         ],
         bottom: showTabs
-            ? TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: _visibleCards.map((key) {
-            final title = availableCards[key] ?? '不明';
-            return Tab(text: title);
-          }).toList(),
+            ? PreferredSize(
+          // 1. タブバーの高さを指定します
+          preferredSize: const Size.fromHeight(kTextTabBarHeight),
+          child: Container(
+            // 2. ここでタブバーの背景色を自由に設定します
+            // 例：白色に変更する場合
+            color: const Color(0xFF1A4314),
+            child: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              // 3. 新しい背景色に合わせて、文字色や下線の色も調整すると見やすくなります
+              indicatorColor: Colors.blue.shade100,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white60,
+              tabs: _visibleCards.map((key) {
+                final title = availableCards[key] ?? '不明';
+                return Tab(text: title);
+              }).toList(),
+            ),
+          ),
         )
             : null,
       ),
