@@ -210,36 +210,31 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   Widget _buildWeeklyRaces() {
     if (_weeklyGradedRaces.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 8.0, bottom: 4.0, left: 4.0),
-          child: Text(
-            '今週の重賞レース',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
+    return ExpansionTile(
+      initiallyExpanded: true,
+      title: const Text(
+        '今週の重賞レース',
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Colors.black87,
         ),
-        ..._weeklyGradedRaces.map((race) {
-          final dayOfWeek = _getDayOfWeek(race);
-          return FeaturedRaceListItem(
-            race: race,
-            dayOfWeek: '$dayOfWeek',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ShutubaTablePage(raceId: race.raceId),
-                ),
-              );
-            },
-          );
-        }).toList(),
-      ],
+      ),
+      children: _weeklyGradedRaces.map((race) {
+        final dayOfWeek = _getDayOfWeek(race);
+        return FeaturedRaceListItem(
+          race: race,
+          dayOfWeek: '$dayOfWeek',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ShutubaTablePage(raceId: race.raceId),
+              ),
+            );
+          },
+        );
+      }).toList(),
     );
   }
 
@@ -250,7 +245,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         _buildMonthSelectorHeader(),
         const SizedBox(height: 8),
         SizedBox(
-          height: 400,
+          height: 600,
           child: PageView.builder(
             controller: _pageController,
             itemCount: _availableMonths.length,
@@ -276,7 +271,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text(
-            '重賞レース一覧',
+            '月別重賞レース一覧',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
