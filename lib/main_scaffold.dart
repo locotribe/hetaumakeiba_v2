@@ -89,43 +89,76 @@ class _MainScaffoldState extends State<MainScaffold> {
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
       ),
-      floatingActionButton: SpeedDial(
-        icon: Icons.add,
-        activeIcon: Icons.close,
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-        animatedIconTheme: const IconThemeData(size: 22.0),
-        curve: Curves.bounceIn,
-        children: [
-          SpeedDialChild(
-            child: const Icon(Icons.camera_alt),
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-            label: 'カメラで読み取る',
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => QRScannerPage(savedListKey: _savedListKey),
-                ),
-              );
-            },
+      floatingActionButton: Theme(
+        data: Theme.of(context).copyWith(
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: SpeedDial(
+          child: ClipOval(
+            child: Image.asset(
+              'assets/images/icon_baken.png',
+              width: 56.0, // FABの標準サイズ
+              height: 56.0,
+              fit: BoxFit.contain,
+            ),
           ),
-          SpeedDialChild(
-            child: const Icon(Icons.image),
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-            label: '画像から読み取る',
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => GalleryQrScannerPage(savedListKey: _savedListKey),
-                ),
-              );
-            },
+          activeChild: ClipOval(
+            child: Image.asset(
+              'assets/images/icon_baken.png',
+              width: 56.0,
+              height: 56.0,
+              fit: BoxFit.contain,
+            ),
           ),
-        ],
+          backgroundColor: Colors.transparent,
+          elevation: 0.0, // 影を無効化
+          renderOverlay: false, // オーバーレイを無効化
+          shape: const CircleBorder(), // ボタンの形状を円形に
+          overlayColor: Colors.transparent,
+          overlayOpacity: 0.0,
+          foregroundColor: Colors.transparent,
+          animatedIconTheme: const IconThemeData(size: 22.0),
+          curve: Curves.easeOut,
+          animationDuration: const Duration(milliseconds: 150),
+          childrenButtonSize: const Size(56.0, 56.0),
+          children: [
+            SpeedDialChild(
+              child: const Icon(Icons.camera_alt),
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              label: 'カメラで読み取る',
+              elevation: 0.0,
+              shape: const CircleBorder(), // 子ボタンも円形に
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => QRScannerPage(savedListKey: _savedListKey),
+                  ),
+                );
+              },
+            ),
+            SpeedDialChild(
+              child: const Icon(Icons.image),
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              label: '画像から読み取る',
+              elevation: 0.0,
+              shape: const CircleBorder(), // 子ボタンも円形に
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => GalleryQrScannerPage(savedListKey: _savedListKey),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+
     );
   }
 }

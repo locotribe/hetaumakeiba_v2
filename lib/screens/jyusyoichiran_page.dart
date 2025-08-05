@@ -215,7 +215,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       title: const Text(
         '今週の重賞レース',
         style: TextStyle(
-          fontSize: 18,
+          fontSize: 14,
           fontWeight: FontWeight.bold,
           color: Colors.black87,
         ),
@@ -273,7 +273,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
           const Text(
             '月別重賞レース一覧',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 14,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
             ),
