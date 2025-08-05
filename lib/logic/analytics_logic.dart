@@ -14,6 +14,23 @@ import 'package:hetaumakeiba_v2/models/analytics_summary_model.dart';
 class AnalyticsLogic {
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
+  /// 検出したグレード表記を正規化する
+  String _normalizeGrade(String rawGrade) {
+    // 大文字に変換し、ローマ数字の全角文字を半角に統一
+    final upperGrade = rawGrade.toUpperCase().replaceAll('Ⅰ', 'I').replaceAll('Ⅱ', 'II').replaceAll('Ⅲ', 'III');
+
+    const gradeMap = {
+      'G1': 'G1', 'GI': 'G1',
+      'G2': 'G2', 'GII': 'G2',
+      'G3': 'G3', 'GIII': 'G3',
+      'JPN1': 'Jpn1',
+      'JPN2': 'Jpn2',
+      'JPN3': 'Jpn3',
+    };
+
+    return gradeMap[upperGrade] ?? 'その他';
+  }
+
   // カテゴリ別の集計マップを更新または新規追加するヘルパー関数
   void _updateCategorySummary({
     required Map<String, CategorySummary> summaryMap,
@@ -22,7 +39,7 @@ class AnalyticsLogic {
     required int payout,
     required bool isHit,
   }) {
-    if (key.isEmpty) return;
+    if (key.isEmpty || key == 'その他') return; // 「その他」は集計から除外する場合
     summaryMap.putIfAbsent(key, () => CategorySummary(name: key));
     final summary = summaryMap[key]!;
     summary.investment += investment;
@@ -176,8 +193,16 @@ class AnalyticsLogic {
             // カテゴリ別集計
             final venue = parsedTicket['開催場'] as String? ?? '不明';
             final purchaseMethod = parsedTicket['方式'] as String? ?? '不明';
-            final gradeMatch = RegExp(r'\((G[1-3])\)').firstMatch(raceResult.raceTitle);
-            final grade = gradeMatch?.group(1) ?? 'その他';
+
+            // ★★★ 修正箇所１ ★★★
+            final gradePattern = RegExp(r'\((G(?:I{1,3}|[1-3])|Jpn[1-3])\)', caseSensitive: false);
+            final gradeMatch = gradePattern.firstMatch(raceResult.raceTitle);
+            String grade = 'その他'; // デフォルト値を設定
+            if (gradeMatch != null) {
+              final rawGrade = gradeMatch.group(1)!;
+              grade = _normalizeGrade(rawGrade);
+            }
+
             final raceInfoParts = raceResult.raceInfo.split('/');
             final trackAndDistance = raceInfoParts.isNotEmpty ? raceInfoParts[0].trim() : '不明';
             final track = trackAndDistance.startsWith('ダ') ? 'ダート' : (trackAndDistance.startsWith('障') ? '障害' : '芝');
@@ -288,8 +313,16 @@ class AnalyticsLogic {
         // カテゴリ別集計
         final venue = parsedTicket['開催場'] as String? ?? '不明';
         final purchaseMethod = parsedTicket['方式'] as String? ?? '不明';
-        final gradeMatch = RegExp(r'\((G[1-3])\)').firstMatch(raceResult.raceTitle);
-        final grade = gradeMatch?.group(1) ?? 'その他';
+
+        // ★★★ 修正箇所２ ★★★
+        final gradePattern = RegExp(r'\((G(?:I{1,3}|[1-3])|Jpn[1-3])\)', caseSensitive: false);
+        final gradeMatch = gradePattern.firstMatch(raceResult.raceTitle);
+        String grade = 'その他'; // デフォルト値を設定
+        if (gradeMatch != null) {
+          final rawGrade = gradeMatch.group(1)!;
+          grade = _normalizeGrade(rawGrade);
+        }
+
         final raceInfoParts = raceResult.raceInfo.split('/');
         final trackAndDistance = raceInfoParts.isNotEmpty ? raceInfoParts[0].trim() : '不明';
         final track = trackAndDistance.startsWith('ダ') ? 'ダート' : (trackAndDistance.startsWith('障') ? '障害' : '芝');
