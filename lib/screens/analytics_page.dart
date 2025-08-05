@@ -18,7 +18,7 @@ class AnalyticsPage extends StatefulWidget {
   State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
-class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProviderStateMixin {
+class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMixin {
   bool _isLoading = true;
   AnalyticsData? _analysisData;
   int? _selectedYear;
@@ -182,30 +182,28 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
   }
 
   Widget _buildBody() {
-    return RefreshIndicator(
-      onRefresh: _loadAnalyticsData,
-      child: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : (_analysisData == null || _selectedYear == null || _analysisData!.yearlySummaries.isEmpty)
-          ? LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: const Center(
-                child: Text(
-                  '表示できるデータがありません。\n馬券を登録してください。',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.black54),
-                ),
+    return _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : (_analysisData == null || _selectedYear == null || _analysisData!.yearlySummaries.isEmpty)
+        ? LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints:
+            BoxConstraints(minHeight: constraints.maxHeight),
+            child: const Center(
+              child: Text(
+                '表示できるデータがありません。\n馬券を登録してください。',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.black54),
               ),
             ),
-          );
-        },
-      )
-          : _buildTabView(),
-    );
+          ),
+        );
+      },
+    )
+        : _buildTabView();
   }
 
   Widget _buildTabView() {
@@ -220,9 +218,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
       children: _visibleCards.map<Widget>((key) {
         final pageContent = _buildPageContent(key, selectedYearSummary);
         // 各ページをListViewでラップして、一貫したスクロール挙動とパディングを適用
-        return ListView(
-          padding: const EdgeInsets.all(8.0),
-          children: [pageContent],
+        return RefreshIndicator(
+          onRefresh: _loadAnalyticsData,
+          child: ListView(
+            key: PageStorageKey<String>(key),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(8.0),
+            children: [pageContent],
+          ),
         );
       }).toList(),
     );
