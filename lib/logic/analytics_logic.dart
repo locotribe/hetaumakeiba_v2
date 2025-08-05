@@ -33,7 +33,7 @@ class AnalyticsLogic {
     }
   }
 
-  Future<AnalyticsData> calculateAnalyticsData() async {
+  Future<AnalyticsData> calculateAnalyticsData({int? filterYear}) async {
     final allQrData = await _dbHelper.getAllQrData();
     final allRaceResults = <String, RaceResult>{};
     for (final qrData in allQrData) {
@@ -86,7 +86,9 @@ class AnalyticsLogic {
       }
     }).toSet().where((y) => y != 0).toList();
 
-    for (final year in availableYears) {
+    final yearsToProcess = filterYear != null ? [filterYear] : availableYears;
+
+    for (final year in yearsToProcess) {
       final yearlySummary = YearlySummary(year: year);
       yearlySummaries[year] = yearlySummary;
 

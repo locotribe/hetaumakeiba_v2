@@ -1,5 +1,6 @@
 // lib/screens/analytics_page.dart
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analytics_logic.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
@@ -21,8 +22,8 @@ class AnalyticsPage extends StatefulWidget {
 class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMixin {
   bool _isLoading = true;
   AnalyticsData? _analysisData;
-  int? _selectedYear;
   List<int> _availableYears = [];
+  String _selectedPeriod = '総合'; // '総合' or 'YYYY'
 
   List<String> _visibleCards = [];
   TabController? _tabController;
@@ -48,49 +49,55 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
 
   Future<void> _loadInitialSettingsAndData() async {
     await _loadDashboardSettings();
-    await _loadAnalyticsData();
+    // 初回読み込み時は全期間のデータを取得して利用可能年数を設定する
+    await _loadAnalyticsData(isInitialLoad: true);
   }
 
   Future<void> _loadDashboardSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final savedCards = prefs.getStringList('dashboard_visible_cards');
 
-    // 表示設定に 'yearly_summary' がない場合、強制的に追加する
-    // これにより、'top_payout' の設定が消えても表示が維持される
     final initialCards = availableCards.keys.toList();
     if (savedCards == null) {
       _visibleCards = initialCards;
     } else {
-      // 'top_payout' が保存されていても、UI上は 'yearly_summary' に統合されているため、
-      // 'yearly_summary' がリストに含まれていることを保証する
       final tempVisible = savedCards.toSet();
       if (savedCards.contains('top_payout')) {
         tempVisible.add('yearly_summary');
       }
-      // 'top_payout' はタブとして表示しないので、リストからは除外する
       tempVisible.remove('top_payout');
-
-      // 元の順序を維持しつつ、表示するカードを確定する
       _visibleCards = initialCards.where((card) => tempVisible.contains(card)).toList();
     }
 
-    setState(() {});
+    if(mounted) setState(() {});
   }
 
-  Future<void> _loadAnalyticsData() async {
+  Future<void> _loadAnalyticsData({bool isInitialLoad = false}) async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
-    final data = await _logic.calculateAnalyticsData();
+
+    final int? filterYear = (_selectedPeriod == '総合') ? null : int.tryParse(_selectedPeriod);
+    final data = await _logic.calculateAnalyticsData(filterYear: filterYear);
     if (!mounted) return;
+
+    // 初回ロード時のみ、利用可能な年のリストを全期間データから設定
+    if (isInitialLoad && data.yearlySummaries.keys.isNotEmpty) {
+      _availableYears = data.yearlySummaries.keys.toList()..sort((a, b) => b.compareTo(a));
+    }
+
+    // 期間を切り替えた場合、再度全期間のデータを取得して年のリストを更新
+    if (!isInitialLoad && _selectedPeriod == '総合') {
+      final allData = await _logic.calculateAnalyticsData();
+      if (mounted) {
+        _availableYears = allData.yearlySummaries.keys.toList()..sort((a, b) => b.compareTo(a));
+      }
+    }
+
 
     setState(() {
       _analysisData = data;
-      if (data.yearlySummaries.keys.isNotEmpty) {
-        _availableYears = data.yearlySummaries.keys.toList()..sort((a, b) => b.compareTo(a));
-        _selectedYear = _availableYears.first;
-      }
       _isLoading = false;
       if (_visibleCards.isNotEmpty) {
         _setupTabController();
@@ -98,10 +105,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
     });
   }
 
-  void _onYearChanged(int newYear) {
+  void _onPeriodChanged(String newPeriod) {
+    if (_selectedPeriod == newPeriod) return;
     setState(() {
-      _selectedYear = newYear;
+      _selectedPeriod = newPeriod;
     });
+    _loadAnalyticsData();
   }
 
   void _showDashboardSettings() {
@@ -129,7 +138,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    // データがない、またはロード中の場合はタブを表示しない
     final bool showTabs = !_isLoading && _analysisData != null && _analysisData!.yearlySummaries.isNotEmpty && _tabController != null;
 
     return Scaffold(
@@ -175,8 +183,44 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
               fillColor: Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
-          _buildBody(),
+          Column(
+            children: [
+              _buildPeriodFilter(),
+              Expanded(child: _buildBody()),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPeriodFilter() {
+    if (_isLoading || _availableYears.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final List<String> periods = ['総合', ..._availableYears.map((y) => y.toString())];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: periods.map((period) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: ChoiceChip(
+                label: Text(period == '総合' ? '総合' : '$period年'),
+                selected: _selectedPeriod == period,
+                onSelected: (isSelected) {
+                  if (isSelected) {
+                    _onPeriodChanged(period);
+                  }
+                },
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -184,19 +228,22 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
   Widget _buildBody() {
     return _isLoading
         ? const Center(child: CircularProgressIndicator())
-        : (_analysisData == null || _selectedYear == null || _analysisData!.yearlySummaries.isEmpty)
+        : (_analysisData == null || _analysisData!.yearlySummaries.isEmpty)
         ? LayoutBuilder(
       builder: (context, constraints) {
-        return SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: ConstrainedBox(
-            constraints:
-            BoxConstraints(minHeight: constraints.maxHeight),
-            child: const Center(
-              child: Text(
-                '表示できるデータがありません。\n馬券を登録してください。',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.black54),
+        return RefreshIndicator(
+          onRefresh: () => _loadAnalyticsData(isInitialLoad: true),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints:
+              BoxConstraints(minHeight: constraints.maxHeight),
+              child: const Center(
+                child: Text(
+                  '表示できるデータがありません。\n馬券を登録してください。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.black54),
+                ),
               ),
             ),
           ),
@@ -211,15 +258,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
       return const Center(child: Text('表示するカードがありません。'));
     }
 
-    final selectedYearSummary = _analysisData!.yearlySummaries[_selectedYear!];
-
     return TabBarView(
       controller: _tabController,
       children: _visibleCards.map<Widget>((key) {
-        final pageContent = _buildPageContent(key, selectedYearSummary);
-        // 各ページをListViewでラップして、一貫したスクロール挙動とパディングを適用
+        final pageContent = _buildPageContent(key);
         return RefreshIndicator(
-          onRefresh: _loadAnalyticsData,
+          onRefresh: () => _loadAnalyticsData(isInitialLoad: _selectedPeriod == '総合'),
           child: ListView(
             key: PageStorageKey<String>(key),
             physics: const AlwaysScrollableScrollPhysics(),
@@ -231,66 +275,27 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
     );
   }
 
-  Widget _buildPageContent(String key, YearlySummary? selectedYearSummary) {
+  Widget _buildPageContent(String key) {
     switch (key) {
       case 'yearly_summary':
+        final bool isOverallMode = _selectedPeriod == '総合';
+        final yearlySummaries = _analysisData!.yearlySummaries.values.toList()
+          ..sort((a, b) => a.year.compareTo(b.year));
+
         return Card(
           elevation: 2,
           margin: const EdgeInsets.symmetric(vertical: 8.0),
           child: Column(
             children: [
-              // Part 1: Yearly Summary content
-              if (selectedYearSummary != null)
-                YearlySummaryCard(
-                  yearlySummary: selectedYearSummary,
-                  availableYears: _availableYears,
-                  selectedYear: _selectedYear!,
-                  onYearChanged: _onYearChanged,
-                ),
+              isOverallMode
+                  ? _buildOverallContent(yearlySummaries)
+                  : _buildYearlyContent(),
 
-              // Separator
-              if (selectedYearSummary != null && _analysisData!.topPayout != null)
+              if (_analysisData!.topPayout != null)
                 const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
 
-              // Part 2: Top Payout content
               if (_analysisData!.topPayout != null)
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '過去最高払戻', // Title as requested
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 16),
-                      Center(
-                        child: Column(
-                          children: [
-                            Text(
-                              '${NumberFormat.decimalPattern('ja').format(_analysisData!.topPayout!.payout)}円',
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.amber.shade800,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _analysisData!.topPayout!.raceName,
-                              style: const TextStyle(fontSize: 14, color: Colors.black54),
-                              textAlign: TextAlign.center,
-                            ),
-                            Text(
-                              _analysisData!.topPayout!.raceDate,
-                              style: const TextStyle(fontSize: 12, color: Colors.black54),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _buildTopPayoutContent(),
             ],
           ),
         );
@@ -327,5 +332,207 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  Widget _buildOverallContent(List<YearlySummary> summaries) {
+    final currencyFormatter = NumberFormat.decimalPattern('ja');
+    if (summaries.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Center(child: Text('データがありません。')),
+      );
+    }
+
+    // 全期間の合計を計算
+    final overallTotal = summaries.fold<Map<String, int>>(
+      {'investment': 0, 'payout': 0, 'profit': 0},
+          (prev, s) => {
+        'investment': prev['investment']! + s.totalInvestment,
+        'payout': prev['payout']! + s.totalPayout,
+        'profit': prev['profit']! + s.totalProfit,
+      },
+    );
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '年別収支比較',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            height: 200,
+            child: _buildOverallBarChart(summaries, currencyFormatter),
+          ),
+          const SizedBox(height: 24),
+          _buildOverallSummaryTable(summaries, currencyFormatter, overallTotal),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverallBarChart(List<YearlySummary> summaries, NumberFormat formatter) {
+    final profits = summaries.map((s) => s.totalProfit.toDouble());
+    final maxProfit = profits.fold(0.0, (max, p) => p > max ? p : max);
+    final minProfit = profits.fold(0.0, (min, p) => p < min ? p : min);
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: maxProfit > 0 ? maxProfit * 1.2 : 1000,
+        minY: minProfit < 0 ? minProfit * 1.2 : 0,
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (double value, TitleMeta meta) {
+                return SideTitleWidget(
+                  axisSide: meta.axisSide,
+                  child: Text(value.toInt().toString(), style: const TextStyle(fontSize: 10)),
+                );
+              },
+              reservedSize: 20,
+            ),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        gridData: FlGridData(show: true, drawVerticalLine: false),
+        barTouchData: BarTouchData(
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (group) => Colors.blueGrey,
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              final year = summaries[groupIndex].year;
+              final profit = rod.toY.toInt();
+              return BarTooltipItem(
+                '$year年\n',
+                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                children: [
+                  TextSpan(
+                    text: formatter.format(profit),
+                    style: TextStyle(
+                      color: profit >= 0 ? Colors.lightBlueAccent : Colors.redAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const TextSpan(text: ' 円', style: TextStyle(color: Colors.white, fontSize: 12)),
+                ],
+              );
+            },
+          ),
+        ),
+        barGroups: List.generate(summaries.length, (index) {
+          final summary = summaries[index];
+          return BarChartGroupData(
+            x: summary.year,
+            barRods: [
+              BarChartRodData(
+                toY: summary.totalProfit.toDouble(),
+                color: summary.totalProfit >= 0 ? Colors.blue : Colors.red,
+                width: 16,
+              ),
+            ],
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildOverallSummaryTable(List<YearlySummary> summaries, NumberFormat formatter, Map<String, int> overallTotal) {
+    final rows = summaries.map((s) {
+      final profitColor = s.totalProfit > 0 ? Colors.blue.shade700 : (s.totalProfit < 0 ? Colors.red.shade700 : Colors.black87);
+      return DataRow(cells: [
+        DataCell(Text('${s.year}年')),
+        DataCell(Text(formatter.format(s.totalInvestment))),
+        DataCell(Text(formatter.format(s.totalPayout))),
+        DataCell(Text(formatter.format(s.totalProfit), style: TextStyle(color: profitColor))),
+        DataCell(Text('${s.totalRecoveryRate.toStringAsFixed(1)}%')),
+      ]);
+    }).toList();
+
+    // Add total row
+    final totalProfit = overallTotal['profit']!;
+    final totalRecoveryRate = overallTotal['investment']! == 0 ? 0.0 : (overallTotal['payout']! / overallTotal['investment']!) * 100;
+    final totalProfitColor = totalProfit > 0 ? Colors.blue.shade700 : (totalProfit < 0 ? Colors.red.shade700 : Colors.black87);
+
+    rows.add(DataRow(
+        cells: [
+          const DataCell(Text('累計', style: TextStyle(fontWeight: FontWeight.bold))),
+          DataCell(Text(formatter.format(overallTotal['investment']), style: const TextStyle(fontWeight: FontWeight.bold))),
+          DataCell(Text(formatter.format(overallTotal['payout']), style: const TextStyle(fontWeight: FontWeight.bold))),
+          DataCell(Text(formatter.format(totalProfit), style: TextStyle(color: totalProfitColor, fontWeight: FontWeight.bold))),
+          DataCell(Text('${totalRecoveryRate.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.bold))),
+        ]
+    ));
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 16,
+        columns: const [
+          DataColumn(label: Text('年度')),
+          DataColumn(label: Text('投資額'), numeric: true),
+          DataColumn(label: Text('払戻額'), numeric: true),
+          DataColumn(label: Text('収支'), numeric: true),
+          DataColumn(label: Text('回収率'), numeric: true),
+        ],
+        rows: rows,
+      ),
+    );
+  }
+
+  Widget _buildYearlyContent() {
+    final selectedYearSummary = _analysisData!.yearlySummaries[int.parse(_selectedPeriod)];
+    if (selectedYearSummary == null) {
+      return const SizedBox.shrink();
+    }
+    return YearlySummaryCard(
+      yearlySummary: selectedYearSummary,
+    );
+  }
+
+  Widget _buildTopPayoutContent() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '過去最高払戻',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  '${NumberFormat.decimalPattern('ja').format(_analysisData!.topPayout!.payout)}円',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.amber.shade800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _analysisData!.topPayout!.raceName,
+                  style: const TextStyle(fontSize: 14, color: Colors.black54),
+                  textAlign: TextAlign.center,
+                ),
+                Text(
+                  _analysisData!.topPayout!.raceDate,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

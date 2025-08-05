@@ -8,16 +8,10 @@ import 'package:intl/intl.dart';
 
 class YearlySummaryCard extends StatelessWidget {
   final YearlySummary yearlySummary;
-  final List<int> availableYears;
-  final int selectedYear;
-  final ValueChanged<int> onYearChanged;
 
   const YearlySummaryCard({
     super.key,
     required this.yearlySummary,
-    required this.availableYears,
-    required this.selectedYear,
-    required this.onYearChanged,
   });
 
   void _showMonthlyDetails(BuildContext context, int month) {
@@ -29,7 +23,7 @@ class YearlySummaryCard extends StatelessWidget {
       context: context,
       builder: (context) {
         return MonthlyDetailsPopup(
-          year: selectedYear,
+          year: yearlySummary.year,
           month: month,
           purchaseDetails: detailsForMonth,
         );
@@ -46,7 +40,10 @@ class YearlySummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildYearSelector(),
+          Text(
+            '${yearlySummary.year}年 月別収支',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 24),
           SizedBox(
             height: 200,
@@ -56,36 +53,6 @@ class YearlySummaryCard extends StatelessWidget {
           _buildSummaryTable(currencyFormatter),
         ],
       ),
-    );
-  }
-
-  Widget _buildYearSelector() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_left),
-          onPressed: () {
-            final currentIndex = availableYears.indexOf(selectedYear);
-            if (currentIndex < availableYears.length - 1) {
-              onYearChanged(availableYears[currentIndex + 1]);
-            }
-          },
-        ),
-        Text(
-          '$selectedYear年',
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        IconButton(
-          icon: const Icon(Icons.arrow_right),
-          onPressed: () {
-            final currentIndex = availableYears.indexOf(selectedYear);
-            if (currentIndex > 0) {
-              onYearChanged(availableYears[currentIndex - 1]);
-            }
-          },
-        ),
-      ],
     );
   }
 
