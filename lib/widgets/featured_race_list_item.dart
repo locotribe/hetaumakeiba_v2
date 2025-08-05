@@ -66,10 +66,11 @@ class FeaturedRaceListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final gradeColor = _getGradeColor(race.raceGrade);
     final bool hasDetails = race.raceDetails1 != null && race.raceDetails1!.isNotEmpty;
+    final bool isMonthlyRace = !hasDetails;
 
     Widget buildStatusWidget() {
       // 月別一覧のレース（詳細情報がないレース）かどうかを判定
-      final bool isMonthlyRace = !hasDetails;
+      // final bool isMonthlyRace = !hasDetails;
 
       if (isMonthlyRace) {
         final raceDate = _parseDateStringAsDateTime(race.raceDate);
@@ -116,7 +117,87 @@ class FeaturedRaceListItem extends StatelessWidget {
           ],
           border: Border(left: BorderSide(color: gradeColor, width: 5)),
         ),
-        child: Row(
+        child: isMonthlyRace
+            ? Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 25,
+                  decoration: BoxDecoration(
+                    color: gradeColor,
+                  ),
+                  child: Center(
+                    child: Text(
+                      race.raceGrade,
+                      style: TextStyle(
+                        color: _getGradeTextColor(race.raceGrade),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8.0),
+                Container(
+                  width: 40,
+                  height: 25,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.grey.shade600,
+                      width: 2,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      race.venue,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                if (dayOfWeek != null && dayOfWeek!.isNotEmpty) ...[
+                  const SizedBox(width: 8.0),
+                  Container(
+                    width: 40,
+                    height: 25,
+                    decoration: BoxDecoration(
+                      color: _getDayOfWeekColor(dayOfWeek!),
+                    ),
+                    child: Center(
+                      child: Text(
+                        dayOfWeek!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                buildStatusWidget(),
+              ],
+            ),
+            const SizedBox(height: 8.0),
+            Text(
+              race.raceName,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        )
+            : Row(
           children: [
             SizedBox(
               width: 40,
