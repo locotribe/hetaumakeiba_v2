@@ -33,13 +33,13 @@ DateTime _parseDateStringAsDateTime(String dateText) {
 
 class FeaturedRaceListItem extends StatelessWidget {
   final FeaturedRace race;
-  final String? dayOfWeek; // ★ requiredを外し、String? に変更
+  final String? dayOfWeek;
   final VoidCallback onTap;
 
   const FeaturedRaceListItem({
     super.key,
     required this.race,
-    this.dayOfWeek, // ★ requiredを外す
+    this.dayOfWeek,
     required this.onTap,
   });
 
@@ -55,13 +55,18 @@ class FeaturedRaceListItem extends StatelessWidget {
   Color _getGradeTextColor(String grade) {
     return Colors.white;
   }
+  // 曜日ごとの背景色を返すヘルパーメソッド
+  Color _getDayOfWeekColor(String day) {
+    if (day == '土') return Colors.blue.shade700; // 土曜日は青
+    if (day == '日') return Colors.pink.shade300; // 日曜日はピンク
+    return Colors.grey; // その他
+  }
 
   @override
   Widget build(BuildContext context) {
     final gradeColor = _getGradeColor(race.raceGrade);
     final bool hasDetails = race.raceDetails1 != null && race.raceDetails1!.isNotEmpty;
 
-    // ▼▼▼ 表示を「>」アイコンから「確/未」表示に切り替えるロジック ▼▼▼
     Widget buildStatusWidget() {
       // 月別一覧のレース（詳細情報がないレース）かどうかを判定
       final bool isMonthlyRace = !hasDetails;
@@ -114,7 +119,7 @@ class FeaturedRaceListItem extends StatelessWidget {
         child: Row(
           children: [
             SizedBox(
-              width: 48,
+              width: 40,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -135,15 +140,23 @@ class FeaturedRaceListItem extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // ★ dayOfWeekが渡された時だけ表示するように修正
                   if (dayOfWeek != null && dayOfWeek!.isNotEmpty) ...[
                     const SizedBox(height: 4.0),
-                    Text(
-                      dayOfWeek!,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.black54,
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      width: 40,
+                      height: 25,
+                      decoration: BoxDecoration(
+                        color: _getDayOfWeekColor(dayOfWeek!), // ヘルパー関数で色を指定
+                      ),
+                      child: Center(
+                        child: Text(
+                          dayOfWeek!,
+                          style: const TextStyle(
+                            color: Colors.white, // 文字色を白に
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
                     ),
                   ],
