@@ -65,6 +65,18 @@ class YearlySummary {
   double get totalHitRate => totalBetCount == 0 ? 0.0 : (totalHitCount / totalBetCount) * 100;
 }
 
+class TopPayoutInfo {
+  final int payout;
+  final String raceName;
+  final String raceDate;
+
+  TopPayoutInfo({
+    required this.payout,
+    required this.raceName,
+    required this.raceDate,
+  });
+}
+
 class AnalyticsData {
   final Map<int, YearlySummary> yearlySummaries;
   final List<CategorySummary> gradeSummaries;
@@ -73,6 +85,7 @@ class AnalyticsData {
   final List<CategorySummary> trackSummaries;
   final List<CategorySummary> ticketTypeSummaries;
   final List<CategorySummary> purchaseMethodSummaries;
+  final TopPayoutInfo? topPayout;
 
   AnalyticsData({
     required this.yearlySummaries,
@@ -82,5 +95,6 @@ class AnalyticsData {
     required this.trackSummaries,
     required this.ticketTypeSummaries,
     required this.purchaseMethodSummaries,
+    this.topPayout,
   });
 }

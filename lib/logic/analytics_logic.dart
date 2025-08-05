@@ -54,6 +54,7 @@ class AnalyticsLogic {
       }
     }
 
+    TopPayoutInfo? topPayoutInfo;
     final Map<int, YearlySummary> yearlySummaries = {};
     final Map<String, CategorySummary> gradeSummaries = {};
     final Map<String, CategorySummary> venueSummaries = {};
@@ -146,6 +147,13 @@ class AnalyticsLogic {
             if (raceResult == null) continue;
 
             final hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
+            if (hitResult.isHit && (topPayoutInfo == null || hitResult.totalPayout > topPayoutInfo.payout)) {
+              topPayoutInfo = TopPayoutInfo(
+                payout: hitResult.totalPayout,
+                raceName: raceResult.raceTitle,
+                raceDate: raceResult.raceDate,
+              );
+            }
             final int totalInvestment = parsedTicket['合計金額'] as int? ?? 0;
             final int totalPayout = hitResult.totalPayout;
             final bool isHit = hitResult.isHit;
@@ -243,6 +251,13 @@ class AnalyticsLogic {
         if (raceResult == null) continue;
 
         final hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
+        if (hitResult.isHit && (topPayoutInfo == null || hitResult.totalPayout > topPayoutInfo.payout)) {
+          topPayoutInfo = TopPayoutInfo(
+            payout: hitResult.totalPayout,
+            raceName: raceResult.raceTitle,
+            raceDate: raceResult.raceDate,
+          );
+        }
         final int totalInvestment = parsedTicket['合計金額'] as int? ?? 0;
         final int totalPayout = hitResult.totalPayout;
         final bool isHit = hitResult.isHit;
@@ -347,6 +362,7 @@ class AnalyticsLogic {
       trackSummaries: trackSummaries.values.toList(),
       ticketTypeSummaries: ticketTypeSummaries.values.toList(),
       purchaseMethodSummaries: purchaseMethodSummaries.values.toList(),
+      topPayout: topPayoutInfo,
     );
   }
 }

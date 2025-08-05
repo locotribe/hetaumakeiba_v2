@@ -5,6 +5,7 @@ import 'package:hetaumakeiba_v2/logic/analytics_logic.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/settings_page.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
+import 'package:hetaumakeiba_v2/widgets/top_payout_card.dart';
 import 'package:hetaumakeiba_v2/widgets/yearly_summary_card.dart';
 import 'package:hetaumakeiba_v2/widgets/category_summary_card.dart';
 import 'package:hetaumakeiba_v2/widgets/dashboard_settings_sheet.dart';
@@ -182,6 +183,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             selectedYear: _selectedYear!,
             onYearChanged: _onYearChanged,
           )
+              : const SizedBox.shrink();
+        case 'top_payout':
+          return _analysisData!.topPayout != null
+              ? TopPayoutCard(topPayout: _analysisData!.topPayout!)
               : const SizedBox.shrink();
         case 'grade_summary':
           return CategorySummaryCard(
