@@ -1,5 +1,4 @@
 // lib/db/database_helper.dart
-
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
@@ -33,7 +32,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3, // ★バージョンを2から3に更新
+      version: 4, // ★バージョンを3から4に更新
       onCreate: (db, version) async {
         // QRコードデータテーブルの作成
         await db.execute('''
@@ -113,6 +112,25 @@ class DatabaseHelper {
             UNIQUE(raceId, horseId) ON CONFLICT REPLACE
           )
         ''');
+        // analytics_summaries テーブルの作成
+        await db.execute('''
+          CREATE TABLE analytics_summaries(
+            period TEXT PRIMARY KEY,
+            totalInvestment INTEGER,
+            totalPayout INTEGER,
+            hitCount INTEGER,
+            betCount INTEGER,
+            lastCalculated TEXT
+          )
+        ''');
+        // category_summary_cache テーブルの作成
+        await db.execute('''
+          CREATE TABLE category_summary_cache(
+            cacheKey TEXT PRIMARY KEY,
+            summaryJson TEXT NOT NULL,
+            lastCalculated TEXT NOT NULL
+          )
+        ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ★onUpgrade メソッドを追加/修正
@@ -140,6 +158,15 @@ class DatabaseHelper {
               hitCount INTEGER,
               betCount INTEGER,
               lastCalculated TEXT
+            )
+          ''');
+        }
+        if (oldVersion < 4) {
+          await db.execute('''
+            CREATE TABLE category_summary_cache(
+              cacheKey TEXT PRIMARY KEY,
+              summaryJson TEXT NOT NULL,
+              lastCalculated TEXT NOT NULL
             )
           ''');
         }
@@ -405,6 +432,30 @@ class DatabaseHelper {
     );
   }
 
+  // CategorySummaryCache 関連のメソッド
+  Future<void> insertOrUpdateCategorySummaryCache(CategorySummaryCache cache) async {
+    final db = await database;
+    await db.insert(
+      'category_summary_cache',
+      cache.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<CategorySummaryCache?> getCategorySummaryCache(String cacheKey) async {
+    final db = await database;
+    final maps = await db.query(
+      'category_summary_cache',
+      where: 'cacheKey = ?',
+      whereArgs: [cacheKey],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return CategorySummaryCache.fromMap(maps.first);
+    }
+    return null;
+  }
+
   /// 全てのデータを削除します。
   Future<void> deleteAllData() async {
     final db = await database;
@@ -414,6 +465,7 @@ class DatabaseHelper {
     await db.delete('featured_races');
     await db.delete('user_marks'); // ★追加
     await db.delete('analytics_summaries');
-    print('DEBUG: All data deleted from qr_data, race_results, horse_performance, featured_races, user_marks, and analytics_summaries tables.');
+    await db.delete('category_summary_cache');
+    print('DEBUG: All data deleted from qr_data, race_results, horse_performance, featured_races, user_marks, analytics_summaries, and category_summary_cache tables.');
   }
 }

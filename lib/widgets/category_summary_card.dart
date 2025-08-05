@@ -1,5 +1,4 @@
 // lib/widgets/category_summary_card.dart
-
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
@@ -19,7 +18,19 @@ class CategorySummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (summaries.isEmpty) {
-      return const SizedBox.shrink();
+      return Card(
+        elevation: 2,
+        margin: const EdgeInsets.symmetric(vertical: 8.0),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Center(
+            child: Text(
+              '表示できるデータがありません。',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          ),
+        ),
+      );
     }
 
     // 回収率で降順ソート
@@ -173,7 +184,7 @@ class CategorySummaryCard extends StatelessWidget {
 
   double _getChartMaxY(List<CategorySummary> sortedSummaries) {
     if (sortedSummaries.isEmpty) return 120.0;
-    final maxRate = sortedSummaries.map((s) => s.recoveryRate).reduce((a, b) => a > b ? a : b);
+    final maxRate = sortedSummaries.map((s) => s.recoveryRate).fold(0.0, (a, b) => a > b ? a : b);
     return maxRate > 100 ? maxRate * 1.2 : 120;
   }
 }

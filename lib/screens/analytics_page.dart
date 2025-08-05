@@ -1,5 +1,4 @@
 // lib/screens/analytics_page.dart
-
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analytics_logic.dart';
@@ -21,7 +20,7 @@ class AnalyticsPage extends StatefulWidget {
 
 class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMixin {
   bool _isLoading = true;
-  AnalyticsData? _analysisData;
+  AnalyticsData _analysisData = AnalyticsData.empty();
   List<int> _availableYears = [];
   String _selectedPeriod = '総合'; // '総合' or 'YYYY'
 
@@ -49,7 +48,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
 
   Future<void> _loadInitialSettingsAndData() async {
     await _loadDashboardSettings();
-    // 初回読み込み時は全期間のデータを取得して利用可能年数を設定する
+    _setupTabController();
     await _loadAnalyticsData(isInitialLoad: true);
   }
 
@@ -68,8 +67,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
       tempVisible.remove('top_payout');
       _visibleCards = initialCards.where((card) => tempVisible.contains(card)).toList();
     }
-
-    if(mounted) setState(() {});
   }
 
   Future<void> _loadAnalyticsData({bool isInitialLoad = false}) async {
@@ -79,29 +76,22 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
     });
 
     final int? filterYear = (_selectedPeriod == '総合') ? null : int.tryParse(_selectedPeriod);
-    final data = await _logic.calculateAnalyticsData(filterYear: filterYear);
+    // 安全なバックグラウンド処理を呼び出すように変更
+    final data = await _logic.calculateAnalyticsDataInBackground(filterYear: filterYear);
     if (!mounted) return;
 
-    // 初回ロード時のみ、利用可能な年のリストを全期間データから設定
-    if (isInitialLoad && data.yearlySummaries.keys.isNotEmpty) {
-      _availableYears = data.yearlySummaries.keys.toList()..sort((a, b) => b.compareTo(a));
-    }
-
-    // 期間を切り替えた場合、再度全期間のデータを取得して年のリストを更新
-    if (!isInitialLoad && _selectedPeriod == '総合') {
-      final allData = await _logic.calculateAnalyticsData();
+    // isInitialLoad時、または「総合」を選択した際に利用可能な年のリストを更新
+    if (isInitialLoad || _selectedPeriod == '総合') {
+      // 全期間のデータをバックグラウンドで取得して年リストを作成
+      final allData = await _logic.calculateAnalyticsDataInBackground(filterYear: null);
       if (mounted) {
         _availableYears = allData.yearlySummaries.keys.toList()..sort((a, b) => b.compareTo(a));
       }
     }
 
-
     setState(() {
       _analysisData = data;
       _isLoading = false;
-      if (_visibleCards.isNotEmpty) {
-        _setupTabController();
-      }
     });
   }
 
@@ -110,7 +100,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
     setState(() {
       _selectedPeriod = newPeriod;
     });
-    _loadAnalyticsData();
+    _loadAnalyticsData(isInitialLoad: false);
   }
 
   void _showDashboardSettings() {
@@ -125,9 +115,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
             onSettingsChanged: (newSettings) {
               setState(() {
                 _visibleCards = newSettings;
-                if (_visibleCards.isNotEmpty) {
-                  _setupTabController();
-                }
+                _setupTabController();
               });
             },
           ),
@@ -138,8 +126,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    final bool showTabs = !_isLoading && _analysisData != null && _analysisData!.yearlySummaries.isNotEmpty && _tabController != null;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('収支分析'),
@@ -163,18 +149,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
             },
           ),
         ],
-        bottom: showTabs
-            ? PreferredSize(
-          // 1. タブバーの高さを指定します
+        bottom: _tabController == null
+            ? null
+            : PreferredSize(
           preferredSize: const Size.fromHeight(kTextTabBarHeight),
           child: Container(
-            // 2. ここでタブバーの背景色を自由に設定します
-            // 例：白色に変更する場合
             color: const Color(0xFF1A4314),
             child: TabBar(
               controller: _tabController,
               isScrollable: true,
-              // 3. 新しい背景色に合わせて、文字色や下線の色も調整すると見やすくなります
               indicatorColor: Colors.blue.shade100,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white60,
@@ -184,8 +167,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
               }).toList(),
             ),
           ),
-        )
-            : null,
+        ),
       ),
       body: Stack(
         children: [
@@ -208,11 +190,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
   }
 
   Widget _buildPeriodFilter() {
-    if (_isLoading || _availableYears.isEmpty) {
-      return const SizedBox.shrink();
+    List<String> periods = ['総合', ..._availableYears.map((y) => y.toString())];
+    if (_availableYears.isEmpty && !_isLoading) {
+      periods = ['総合', DateTime.now().year.toString()];
+    } else if (_isLoading && _availableYears.isEmpty) {
+      return const SizedBox(height: 48); // 読み込み中は高さを確保
     }
-
-    final List<String> periods = ['総合', ..._availableYears.map((y) => y.toString())];
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
@@ -239,44 +222,22 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
   }
 
   Widget _buildBody() {
-    return _isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : (_analysisData == null || _analysisData!.yearlySummaries.isEmpty)
-        ? LayoutBuilder(
-      builder: (context, constraints) {
-        return RefreshIndicator(
-          onRefresh: () => _loadAnalyticsData(isInitialLoad: true),
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: ConstrainedBox(
-              constraints:
-              BoxConstraints(minHeight: constraints.maxHeight),
-              child: const Center(
-                child: Text(
-                  '表示できるデータがありません。\n馬券を登録してください。',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.black54),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    )
-        : _buildTabView();
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_tabController == null) {
+      return const Center(child: Text('表示設定を読み込んでいます...'));
+    }
+    return _buildTabView();
   }
 
   Widget _buildTabView() {
-    if (_tabController == null) {
-      return const Center(child: Text('表示するカードがありません。'));
-    }
-
     return TabBarView(
       controller: _tabController,
       children: _visibleCards.map<Widget>((key) {
         final pageContent = _buildPageContent(key);
         return RefreshIndicator(
-          onRefresh: () => _loadAnalyticsData(isInitialLoad: _selectedPeriod == '総合'),
+          onRefresh: () => _loadAnalyticsData(isInitialLoad: false),
           child: ListView(
             key: PageStorageKey<String>(key),
             physics: const AlwaysScrollableScrollPhysics(),
@@ -292,7 +253,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
     switch (key) {
       case 'yearly_summary':
         final bool isOverallMode = _selectedPeriod == '総合';
-        final yearlySummaries = _analysisData!.yearlySummaries.values.toList()
+        final yearlySummaries = _analysisData.yearlySummaries.values.toList()
           ..sort((a, b) => a.year.compareTo(b.year));
 
         return Card(
@@ -304,10 +265,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
                   ? _buildOverallContent(yearlySummaries)
                   : _buildYearlyContent(),
 
-              if (_analysisData!.topPayout != null)
+              if (_analysisData.topPayout != null)
                 const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
 
-              if (_analysisData!.topPayout != null)
+              if (_analysisData.topPayout != null)
                 _buildTopPayoutContent(),
             ],
           ),
@@ -315,32 +276,32 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
       case 'grade_summary':
         return CategorySummaryCard(
           title: 'グレード別 収支',
-          summaries: _analysisData!.gradeSummaries,
+          summaries: _analysisData.gradeSummaries,
         );
       case 'venue_summary':
         return CategorySummaryCard(
           title: '競馬場別 収支',
-          summaries: _analysisData!.venueSummaries,
+          summaries: _analysisData.venueSummaries,
         );
       case 'distance_summary':
         return CategorySummaryCard(
           title: '距離別 収支',
-          summaries: _analysisData!.distanceSummaries,
+          summaries: _analysisData.distanceSummaries,
         );
       case 'track_summary':
         return CategorySummaryCard(
           title: '馬場状態別 収支',
-          summaries: _analysisData!.trackSummaries,
+          summaries: _analysisData.trackSummaries,
         );
       case 'ticket_type_summary':
         return CategorySummaryCard(
           title: '式別 収支',
-          summaries: _analysisData!.ticketTypeSummaries,
+          summaries: _analysisData.ticketTypeSummaries,
         );
       case 'purchase_method_summary':
         return CategorySummaryCard(
           title: '方式別 収支',
-          summaries: _analysisData!.purchaseMethodSummaries,
+          summaries: _analysisData.purchaseMethodSummaries,
         );
       default:
         return const SizedBox.shrink();
@@ -350,9 +311,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
   Widget _buildOverallContent(List<YearlySummary> summaries) {
     final currencyFormatter = NumberFormat.decimalPattern('ja');
     if (summaries.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Center(child: Text('データがありません。')),
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+            child: Text('表示できるデータがありません。',
+                style: TextStyle(color: Colors.grey[600]))),
       );
     }
 
@@ -500,9 +463,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
   }
 
   Widget _buildYearlyContent() {
-    final selectedYearSummary = _analysisData!.yearlySummaries[int.parse(_selectedPeriod)];
+    final selectedYear = int.tryParse(_selectedPeriod);
+    if (selectedYear == null) return const SizedBox.shrink();
+
+    final selectedYearSummary = _analysisData.yearlySummaries[selectedYear];
     if (selectedYearSummary == null) {
-      return const SizedBox.shrink();
+      return YearlySummaryCard(
+        yearlySummary: YearlySummary(year: selectedYear),
+      );
     }
     return YearlySummaryCard(
       yearlySummary: selectedYearSummary,
@@ -524,7 +492,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
             child: Column(
               children: [
                 Text(
-                  '${NumberFormat.decimalPattern('ja').format(_analysisData!.topPayout!.payout)}円',
+                  '${NumberFormat.decimalPattern('ja').format(_analysisData.topPayout!.payout)}円',
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -533,12 +501,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _analysisData!.topPayout!.raceName,
+                  _analysisData.topPayout!.raceName,
                   style: const TextStyle(fontSize: 14, color: Colors.black54),
                   textAlign: TextAlign.center,
                 ),
                 Text(
-                  _analysisData!.topPayout!.raceDate,
+                  _analysisData.topPayout!.raceDate,
                   style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ],

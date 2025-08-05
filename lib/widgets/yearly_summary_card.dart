@@ -136,11 +136,13 @@ class YearlySummaryCard extends StatelessWidget {
   }
 
   double _getChartMaxY() {
+    if (yearlySummary.monthlyData.every((d) => d.profit == 0)) return 1000;
     final maxProfit = yearlySummary.monthlyData.map((d) => d.profit).reduce((a, b) => a > b ? a : b);
     return maxProfit > 0 ? maxProfit * 1.2 : 1000;
   }
 
   double _getChartMinY() {
+    if (yearlySummary.monthlyData.every((d) => d.profit == 0)) return 0;
     final minProfit = yearlySummary.monthlyData.map((d) => d.profit).reduce((a, b) => a < b ? a : b);
     return minProfit < 0 ? minProfit * 1.2 : 0;
   }

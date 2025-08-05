@@ -1,4 +1,5 @@
 // lib/models/analytics_data_model.dart
+import 'dart:convert';
 
 // 月ごとの詳細な購入履歴1件分のデータ
 class MonthlyPurchaseDetail {
@@ -15,6 +16,24 @@ class MonthlyPurchaseDetail {
   });
 
   int get profit => payout - investment;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'month': month,
+      'raceName': raceName,
+      'investment': investment,
+      'payout': payout,
+    };
+  }
+
+  factory MonthlyPurchaseDetail.fromMap(Map<String, dynamic> map) {
+    return MonthlyPurchaseDetail(
+      month: map['month'] as int,
+      raceName: map['raceName'] as String,
+      investment: map['investment'] as int,
+      payout: map['payout'] as int,
+    );
+  }
 }
 
 class CategorySummary {
@@ -35,6 +54,26 @@ class CategorySummary {
   int get profit => payout - investment;
   double get recoveryRate => investment == 0 ? 0.0 : (payout / investment) * 100;
   double get hitRate => betCount == 0 ? 0.0 : (hitCount / betCount) * 100;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'investment': investment,
+      'payout': payout,
+      'hitCount': hitCount,
+      'betCount': betCount,
+    };
+  }
+
+  factory CategorySummary.fromMap(Map<String, dynamic> map) {
+    return CategorySummary(
+      name: map['name'] as String,
+      investment: map['investment'] as int? ?? 0,
+      payout: map['payout'] as int? ?? 0,
+      hitCount: map['hitCount'] as int? ?? 0,
+      betCount: map['betCount'] as int? ?? 0,
+    );
+  }
 }
 
 class MonthlyDataPoint {
@@ -45,6 +84,22 @@ class MonthlyDataPoint {
   MonthlyDataPoint({required this.month, this.investment = 0, this.payout = 0});
 
   int get profit => payout - investment;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'month': month,
+      'investment': investment,
+      'payout': payout,
+    };
+  }
+
+  factory MonthlyDataPoint.fromMap(Map<String, dynamic> map) {
+    return MonthlyDataPoint(
+      month: map['month'] as int,
+      investment: map['investment'] as int,
+      payout: map['payout'] as int,
+    );
+  }
 }
 
 class YearlySummary {
@@ -63,6 +118,33 @@ class YearlySummary {
   int get totalProfit => totalPayout - totalInvestment;
   double get totalRecoveryRate => totalInvestment == 0 ? 0.0 : (totalPayout / totalInvestment) * 100;
   double get totalHitRate => totalBetCount == 0 ? 0.0 : (totalHitCount / totalBetCount) * 100;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'year': year,
+      'monthlyData': monthlyData.map((x) => x.toMap()).toList(),
+      'monthlyPurchaseDetails': monthlyPurchaseDetails.map((x) => x.toMap()).toList(),
+      'totalInvestment': totalInvestment,
+      'totalPayout': totalPayout,
+      'totalHitCount': totalHitCount,
+      'totalBetCount': totalBetCount,
+    };
+  }
+
+  factory YearlySummary.fromMap(Map<String, dynamic> map) {
+    final summary = YearlySummary(
+      year: map['year'] as int,
+    );
+    summary.monthlyData.clear();
+    summary.monthlyData.addAll(List<MonthlyDataPoint>.from(map['monthlyData']?.map((x) => MonthlyDataPoint.fromMap(x))));
+    summary.monthlyPurchaseDetails.clear();
+    summary.monthlyPurchaseDetails.addAll(List<MonthlyPurchaseDetail>.from(map['monthlyPurchaseDetails']?.map((x) => MonthlyPurchaseDetail.fromMap(x))));
+    summary.totalInvestment = map['totalInvestment'] as int;
+    summary.totalPayout = map['totalPayout'] as int;
+    summary.totalHitCount = map['totalHitCount'] as int;
+    summary.totalBetCount = map['totalBetCount'] as int;
+    return summary;
+  }
 }
 
 class TopPayoutInfo {
@@ -75,6 +157,22 @@ class TopPayoutInfo {
     required this.raceName,
     required this.raceDate,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'payout': payout,
+      'raceName': raceName,
+      'raceDate': raceDate,
+    };
+  }
+
+  factory TopPayoutInfo.fromMap(Map<String, dynamic> map) {
+    return TopPayoutInfo(
+      payout: map['payout'] as int,
+      raceName: map['raceName'] as String,
+      raceDate: map['raceDate'] as String,
+    );
+  }
 }
 
 class AnalyticsData {
@@ -97,4 +195,47 @@ class AnalyticsData {
     required this.purchaseMethodSummaries,
     this.topPayout,
   });
+
+  factory AnalyticsData.empty() {
+    return AnalyticsData(
+      yearlySummaries: {},
+      gradeSummaries: [],
+      venueSummaries: [],
+      distanceSummaries: [],
+      trackSummaries: [],
+      ticketTypeSummaries: [],
+      purchaseMethodSummaries: [],
+      topPayout: null,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'yearlySummaries': yearlySummaries.map((key, value) => MapEntry(key.toString(), value.toMap())),
+      'gradeSummaries': gradeSummaries.map((x) => x.toMap()).toList(),
+      'venueSummaries': venueSummaries.map((x) => x.toMap()).toList(),
+      'distanceSummaries': distanceSummaries.map((x) => x.toMap()).toList(),
+      'trackSummaries': trackSummaries.map((x) => x.toMap()).toList(),
+      'ticketTypeSummaries': ticketTypeSummaries.map((x) => x.toMap()).toList(),
+      'purchaseMethodSummaries': purchaseMethodSummaries.map((x) => x.toMap()).toList(),
+      'topPayout': topPayout?.toMap(),
+    };
+  }
+
+  factory AnalyticsData.fromMap(Map<String, dynamic> map) {
+    return AnalyticsData(
+      yearlySummaries: Map<int, YearlySummary>.from(map['yearlySummaries'].map((key, value) => MapEntry(int.parse(key), YearlySummary.fromMap(value)))),
+      gradeSummaries: List<CategorySummary>.from(map['gradeSummaries']?.map((x) => CategorySummary.fromMap(x))),
+      venueSummaries: List<CategorySummary>.from(map['venueSummaries']?.map((x) => CategorySummary.fromMap(x))),
+      distanceSummaries: List<CategorySummary>.from(map['distanceSummaries']?.map((x) => CategorySummary.fromMap(x))),
+      trackSummaries: List<CategorySummary>.from(map['trackSummaries']?.map((x) => CategorySummary.fromMap(x))),
+      ticketTypeSummaries: List<CategorySummary>.from(map['ticketTypeSummaries']?.map((x) => CategorySummary.fromMap(x))),
+      purchaseMethodSummaries: List<CategorySummary>.from(map['purchaseMethodSummaries']?.map((x) => CategorySummary.fromMap(x))),
+      topPayout: map['topPayout'] != null ? TopPayoutInfo.fromMap(map['topPayout']) : null,
+    );
+  }
+
+  String toJson() => json.encode(toMap());
+
+  factory AnalyticsData.fromJson(String source) => AnalyticsData.fromMap(json.decode(source));
 }
