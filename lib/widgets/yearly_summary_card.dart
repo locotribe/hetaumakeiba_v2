@@ -21,7 +21,6 @@ class YearlySummaryCard extends StatelessWidget {
   });
 
   void _showMonthlyDetails(BuildContext context, int month) {
-    // --- ▼▼▼ Step 4 で変更 ▼▼▼ ---
     // 該当月の購入履歴リストをフィルタリングして渡す
     final detailsForMonth = yearlySummary.monthlyPurchaseDetails
         .where((detail) => detail.month == month)
@@ -32,7 +31,7 @@ class YearlySummaryCard extends StatelessWidget {
         return MonthlyDetailsPopup(
           year: selectedYear,
           month: month,
-          purchaseDetails: detailsForMonth, // Step 4 で変更
+          purchaseDetails: detailsForMonth,
         );
       },
     );
@@ -42,24 +41,20 @@ class YearlySummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final currencyFormatter = NumberFormat.decimalPattern('ja');
 
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildYearSelector(),
-            const SizedBox(height: 24),
-            SizedBox(
-              height: 200,
-              child: _buildBarChart(context),
-            ),
-            const SizedBox(height: 24),
-            _buildSummaryTable(currencyFormatter),
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildYearSelector(),
+          const SizedBox(height: 24),
+          SizedBox(
+            height: 200,
+            child: _buildBarChart(context),
+          ),
+          const SizedBox(height: 24),
+          _buildSummaryTable(currencyFormatter),
+        ],
       ),
     );
   }

@@ -5,10 +5,10 @@ import 'package:hetaumakeiba_v2/logic/analytics_logic.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/settings_page.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/widgets/top_payout_card.dart';
 import 'package:hetaumakeiba_v2/widgets/yearly_summary_card.dart';
 import 'package:hetaumakeiba_v2/widgets/category_summary_card.dart';
 import 'package:hetaumakeiba_v2/widgets/dashboard_settings_sheet.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AnalyticsPage extends StatefulWidget {
@@ -18,13 +18,14 @@ class AnalyticsPage extends StatefulWidget {
   State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
-class _AnalyticsPageState extends State<AnalyticsPage> {
+class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   AnalyticsData? _analysisData;
   int? _selectedYear;
   List<int> _availableYears = [];
 
   List<String> _visibleCards = [];
+  TabController? _tabController;
 
   final AnalyticsLogic _logic = AnalyticsLogic();
 
@@ -32,6 +33,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   void initState() {
     super.initState();
     _loadInitialSettingsAndData();
+  }
+
+  @override
+  void dispose() {
+    _tabController?.dispose();
+    super.dispose();
+  }
+
+  void _setupTabController() {
+    _tabController?.dispose();
+    _tabController = TabController(length: _visibleCards.length, vsync: this);
   }
 
   Future<void> _loadInitialSettingsAndData() async {
@@ -42,15 +54,27 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Future<void> _loadDashboardSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final savedCards = prefs.getStringList('dashboard_visible_cards');
+
+    // 表示設定に 'yearly_summary' がない場合、強制的に追加する
+    // これにより、'top_payout' の設定が消えても表示が維持される
+    final initialCards = availableCards.keys.toList();
     if (savedCards == null) {
-      setState(() {
-        _visibleCards = availableCards.keys.toList();
-      });
+      _visibleCards = initialCards;
     } else {
-      setState(() {
-        _visibleCards = savedCards;
-      });
+      // 'top_payout' が保存されていても、UI上は 'yearly_summary' に統合されているため、
+      // 'yearly_summary' がリストに含まれていることを保証する
+      final tempVisible = savedCards.toSet();
+      if (savedCards.contains('top_payout')) {
+        tempVisible.add('yearly_summary');
+      }
+      // 'top_payout' はタブとして表示しないので、リストからは除外する
+      tempVisible.remove('top_payout');
+
+      // 元の順序を維持しつつ、表示するカードを確定する
+      _visibleCards = initialCards.where((card) => tempVisible.contains(card)).toList();
     }
+
+    setState(() {});
   }
 
   Future<void> _loadAnalyticsData() async {
@@ -68,6 +92,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         _selectedYear = _availableYears.first;
       }
       _isLoading = false;
+      if (_visibleCards.isNotEmpty) {
+        _setupTabController();
+      }
     });
   }
 
@@ -89,6 +116,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             onSettingsChanged: (newSettings) {
               setState(() {
                 _visibleCards = newSettings;
+                if (_visibleCards.isNotEmpty) {
+                  _setupTabController();
+                }
               });
             },
           ),
@@ -99,6 +129,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // データがない、またはロード中の場合はタブを表示しない
+    final bool showTabs = !_isLoading && _analysisData != null && _analysisData!.yearlySummaries.isNotEmpty && _tabController != null;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('収支分析'),
@@ -122,6 +155,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             },
           ),
         ],
+        bottom: showTabs
+            ? TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabs: _visibleCards.map((key) {
+            final title = availableCards[key] ?? '不明';
+            return Tab(text: title);
+          }).toList(),
+        )
+            : null,
       ),
       body: Stack(
         children: [
@@ -139,13 +182,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Widget _buildBody() {
-    // RefreshIndicatorを最上位に配置し、常にスワイプ可能にする
     return RefreshIndicator(
       onRefresh: _loadAnalyticsData,
       child: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : (_analysisData == null || _selectedYear == null || _analysisData!.yearlySummaries.isEmpty)
-      // データがない場合もスクロール可能にするためのウィジェット構成
           ? LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -163,69 +204,125 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           );
         },
       )
-      // データがある場合は、これまで通りListViewを表示
-          : _buildDataView(),
+          : _buildTabView(),
     );
   }
 
-  // データがある場合の表示部分を別ウィジェットに分離
-  Widget _buildDataView() {
+  Widget _buildTabView() {
+    if (_tabController == null) {
+      return const Center(child: Text('表示するカードがありません。'));
+    }
+
     final selectedYearSummary = _analysisData!.yearlySummaries[_selectedYear!];
 
-    // _visibleCardsリストの順序に従って、表示するウィジェットのリストを直接構築する
-    final List<Widget> cardsToShow = _visibleCards.map((key) {
-      switch (key) {
-        case 'yearly_summary':
-          return selectedYearSummary != null
-              ? YearlySummaryCard(
-            yearlySummary: selectedYearSummary,
-            availableYears: _availableYears,
-            selectedYear: _selectedYear!,
-            onYearChanged: _onYearChanged,
-          )
-              : const SizedBox.shrink();
-        case 'top_payout':
-          return _analysisData!.topPayout != null
-              ? TopPayoutCard(topPayout: _analysisData!.topPayout!)
-              : const SizedBox.shrink();
-        case 'grade_summary':
-          return CategorySummaryCard(
-            title: 'グレード別 収支',
-            summaries: _analysisData!.gradeSummaries,
-          );
-        case 'venue_summary':
-          return CategorySummaryCard(
-            title: '競馬場別 収支',
-            summaries: _analysisData!.venueSummaries,
-          );
-        case 'distance_summary':
-          return CategorySummaryCard(
-            title: '距離別 収支',
-            summaries: _analysisData!.distanceSummaries,
-          );
-        case 'track_summary':
-          return CategorySummaryCard(
-            title: '馬場状態別 収-支',
-            summaries: _analysisData!.trackSummaries,
-          );
-        case 'ticket_type_summary':
-          return CategorySummaryCard(
-            title: '式別 収支',
-            summaries: _analysisData!.ticketTypeSummaries,
-          );
-        case 'purchase_method_summary':
-          return CategorySummaryCard(
-            title: '方式別 収支',
-            summaries: _analysisData!.purchaseMethodSummaries,
-          );
-        default:
-          return const SizedBox.shrink(); // 不明なキーの場合は何も表示しない
-      }
-    }).toList();
-
-    return ListView(
-      padding: const EdgeInsets.all(8.0),
-      children: cardsToShow,
+    return TabBarView(
+      controller: _tabController,
+      children: _visibleCards.map<Widget>((key) {
+        final pageContent = _buildPageContent(key, selectedYearSummary);
+        // 各ページをListViewでラップして、一貫したスクロール挙動とパディングを適用
+        return ListView(
+          padding: const EdgeInsets.all(8.0),
+          children: [pageContent],
+        );
+      }).toList(),
     );
+  }
+
+  Widget _buildPageContent(String key, YearlySummary? selectedYearSummary) {
+    switch (key) {
+      case 'yearly_summary':
+        return Card(
+          elevation: 2,
+          margin: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Column(
+            children: [
+              // Part 1: Yearly Summary content
+              if (selectedYearSummary != null)
+                YearlySummaryCard(
+                  yearlySummary: selectedYearSummary,
+                  availableYears: _availableYears,
+                  selectedYear: _selectedYear!,
+                  onYearChanged: _onYearChanged,
+                ),
+
+              // Separator
+              if (selectedYearSummary != null && _analysisData!.topPayout != null)
+                const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
+
+              // Part 2: Top Payout content
+              if (_analysisData!.topPayout != null)
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '過去最高払戻', // Title as requested
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              '${NumberFormat.decimalPattern('ja').format(_analysisData!.topPayout!.payout)}円',
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _analysisData!.topPayout!.raceName,
+                              style: const TextStyle(fontSize: 14, color: Colors.black54),
+                              textAlign: TextAlign.center,
+                            ),
+                            Text(
+                              _analysisData!.topPayout!.raceDate,
+                              style: const TextStyle(fontSize: 12, color: Colors.black54),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+      case 'grade_summary':
+        return CategorySummaryCard(
+          title: 'グレード別 収支',
+          summaries: _analysisData!.gradeSummaries,
+        );
+      case 'venue_summary':
+        return CategorySummaryCard(
+          title: '競馬場別 収支',
+          summaries: _analysisData!.venueSummaries,
+        );
+      case 'distance_summary':
+        return CategorySummaryCard(
+          title: '距離別 収支',
+          summaries: _analysisData!.distanceSummaries,
+        );
+      case 'track_summary':
+        return CategorySummaryCard(
+          title: '馬場状態別 収支',
+          summaries: _analysisData!.trackSummaries,
+        );
+      case 'ticket_type_summary':
+        return CategorySummaryCard(
+          title: '式別 収支',
+          summaries: _analysisData!.ticketTypeSummaries,
+        );
+      case 'purchase_method_summary':
+        return CategorySummaryCard(
+          title: '方式別 収支',
+          summaries: _analysisData!.purchaseMethodSummaries,
+        );
+      default:
+        return const SizedBox.shrink();
+    }
   }
 }
