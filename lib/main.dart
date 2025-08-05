@@ -1,9 +1,8 @@
 // lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
-import 'package:hetaumakeiba_v2/main_scaffold.dart'; // HomePageの代わりにMainScaffoldをインポート
+import 'package:hetaumakeiba_v2/main_scaffold.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

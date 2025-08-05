@@ -135,6 +135,19 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     }
   }
 
+  String _getDayOfWeek(FeaturedRace race) {
+    try {
+      final dateTime = _parseDateStringAsDateTime(race.raceDate);
+      // DateTime.weekdayは月曜日が1、日曜日が7を返す
+      // リストのインデックス（0から6）に合わせるため、1を引く
+      const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
+      return weekdays[dateTime.weekday - 1];
+    } catch (e) {
+      print('Day of week parsing error: ${race.raceDate}, Error: $e');
+      return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -212,8 +225,10 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
           ),
         ),
         ..._weeklyGradedRaces.map((race) {
+          final dayOfWeek = _getDayOfWeek(race);
           return FeaturedRaceListItem(
             race: race,
+            dayOfWeek: '($dayOfWeek)',
             onTap: () {
               Navigator.push(
                 context,
@@ -323,6 +338,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         final race = racesForMonth[index];
         return FeaturedRaceListItem(
           race: race,
+          // ★ dayOfWeekパラメータを渡さないように修正
           onTap: () async {
             final today = DateTime.now();
             final raceDate = _parseDateStringAsDateTime(race.raceDate);

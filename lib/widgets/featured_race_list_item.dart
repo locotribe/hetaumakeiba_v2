@@ -33,11 +33,13 @@ DateTime _parseDateStringAsDateTime(String dateText) {
 
 class FeaturedRaceListItem extends StatelessWidget {
   final FeaturedRace race;
+  final String? dayOfWeek; // ★ requiredを外し、String? に変更
   final VoidCallback onTap;
 
   const FeaturedRaceListItem({
     super.key,
     required this.race,
+    this.dayOfWeek, // ★ requiredを外す
     required this.onTap,
   });
 
@@ -111,23 +113,41 @@ class FeaturedRaceListItem extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // 左側: グレードアイコン
-            Container(
-              width: 40,
-              height: 25,
-              decoration: BoxDecoration(
-                color: gradeColor,
-               // shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  race.raceGrade,
-                  style: TextStyle(
-                    color: _getGradeTextColor(race.raceGrade),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+            SizedBox(
+              width: 48,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 25,
+                    decoration: BoxDecoration(
+                      color: gradeColor,
+                    ),
+                    child: Center(
+                      child: Text(
+                        race.raceGrade,
+                        style: TextStyle(
+                          color: _getGradeTextColor(race.raceGrade),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  // ★ dayOfWeekが渡された時だけ表示するように修正
+                  if (dayOfWeek != null && dayOfWeek!.isNotEmpty) ...[
+                    const SizedBox(height: 4.0),
+                    Text(
+                      dayOfWeek!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             const SizedBox(width: 16.0),
