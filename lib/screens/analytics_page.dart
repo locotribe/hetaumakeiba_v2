@@ -292,12 +292,14 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     }
 
     // 全期間の合計を計算
-    final overallTotal = summaries.fold<Map<String, int>>(
-      {'investment': 0, 'payout': 0, 'profit': 0},
+    final overallTotal = summaries.fold<Map<String, num>>(
+      {'investment': 0, 'payout': 0, 'profit': 0, 'hitCount': 0, 'betCount': 0},
           (prev, s) => {
         'investment': prev['investment']! + s.totalInvestment,
         'payout': prev['payout']! + s.totalPayout,
         'profit': prev['profit']! + s.totalProfit,
+        'hitCount': prev['hitCount']! + s.totalHitCount,
+        'betCount': prev['betCount']! + s.totalBetCount,
       },
     );
 
@@ -391,7 +393,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     );
   }
 
-  Widget _buildOverallSummaryTable(List<YearlySummary> summaries, NumberFormat formatter, Map<String, int> overallTotal) {
+  Widget _buildOverallSummaryTable(List<YearlySummary> summaries, NumberFormat formatter, Map<String, num> overallTotal) {
     final rows = summaries.map((s) {
       final profitColor = s.totalProfit > 0 ? Colors.blue.shade700 : (s.totalProfit < 0 ? Colors.red.shade700 : Colors.black87);
       return DataRow(cells: [
@@ -400,6 +402,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
         DataCell(Text(formatter.format(s.totalPayout))),
         DataCell(Text(formatter.format(s.totalProfit), style: TextStyle(color: profitColor))),
         DataCell(Text('${s.totalRecoveryRate.toStringAsFixed(1)}%')),
+        DataCell(Text('${s.totalHitRate.toStringAsFixed(1)}%')),
       ]);
     }).toList();
 
@@ -407,6 +410,9 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     final totalProfit = overallTotal['profit']!;
     final totalRecoveryRate = overallTotal['investment']! == 0 ? 0.0 : (overallTotal['payout']! / overallTotal['investment']!) * 100;
     final totalProfitColor = totalProfit > 0 ? Colors.blue.shade700 : (totalProfit < 0 ? Colors.red.shade700 : Colors.black87);
+    final totalHitCount = overallTotal['hitCount']!;
+    final totalBetCount = overallTotal['betCount']!;
+    final totalHitRate = totalBetCount == 0 ? 0.0 : (totalHitCount / totalBetCount) * 100;
 
     rows.add(DataRow(
         cells: [
@@ -415,6 +421,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
           DataCell(Text(formatter.format(overallTotal['payout']), style: const TextStyle(fontWeight: FontWeight.bold))),
           DataCell(Text(formatter.format(totalProfit), style: TextStyle(color: totalProfitColor, fontWeight: FontWeight.bold))),
           DataCell(Text('${totalRecoveryRate.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.bold))),
+          DataCell(Text('${totalHitRate.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.bold))),
         ]
     ));
 
@@ -428,6 +435,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
           DataColumn(label: Text('払戻額'), numeric: true),
           DataColumn(label: Text('収支'), numeric: true),
           DataColumn(label: Text('回収率'), numeric: true),
+          DataColumn(label: Text('的中率'), numeric: true),
         ],
         rows: rows,
       ),
