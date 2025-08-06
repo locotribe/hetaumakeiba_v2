@@ -128,25 +128,24 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('収支分析'),
+        title: const Text('　集計'),
         titleSpacing: 0,
         backgroundColor: const Color.fromRGBO(172, 234, 231, 1.0),
         foregroundColor: Colors.black87,
         elevation: 0,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () {
+              Scaffold.of(context).openDrawer();
+            },
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.tune),
             tooltip: '表示設定',
             onPressed: _showDashboardSettings,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'アプリ設定',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const SettingsPage()),
-              );
-            },
           ),
         ],
         bottom: _tabController == null
@@ -167,6 +166,37 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
               }).toList(),
             ),
           ),
+        ),
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+              ),
+              child: const Text(
+                'メニュー',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('全データ削除'),
+              onTap: () {
+                // Close the drawer before navigating
+                Navigator.of(context).pop();
+                // Navigate to SettingsPage
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const SettingsPage()),
+                );
+              },
+            ),
+          ],
         ),
       ),
       body: Stack(

@@ -54,22 +54,50 @@ class _MainScaffoldState extends State<MainScaffold> {
           ? null
           : AppBar(
         title: Text(_pageTitles[_selectedIndex]),
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
             onPressed: () {
-              Navigator.of(context)
-                  .push(
-                MaterialPageRoute(
-                    builder: (context) => const SettingsPage()),
-              )
-                  .then((_) {
-                _savedListKey.currentState?.reloadData();
-              });
+              Scaffold.of(context).openDrawer();
             },
           ),
-        ],
+        ),
+        actions: [],
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+              ),
+              child: const Text(
+                'メニュー',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('全データ削除'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context)
+                    .push(
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsPage(),
+                  ),
+                )
+                    .then((_) {
+                  _savedListKey.currentState?.reloadData();
+                });
+              },
+            ),
+          ],
+        ),
       ),
       body: IndexedStack(
         index: _selectedIndex,
@@ -86,12 +114,12 @@ class _MainScaffoldState extends State<MainScaffold> {
         onTap: _onItemTapped,
       ),
       floatingActionButton: AnimatedSlide(
-        duration: Duration(milliseconds: _selectedIndex == 0 ? 250 : 500), // ホームに戻るとき250ms、離れるとき500ms
+        duration: Duration(milliseconds: _selectedIndex == 0 ? 250 : 500),
         curve: Curves.easeOut,
-        offset: _selectedIndex == 0 ? Offset.zero : const Offset(2, 0), // 右にスライド
+        offset: _selectedIndex == 0 ? Offset.zero : const Offset(2, 0),
         child: AnimatedOpacity(
           opacity: _selectedIndex == 0 ? 1.0 : 0.0,
-          duration: Duration(milliseconds: _selectedIndex == 0 ? 250 : 500), // 透明度も同じ時間設定
+          duration: Duration(milliseconds: _selectedIndex == 0 ? 250 : 500),
           curve: Curves.easeInOut,
           child: ExpandableFab(
             distance: 92.0,
