@@ -1,3 +1,4 @@
+// main_scaffold.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/screens/home_page.dart';
@@ -20,6 +21,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   int _selectedIndex = 0;
   final GlobalKey<SavedTicketsListPageState> _savedListKey =
   GlobalKey<SavedTicketsListPageState>();
+  final GlobalKey<AnalyticsPageState> _analyticsPageKey = GlobalKey<AnalyticsPageState>();
 
   late final List<Widget> _pages;
   static const List<String> _pageTitles = ['ホーム', '重賞', '購入履歴', '集計'];
@@ -31,7 +33,7 @@ class _MainScaffoldState extends State<MainScaffold> {
       const HomePage(),
       const JyusyoIchiranPage(),
       SavedTicketsListPage(key: _savedListKey),
-      const AnalyticsPage(),
+      AnalyticsPage(key: _analyticsPageKey),
     ];
   }
 
@@ -47,12 +49,9 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isAnalyticsPageSelected = _selectedIndex == 3;
 
     return Scaffold(
-      appBar: isAnalyticsPageSelected
-          ? null
-          : AppBar(
+      appBar: AppBar(
         title: Text(_pageTitles[_selectedIndex]),
         leading: Builder(
           builder: (context) => IconButton(
@@ -62,7 +61,17 @@ class _MainScaffoldState extends State<MainScaffold> {
             },
           ),
         ),
-        actions: [],
+        actions: _selectedIndex == 3
+            ? [
+          IconButton(
+            icon: const Icon(Icons.tune),
+            tooltip: '表示設定',
+            onPressed: () {
+              _analyticsPageKey.currentState?.showDashboardSettings();
+            },
+          ),
+        ]
+            : [],
       ),
       drawer: Drawer(
         child: ListView(

@@ -3,7 +3,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analytics_logic.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
-import 'package:hetaumakeiba_v2/screens/settings_page.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/yearly_summary_card.dart';
 import 'package:hetaumakeiba_v2/widgets/category_summary_card.dart';
@@ -15,10 +14,10 @@ class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
 
   @override
-  State<AnalyticsPage> createState() => _AnalyticsPageState();
+  State<AnalyticsPage> createState() => AnalyticsPageState();
 }
 
-class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMixin {
+class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMixin {
   bool _isLoading = true;
   AnalyticsData _analysisData = AnalyticsData.empty();
   List<int> _availableYears = [];
@@ -103,7 +102,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
     _loadAnalyticsData(isInitialLoad: false);
   }
 
-  void _showDashboardSettings() {
+  void showDashboardSettings() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -127,78 +126,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('　集計'),
-        titleSpacing: 0,
-        backgroundColor: const Color.fromRGBO(172, 234, 231, 1.0),
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {
-              Scaffold.of(context).openDrawer();
-            },
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.tune),
-            tooltip: '表示設定',
-            onPressed: _showDashboardSettings,
-          ),
-        ],
-        bottom: _tabController == null
-            ? null
-            : PreferredSize(
-          preferredSize: const Size.fromHeight(kTextTabBarHeight),
-          child: Container(
-            color: const Color(0xFF1A4314),
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              indicatorColor: Colors.blue.shade100,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white60,
-              tabs: _visibleCards.map((key) {
-                final title = availableCards[key] ?? '不明';
-                return Tab(text: title);
-              }).toList(),
-            ),
-          ),
-        ),
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-              ),
-              child: const Text(
-                'メニュー',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('全データ削除'),
-              onTap: () {
-                // Close the drawer before navigating
-                Navigator.of(context).pop();
-                // Navigate to SettingsPage
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const SettingsPage()),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
       body: Stack(
         children: [
           const Positioned.fill(
@@ -210,6 +137,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateM
           ),
           Column(
             children: [
+              if (_tabController != null)
+                Container(
+                  color: const Color(0xFF1A4314),
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    indicatorColor: Colors.blue.shade100,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.white60,
+                    tabs: _visibleCards.map((key) {
+                      final title = availableCards[key] ?? '不明';
+                      return Tab(text: title);
+                    }).toList(),
+                  ),
+                ),
               _buildPeriodFilter(),
               Expanded(child: _buildBody()),
             ],
