@@ -85,31 +85,40 @@ class _MainScaffoldState extends State<MainScaffold> {
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
       ),
-      floatingActionButton: ExpandableFab(
-        distance: 92.0,
-        children: [
-          ActionButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => QRScannerPage(savedListKey: _savedListKey),
-                ),
-              );
-            },
-            icon: const Icon(Icons.camera_alt),
+      floatingActionButton: AnimatedSlide(
+        duration: Duration(milliseconds: _selectedIndex == 0 ? 250 : 500), // ホームに戻るとき250ms、離れるとき500ms
+        curve: Curves.easeOut,
+        offset: _selectedIndex == 0 ? Offset.zero : const Offset(2, 0), // 右にスライド
+        child: AnimatedOpacity(
+          opacity: _selectedIndex == 0 ? 1.0 : 0.0,
+          duration: Duration(milliseconds: _selectedIndex == 0 ? 250 : 500), // 透明度も同じ時間設定
+          curve: Curves.easeInOut,
+          child: ExpandableFab(
+            distance: 92.0,
+            children: [
+              ActionButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => QRScannerPage(savedListKey: _savedListKey),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.camera_alt),
+              ),
+              ActionButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => GalleryQrScannerPage(savedListKey: _savedListKey),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.image),
+              ),
+            ],
           ),
-          ActionButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      GalleryQrScannerPage(savedListKey: _savedListKey),
-                ),
-              );
-            },
-            icon: const Icon(Icons.image),
-          ),
-        ],
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
