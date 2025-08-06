@@ -7,6 +7,7 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/analytics_summary_model.dart';
+import 'package:hetaumakeiba_v2/models/feed_model.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -32,7 +33,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4, // ★バージョンを3から4に更新
+      version: 5, // ★バージョンを3から4に更新
       onCreate: (db, version) async {
         // QRコードデータテーブルの作成
         await db.execute('''
@@ -112,6 +113,16 @@ class DatabaseHelper {
             UNIQUE(raceId, horseId) ON CONFLICT REPLACE
           )
         ''');
+        // user_feeds テーブルの作成
+        await db.execute('''
+          CREATE TABLE user_feeds(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            url TEXT NOT NULL,
+            type TEXT NOT NULL,
+            display_order INTEGER NOT NULL
+          )
+        ''');
         // analytics_summaries テーブルの作成
         await db.execute('''
           CREATE TABLE analytics_summaries(
@@ -167,6 +178,17 @@ class DatabaseHelper {
               cacheKey TEXT PRIMARY KEY,
               summaryJson TEXT NOT NULL,
               lastCalculated TEXT NOT NULL
+            )
+          ''');
+        }
+        if (oldVersion < 5) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS user_feeds(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              title TEXT NOT NULL,
+              url TEXT NOT NULL,
+              type TEXT NOT NULL,
+              display_order INTEGER NOT NULL
             )
           ''');
         }
@@ -399,6 +421,54 @@ class DatabaseHelper {
     );
   }
 
+  // UserFeed 関連のメソッド
+  Future<int> insertFeed(Feed feed) async {
+    final db = await database;
+    return await db.insert('user_feeds', feed.toMap());
+  }
+
+  Future<List<Feed>> getAllFeeds() async {
+    final db = await database;
+    final maps = await db.query('user_feeds', orderBy: 'display_order ASC');
+    return List.generate(maps.length, (i) {
+      return Feed.fromMap(maps[i]);
+    });
+  }
+
+  Future<int> updateFeed(Feed feed) async {
+    final db = await database;
+    return await db.update(
+      'user_feeds',
+      feed.toMap(),
+      where: 'id = ?',
+      whereArgs: [feed.id],
+    );
+  }
+
+  Future<int> deleteFeed(int id) async {
+    final db = await database;
+    return await db.delete(
+      'user_feeds',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> updateFeedOrder(List<Feed> feeds) async {
+    final db = await database;
+    final batch = db.batch();
+    for (int i = 0; i < feeds.length; i++) {
+      final feed = feeds[i];
+      batch.update(
+        'user_feeds',
+        {'display_order': i},
+        where: 'id = ?',
+        whereArgs: [feed.id],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   // AnalyticsSummary (キャッシュ) 関連のメソッド
   Future<void> insertOrUpdateSummary(AnalyticsSummary summary) async {
     final db = await database;
@@ -466,6 +536,7 @@ class DatabaseHelper {
     await db.delete('user_marks'); // ★追加
     await db.delete('analytics_summaries');
     await db.delete('category_summary_cache');
+    await db.delete('user_feeds');
     print('DEBUG: All data deleted from qr_data, race_results, horse_performance, featured_races, user_marks, analytics_summaries, and category_summary_cache tables.');
   }
 }

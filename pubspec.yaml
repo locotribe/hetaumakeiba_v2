@@ -29,6 +29,7 @@ dependencies:
   html: ^0.15.4
   url_launcher: ^6.3.0
   charset_converter: ^2.1.1
+  rss_dart: ^1.0.0
 
   # Chart/Graph
   fl_chart: ^0.68.0

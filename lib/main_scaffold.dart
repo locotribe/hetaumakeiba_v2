@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/settings_page.dart';
 import 'package:hetaumakeiba_v2/screens/jyusyoichiran_page.dart';
+import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
 
 
 class MainScaffold extends StatefulWidget {
@@ -88,6 +89,18 @@ class _MainScaffoldState extends State<MainScaffold> {
                   fontSize: 24,
                 ),
               ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home_work_outlined),
+              title: const Text('ホームページ設定'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const HomeSettingsPage(),
+                  ),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.settings),
