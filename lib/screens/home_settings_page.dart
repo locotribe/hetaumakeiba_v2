@@ -42,6 +42,11 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
     final urlController = TextEditingController(text: existingFeed?.url);
     String selectedType = existingFeed?.type ?? 'news'; // デフォルトは 'news'
 
+    // ★★★ 修正箇所：URLがYouTubeのRSS形式の場合、チャンネルIDのみを編集欄に表示する ★★★
+    if (selectedType == 'youtube' && urlController.text.contains('channel_id=')) {
+      urlController.text = Uri.parse(urlController.text).queryParameters['channel_id'] ?? urlController.text;
+    }
+
     final result = await showDialog<Feed?>(
       context: context,
       builder: (context) {
@@ -49,33 +54,23 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
           title: Text(existingFeed == null ? '新しいフィードを追加' : 'フィードを編集'),
           content: Form(
             key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: titleController,
-                    decoration: const InputDecoration(labelText: 'タイトル'),
-                    validator: (value) =>
-                    value == null || value.isEmpty ? 'タイトルを入力してください' : null,
-                  ),
-                  TextFormField(
-                    controller: urlController,
-                    decoration: const InputDecoration(labelText: 'RSSフィードのURL'),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'URLを入力してください';
-                      }
-                      final uri = Uri.tryParse(value);
-                      if (uri == null || !uri.isAbsolute) {
-                        return '有効なURLを入力してください';
-                      }
-                      return null;
-                    },
-                  ),
-                  StatefulBuilder(
-                    builder: (BuildContext context, StateSetter setState) {
-                      return DropdownButtonFormField<String>(
+            // ★★★ 修正箇所：StatefulBuilderでフォーム全体を囲み、UIを動的に変更 ★★★
+            child: StatefulBuilder(
+              builder: (BuildContext context, StateSetter setState) {
+                final String urlLabel = selectedType == 'youtube' ? 'YouTubeチャンネルID' : 'RSSフィードのURL';
+                final String urlHint = selectedType == 'youtube' ? '例: UCxxxxxxxxxxxx' : '例: https://...';
+
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: titleController,
+                        decoration: const InputDecoration(labelText: 'タイトル'),
+                        validator: (value) =>
+                        value == null || value.isEmpty ? 'タイトルを入力してください' : null,
+                      ),
+                      DropdownButtonFormField<String>(
                         value: selectedType,
                         decoration: const InputDecoration(labelText: '種類'),
                         items: const [
@@ -87,11 +82,31 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
                             setState(() => selectedType = value);
                           }
                         },
-                      );
-                    },
+                      ),
+                      TextFormField(
+                        controller: urlController,
+                        decoration: InputDecoration(
+                          labelText: urlLabel,
+                          hintText: urlHint,
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return selectedType == 'youtube' ? 'チャンネルIDを入力してください' : 'URLを入力してください';
+                          }
+                          // ニュースの場合はURL形式をチェック
+                          if (selectedType == 'news') {
+                            final uri = Uri.tryParse(value);
+                            if (uri == null || !uri.isAbsolute) {
+                              return '有効なURLを入力してください';
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ),
           actions: [
@@ -102,10 +117,16 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
             TextButton(
               onPressed: () {
                 if (formKey.currentState!.validate()) {
+                  // ★★★ 修正箇所：保存時にURLを自動生成するロジックを追加 ★★★
+                  String finalUrl = urlController.text.trim();
+                  if (selectedType == 'youtube' && !finalUrl.contains('youtube.com')) {
+                    finalUrl = 'https://www.youtube.com/feeds/videos.xml?channel_id=$finalUrl';
+                  }
+
                   final newFeed = Feed(
                     id: existingFeed?.id,
                     title: titleController.text,
-                    url: urlController.text,
+                    url: finalUrl, // 加工したURLを保存
                     type: selectedType,
                     displayOrder: existingFeed?.displayOrder ?? _feeds.length,
                   );
