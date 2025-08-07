@@ -63,6 +63,32 @@ class _FeedCardState extends State<FeedCard> {
     }
   }
 
+  // ★★★ 修正箇所：サムネイルURLを取得するためのヘルパー関数 ★★★
+  String? _getThumbnailUrl(dynamic item) {
+    // 1. YouTubeフィードの場合、動画URLからサムネイルURLを直接生成
+    if (widget.feed.type == 'youtube') {
+      String? videoUrl;
+      if (item is RssItem) videoUrl = item.link;
+      if (item is AtomItem) videoUrl = item.links.isNotEmpty ? item.links.first.href : null;
+
+      if (videoUrl != null) {
+        final uri = Uri.tryParse(videoUrl);
+        if (uri != null && uri.queryParameters.containsKey('v')) {
+          final videoId = uri.queryParameters['v'];
+          // 高画質のデフォルトサムネイルを返す
+          return 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+        }
+      }
+    }
+
+    // 2. YouTube以外、または上記で失敗した場合、RSS/Atomのメディア情報から探す
+    if (item.media?.thumbnails != null && item.media!.thumbnails.isNotEmpty) {
+      return item.media!.thumbnails.first.url;
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -117,6 +143,7 @@ class _FeedCardState extends State<FeedCard> {
                   String title = 'タイトルなし';
                   String? link;
                   DateTime? pubDate;
+                  final String? thumbnailUrl = _getThumbnailUrl(item);
 
                   if (item is RssItem) {
                     title = item.title ?? 'タイトルなし';
@@ -133,6 +160,27 @@ class _FeedCardState extends State<FeedCard> {
                   }
 
                   return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    leading: thumbnailUrl != null
+                        ? SizedBox(
+                      width: 120, // 16:9に近い比率
+                      height: 67.5,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8.0),
+                        child: Image.network(
+                          thumbnailUrl,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const Center(child: CircularProgressIndicator(strokeWidth: 2.0));
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(Icons.image_not_supported, color: Colors.grey);
+                          },
+                        ),
+                      ),
+                    )
+                        : null,
                     title: Text(
                       title,
                       maxLines: 2,
