@@ -1,4 +1,5 @@
 // lib/services/scraper_service.dart
+
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
@@ -9,6 +10,7 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
@@ -555,6 +557,8 @@ class ScraperService {
             print('-----------------------------------------');
 
             await dbHelper.insertOrUpdateRaceResult(raceResult);
+            // ★★★ 修正箇所：新しい集計サービスを呼び出すトリガーを追加 ★★★
+            await AnalyticsService().updateAggregatesOnResultConfirmed(raceResult.raceId);
             print('結果をDBに保存しました: ${race.raceName}');
             await Future.delayed(const Duration(milliseconds: 500));
           }

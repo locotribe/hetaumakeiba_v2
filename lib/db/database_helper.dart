@@ -1,4 +1,5 @@
 // lib/db/database_helper.dart
+
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
@@ -6,7 +7,6 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
-import 'package:hetaumakeiba_v2/models/analytics_summary_model.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 
 class DatabaseHelper {
@@ -33,7 +33,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5, // ★バージョンを3から4に更新
+      version: 6,
       onCreate: (db, version) async {
         // QRコードデータテーブルの作成
         await db.execute('''
@@ -99,10 +99,10 @@ class DatabaseHelper {
             weight TEXT,
             race_details_1 TEXT,
             race_details_2 TEXT,
-            shutubaHorsesJson TEXT  -- ★追加
+            shutubaHorsesJson TEXT
           )
         ''');
-        // ★追加：user_marks データテーブルの作成
+        // user_marks データテーブルの作成
         await db.execute('''
           CREATE TABLE user_marks(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,32 +123,20 @@ class DatabaseHelper {
             display_order INTEGER NOT NULL
           )
         ''');
-        // analytics_summaries テーブルの作成
+        // analytics_aggregates テーブルの作成
         await db.execute('''
-          CREATE TABLE analytics_summaries(
-            period TEXT PRIMARY KEY,
-            totalInvestment INTEGER,
-            totalPayout INTEGER,
-            hitCount INTEGER,
-            betCount INTEGER,
-            lastCalculated TEXT
-          )
-        ''');
-        // category_summary_cache テーブルの作成
-        await db.execute('''
-          CREATE TABLE category_summary_cache(
-            cacheKey TEXT PRIMARY KEY,
-            summaryJson TEXT NOT NULL,
-            lastCalculated TEXT NOT NULL
+          CREATE TABLE analytics_aggregates(
+            aggregate_key TEXT PRIMARY KEY,
+            total_investment INTEGER NOT NULL DEFAULT 0,
+            total_payout INTEGER NOT NULL DEFAULT 0,
+            hit_count INTEGER NOT NULL DEFAULT 0,
+            bet_count INTEGER NOT NULL DEFAULT 0
           )
         ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        // ★onUpgrade メソッドを追加/修正
         if (oldVersion < 2) {
-          // featured_races テーブルに shutubaHorsesJson カラムを追加
           await db.execute('ALTER TABLE featured_races ADD COLUMN shutubaHorsesJson TEXT');
-          // user_marks テーブルを作成
           await db.execute('''
             CREATE TABLE IF NOT EXISTS user_marks(
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,8 +149,9 @@ class DatabaseHelper {
           ''');
         }
         if (oldVersion < 3) {
+          // This table is now obsolete, but we leave the creation for users upgrading from < 3 to avoid errors. It will be dropped at version 6.
           await db.execute('''
-            CREATE TABLE analytics_summaries(
+            CREATE TABLE IF NOT EXISTS analytics_summaries(
               period TEXT PRIMARY KEY,
               totalInvestment INTEGER,
               totalPayout INTEGER,
@@ -173,8 +162,9 @@ class DatabaseHelper {
           ''');
         }
         if (oldVersion < 4) {
+          // This table is also obsolete.
           await db.execute('''
-            CREATE TABLE category_summary_cache(
+            CREATE TABLE IF NOT EXISTS category_summary_cache(
               cacheKey TEXT PRIMARY KEY,
               summaryJson TEXT NOT NULL,
               lastCalculated TEXT NOT NULL
@@ -189,6 +179,19 @@ class DatabaseHelper {
               url TEXT NOT NULL,
               type TEXT NOT NULL,
               display_order INTEGER NOT NULL
+            )
+          ''');
+        }
+        if (oldVersion < 6) {
+          await db.execute('DROP TABLE IF EXISTS analytics_summaries');
+          await db.execute('DROP TABLE IF EXISTS category_summary_cache');
+          await db.execute('''
+            CREATE TABLE analytics_aggregates(
+              aggregate_key TEXT PRIMARY KEY,
+              total_investment INTEGER NOT NULL DEFAULT 0,
+              total_payout INTEGER NOT NULL DEFAULT 0,
+              hit_count INTEGER NOT NULL DEFAULT 0,
+              bet_count INTEGER NOT NULL DEFAULT 0
             )
           ''');
         }
@@ -277,8 +280,6 @@ class DatabaseHelper {
 
   // HorsePerformanceデータ関連のメソッド
 
-  /// 競走馬の単一の競走成績をデータベースに挿入または更新します。
-  /// horse_idとdateが重複する場合は既存のレコードを上書きします。
   Future<int> insertOrUpdateHorsePerformance(HorseRaceRecord record) async {
     final db = await database;
     print('--- [DB Save] Horse Performance ---'); //
@@ -286,32 +287,30 @@ class DatabaseHelper {
     return await db.insert(
       'horse_performance',
       record.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace, // 重複した場合は更新
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  /// 特定の競走馬の全ての競走成績を取得します。
   Future<List<HorseRaceRecord>> getHorsePerformanceRecords(String horseId) async {
     final db = await database;
     final maps = await db.query(
       'horse_performance',
       where: 'horse_id = ?',
       whereArgs: [horseId],
-      orderBy: 'date DESC', // 日付の新しい順にソート
+      orderBy: 'date DESC',
     );
     return List.generate(maps.length, (i) {
       return HorseRaceRecord.fromMap(maps[i]);
     });
   }
 
-  /// 特定の競走馬の最新の競走成績を1件取得します。
   Future<HorseRaceRecord?> getLatestHorsePerformanceRecord(String horseId) async {
     final db = await database;
     final maps = await db.query(
       'horse_performance',
       where: 'horse_id = ?',
       whereArgs: [horseId],
-      orderBy: 'date DESC', // 日付の新しい順にソート
+      orderBy: 'date DESC',
       limit: 1,
     );
     if (maps.isNotEmpty) {
@@ -320,7 +319,6 @@ class DatabaseHelper {
     return null;
   }
 
-  /// 特定の競走馬の全ての競走成績を削除します。
   Future<int> deleteHorsePerformance(String horseId) async {
     final db = await database;
     return await db.delete(
@@ -332,8 +330,6 @@ class DatabaseHelper {
 
   // FeaturedRaceデータ関連のメソッド
 
-  /// 注目レースの単一のレコードをデータベースに挿入または更新します。
-  /// race_idが重複する場合は既存のレコードを上書きします。
   Future<int> insertOrUpdateFeaturedRace(FeaturedRace featuredRace) async {
     final db = await database;
     print('--- DBに保存するFeaturedRaceデータ ---');
@@ -342,20 +338,18 @@ class DatabaseHelper {
     return await db.insert(
       'featured_races',
       featuredRace.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace, // 重複した場合は更新
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  /// データベースに保存されている全ての注目レースを取得します。
   Future<List<FeaturedRace>> getAllFeaturedRaces() async {
     final db = await database;
-    final maps = await db.query('featured_races', orderBy: 'last_scraped DESC'); // 最新のスクレイピング日時でソート
+    final maps = await db.query('featured_races', orderBy: 'last_scraped DESC');
     return List.generate(maps.length, (i) {
       return FeaturedRace.fromMap(maps[i]);
     });
   }
 
-  /// 特定の注目レースをraceIdで取得します。
   Future<FeaturedRace?> getFeaturedRace(String raceId) async {
     final db = await database;
     final maps = await db.query(
@@ -370,13 +364,12 @@ class DatabaseHelper {
     return null;
   }
 
-  /// 全ての注目レースデータを削除します。
   Future<int> deleteAllFeaturedRaces() async {
     final db = await database;
     return await db.delete('featured_races');
   }
 
-  // ★追加：UserMark 関連のメソッド
+  // UserMark 関連のメソッド
   Future<int> insertOrUpdateUserMark(UserMark mark) async {
     final db = await database;
     return await db.insert(
@@ -469,62 +462,9 @@ class DatabaseHelper {
     await batch.commit(noResult: true);
   }
 
-  // AnalyticsSummary (キャッシュ) 関連のメソッド
-  Future<void> insertOrUpdateSummary(AnalyticsSummary summary) async {
-    final db = await database;
-    await db.insert(
-      'analytics_summaries',
-      summary.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<AnalyticsSummary?> getSummary(String period) async {
-    final db = await database;
-    final maps = await db.query(
-      'analytics_summaries',
-      where: 'period = ?',
-      whereArgs: [period],
-      limit: 1,
-    );
-    if (maps.isNotEmpty) {
-      return AnalyticsSummary.fromMap(maps.first);
-    }
-    return null;
-  }
-
-  Future<void> deleteSummary(String period) async {
-    final db = await database;
-    await db.delete(
-      'analytics_summaries',
-      where: 'period = ?',
-      whereArgs: [period],
-    );
-  }
-
-  // CategorySummaryCache 関連のメソッド
-  Future<void> insertOrUpdateCategorySummaryCache(CategorySummaryCache cache) async {
-    final db = await database;
-    await db.insert(
-      'category_summary_cache',
-      cache.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<CategorySummaryCache?> getCategorySummaryCache(String cacheKey) async {
-    final db = await database;
-    final maps = await db.query(
-      'category_summary_cache',
-      where: 'cacheKey = ?',
-      whereArgs: [cacheKey],
-      limit: 1,
-    );
-    if (maps.isNotEmpty) {
-      return CategorySummaryCache.fromMap(maps.first);
-    }
-    return null;
-  }
+  // ★★★ 修正箇所：古いキャッシュ関連メソッドを全て削除 ★★★
+  // AnalyticsSummary (キャッシュ) 関連のメソッドは不要になったため削除
+  // CategorySummaryCache 関連のメソッドは不要になったため削除
 
   /// 全てのデータを削除します。
   Future<void> deleteAllData() async {
@@ -533,10 +473,79 @@ class DatabaseHelper {
     await db.delete('race_results');
     await db.delete('horse_performance');
     await db.delete('featured_races');
-    await db.delete('user_marks'); // ★追加
-    await db.delete('analytics_summaries');
-    await db.delete('category_summary_cache');
+    await db.delete('user_marks');
     await db.delete('user_feeds');
-    print('DEBUG: All data deleted from qr_data, race_results, horse_performance, featured_races, user_marks, analytics_summaries, and category_summary_cache tables.');
+    await db.delete('analytics_aggregates');
+    print('DEBUG: All data deleted from all tables.');
+  }
+
+  // --- Analytics Aggregates (New Methods) ---
+
+  Future<void> updateAggregates(Map<String, Map<String, int>> updates) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final key in updates.keys) {
+        final current = await txn.query(
+          'analytics_aggregates',
+          where: 'aggregate_key = ?',
+          whereArgs: [key],
+        );
+
+        final Map<String, dynamic> updateValues = updates[key]!;
+        if (current.isEmpty) {
+          // Insert new record
+          await txn.insert('analytics_aggregates', {
+            'aggregate_key': key,
+            'total_investment': updateValues['investment_delta'] ?? 0,
+            'total_payout': updateValues['payout_delta'] ?? 0,
+            'hit_count': updateValues['hit_delta'] ?? 0,
+            'bet_count': updateValues['bet_delta'] ?? 0,
+          });
+        } else {
+          // Update existing record
+          await txn.update(
+            'analytics_aggregates',
+            {
+              'total_investment': (current.first['total_investment'] as int) + (updateValues['investment_delta'] ?? 0),
+              'total_payout': (current.first['total_payout'] as int) + (updateValues['payout_delta'] ?? 0),
+              'hit_count': (current.first['hit_count'] as int) + (updateValues['hit_delta'] ?? 0),
+              'bet_count': (current.first['bet_count'] as int) + (updateValues['bet_delta'] ?? 0),
+            },
+            where: 'aggregate_key = ?',
+            whereArgs: [key],
+          );
+        }
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getYearlySummaries() async {
+    final db = await database;
+    return await db.query(
+      'analytics_aggregates',
+      where: "aggregate_key LIKE 'total_%' AND aggregate_key NOT LIKE 'total_%-%'",
+      orderBy: 'aggregate_key ASC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getMonthlyDataForYear(int year) async {
+    final db = await database;
+    return await db.query(
+      'analytics_aggregates',
+      where: "aggregate_key LIKE ?",
+      whereArgs: ['total_$year-%'],
+      orderBy: 'aggregate_key ASC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getCategorySummaries(String prefix, {int? year}) async {
+    final db = await database;
+    final whereClause = year != null ? "aggregate_key LIKE ?" : "aggregate_key LIKE ?";
+    final whereArgs = year != null ? ['${prefix}_%_$year'] : ['${prefix}_%'];
+    return await db.query(
+      'analytics_aggregates',
+      where: whereClause,
+      whereArgs: whereArgs,
+    );
   }
 }

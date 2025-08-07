@@ -7,6 +7,7 @@ import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
+import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
@@ -29,40 +30,8 @@ class TicketProcessingService {
         );
         await _dbHelper.insertQrData(qrDataToSave);
 
-        // キャッシュ無効化ロジック
-        final now = DateTime.now();
-        final currentYear = now.year;
-        final currentMonth = now.month;
-
-        final url = generateNetkeibaUrl(
-          year: parsedData['年'].toString(),
-          racecourseCode: racecourseDict.entries
-              .firstWhere((entry) => entry.value == parsedData['開催場'])
-              .key,
-          round: parsedData['回'].toString(),
-          day: parsedData['日'].toString(),
-          race: parsedData['レース'].toString(),
-        );
-        final raceId = ScraperService.getRaceIdFromUrl(url);
-
-        if (raceId != null) {
-          final raceResult = await _dbHelper.getRaceResult(raceId);
-          if (raceResult != null) {
-            try {
-              final dateParts = raceResult.raceDate.split(RegExp(r'[年月日]'));
-              final year = int.parse(dateParts[0]);
-              final month = int.parse(dateParts[1]);
-
-              if (year < currentYear || (year == currentYear && month < currentMonth)) {
-                final period = "$year-${month.toString().padLeft(2, '0')}";
-                await _dbHelper.deleteSummary(period);
-                print('DEBUG: Cache invalidated for period $period due to new ticket addition.');
-              }
-            } catch (e) {
-              print('Error during cache invalidation logic: $e');
-            }
-          }
-        }
+        // ★★★ 修正箇所：古いキャッシュ無効化ロジックを削除 ★★★
+        // このブロックは不要になるため削除されました。
 
         savedListKey.currentState?.reloadData();
       } else {
@@ -137,6 +106,9 @@ class TicketProcessingService {
           );
           await ScraperService.syncNewHorseData([featuredRacePlaceholder], dbHelper);
         }
+
+        // ★★★ 修正箇所：新しい集計サービスを呼び出すトリガーを追加 ★★★
+        await AnalyticsService().updateAggregatesOnResultConfirmed(raceId);
       }
     } catch (e) {
       print('ERROR: バックグラウンドスクレイピング処理全体でエラーが発生しました: $e');

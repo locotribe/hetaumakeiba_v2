@@ -1,4 +1,5 @@
 // lib/screens/race_result_page.dart
+
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
@@ -92,6 +94,9 @@ class _RaceResultPageState extends State<RaceResultPage> {
           'https://db.netkeiba.com/race/$raceId'
       );
       await _dbHelper.insertOrUpdateRaceResult(newRaceResult);
+
+      // ★★★ 修正箇所：新しい集計サービスを呼び出すトリガーを追加 ★★★
+      await AnalyticsService().updateAggregatesOnResultConfirmed(newRaceResult.raceId);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

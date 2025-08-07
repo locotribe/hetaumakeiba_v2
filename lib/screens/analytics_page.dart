@@ -1,8 +1,14 @@
 // lib/screens/analytics_page.dart
+
+import 'dart:convert';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/logic/analytics_logic.dart';
+import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
+import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/yearly_summary_card.dart';
 import 'package:hetaumakeiba_v2/widgets/category_summary_card.dart';
@@ -26,7 +32,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
   List<String> _visibleCards = [];
   TabController? _tabController;
 
-  final AnalyticsLogic _logic = AnalyticsLogic();
+  final DatabaseHelper _dbHelper = DatabaseHelper();
 
   @override
   void initState() {
@@ -48,7 +54,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
   Future<void> _loadInitialSettingsAndData() async {
     await _loadDashboardSettings();
     _setupTabController();
-    await _loadAnalyticsData(isInitialLoad: true);
+    await _loadAnalyticsData();
   }
 
   Future<void> _loadDashboardSettings() async {
@@ -68,30 +74,138 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     }
   }
 
-  Future<void> _loadAnalyticsData({bool isInitialLoad = false}) async {
+  Future<void> _loadAnalyticsData() async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
 
     final int? filterYear = (_selectedPeriod == '総合') ? null : int.tryParse(_selectedPeriod);
-    // 安全なバックグラウンド処理を呼び出すように変更
-    final data = await _logic.calculateAnalyticsDataInBackground(filterYear: filterYear);
-    if (!mounted) return;
 
-    // isInitialLoad時、または「総合」を選択した際に利用可能な年のリストを更新
-    if (isInitialLoad || _selectedPeriod == '総合') {
-      // 全期間のデータをバックグラウンドで取得して年リストを作成
-      final allData = await _logic.calculateAnalyticsDataInBackground(filterYear: null);
-      if (mounted) {
-        _availableYears = allData.yearlySummaries.keys.toList()..sort((a, b) => b.compareTo(a));
+    // --- データ取得ロジックをDBからの直接クエリに変更 ---
+
+    // 1. 利用可能な年のリストと、総合表示用の年別サマリーを取得
+    final yearlySummariesMaps = await _dbHelper.getYearlySummaries();
+    final availableYears = yearlySummariesMaps
+        .map((e) => int.parse(e['aggregate_key'].split('_').last))
+        .toList()..sort((a, b) => b.compareTo(a));
+
+    // 2. 各カテゴリのサマリーを取得
+    final gradeSummaries = await _dbHelper.getCategorySummaries('grade', year: filterYear);
+    final venueSummaries = await _dbHelper.getCategorySummaries('venue', year: filterYear);
+    final distanceSummaries = await _dbHelper.getCategorySummaries('distance', year: filterYear);
+    final trackSummaries = await _dbHelper.getCategorySummaries('track', year: filterYear);
+    final ticketTypeSummaries = await _dbHelper.getCategorySummaries('ticket_type', year: filterYear);
+    final purchaseMethodSummaries = await _dbHelper.getCategorySummaries('purchase_method', year: filterYear);
+
+    // 3. 過去最高払戻は都度計算が必要なため、別途ロジックを呼び出す
+    final topPayout = await _calculateTopPayout(filterYear: filterYear);
+
+    // 4. DBから取得したデータをUIで使うためのAnalyticsDataモデルに変換
+    final Map<int, YearlySummary> yearlySummaries = {};
+    for (var map in yearlySummariesMaps) {
+      final year = int.parse(map['aggregate_key'].split('_').last);
+      final summary = YearlySummary(year: year)
+        ..totalInvestment = map['total_investment']
+        ..totalPayout = map['total_payout']
+        ..totalHitCount = map['hit_count']
+        ..totalBetCount = map['bet_count'];
+      yearlySummaries[year] = summary;
+    }
+
+    if (filterYear != null) {
+      final monthlyDataMaps = await _dbHelper.getMonthlyDataForYear(filterYear);
+      final yearSummary = yearlySummaries.putIfAbsent(filterYear, () => YearlySummary(year: filterYear));
+
+      // monthlyPurchaseDetailsは新しい集計方法では直接取得しないため空リストとする
+      yearSummary.monthlyPurchaseDetails.clear();
+
+      for (var map in monthlyDataMaps) {
+        final month = int.parse(map['aggregate_key'].split('-').last);
+        if (month >= 1 && month <= 12) {
+          final dataPoint = yearSummary.monthlyData[month-1];
+          dataPoint.investment = map['total_investment'];
+          dataPoint.payout = map['total_payout'];
+        }
       }
     }
 
+    // 5. 最終的なデータを構築
+    final data = AnalyticsData(
+      yearlySummaries: yearlySummaries,
+      gradeSummaries: gradeSummaries.map((m) => _mapToCategorySummary(m, 'grade_')).toList(),
+      venueSummaries: venueSummaries.map((m) => _mapToCategorySummary(m, 'venue_')).toList(),
+      distanceSummaries: distanceSummaries.map((m) => _mapToCategorySummary(m, 'distance_')).toList(),
+      trackSummaries: trackSummaries.map((m) => _mapToCategorySummary(m, 'track_')).toList(),
+      ticketTypeSummaries: ticketTypeSummaries.map((m) => _mapToCategorySummary(m, 'ticket_type_')).toList(),
+      purchaseMethodSummaries: purchaseMethodSummaries.map((m) => _mapToCategorySummary(m, 'purchase_method_')).toList(),
+      topPayout: topPayout,
+    );
+
+    if (!mounted) return;
+
     setState(() {
       _analysisData = data;
+      _availableYears = availableYears;
       _isLoading = false;
     });
+  }
+
+  CategorySummary _mapToCategorySummary(Map<String, dynamic> map, String prefixToRemove) {
+    String name = map['aggregate_key'].replaceFirst(prefixToRemove, '');
+    // key might be "G1_2024" or "3連単_2024", so we remove the last underscore and year.
+    if (name.contains('_')) {
+      name = name.substring(0, name.lastIndexOf('_'));
+    }
+
+    return CategorySummary(
+      name: name,
+      investment: map['total_investment'],
+      payout: map['total_payout'],
+      hitCount: map['hit_count'],
+      betCount: map['bet_count'],
+    );
+  }
+
+  Future<TopPayoutInfo?> _calculateTopPayout({int? filterYear}) async {
+    final allQrData = await _dbHelper.getAllQrData();
+    TopPayoutInfo? topPayoutInfo;
+
+    for (final qrData in allQrData) {
+      final parsedTicket = json.decode(qrData.parsedDataJson) as Map<String, dynamic>;
+      final url = generateNetkeibaUrl(
+        year: parsedTicket['年'].toString(),
+        racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
+        round: parsedTicket['回'].toString(),
+        day: parsedTicket['日'].toString(),
+        race: parsedTicket['レース'].toString(),
+      );
+      final raceId = ScraperService.getRaceIdFromUrl(url);
+      if (raceId == null) continue;
+
+      final raceResult = await _dbHelper.getRaceResult(raceId);
+
+      if (raceResult == null || raceResult.isIncomplete) continue;
+
+      if (filterYear != null) {
+        try {
+          final year = int.parse(raceResult.raceDate.split(RegExp(r'[年月日]')).first);
+          if (year != filterYear) continue;
+        } catch(e) {
+          continue;
+        }
+      }
+
+      final hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
+      if (hitResult.isHit && (topPayoutInfo == null || hitResult.totalPayout > topPayoutInfo.payout)) {
+        topPayoutInfo = TopPayoutInfo(
+            payout: hitResult.totalPayout,
+            raceName: raceResult.raceTitle,
+            raceDate: raceResult.raceDate
+        );
+      }
+    }
+    return topPayoutInfo;
   }
 
   void _onPeriodChanged(String newPeriod) {
@@ -99,7 +213,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     setState(() {
       _selectedPeriod = newPeriod;
     });
-    _loadAnalyticsData(isInitialLoad: false);
+    _loadAnalyticsData();
   }
 
   void showDashboardSettings() {
@@ -209,7 +323,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       children: _visibleCards.map<Widget>((key) {
         final pageContent = _buildPageContent(key);
         return RefreshIndicator(
-          onRefresh: () => _loadAnalyticsData(isInitialLoad: false),
+          onRefresh: () => _loadAnalyticsData(),
           child: ListView(
             key: PageStorageKey<String>(key),
             physics: const AlwaysScrollableScrollPhysics(),
