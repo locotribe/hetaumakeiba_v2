@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:http/http.dart' as http;
 import 'package:rss_dart/dart_rss.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:html/parser.dart' as html;
 
 class FeedCard extends StatefulWidget {
   final Feed feed;
@@ -63,7 +64,7 @@ class _FeedCardState extends State<FeedCard> {
     }
   }
 
-  // ★★★ 修正箇所：サムネイルURLを取得するためのヘルパー関数 ★★★
+  // ★★★ 修正箇所：サムネイル取得ロジックを強化 ★★★
   String? _getThumbnailUrl(dynamic item) {
     // 1. YouTubeフィードの場合、動画URLからサムネイルURLを直接生成
     if (widget.feed.type == 'youtube') {
@@ -81,9 +82,28 @@ class _FeedCardState extends State<FeedCard> {
       }
     }
 
-    // 2. YouTube以外、または上記で失敗した場合、RSS/Atomのメディア情報から探す
+    // 2. RSS/Atomの標準的なメディア情報から探す
     if (item.media?.thumbnails != null && item.media!.thumbnails.isNotEmpty) {
       return item.media!.thumbnails.first.url;
+    }
+
+    // 3. 上記で見つからない場合、記事本文(description/content)のHTMLを解析して<img>タグを探す
+    String? content;
+    if (item is RssItem) {
+      content = item.description;
+    } else if (item is AtomItem) {
+      content = item.content;
+    }
+
+    if (content != null) {
+      final document = html.parseFragment(content);
+      final imgElement = document.querySelector('img');
+      if (imgElement != null) {
+        final src = imgElement.attributes['src'];
+        if (src != null && src.isNotEmpty) {
+          return src;
+        }
+      }
     }
 
     return null;
@@ -92,8 +112,6 @@ class _FeedCardState extends State<FeedCard> {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
-      elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -163,7 +181,7 @@ class _FeedCardState extends State<FeedCard> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                     leading: thumbnailUrl != null
                         ? SizedBox(
-                      width: 120, // 16:9に近い比率
+                      width: 100, // 16:9に近い比率
                       height: 67.5,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8.0),
