@@ -211,7 +211,7 @@ class ScraperService {
           continue;
         }
 
-        final shutubaRaceDetails = await _scrapeShutubaPageDetails(raceId);
+        final shutubaRaceDetails = await scrapeShutubaPageDetails(raceId);
         if (shutubaRaceDetails != null) {
           await dbHelper.insertOrUpdateFeaturedRace(shutubaRaceDetails);
           featuredRaces.add(shutubaRaceDetails);
@@ -224,7 +224,7 @@ class ScraperService {
     }
   }
 
-  static Future<FeaturedRace?> _scrapeShutubaPageDetails(String raceId) async {
+  static Future<FeaturedRace?> scrapeShutubaPageDetails(String raceId) async {
     try {
       final url = 'https://race.netkeiba.com/race/shutuba.html?race_id=$raceId';
       final response = await http.get(Uri.parse(url), headers: _headers);
@@ -519,6 +519,7 @@ class ScraperService {
           raceNumber: '',
           lastScraped: DateTime.now(),
           raceDetails1: '',
+
           raceDetails2: '',
           shutubaHorses: null,
         ));
@@ -661,8 +662,8 @@ class ScraperService {
 
         horses.add(ShutubaHorseDetail(
           horseId: horseId,
-          gateNumber: int.tryParse(_safeGetText(row.querySelector('td.Waku'))) ?? 0,
-          horseNumber: int.tryParse(_safeGetText(row.querySelector('td.Umaban'))) ?? 0,
+          gateNumber: int.tryParse(_safeGetText(row.querySelector('td[class^="Waku"]'))) ?? 0,
+          horseNumber: int.tryParse(_safeGetText(row.querySelector('td[class^="Umaban"]'))) ?? 0,
           horseName: _safeGetText(horseLink),
           sexAndAge: _safeGetText(row.querySelector('td.Barei')),
           carriedWeight: double.tryParse(_safeGetText(cells[5])) ?? 0.0,
@@ -678,25 +679,38 @@ class ScraperService {
     return horses;
   }
 
-  static Future<PredictionRaceData> scrapePredictionRaceData(FeaturedRace featuredRace) async {
+  static Future<PredictionRaceData> scrapeFullPredictionData(String raceId) async {
     try {
-      // 1. netkeibaから基本情報を取得
+      // 1. netkeibaからレースの基本情報を取得
+      final featuredRace = await scrapeShutubaPageDetails(raceId);
+      if (featuredRace == null) {
+        throw Exception('netkeibaからレースの基本情報の取得に失敗しました。');
+      }
+
+      // 2. netkeibaから出走馬のリストを取得
       final netkeibaHorses = await _scrapeNetkeibaShutubaData(featuredRace.shutubaTableUrl);
 
-      // 2. Uma-Xからオッズ・人気情報を取得
-      final umaXUrl = generateUmaXShutubaUrl(
-        raceId: featuredRace.raceId,
-        raceDate: featuredRace.raceDate,
-        venue: featuredRace.venue,
-      );
-      final response = await http.get(Uri.parse(umaXUrl), headers: _headers);
-      if (response.statusCode != 200) {
-        throw Exception('uma-x.jpの出馬表ページ取得に失敗: Status code ${response.statusCode}');
+      // 3. Uma-Xからオッズ・人気情報を取得
+      Map<String, dynamic> umaXData = {};
+      try {
+        final umaXUrl = generateUmaXShutubaUrl(
+          raceId: featuredRace.raceId,
+          raceDate: featuredRace.raceDate,
+          venue: featuredRace.venue,
+        );
+        final response = await http.get(Uri.parse(umaXUrl), headers: _headers);
+        if (response.statusCode == 200) {
+          final umaXDocument = html.parse(response.body);
+          umaXData = _scrapeUmaXShutubaData(umaXDocument);
+        } else {
+          print('警告: uma-x.jpからのデータ取得に失敗しました。オッズ・人気なしで続行します。');
+        }
+      } catch (e) {
+        print('警告: uma-x.jpの処理中にエラーが発生しました: $e');
       }
-      final umaXDocument = html.parse(response.body);
-      final umaXData = _scrapeUmaXShutubaData(umaXDocument);
 
-      // 3. データをマージ
+
+      // 4. データをマージ
       final List<PredictionHorseDetail> finalHorses = [];
       for (final netkeibaHorse in netkeibaHorses) {
         if (umaXData.containsKey(netkeibaHorse.horseId)) {
@@ -707,6 +721,7 @@ class ScraperService {
         finalHorses.add(PredictionHorseDetail.fromShutubaHorseDetail(netkeibaHorse));
       }
 
+      // 5. 完全なデータを返す
       return PredictionRaceData(
         raceId: featuredRace.raceId,
         raceName: featuredRace.raceName,
@@ -719,7 +734,7 @@ class ScraperService {
         horses: finalHorses,
       );
     } catch (e) {
-      print('[ERROR] 予想データのスクレイピング中にエラー: $e');
+      print('[ERROR] 予想データのスクレイピング中にエラーが発生しました: $e');
       rethrow;
     }
   }

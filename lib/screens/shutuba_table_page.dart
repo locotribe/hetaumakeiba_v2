@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
@@ -34,11 +35,29 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
   Future<PredictionRaceData?> _fetchPredictionData() async {
     try {
-      final race = await _dbHelper.getFeaturedRace(widget.raceId);
-      if (race == null) {
-        throw Exception('データベースからレース情報が見つかりませんでした。');
-      }
-      final predictionData = await ScraperService.scrapePredictionRaceData(race);
+      // ステップ1で修正した単一のメソッドを呼び出し、最新の出馬表データを一括で取得
+      final predictionData = await ScraperService.scrapeFullPredictionData(widget.raceId);
+
+      // 取得した最新情報でDBのキャッシュを更新し、アプリ全体でデータの一貫性を保つ
+      final featuredRaceToSave = FeaturedRace(
+        raceId: predictionData.raceId,
+        raceName: predictionData.raceName,
+        raceGrade: predictionData.raceGrade,
+        raceDate: predictionData.raceDate,
+        venue: predictionData.venue,
+        raceNumber: predictionData.raceNumber,
+        shutubaTableUrl: predictionData.shutubaTableUrl,
+        lastScraped: DateTime.now(),
+        distance: '',
+        conditions: '',
+        weight: '',
+        raceDetails1: predictionData.raceDetails1,
+        raceDetails2: '',
+        shutubaHorses: null,
+      );
+      await _dbHelper.insertOrUpdateFeaturedRace(featuredRaceToSave);
+
+      // ユーザーの印情報を取得してマージする処理はそのまま維持
       final userMarks = await _dbHelper.getAllUserMarksForRace(widget.raceId);
       final markMap = {for (var mark in userMarks) mark.horseId: mark};
 
