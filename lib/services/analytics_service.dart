@@ -39,7 +39,7 @@ class AnalyticsService {
       final hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
 
       final int investment = parsedTicket['合計金額'] as int? ?? 0;
-      final int payout = hitResult.totalPayout;
+      final int payout = hitResult.totalPayout + hitResult.totalRefund;
       final int isHit = hitResult.isHit ? 1 : 0;
       final int betCount = 1;
 
