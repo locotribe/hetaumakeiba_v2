@@ -19,6 +19,7 @@ class ScraperService {
 
   static const Map<String, String> _headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+    'x-requested-with': 'XMLHttpRequest',
   };
   /// URLからレースIDを抽出するヘルパー関数
   static String? getRaceIdFromUrl(String url) {
@@ -237,52 +238,7 @@ class ScraperService {
       final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
       final document = html.parse(decodedBody);
 
-      final raceNameBox = document.querySelector('div.RaceList_NameBox');
-      final titleText = _safeGetText(document.querySelector('head > title'));
-
-      String raceDate = '';
-      final dateMatch = RegExp(r'(\d{4}年\d{1,2}月\d{1,2}日)').firstMatch(titleText);
-      if (dateMatch != null) {
-        raceDate = dateMatch.group(1)!;
-      }
-
-      final raceName = _safeGetText(raceNameBox?.querySelector('.RaceName'));
-      final raceDetails1 = _safeGetText(raceNameBox?.querySelector('.RaceData01'));
-      final raceDetails2 = _safeGetText(raceNameBox?.querySelector('.RaceData02')).replaceAll(RegExp(r'\s+'), ' ');
-
-      String raceGrade = '';
-      final gradeElement = raceNameBox?.querySelector('.RaceName [class*="Icon_GradeType"]');
-      if (gradeElement != null) {
-        final className = gradeElement.className;
-        if (className.contains('Icon_GradeType1')) {
-          raceGrade = 'G1';
-        } else if (className.contains('Icon_GradeType2')) {
-          raceGrade = 'G2';
-        } else if (className.contains('Icon_GradeType3')) {
-          raceGrade = 'G3';
-        } else if (className.contains('Icon_GradeType4')) {
-          raceGrade = 'J.G1';
-        } else if (className.contains('Icon_GradeType19')) {
-          raceGrade = 'L';
-        }
-      }
-
-      return FeaturedRace(
-        raceId: raceId,
-        raceName: raceName,
-        raceGrade: raceGrade,
-        raceDate: raceDate,
-        venue: _safeGetText(document.querySelector('.RaceKaisaiWrap .Active a')),
-        raceNumber: _safeGetText(document.querySelector('.RaceNumWrap .Active a')).replaceAll('R', ''),
-        shutubaTableUrl: url,
-        lastScraped: DateTime.now(),
-        distance: raceDetails1.split('/')[1].split('(')[0].trim(),
-        conditions: '',
-        weight: '',
-        raceDetails1: raceDetails1,
-        raceDetails2: raceDetails2,
-        shutubaHorses: null,
-      );
+      return _parseFeaturedRaceFromDocument(document, raceId, url);
     } catch (e) {
       print('[ERROR]出馬表ページ $raceId のスクレイピング中にエラーが発生しました: $e');
       return null;
@@ -600,123 +556,85 @@ class ScraperService {
     }
   }
 
-  static Map<String, dynamic> _scrapeUmaXShutubaData(dom.Document document) {
-    final Map<String, Map<String, dynamic>> horseDataMap = {};
-    final table = document.querySelector('section.race_data > div.table-wrapper > div.table-body > table.race_data_tbl');
-    if (table == null) return {};
-
-    final rows = table.querySelectorAll('tbody > tr');
-
-    for (final row in rows) {
-      final cells = row.querySelectorAll('td');
-      if (cells.length < 4) continue;
-
-      try {
-        final horseLink = cells[0].querySelector('a');
-        if (horseLink == null) continue;
-
-        final horseId = horseLink.attributes['href']?.split('/').last ?? '';
-        if (horseId.isEmpty) continue;
-
-        final popularityText = _safeGetText(cells[2]);
-        final oddsText = _safeGetText(cells[3].querySelector('div.relative'));
-
-        final popularity = int.tryParse(popularityText);
-        final odds = double.tryParse(oddsText);
-
-        horseDataMap[horseId] = {
-          'popularity': popularity,
-          'odds': odds,
-        };
-      } catch (e) {
-        print('[ERROR] _scrapeUmaXShutubaData parsing error: $e');
-        continue;
-      }
-    }
-    return horseDataMap;
-  }
-
-  static Future<List<ShutubaHorseDetail>> _scrapeNetkeibaShutubaData(String url) async {
-    final List<ShutubaHorseDetail> horses = [];
+  static Future<Map<String, Map<String, num>>> _fetchAndParseNetkeibaOddsHtml(String raceId) async {
     try {
-      final response = await http.get(Uri.parse(url), headers: _headers);
-      if (response.statusCode != 200) {
-        throw Exception('netkeiba出馬表の取得に失敗: Status code ${response.statusCode}');
-      }
-      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
-      final document = html.parse(decodedBody);
+      final uri = Uri.https(
+        'race.netkeiba.com',
+        '/odds/odds_get_form.html',
+        {
+          'race_id': raceId,
+          'type': '1', // 単勝・人気を取得
+          'housiki': '',
+        },
+      );
 
-      final rows = document.querySelectorAll('table.Shutuba_Table tr.HorseList');
-      for (final row in rows) {
+      final requestHeaders = Map<String, String>.from(_headers);
+      requestHeaders['Referer'] = 'https://race.netkeiba.com/race/shutuba.html?race_id=$raceId';
+
+      final res = await http.get(uri, headers: requestHeaders);
+
+      if (res.statusCode != 200) {
+        print('警告: オッズHTMLスニペットの取得に失敗 (Code: ${res.statusCode})');
+        return {'odds': {}, 'popularity': {}};
+      }
+
+      final document = html.parse(res.body);
+      final Map<String, num> oddsMap = {};
+      final Map<String, num> popMap = {};
+
+      final rows = document.querySelectorAll('#odds_view_result table tr');
+      for (var row in rows.skip(1)) { // ヘッダー行を除外
         final cells = row.querySelectorAll('td');
-        if (cells.length < 9) continue;
+        if (cells.length < 3) continue;
 
-        final horseInfoCell = row.querySelector('td.HorseInfo');
-        final horseLink = horseInfoCell?.querySelector('a');
-        final horseId = horseLink?.attributes['href']?.split('/').lastWhere((p) => p.isNotEmpty, orElse: () => '') ?? '';
+        final umaban = cells[0].text.trim();
+        final odds = cells[1].text.trim();
+        final pop = cells[2].text.trim();
 
-        if (horseId.isEmpty) continue;
-
-        final isScratched = _safeGetText(row.querySelector('td.Cancel_Txt')).isNotEmpty;
-
-
-        horses.add(ShutubaHorseDetail(
-          horseId: horseId,
-          gateNumber: int.tryParse(_safeGetText(row.querySelector('td[class^="Waku"]'))) ?? 0,
-          horseNumber: int.tryParse(_safeGetText(row.querySelector('td[class^="Umaban"]'))) ?? 0,
-          horseName: _safeGetText(horseLink),
-          sexAndAge: _safeGetText(row.querySelector('td.Barei')),
-          carriedWeight: double.tryParse(_safeGetText(cells[5])) ?? 0.0,
-          jockey: _safeGetText(row.querySelector('td.Jockey a')),
-          trainer: _safeGetText(row.querySelector('td.Trainer a')),
-          horseWeight: _safeGetText(row.querySelector('td.Weight')),
-          isScratched: isScratched,
-        ));
+        if (umaban.isNotEmpty && odds.isNotEmpty) {
+          oddsMap[umaban] = num.tryParse(odds) ?? 0;
+        }
+        if (umaban.isNotEmpty && pop.isNotEmpty) {
+          popMap[umaban] = num.tryParse(pop) ?? 0;
+        }
       }
+      return {'odds': oddsMap, 'popularity': popMap};
     } catch (e) {
-      print('[ERROR] netkeiba出馬表のスクレイピング中にエラー: $e');
+      print('[ERROR] netkeibaオッズHTMLの処理中にエラーが発生しました: $e');
+      return {'odds': {}, 'popularity': {}};
     }
-    return horses;
   }
 
   static Future<PredictionRaceData> scrapeFullPredictionData(String raceId) async {
     try {
-      // 1. netkeibaからレースの基本情報を取得
-      final featuredRace = await scrapeShutubaPageDetails(raceId);
-      if (featuredRace == null) {
-        throw Exception('netkeibaからレースの基本情報の取得に失敗しました。');
+      // 1. netkeibaからHTMLを一度だけ取得
+      final shutubaUrl = 'https://race.netkeiba.com/race/shutuba.html?race_id=$raceId';
+      final shutubaResponse = await http.get(Uri.parse(shutubaUrl), headers: _headers);
+      if (shutubaResponse.statusCode != 200) {
+        throw Exception('netkeiba出馬表ページの取得に失敗しました。');
       }
 
-      // 2. netkeibaから出走馬のリストを取得
-      final netkeibaHorses = await _scrapeNetkeibaShutubaData(featuredRace.shutubaTableUrl);
+      final decodedBody = await CharsetConverter.decode('EUC-JP', shutubaResponse.bodyBytes);
+      final document = html.parse(decodedBody);
 
-      // 3. Uma-Xからオッズ・人気情報を取得
-      Map<String, dynamic> umaXData = {};
-      try {
-        final umaXUrl = generateUmaXShutubaUrl(
-          raceId: featuredRace.raceId,
-          raceDate: featuredRace.raceDate,
-          venue: featuredRace.venue,
-        );
-        final response = await http.get(Uri.parse(umaXUrl), headers: _headers);
-        if (response.statusCode == 200) {
-          final umaXDocument = html.parse(response.body);
-          umaXData = _scrapeUmaXShutubaData(umaXDocument);
-        } else {
-          print('警告: uma-x.jpからのデータ取得に失敗しました。オッズ・人気なしで続行します。');
-        }
-      } catch (e) {
-        print('警告: uma-x.jpの処理中にエラーが発生しました: $e');
-      }
+      // 2. 取得したHTMLから基本情報と出走馬リストを解析
+      final featuredRace = _parseFeaturedRaceFromDocument(document, raceId, shutubaUrl);
+      final netkeibaHorses = _parseShutubaHorsesFromDocument(document);
 
+      // 3. 別のHTMLスニペットAPIからオッズ・人気情報を取得
+      final oddsData = await _fetchAndParseNetkeibaOddsHtml(raceId);
+      final oddsMap = oddsData['odds'] ?? {};
+      final popularityMap = oddsData['popularity'] ?? {};
 
       // 4. データをマージ
       final List<PredictionHorseDetail> finalHorses = [];
       for (final netkeibaHorse in netkeibaHorses) {
-        if (umaXData.containsKey(netkeibaHorse.horseId)) {
-          final oddsPopularity = umaXData[netkeibaHorse.horseId]!;
-          netkeibaHorse.odds = oddsPopularity['odds'];
-          netkeibaHorse.popularity = oddsPopularity['popularity'];
+        final horseNumberStr = netkeibaHorse.horseNumber.toString();
+        if (oddsMap.containsKey(horseNumberStr)) {
+          netkeibaHorse.odds = oddsMap[horseNumberStr]?.toDouble();
+        }
+        if (popularityMap.containsKey(horseNumberStr)) {
+          netkeibaHorse.popularity = popularityMap[horseNumberStr]?.toInt();
         }
         finalHorses.add(PredictionHorseDetail.fromShutubaHorseDetail(netkeibaHorse));
       }
@@ -737,5 +655,79 @@ class ScraperService {
       print('[ERROR] 予想データのスクレイピング中にエラーが発生しました: $e');
       rethrow;
     }
+  }
+
+  static FeaturedRace _parseFeaturedRaceFromDocument(dom.Document document, String raceId, String url) {
+    final raceNameBox = document.querySelector('div.RaceList_NameBox');
+    final titleText = _safeGetText(document.querySelector('head > title'));
+
+    String raceDate = '';
+    final dateMatch = RegExp(r'(\d{4}年\d{1,2}月\d{1,2}日)').firstMatch(titleText);
+    if (dateMatch != null) {
+      raceDate = dateMatch.group(1)!;
+    }
+
+    final raceName = _safeGetText(raceNameBox?.querySelector('.RaceName'));
+    final raceDetails1 = _safeGetText(raceNameBox?.querySelector('.RaceData01'));
+    final raceDetails2 = _safeGetText(raceNameBox?.querySelector('.RaceData02')).replaceAll(RegExp(r'\s+'), ' ');
+
+    String raceGrade = '';
+    final gradeElement = raceNameBox?.querySelector('.RaceName [class*="Icon_GradeType"]');
+    if (gradeElement != null) {
+      final className = gradeElement.className;
+      if (className.contains('Icon_GradeType1')) raceGrade = 'G1';
+      else if (className.contains('Icon_GradeType2')) raceGrade = 'G2';
+      else if (className.contains('Icon_GradeType3')) raceGrade = 'G3';
+      else if (className.contains('Icon_GradeType4')) raceGrade = 'J.G1';
+      else if (className.contains('Icon_GradeType19')) raceGrade = 'L';
+    }
+
+    return FeaturedRace(
+      raceId: raceId,
+      raceName: raceName,
+      raceGrade: raceGrade,
+      raceDate: raceDate,
+      venue: _safeGetText(document.querySelector('.RaceKaisaiWrap .Active a')),
+      raceNumber: _safeGetText(document.querySelector('.RaceNumWrap .Active a')).replaceAll('R', ''),
+      shutubaTableUrl: url,
+      lastScraped: DateTime.now(),
+      distance: '', // 詳細情報はraceDetails1から取得するため、個別フィールドは空でよい
+      conditions: '',
+      weight: '',
+      raceDetails1: raceDetails1,
+      raceDetails2: raceDetails2,
+      shutubaHorses: null,
+    );
+  }
+
+  static List<ShutubaHorseDetail> _parseShutubaHorsesFromDocument(dom.Document document) {
+    final List<ShutubaHorseDetail> horses = [];
+    final rows = document.querySelectorAll('table.Shutuba_Table tr.HorseList');
+    for (final row in rows) {
+      final cells = row.querySelectorAll('td');
+      if (cells.length < 9) continue;
+
+      final horseInfoCell = row.querySelector('td.HorseInfo');
+      final horseLink = horseInfoCell?.querySelector('a');
+      final horseId = horseLink?.attributes['href']?.split('/').lastWhere((p) => p.isNotEmpty, orElse: () => '') ?? '';
+
+      if (horseId.isEmpty) continue;
+
+      final isScratched = _safeGetText(row.querySelector('td.Cancel_Txt')).isNotEmpty;
+
+      horses.add(ShutubaHorseDetail(
+        horseId: horseId,
+        gateNumber: int.tryParse(_safeGetText(row.querySelector('td[class^="Waku"]'))) ?? 0,
+        horseNumber: int.tryParse(_safeGetText(row.querySelector('td[class^="Umaban"]'))) ?? 0,
+        horseName: _safeGetText(horseLink),
+        sexAndAge: _safeGetText(row.querySelector('td.Barei')),
+        carriedWeight: double.tryParse(_safeGetText(cells[5])) ?? 0.0,
+        jockey: _safeGetText(row.querySelector('td.Jockey a')),
+        trainer: _safeGetText(row.querySelector('td.Trainer a')),
+        horseWeight: _safeGetText(row.querySelector('td.Weight')),
+        isScratched: isScratched,
+      ));
+    }
+    return horses;
   }
 }

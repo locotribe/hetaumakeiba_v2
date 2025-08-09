@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
@@ -29,66 +28,70 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
   Future<void> _loadShutubaData() async {
     setState(() {
-      _predictionRaceDataFuture = _fetchPredictionData();
+      _predictionRaceDataFuture = ScraperService.scrapeFullPredictionData(widget.raceId);
     });
   }
 
-  Future<PredictionRaceData?> _fetchPredictionData() async {
-    try {
-      // ステップ1で修正した単一のメソッドを呼び出し、最新の出馬表データを一括で取得
-      final predictionData = await ScraperService.scrapeFullPredictionData(widget.raceId);
+  /// 過去レースの詳細情報をポップアップで表示するメソッド
+  void _showPastRaceDetailsPopup(BuildContext context, HorseRaceRecord record) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(record.raceName),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                _buildDetailRow('日付:', record.date),
+                _buildDetailRow('開催:', record.venue),
+                _buildDetailRow('天候/馬場:', '${record.weather} / ${record.trackCondition}'),
+                _buildDetailRow('R:', record.raceNumber),
+                _buildDetailRow('頭数:', record.numberOfHorses),
+                _buildDetailRow('枠/馬:', '${record.frameNumber} / ${record.horseNumber}'),
+                _buildDetailRow('人気/オッズ:', '${record.popularity}番人気 / ${record.odds}倍'),
+                _buildDetailRow('着順:', record.rank),
+                _buildDetailRow('騎手/斤量:', '${record.jockey} / ${record.carriedWeight}kg'),
+                _buildDetailRow('距離:', record.distance),
+                _buildDetailRow('タイム/着差:', '${record.time} / ${record.margin}'),
+                _buildDetailRow('通過:', record.cornerPassage),
+                _buildDetailRow('ペース/上り:', '${record.pace} / ${record.agari}'),
+                _buildDetailRow('馬体重:', record.horseWeight),
+                _buildDetailRow('勝ち馬:', record.winnerOrSecondHorse),
+                _buildDetailRow('賞金:', record.prizeMoney),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('閉じる'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-      // 取得した最新情報でDBのキャッシュを更新し、アプリ全体でデータの一貫性を保つ
-      final featuredRaceToSave = FeaturedRace(
-        raceId: predictionData.raceId,
-        raceName: predictionData.raceName,
-        raceGrade: predictionData.raceGrade,
-        raceDate: predictionData.raceDate,
-        venue: predictionData.venue,
-        raceNumber: predictionData.raceNumber,
-        shutubaTableUrl: predictionData.shutubaTableUrl,
-        lastScraped: DateTime.now(),
-        distance: '',
-        conditions: '',
-        weight: '',
-        raceDetails1: predictionData.raceDetails1,
-        raceDetails2: '',
-        shutubaHorses: null,
-      );
-      await _dbHelper.insertOrUpdateFeaturedRace(featuredRaceToSave);
-
-      // ユーザーの印情報を取得してマージする処理はそのまま維持
-      final userMarks = await _dbHelper.getAllUserMarksForRace(widget.raceId);
-      final markMap = {for (var mark in userMarks) mark.horseId: mark};
-
-      for (var horse in predictionData.horses) {
-        horse.userMark = markMap[horse.horseId];
-      }
-      return predictionData;
-    } catch (e) {
-      print('Error fetching prediction data: $e');
-      rethrow;
+  /// ポップアップ内の詳細表示用のヘルパーウィジェット
+  Widget _buildDetailRow(String label, String value) {
+    if (value.trim().isEmpty || value.trim() == '-') {
+      return const SizedBox.shrink();
     }
-  }
-
-  Future<void> _refreshData() async {
-    await _loadShutubaData();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('出馬表データを更新しました')),
-      );
-    }
-  }
-
-  Color _getGradeColor(String grade) {
-    if (grade.contains('G1')) return Colors.blue.shade700;
-    if (grade.contains('G2')) return Colors.red.shade700;
-    if (grade.contains('G3')) return Colors.green.shade700;
-    return Colors.blueGrey;
-  }
-
-  Color _getGradeTextColor(String grade) {
-    return Colors.white;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -112,17 +115,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
           final predictionData = snapshot.data!;
           return RefreshIndicator(
-            onRefresh: _refreshData,
+            onRefresh: _loadShutubaData,
             child: ListView(
+              padding: const EdgeInsets.all(8.0),
               children: [
                 _buildRaceInfoCard(predictionData),
-                if (predictionData.horses.isNotEmpty)
-                  _buildHorseList(predictionData.horses),
-                if (predictionData.horses.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Center(child: Text('出走馬情報がありません。')),
-                  ),
+                const SizedBox(height: 8),
+                _buildHorseDataTable(predictionData.horses),
               ],
             ),
           );
@@ -133,7 +132,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
   Widget _buildRaceInfoCard(PredictionRaceData race) {
     return Card(
-      margin: const EdgeInsets.all(8.0),
+      margin: const EdgeInsets.symmetric(vertical: 4.0),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -144,36 +143,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (race.raceGrade.isNotEmpty) ...[
-                  Container(
-                    width: 40,
-                    height: 25,
-                    decoration: BoxDecoration(
-                      color: _getGradeColor(race.raceGrade),
-                    ),
-                    child: Center(
-                      child: Text(
-                        race.raceGrade,
-                        style: TextStyle(
-                          color: _getGradeTextColor(race.raceGrade),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                ],
-                Expanded(
-                  child: Text(
-                    race.raceName,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
+            Text(
+              race.raceName,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(race.raceDetails1 ?? ''),
@@ -183,6 +155,198 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     );
   }
 
+  /// 馬リストを表形式で表示するウィジェット
+  Widget _buildHorseDataTable(List<PredictionHorseDetail> horses) {
+    horses.sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 12.0,
+        headingRowHeight: 40,
+        dataRowMinHeight: 48,
+        dataRowMaxHeight: 56,
+        columns: const [
+          DataColumn(label: Text('印')),
+          DataColumn(label: Text('枠')),
+          DataColumn(label: Text('馬番')),
+          DataColumn(label: Text('馬名')),
+          DataColumn(label: Text('性齢')),
+          DataColumn(label: Text('斤量')),
+          DataColumn(label: Text('騎手')),
+          DataColumn(label: Text('調教師')),
+          DataColumn(label: Text('馬体重')),
+          DataColumn(label: Text('前走')),
+          DataColumn(label: Text('前々走')),
+          DataColumn(label: Text('3走前')),
+          DataColumn(label: Text('4走前')),
+          DataColumn(label: Text('5走前')),
+        ],
+        rows: horses.map((horse) {
+          return DataRow(
+            cells: [
+              DataCell(_buildMarkDropdown(horse)),
+              DataCell(_buildGateNumber(horse.gateNumber)),
+              DataCell(_buildHorseNumber(horse.horseNumber, horse.gateNumber)),
+              DataCell(Text(horse.horseName)),
+              DataCell(Text(horse.sexAndAge)),
+              DataCell(Text(horse.carriedWeight.toString())),
+              DataCell(Text(horse.jockey)),
+              DataCell(Text(horse.trainer)),
+              DataCell(Text(horse.horseWeight ?? '--')),
+              ..._buildPastRaceCells(horse.horseId),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// 印のドロップダウンを作成
+  Widget _buildMarkDropdown(PredictionHorseDetail horse) {
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: horse.userMark?.mark,
+        hint: const Icon(Icons.edit_note, size: 20),
+        items: <String>['◎', '〇', '▲', '△', '✕', '消', '　'].map((String value) {
+          return DropdownMenuItem<String>(
+            value: value,
+            child: Text(value, style: const TextStyle(fontSize: 16.0)),
+          );
+        }).toList(),
+        onChanged: (String? newValue) async {
+          if (newValue != null) {
+            final userMark = UserMark(
+              raceId: widget.raceId,
+              horseId: horse.horseId,
+              mark: newValue,
+              timestamp: DateTime.now(),
+            );
+            await _dbHelper.insertOrUpdateUserMark(userMark);
+            setState(() {
+              horse.userMark = userMark;
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  /// 枠番表示を作成
+  Widget _buildGateNumber(int gateNumber) {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        color: _getGateColor(gateNumber),
+        border: gateNumber == 1 ? Border.all(color: Colors.grey) : null,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        gateNumber.toString(),
+        style: TextStyle(
+          color: _getTextColorForGate(gateNumber),
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  /// 馬番表示を作成
+  Widget _buildHorseNumber(int horseNumber, int gateNumber) {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: _getGateColor(gateNumber),
+          width: 2.0,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        horseNumber.toString(),
+        style: TextStyle(
+          color: _getGateColor(gateNumber) == Colors.black ? Colors.black : Colors.black87,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  // --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
+  /// 過去5走分のセルを作成
+  List<DataCell> _buildPastRaceCells(String horseId) {
+    return [
+      for (int i = 0; i < 5; i++)
+        DataCell(
+          FutureBuilder<List<HorseRaceRecord>>(
+            future: _dbHelper.getHorsePerformanceRecords(horseId),
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data!.length > i) {
+                final record = snapshot.data![i];
+
+                Color backgroundColor = Colors.transparent;
+                bool isTopThree = false;
+
+                switch (record.rank) {
+                  case '1':
+                    backgroundColor = Colors.red.withOpacity(0.4);
+                    isTopThree = true;
+                    break;
+                  case '2':
+                    backgroundColor = Colors.grey.withOpacity(0.5);
+                    isTopThree = true;
+                    break;
+                  case '3':
+                    backgroundColor = Colors.yellow.withOpacity(0.5);
+                    isTopThree = true;
+                    break;
+                }
+
+                return InkWell(
+                  onTap: () => _showPastRaceDetailsPopup(context, record),
+                  child: Container(
+                    width: double.infinity,
+                    height: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                    decoration: BoxDecoration(
+                      color: backgroundColor,
+                      borderRadius: BorderRadius.circular(4.0),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (isTopThree)
+                          Text(
+                            record.rank,
+                            style: const TextStyle(
+                              fontSize: 40, // 適切な固定サイズに変更
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        Text(
+                          record.raceName,
+                          style: const TextStyle(color: Colors.black),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return const Text('');
+            },
+          ),
+        ),
+    ];
+  }
+  // --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
+
+  // 枠番の色分けロジック
   Color _getGateColor(int gateNumber) {
     switch (gateNumber) {
       case 1: return Colors.white;
@@ -205,215 +369,5 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       default:
         return Colors.white;
     }
-  }
-
-  Widget _buildHorseList(List<PredictionHorseDetail> horses) {
-    horses.sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
-
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: horses.length,
-      itemBuilder: (context, index) {
-        final horse = horses[index];
-        return FutureBuilder<List<HorseRaceRecord>>(
-          future: _dbHelper.getHorsePerformanceRecords(horse.horseId),
-          builder: (context, snapshot) {
-            List<HorseRaceRecord> records = snapshot.data ?? [];
-            if (records.length > 5) {
-              records = records.sublist(0, 5);
-            }
-
-            return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-              child: ExpansionTile(
-                tilePadding: const EdgeInsets.symmetric(horizontal: 4.0),
-                title: Row(
-                  children: [
-                    DropdownButton<String>(
-                      value: horse.userMark?.mark,
-                      hint: const Text('印'),
-                      underline: const SizedBox(),
-                      items: <String>['◎', '〇', '▲', '△', '✕', '消', '　'].map((String value) {
-                        return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(
-                              value,
-                              style: const TextStyle(fontSize: 20.0),
-                            )
-                        );
-                      }).toList(),
-                      onChanged: (String? newValue) async {
-                        if (newValue != null) {
-                          final userMark = UserMark(
-                            raceId: widget.raceId,
-                            horseId: horse.horseId,
-                            mark: newValue,
-                            timestamp: DateTime.now(),
-                          );
-                          await _dbHelper.insertOrUpdateUserMark(userMark);
-                          setState(() {
-                            horse.userMark = userMark;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 8),
-
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: _getGateColor(horse.gateNumber),
-                        border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        horse.gateNumber.toString(),
-                        style: TextStyle(color: _getTextColorForGate(horse.gateNumber), fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(width: 30, child: Text('${horse.horseNumber}番')),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            horse.horseName,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(
-                      width: 60,
-                      child: Text.rich(
-                        TextSpan(
-                          text: '${horse.sexAndAge} \n',
-                          style: TextStyle(fontSize: 14),
-                          children: [
-                            TextSpan(
-                              text: horse.horseWeight != null && horse.horseWeight!.isNotEmpty
-                                  ? horse.horseWeight!
-                                  : '計不',
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        textAlign: TextAlign.end,
-                      ),
-                    )
-                  ],
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4.0, left: 42.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('斤量 ${horse.carriedWeight.toStringAsFixed(1)}/ 騎手 ${horse.jockey}/ 調教師 ${horse.trainer}'),
-                      Text('オッズ: ${horse.odds?.toStringAsFixed(1) ?? '--'} / ${horse.popularity ?? '--'}人気'),
-                    ],
-                  ),
-                ),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.only(left: 8.0, bottom: 4.0),
-                          child: Text('過去5走成績:', style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        if (snapshot.connectionState == ConnectionState.waiting)
-                          const Center(child: CircularProgressIndicator())
-                        else if (records.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child: Text('過去の競走成績データがありません。'),
-                          )
-                        else
-                          Column(
-                            children: records.asMap().entries.map((entry) {
-                              final record = entry.value;
-                              final isLast = entry.key == records.length - 1;
-                              return Column(
-                                children: [
-                                  _buildPastRaceRecord(record),
-                                  if (!isLast)
-                                    const Divider(height: 1),
-                                ],
-                              );
-                            }).toList(),
-                          )
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-  Widget _buildPastRaceRecord(HorseRaceRecord record) {
-    Widget buildInfoRow(String label, String value) {
-      if (value.trim().isEmpty || value.trim() == '-') {
-        return const SizedBox.shrink();
-      }
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 120,
-              child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-            ),
-            Expanded(
-              child: Text(value, style: const TextStyle(fontSize: 12)),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    '${record.date.replaceAll('/', '.')} ${record.raceName}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text('${record.rank}着', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          buildInfoRow('開催/条件/馬場', '${record.venue} ${record.raceNumber}R / ${record.distance} / 天候:${record.weather} / 馬場:${record.trackCondition}'),
-          buildInfoRow('枠/馬番/頭数', '${record.frameNumber} / ${record.horseNumber} / ${record.numberOfHorses}'),
-          buildInfoRow('騎手/斤量', '${record.jockey} / ${record.carriedWeight}kg'),
-          buildInfoRow('タイム/着差/ペース', '${record.time} / ${record.margin} / ${record.pace}'),
-          buildInfoRow('通過', '${record.cornerPassage} / ${record.agari}'),
-          buildInfoRow('人気/オッズ', '${record.popularity}番人気 / ${record.odds}倍'),
-          buildInfoRow('馬体重', record.horseWeight),
-          buildInfoRow('勝ち馬', record.winnerOrSecondHorse),
-          buildInfoRow('賞金', record.prizeMoney),
-        ],
-      ),
-    );
   }
 }
