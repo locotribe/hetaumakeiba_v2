@@ -185,10 +185,21 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         rows: horses.map((horse) {
           return DataRow(
             cells: [
-              DataCell(_buildMarkDropdown(horse)),
+              DataCell(
+                horse.isScratched
+                    ? const Text('取消', style: TextStyle(color: Colors.red))
+                    : _buildMarkDropdown(horse),
+              ),
               DataCell(_buildGateNumber(horse.gateNumber)),
               DataCell(_buildHorseNumber(horse.horseNumber, horse.gateNumber)),
-              DataCell(Text(horse.horseName)),
+              DataCell(
+                Text(
+                  horse.horseName,
+                  style: TextStyle(
+                    decoration: horse.isScratched ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+              ),
               DataCell(Text(horse.sexAndAge)),
               DataCell(Text(horse.carriedWeight.toString())),
               DataCell(Text(horse.jockey)),
@@ -314,7 +325,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                     padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
                     decoration: BoxDecoration(
                       color: backgroundColor,
-                      borderRadius: BorderRadius.circular(4.0),
                     ),
                     child: Stack(
                       alignment: Alignment.center,
@@ -323,7 +333,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                           Text(
                             record.rank,
                             style: const TextStyle(
-                              fontSize: 40, // 適切な固定サイズに変更
+                              fontSize: 40,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),

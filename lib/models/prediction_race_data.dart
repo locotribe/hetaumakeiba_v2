@@ -42,6 +42,7 @@ class PredictionHorseDetail {
   int? popularity;
   String? horseWeight;
   UserMark? userMark;
+  final bool isScratched; // --- ▼▼▼ 修正箇所 ▼▼▼
 
   PredictionHorseDetail({
     required this.horseId,
@@ -56,6 +57,7 @@ class PredictionHorseDetail {
     this.popularity,
     this.horseWeight,
     this.userMark,
+    required this.isScratched, // --- ▼▼▼ 修正箇所 ▼▼▼
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
@@ -71,6 +73,7 @@ class PredictionHorseDetail {
       horseWeight: detail.horseWeight,
       odds: detail.odds,
       popularity: detail.popularity,
+      isScratched: detail.isScratched, // --- ▼▼▼ 修正箇所 ▼▼▼
     );
   }
 }

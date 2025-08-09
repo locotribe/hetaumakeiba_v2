@@ -492,7 +492,6 @@ class ScraperService {
     for (final race in races) {
       if (race.shutubaTableUrl.isNotEmpty) {
         try {
-          // ▼▼▼ ステップ4で関数名を変更 ▼▼▼
           final officialRaceId = await getOfficialRaceId(race.shutubaTableUrl);
           if (officialRaceId == null) {
             continue;
@@ -514,7 +513,6 @@ class ScraperService {
             print('-----------------------------------------');
 
             await dbHelper.insertOrUpdateRaceResult(raceResult);
-            // ★★★ 修正箇所：新しい集計サービスを呼び出すトリガーを追加 ★★★
             await AnalyticsService().updateAggregatesOnResultConfirmed(raceResult.raceId);
             print('結果をDBに保存しました: ${race.raceName}');
             await Future.delayed(const Duration(milliseconds: 500));
@@ -583,7 +581,7 @@ class ScraperService {
       final Map<String, num> popMap = {};
 
       final rows = document.querySelectorAll('#odds_view_result table tr');
-      for (var row in rows.skip(1)) { // ヘッダー行を除外
+      for (var row in rows.skip(1)) {
         final cells = row.querySelectorAll('td');
         if (cells.length < 3) continue;
 
@@ -607,7 +605,6 @@ class ScraperService {
 
   static Future<PredictionRaceData> scrapeFullPredictionData(String raceId) async {
     try {
-      // 1. netkeibaからHTMLを一度だけ取得
       final shutubaUrl = 'https://race.netkeiba.com/race/shutuba.html?race_id=$raceId';
       final shutubaResponse = await http.get(Uri.parse(shutubaUrl), headers: _headers);
       if (shutubaResponse.statusCode != 200) {
@@ -617,19 +614,16 @@ class ScraperService {
       final decodedBody = await CharsetConverter.decode('EUC-JP', shutubaResponse.bodyBytes);
       final document = html.parse(decodedBody);
 
-      // 2. 取得したHTMLから基本情報と出走馬リストを解析
       final featuredRace = _parseFeaturedRaceFromDocument(document, raceId, shutubaUrl);
       final netkeibaHorses = _parseShutubaHorsesFromDocument(document);
 
-      // 3. 別のHTMLスニペットAPIからオッズ・人気情報を取得
       final oddsData = await _fetchAndParseNetkeibaOddsHtml(raceId);
       final oddsMap = oddsData['odds'] ?? {};
       final popularityMap = oddsData['popularity'] ?? {};
 
-      // 4. データをマージ
       final List<PredictionHorseDetail> finalHorses = [];
       for (final netkeibaHorse in netkeibaHorses) {
-        final horseNumberStr = netkeibaHorse.horseNumber.toString();
+        final horseNumberStr = netkeibaHorse.horseNumber.toString().padLeft(2, '0');
         if (oddsMap.containsKey(horseNumberStr)) {
           netkeibaHorse.odds = oddsMap[horseNumberStr]?.toDouble();
         }
@@ -639,7 +633,6 @@ class ScraperService {
         finalHorses.add(PredictionHorseDetail.fromShutubaHorseDetail(netkeibaHorse));
       }
 
-      // 5. 完全なデータを返す
       return PredictionRaceData(
         raceId: featuredRace.raceId,
         raceName: featuredRace.raceName,
@@ -691,7 +684,7 @@ class ScraperService {
       raceNumber: _safeGetText(document.querySelector('.RaceNumWrap .Active a')).replaceAll('R', ''),
       shutubaTableUrl: url,
       lastScraped: DateTime.now(),
-      distance: '', // 詳細情報はraceDetails1から取得するため、個別フィールドは空でよい
+      distance: '',
       conditions: '',
       weight: '',
       raceDetails1: raceDetails1,
@@ -704,8 +697,12 @@ class ScraperService {
     final List<ShutubaHorseDetail> horses = [];
     final rows = document.querySelectorAll('table.Shutuba_Table tr.HorseList');
     for (final row in rows) {
+      // ▼▼▼ 修正箇所 ▼▼▼
+      final bool isScratched = row.classes.contains('Cancel');
+
       final cells = row.querySelectorAll('td');
-      if (cells.length < 9) continue;
+      // 取消馬はセルの数が異なる場合があるため、柔軟に処理
+      if (cells.isEmpty) continue;
 
       final horseInfoCell = row.querySelector('td.HorseInfo');
       final horseLink = horseInfoCell?.querySelector('a');
@@ -713,15 +710,13 @@ class ScraperService {
 
       if (horseId.isEmpty) continue;
 
-      final isScratched = _safeGetText(row.querySelector('td.Cancel_Txt')).isNotEmpty;
-
       horses.add(ShutubaHorseDetail(
         horseId: horseId,
         gateNumber: int.tryParse(_safeGetText(row.querySelector('td[class^="Waku"]'))) ?? 0,
         horseNumber: int.tryParse(_safeGetText(row.querySelector('td[class^="Umaban"]'))) ?? 0,
         horseName: _safeGetText(horseLink),
         sexAndAge: _safeGetText(row.querySelector('td.Barei')),
-        carriedWeight: double.tryParse(_safeGetText(cells[5])) ?? 0.0,
+        carriedWeight: isScratched ? 0.0 : double.tryParse(_safeGetText(cells[5])) ?? 0.0,
         jockey: _safeGetText(row.querySelector('td.Jockey a')),
         trainer: _safeGetText(row.querySelector('td.Trainer a')),
         horseWeight: _safeGetText(row.querySelector('td.Weight')),
