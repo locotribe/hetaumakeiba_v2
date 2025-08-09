@@ -487,7 +487,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         final totalAmount = item.parsedTicket['合計金額'] as int? ?? 0;
         final isHit = item.hitResult?.isHit ?? false;
         final payout = item.hitResult?.totalPayout ?? 0;
-        final balance = payout - totalAmount;
+        final refund = item.hitResult?.totalRefund ?? 0;
+        final balance = (payout + refund) - totalAmount;
 
         return Dismissible(
           key: ValueKey(item.qrData.id),
@@ -537,7 +538,16 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 children: [
                   Text('${totalAmount}円', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54, height: 1.2)),
                   if (item.raceResult != null) ...[
-                    Text('${payout}円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isHit ? Colors.green.shade700 : Colors.black, height: 1.2)),
+                    RichText(
+                      text: TextSpan(
+                        style: TextStyle(fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily),
+                        children: <TextSpan>[
+                          TextSpan(text: '${payout + refund}円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isHit ? Colors.green.shade700 : Colors.black, height: 1.2)),
+                          if (refund > 0)
+                            TextSpan(text: ' (返${refund})', style: const TextStyle(fontSize: 11, color: Colors.black54, height: 1.1)),
+                        ],
+                      ),
+                    ),
                     Text('${balance >= 0 ? '+' : ''}$balance円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: balance > 0 ? Colors.blue.shade700 : (balance < 0 ? Colors.red.shade700 : Colors.black), height: 1.2)),
                   ] else
                     const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),

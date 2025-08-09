@@ -40,11 +40,15 @@ class HitResult {
   final bool isHit; // 1つでも的中したか
   final int totalPayout; // 総払戻金額
   final List<String> hitDetails; // 的中した馬券の詳細リスト
+  final int totalRefund;
+  final List<String> refundDetails;
 
   HitResult({
     this.isHit = false,
     this.totalPayout = 0,
     this.hitDetails = const [],
+    this.totalRefund = 0,
+    this.refundDetails = const [],
   });
 }
 
@@ -55,12 +59,26 @@ class HitChecker {
     required Map<String, dynamic> parsedTicket,
     required RaceResult raceResult,
   }) {
+    // --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
     int totalPayout = 0;
     List<String> hitDetails = [];
+    int totalRefund = 0;
+    List<String> refundDetails = [];
+
+    // 返還対象となる馬番と枠番のリストを作成
+    final scratchedHorseNumbers = raceResult.horseResults
+        .where((hr) => int.tryParse(hr.rank) == null && hr.rank != '中止')
+        .map((hr) => int.parse(hr.horseNumber))
+        .toSet();
+
+    final scratchedFrameNumbers = raceResult.horseResults
+        .where((hr) => int.tryParse(hr.rank) == null && hr.rank != '中止')
+        .map((hr) => int.parse(hr.frameNumber))
+        .toSet();
 
     for (var purchase in (parsedTicket['購入内容'] as List<dynamic>)) {
       final String ticketTypeId = purchase['式別'];
-
+      final String ticketTypeName = bettingDict[ticketTypeId] ?? '不明';
       if (purchase['all_combinations'] == null) continue;
 
       final int combinationCount = (purchase['all_combinations'] as List).length;
@@ -77,25 +95,39 @@ class HitChecker {
             (r) => r.ticketTypeId == ticketTypeId,
         orElse: () => Refund(ticketTypeId: '', payouts: []),
       );
-      if (refundInfo.payouts.isEmpty) continue;
 
-      final Map<String, Payout> uniqueHits = {};
+      final Set<String> processedHitCombinations = {};
 
       for (final userCombo in allUserCombinations) {
+        // 的中判定
         final matchingPayout = _findPayout(userCombo, refundInfo.payouts, ticketTypeId);
         if (matchingPayout != null) {
-          uniqueHits[matchingPayout.combination] = matchingPayout;
-        }
-      }
+          final comboKey = userCombo.join('-');
+          if (!processedHitCombinations.contains(comboKey)) {
+            final payout = int.tryParse(matchingPayout.amount.replaceAll(',', '')) ?? 0;
+            if (payout > 0) {
+              final payoutAmount = (payout * amountPerBet) ~/ 100;
+              totalPayout += payoutAmount;
+              hitDetails.add('$ticketTypeName 的中！ ${matchingPayout.combination} -> ${payoutAmount}円');
+              processedHitCombinations.add(comboKey);
+            }
+          }
+        } else {
+          // 的中していない場合のみ、返還判定を行う
+          bool isRefundable = false;
+          if (ticketTypeName == '枠連') {
+            if (userCombo.any((frame) => scratchedFrameNumbers.contains(frame))) {
+              isRefundable = true;
+            }
+          } else {
+            if (userCombo.any((horse) => scratchedHorseNumbers.contains(horse))) {
+              isRefundable = true;
+            }
+          }
 
-      if (uniqueHits.isNotEmpty) {
-        final String ticketTypeName = bettingDict[ticketTypeId] ?? '不明';
-        for (final hitPayout in uniqueHits.values) {
-          final payout = int.tryParse(hitPayout.amount.replaceAll(',', '')) ?? 0;
-          if (payout > 0) {
-            final payoutAmount = (payout * amountPerBet) ~/ 100;
-            totalPayout += payoutAmount;
-            hitDetails.add('$ticketTypeName 的中！ ${hitPayout.combination} -> ${payoutAmount}円');
+          if (isRefundable) {
+            totalRefund += amountPerBet;
+            refundDetails.add('$ticketTypeName 返還: ${userCombo.join('-')} -> ${amountPerBet}円');
           }
         }
       }
@@ -105,7 +137,10 @@ class HitChecker {
       isHit: totalPayout > 0,
       totalPayout: totalPayout,
       hitDetails: hitDetails,
+      totalRefund: totalRefund,
+      refundDetails: refundDetails,
     );
+    // --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
   }
 
   static Payout? _findPayout(List<int> userCombo, List<Payout> payouts, String ticketTypeId) {

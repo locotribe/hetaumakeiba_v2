@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
@@ -156,6 +157,13 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 final parsedTicket = pageData.parsedTicket;
                 final raceResult = pageData.raceResult;
 
+                final hitResult = (parsedTicket != null &&
+                    raceResult != null &&
+                    !raceResult.isIncomplete)
+                    ? HitChecker.check(
+                    parsedTicket: parsedTicket, raceResult: raceResult)
+                    : null;
+
                 final Map<String, List<List<int>>> userCombinationsByType = {};
                 if (parsedTicket != null && parsedTicket['購入内容'] != null) {
                   final purchaseDetails = parsedTicket['購入内容'] as List;
@@ -181,7 +189,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     padding: const EdgeInsets.all(8.0),
                     children: [
                       if (parsedTicket != null)
-                        _buildUserTicketCard(parsedTicket),
+                        _buildUserTicketCard(parsedTicket, hitResult),
                       if (raceResult != null) ...[
                         if (raceResult.isIncomplete)
                           _buildIncompleteRaceDataCard()
@@ -254,9 +262,9 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  Widget _buildUserTicketCard(Map<String, dynamic> parsedTicket) {
+  Widget _buildUserTicketCard(Map<String, dynamic> parsedTicket, HitResult? hitResult) {
     final purchaseDetails = parsedTicket['購入内容'] as List;
-    final totalAmount = parsedTicket['合計金額'] ?? 0;
+    final totalAmount = parsedTicket['合計金額'] as int? ?? 0;
 
     return Card(
       elevation: 2,
@@ -303,6 +311,42 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
+            if (hitResult != null) ...[
+              const Divider(height: 32),
+              const Text(
+                '結果',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              _buildResultRow('払戻合計', '${hitResult.totalPayout}円'),
+              _buildResultRow('返還合計', '${hitResult.totalRefund}円'),
+              _buildResultRow(
+                '最終収支',
+                '${(hitResult.totalPayout + hitResult.totalRefund - totalAmount) >= 0 ? '+' : ''}${hitResult.totalPayout + hitResult.totalRefund - totalAmount}円',
+                isProfit: true,
+                profit: hitResult.totalPayout + hitResult.totalRefund - totalAmount,
+              ),
+              if (hitResult.hitDetails.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ...hitResult.hitDetails.map((detail) => Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4.0, left: 8.0),
+                    child: Text('🎯 $detail', style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold)),
+                  ),
+                )),
+              ],
+              if (hitResult.refundDetails.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ...hitResult.refundDetails.map((detail) => Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4.0, left: 8.0),
+                    child: Text('↩️ $detail', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold)),
+                  ),
+                )),
+              ],
+            ],
           ],
         ),
       ),
@@ -461,6 +505,27 @@ class _RaceResultPageState extends State<RaceResultPage> {
             }).toList(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildResultRow(String label, String value, {bool isProfit = false, int profit = 0}) {
+    Color valueColor = Colors.black87;
+    if (isProfit) {
+      if (profit > 0) valueColor = Colors.blue.shade700;
+      if (profit < 0) valueColor = Colors.red.shade700;
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 15)),
+          Text(
+            value,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: valueColor),
+          ),
+        ],
       ),
     );
   }
