@@ -45,10 +45,17 @@ class FeaturedRaceListItem extends StatelessWidget {
 
   // グレードに応じた色を返すヘルパーメソッド
   Color _getGradeColor(String grade) {
-    if (grade.contains('G1')) return Colors.blue.shade700;
-    if (grade.contains('G2')) return Colors.red.shade700;
-    if (grade.contains('G3')) return Colors.green.shade700;
-    return Colors.blueGrey; // デフォルト色
+    // 障害グレードの判定を先に行う
+    if (grade.contains('J.G1')) return Colors.blue.shade700;   // J・G1
+    if (grade.contains('J.G2')) return Colors.red.shade700;     // J・G2
+    if (grade.contains('J.G3')) return Colors.green.shade700;   // J・G3
+
+    // 平地グレードの判定を後に行う
+    if (grade.contains('G1')) return Colors.blue.shade700;    // G1
+    if (grade.contains('G2')) return Colors.red.shade700;     // G2
+    if (grade.contains('G3')) return Colors.green.shade700;    // G3
+
+    return Colors.blueGrey;
   }
 
   // グレードアイコンの文字色は白で統一

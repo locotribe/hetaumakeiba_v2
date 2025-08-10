@@ -503,15 +503,6 @@ class ScraperService {
             print('DBに存在しないため、結果を取得します: ${race.raceName} (ID: $officialRaceId)');
             final resultUrl = 'https://db.netkeiba.com/race/$officialRaceId';
             final raceResult = await scrapeRaceDetails(resultUrl);
-
-            print('-----------------------------------------');
-            print('【保存されるレース結果データ】');
-            print('レース名: ${raceResult.raceTitle}');
-            print('レースID: ${raceResult.raceId}');
-            print('開催日: ${raceResult.raceDate}');
-            print('コース情報: ${raceResult.raceInfo}');
-            print('-----------------------------------------');
-
             await dbHelper.insertOrUpdateRaceResult(raceResult);
             await AnalyticsService().updateAggregatesOnResultConfirmed(raceResult.raceId);
             print('結果をDBに保存しました: ${race.raceName}');
@@ -668,10 +659,16 @@ class ScraperService {
     final gradeElement = raceNameBox?.querySelector('.RaceName [class*="Icon_GradeType"]');
     if (gradeElement != null) {
       final className = gradeElement.className;
-      if (className.contains('Icon_GradeType1')) raceGrade = 'G1';
+      // 障害グレードを先に判定する
+      if (className.contains('Icon_GradeType4')) raceGrade = 'J.G1';
+      // ※J.G2のクラス名は仮です。必要に応じて確認・修正してください。
+      else if (className.contains('Icon_GradeType5')) raceGrade = 'J.G2';
+      else if (className.contains('Icon_GradeType12')) raceGrade = 'J.G3';
+
+      // 次に平地グレードを判定する
+      else if (className.contains('Icon_GradeType1')) raceGrade = 'G1';
       else if (className.contains('Icon_GradeType2')) raceGrade = 'G2';
       else if (className.contains('Icon_GradeType3')) raceGrade = 'G3';
-      else if (className.contains('Icon_GradeType4')) raceGrade = 'J.G1';
       else if (className.contains('Icon_GradeType19')) raceGrade = 'L';
     }
 
