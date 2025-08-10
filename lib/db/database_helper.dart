@@ -548,4 +548,16 @@ class DatabaseHelper {
       whereArgs: whereArgs,
     );
   }
+
+  Future<String> getDbPath() async {
+    final databasePath = await getDatabasesPath();
+    return join(databasePath, 'hetaumakeiba_v2.db');
+  }
+
+  Future<void> closeDb() async {
+    if (_database != null && _database!.isOpen) {
+      await _database!.close();
+      _database = null;
+    }
+  }
 }
