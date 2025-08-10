@@ -224,18 +224,22 @@ class FeaturedRaceListItem extends StatelessWidget {
                   if (dayOfWeek != null && dayOfWeek!.isNotEmpty) ...[
                     const SizedBox(height: 4.0),
                     Container(
-                      width: 40,
-                      height: 25,
+                      width: 40,  // 上のコンテナと幅を合わせる
+                      height: 25, // 上のコンテナと高さを合わせる
                       decoration: BoxDecoration(
-                        color: _getDayOfWeekColor(dayOfWeek!), // ヘルパー関数で色を指定
+                        // 背景色(color)は指定せず、borderプロパティで縁取りを定義
+                        border: Border.all(
+                          color: Colors.grey.shade600, // 縁の色
+                          width: 2,                  // 縁の太さ
+                        ),
                       ),
                       child: Center(
                         child: Text(
-                          dayOfWeek!,
-                          style: const TextStyle(
-                            color: Colors.white, // 文字色を白に
+                          race.venue,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
                             fontWeight: FontWeight.bold,
-                            fontSize: 14,
                           ),
                         ),
                       ),
@@ -243,22 +247,18 @@ class FeaturedRaceListItem extends StatelessWidget {
                   ],
                   const SizedBox(height: 4.0),
                   Container(
-                    width: 40,  // 上のコンテナと幅を合わせる
-                    height: 25, // 上のコンテナと高さを合わせる
+                    width: 40,
+                    height: 25,
                     decoration: BoxDecoration(
-                      // 背景色(color)は指定せず、borderプロパティで縁取りを定義
-                      border: Border.all(
-                        color: Colors.grey.shade600, // 縁の色
-                        width: 2,                  // 縁の太さ
-                      ),
+                      color: _getDayOfWeekColor(dayOfWeek!), // ヘルパー関数で色を指定
                     ),
                     child: Center(
                       child: Text(
-                        race.venue,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade700,
+                        dayOfWeek!,
+                        style: const TextStyle(
+                          color: Colors.white, // 文字色を白に
                           fontWeight: FontWeight.bold,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -266,43 +266,42 @@ class FeaturedRaceListItem extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 16.0),
+            const SizedBox(width: 10.0),
             // 中央: レース情報
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    race.raceName,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4.0),
-                  if (hasDetails) ...[
+              child: Container(
+                width: 150, // ← 固定したい横幅（ピクセル単位）
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      race.raceDetails1 ?? '',
+                      race.raceName,
                       style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.black54,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
                       overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                     const SizedBox(height: 4.0),
-                    Builder(
+                    if (hasDetails) ...[
+                      Text(
+                        race.raceDetails1 ?? '',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.black54,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                      const SizedBox(height: 4.0),
+                      Builder(
                         builder: (context) {
                           String formattedDetails2 = race.raceDetails2 ?? '';
-                          // 「(」の位置を探す
                           final parenIndex = formattedDetails2.indexOf('頭');
-
-                          // 「(」が見つかり、かつその位置が2文字目以降の場合
                           if (parenIndex >= 2) {
-                            // 「(」の2文字前の位置を計算
                             final breakIndex = parenIndex - 2;
-                            // 計算した位置で文字列を分割し、間に改行コードを入れる
                             final part1 = formattedDetails2.substring(0, breakIndex);
                             final part2 = formattedDetails2.substring(breakIndex);
                             formattedDetails2 = '$part1\n$part2';
@@ -314,13 +313,15 @@ class FeaturedRaceListItem extends StatelessWidget {
                               fontSize: 10,
                               color: Colors.black54,
                             ),
+                            softWrap: true,
                           );
-                        }
-                    ),
-                  ] else ...[
-                    const SizedBox(height: 4.0),
-                  ]
-                ],
+                        },
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 4.0),
+                    ]
+                  ],
+                ),
               ),
             ),
             buildStatusWidget(),

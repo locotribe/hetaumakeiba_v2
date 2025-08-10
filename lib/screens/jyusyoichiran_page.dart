@@ -210,32 +210,40 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   Widget _buildWeeklyRaces() {
     if (_weeklyGradedRaces.isEmpty) return const SizedBox.shrink();
 
-    return ExpansionTile(
-      initiallyExpanded: true,
-      title: const Text(
-        '今週の重賞レース',
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        initiallyExpanded: true,
+        title: const Text(
+          '今週の重賞レース',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
         ),
+        childrenPadding: EdgeInsets.zero,
+        tilePadding: EdgeInsets.zero,
+        collapsedBackgroundColor: Colors.transparent,
+        backgroundColor: Colors.transparent,
+        children: _weeklyGradedRaces.map((race) {
+          final dayOfWeek = _getDayOfWeek(race);
+          return FeaturedRaceListItem(
+            race: race,
+            dayOfWeek: '$dayOfWeek',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ShutubaTablePage(raceId: race.raceId),
+                ),
+              );
+            },
+          );
+        }).toList(),
       ),
-      children: _weeklyGradedRaces.map((race) {
-        final dayOfWeek = _getDayOfWeek(race);
-        return FeaturedRaceListItem(
-          race: race,
-          dayOfWeek: '$dayOfWeek',
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ShutubaTablePage(raceId: race.raceId),
-              ),
-            );
-          },
-        );
-      }).toList(),
     );
+
   }
 
   Widget _buildMonthlyRacesPageView() {

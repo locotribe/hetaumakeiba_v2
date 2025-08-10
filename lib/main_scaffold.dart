@@ -92,7 +92,7 @@ class _MainScaffoldState extends State<MainScaffold> {
             ),
             ListTile(
               leading: const Icon(Icons.home_work_outlined),
-              title: const Text('ホームページ設定'),
+              title: const Text('ニュースフィード設定'),
               onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(context).push(
@@ -104,7 +104,7 @@ class _MainScaffoldState extends State<MainScaffold> {
             ),
             ListTile(
               leading: const Icon(Icons.settings),
-              title: const Text('全データ削除'),
+              title: const Text('データ設定'),
               onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(context)
