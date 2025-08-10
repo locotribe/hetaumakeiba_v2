@@ -287,7 +287,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     );
   }
 
-  // --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
   /// 過去5走分のセルを作成
   List<DataCell> _buildPastRaceCells(String horseId) {
     return [
@@ -354,7 +353,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         ),
     ];
   }
-  // --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
 
   // 枠番の色分けロジック
   Color _getGateColor(int gateNumber) {
