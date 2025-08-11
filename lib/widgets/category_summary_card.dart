@@ -1,4 +1,5 @@
 // lib/widgets/category_summary_card.dart
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
@@ -101,20 +102,30 @@ class CategorySummaryCard extends StatelessWidget {
   Widget _buildChart(List<CategorySummary> sortedSummaries, NumberFormat currencyFormatter) {
     return BarChart(
       BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: _getChartMaxY(sortedSummaries),
         barGroups: _generateBarGroups(sortedSummaries),
         titlesData: FlTitlesData(
-          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 50,
+              getTitlesWidget: (value, meta) {
+                if (value == 0) return const SizedBox.shrink();
+                return Text(
+                  currencyFormatter.format(value),
+                  style: const TextStyle(fontSize: 10),
+                );
+              },
+            ),
+          ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              reservedSize: 30,
               getTitlesWidget: (double value, TitleMeta meta) {
                 final index = value.toInt();
                 if (index < 0 || index >= sortedSummaries.length) return const SizedBox.shrink();
-
                 final summary = sortedSummaries[index];
                 final String displayName = title == '式別 収支'
                     ? (bettingDict[summary.name] ?? summary.name)
@@ -122,39 +133,43 @@ class CategorySummaryCard extends StatelessWidget {
 
                 return SideTitleWidget(
                   axisSide: meta.axisSide,
-                  space: 4.0,
-                  child: Text(displayName, style: const TextStyle(fontSize: 10)),
+                  space: 4,
+                  child: Text(
+                    displayName,
+                    style: const TextStyle(fontSize: 10),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 );
               },
-              reservedSize: 20,
             ),
           ),
         ),
-        borderData: FlBorderData(show: false),
-        gridData: FlGridData(show: true, drawVerticalLine: false),
+        gridData: const FlGridData(
+          show: true,
+          drawVerticalLine: false,
+        ),
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
             getTooltipColor: (group) => Colors.blueGrey,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              final summary = sortedSummaries[group.x.toInt()];
+              final summary = sortedSummaries[groupIndex];
               final String displayName = title == '式別 収支'
                   ? (bettingDict[summary.name] ?? summary.name)
                   : summary.name;
+
+              final investment = currencyFormatter.format(summary.investment);
+              final payout = currencyFormatter.format(summary.payout);
+              final recoveryRate = summary.recoveryRate.toStringAsFixed(1);
 
               return BarTooltipItem(
                 '$displayName\n',
                 const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 children: <TextSpan>[
+                  TextSpan(text: '投資: $investment円\n', style: const TextStyle(fontSize: 12)),
+                  TextSpan(text: '払戻: $payout円\n', style: const TextStyle(fontSize: 12)),
                   TextSpan(
-                    text: '${summary.recoveryRate.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      color: summary.recoveryRate >= 100 ? Colors.lightBlueAccent : Colors.redAccent,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  TextSpan(
-                    text: '\n収支: ${currencyFormatter.format(summary.profit)}円',
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    text: '回収率: $recoveryRate%',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.amber.shade300),
                   ),
                 ],
               );
@@ -168,23 +183,25 @@ class CategorySummaryCard extends StatelessWidget {
   List<BarChartGroupData> _generateBarGroups(List<CategorySummary> sortedSummaries) {
     return List.generate(sortedSummaries.length, (index) {
       final summary = sortedSummaries[index];
+      const barWidth = 10.0;
       return BarChartGroupData(
         x: index,
         barRods: [
           BarChartRodData(
-            toY: summary.recoveryRate,
-            color: summary.recoveryRate >= 100 ? Colors.blue : Colors.red,
-            width: 16,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+            toY: summary.investment.toDouble(),
+            color: Colors.grey.shade400,
+            width: barWidth,
+            borderRadius: BorderRadius.zero,
+          ),
+          BarChartRodData(
+            toY: summary.payout.toDouble(),
+            color: Colors.green.shade400,
+            width: barWidth,
+            borderRadius: BorderRadius.zero,
           ),
         ],
+        showingTooltipIndicators: [],
       );
     });
-  }
-
-  double _getChartMaxY(List<CategorySummary> sortedSummaries) {
-    if (sortedSummaries.isEmpty) return 120.0;
-    final maxRate = sortedSummaries.map((s) => s.recoveryRate).fold(0.0, (a, b) => a > b ? a : b);
-    return maxRate > 100 ? maxRate * 1.2 : 120;
   }
 }
