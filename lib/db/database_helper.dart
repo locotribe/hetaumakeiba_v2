@@ -9,31 +9,49 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 
+/// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
+/// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
 class DatabaseHelper {
+  /// シングルトンインスタンスを保持するためのプライベート変数。
   static final DatabaseHelper _instance = DatabaseHelper._internal();
+  /// データベース接続を保持するためのプライベート変数。
   static Database? _database;
 
+  /// `DatabaseHelper`のシングルトンインスタンスを返します。
+  // このファクトリコンストラクタにより、常に同じインスタンスが返されます。
   factory DatabaseHelper() {
     return _instance;
   }
 
+  /// 内部からのみ呼び出されるプライベートコンストラクタ。
+  // 外部からのインスタンス化を防ぐためのプライベートコンストラクタ。
   DatabaseHelper._internal();
 
+  /// データベースへの接続を取得します。
+  /// 既に接続が存在する場合はそれを返し、ない場合は新しく初期化します。
   Future<Database> get database async {
+    // 既にインスタンスが生成されていれば、それを返すことで無駄な初期化を防ぐ。
     if (_database != null) {
       return _database!;
     }
+    // インスタンスがなければ、データベースを初期化する。
     _database = await _initDatabase();
     return _database!;
   }
 
+  /// データベースを初期化します。
+  /// データベースファイルへのパスを設定し、テーブルを作成または更新します。
   Future<Database> _initDatabase() async {
     final databasePath = await getDatabasesPath();
+    // pathパッケージのjoinを使い、OSに依存しない安全なパスを作成します。
     final path = join(databasePath, 'hetaumakeiba_v2.db');
 
     return await openDatabase(
       path,
+      // スキーマを変更した場合は、このバージョンを上げる必要があります。
       version: 6,
+      /// データベースが初めて作成されるときに呼び出されます。
+      /// ここで初期テーブルの作成を行います。
       onCreate: (db, version) async {
         // QRコードデータテーブルの作成
         await db.execute('''
@@ -102,7 +120,7 @@ class DatabaseHelper {
             shutubaHorsesJson TEXT
           )
         ''');
-        // user_marks データテーブルの作成
+        // ユーザーの印データテーブルの作成
         await db.execute('''
           CREATE TABLE user_marks(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,7 +131,7 @@ class DatabaseHelper {
             UNIQUE(raceId, horseId) ON CONFLICT REPLACE
           )
         ''');
-        // user_feeds テーブルの作成
+        // ユーザーが設定したフィード（RSSなど）のデータテーブル作成
         await db.execute('''
           CREATE TABLE user_feeds(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,7 +141,7 @@ class DatabaseHelper {
             display_order INTEGER NOT NULL
           )
         ''');
-        // analytics_aggregates テーブルの作成
+        // 分析用の集計データテーブル作成
         await db.execute('''
           CREATE TABLE analytics_aggregates(
             aggregate_key TEXT PRIMARY KEY,
@@ -134,7 +152,11 @@ class DatabaseHelper {
           )
         ''');
       },
+      /// データベースのバージョンがアップグレードされたときに呼び出されます。
+      /// スキーマの変更（テーブルの追加やカラムの変更など）をここで行います。
+      // データベースのバージョンが上がった際のデータ移行（マイグレーション）処理。
       onUpgrade: (db, oldVersion, newVersion) async {
+        // v1からv2へのアップグレード処理。古いバージョンから順番に実行されます。
         if (oldVersion < 2) {
           await db.execute('ALTER TABLE featured_races ADD COLUMN shutubaHorsesJson TEXT');
           await db.execute('''
@@ -148,8 +170,8 @@ class DatabaseHelper {
             )
           ''');
         }
+        // v2からv3へのアップグレード処理
         if (oldVersion < 3) {
-          // This table is now obsolete, but we leave the creation for users upgrading from < 3 to avoid errors. It will be dropped at version 6.
           await db.execute('''
             CREATE TABLE IF NOT EXISTS analytics_summaries(
               period TEXT PRIMARY KEY,
@@ -161,6 +183,7 @@ class DatabaseHelper {
             )
           ''');
         }
+        // v3からv4へのアップグレード処理
         if (oldVersion < 4) {
           // This table is also obsolete.
           await db.execute('''
@@ -171,6 +194,7 @@ class DatabaseHelper {
             )
           ''');
         }
+        // v4からv5へのアップグレード処理
         if (oldVersion < 5) {
           await db.execute('''
             CREATE TABLE IF NOT EXISTS user_feeds(
@@ -182,9 +206,12 @@ class DatabaseHelper {
             )
           ''');
         }
+        // v5からv6へのアップグレード処理
         if (oldVersion < 6) {
+          // 不要になった旧テーブルを削除
           await db.execute('DROP TABLE IF EXISTS analytics_summaries');
           await db.execute('DROP TABLE IF EXISTS category_summary_cache');
+          // 新しい集計テーブルを作成
           await db.execute('''
             CREATE TABLE analytics_aggregates(
               aggregate_key TEXT PRIMARY KEY,
@@ -199,10 +226,10 @@ class DatabaseHelper {
     );
   }
 
-  // QRデータ関連のメソッド
-
+  /// 指定されたQRコードがデータベースに存在するかを確認します。
   Future<bool> qrCodeExists(String qrCode) async {
     final db = await database;
+    // クエリ結果の最初の行の最初の列を整数として効率的に取得します。
     final count = Sqflite.firstIntValue(await db.query(
       'qr_data',
       columns: ['COUNT(*)'],
@@ -212,6 +239,7 @@ class DatabaseHelper {
     return count! > 0;
   }
 
+  /// IDを指定して単一のQRコードデータを取得します。
   Future<QrData?> getQrData(int id) async {
     final db = await database;
     final maps = await db.query(
@@ -225,23 +253,28 @@ class DatabaseHelper {
     return null;
   }
 
+  /// 保存されている全てのQRコードデータを取得します。
   Future<List<QrData>> getAllQrData() async {
     final db = await database;
     final maps = await db.query('qr_data', orderBy: 'timestamp DESC');
+    // クエリ結果のMapリストをQrDataオブジェクトのリストに変換します。
     return List.generate(maps.length, (i) {
       return QrData.fromMap(maps[i]);
     });
   }
 
+  /// 新しいQRコードデータをデータベースに挿入します。
   Future<int> insertQrData(QrData qrData) async {
     final db = await database;
     return await db.insert(
       'qr_data',
       qrData.toMap(),
+      // UNIQUE制約で競合が発生した場合、新しいデータで既存の行を置き換えます（UPSERT動作）。
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
+  /// IDを指定してQRコードデータを削除します。
   Future<int> deleteQrData(int id) async {
     final db = await database;
     return await db.delete(
@@ -251,8 +284,7 @@ class DatabaseHelper {
     );
   }
 
-  // RaceResultデータ関連のメソッド
-
+  /// レースIDを指定してレース結果を取得します。
   Future<RaceResult?> getRaceResult(String raceId) async {
     final db = await database;
     final maps = await db.query(
@@ -261,11 +293,13 @@ class DatabaseHelper {
       whereArgs: [raceId],
     );
     if (maps.isNotEmpty) {
+      // JSON文字列をRaceResultオブジェクトに変換して返す。
       return raceResultFromJson(maps.first['race_result_json'] as String);
     }
     return null;
   }
 
+  /// レース結果を挿入または更新します。
   Future<int> insertOrUpdateRaceResult(RaceResult raceResult) async {
     final db = await database;
     return await db.insert(
@@ -274,23 +308,26 @@ class DatabaseHelper {
         'race_id': raceResult.raceId,
         'race_result_json': raceResultToJson(raceResult),
       },
+      // 主キー(race_id)で競合が発生した場合、新しいデータで置き換えます。
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  // HorsePerformanceデータ関連のメソッド
-
+  /// 競走馬の成績を1件挿入または更新します。
   Future<int> insertOrUpdateHorsePerformance(HorseRaceRecord record) async {
     final db = await database;
-    print('--- [DB Save] Horse Performance ---'); //
-    print('Horse ID: ${record.horseId}, Date: ${record.date}, Race: ${record.raceName}, Rank: ${record.rank}'); //
+    // デバッグ用のログ出力
+    print('--- [DB Save] Horse Performance ---');
+    print('Horse ID: ${record.horseId}, Date: ${record.date}, Race: ${record.raceName}, Rank: ${record.rank}');
     return await db.insert(
       'horse_performance',
       record.toMap(),
+      // UNIQUE制約(horse_id, date)で競合が発生した場合、新しいデータで置き換えます。
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
+  /// 指定された馬IDの全成績レコードを取得します。
   Future<List<HorseRaceRecord>> getHorsePerformanceRecords(String horseId) async {
     final db = await database;
     final maps = await db.query(
@@ -304,6 +341,7 @@ class DatabaseHelper {
     });
   }
 
+  /// 指定された馬IDの最新の成績レコードを1件取得します。
   Future<HorseRaceRecord?> getLatestHorsePerformanceRecord(String horseId) async {
     final db = await database;
     final maps = await db.query(
@@ -311,6 +349,7 @@ class DatabaseHelper {
       where: 'horse_id = ?',
       whereArgs: [horseId],
       orderBy: 'date DESC',
+      // データが1件見つかった時点で検索を終了するため、パフォーマンスが向上します。
       limit: 1,
     );
     if (maps.isNotEmpty) {
@@ -319,6 +358,7 @@ class DatabaseHelper {
     return null;
   }
 
+  /// 指定された馬IDの全成績レコードを削除します。
   Future<int> deleteHorsePerformance(String horseId) async {
     final db = await database;
     return await db.delete(
@@ -328,13 +368,9 @@ class DatabaseHelper {
     );
   }
 
-  // FeaturedRaceデータ関連のメソッド
-
+  /// 注目レースを挿入または更新します。
   Future<int> insertOrUpdateFeaturedRace(FeaturedRace featuredRace) async {
     final db = await database;
-    print('--- DBに保存するFeaturedRaceデータ ---');
-    print('[DB Save] 注目レース: ${featuredRace.raceName}');
-    print('------------------------------------');
     return await db.insert(
       'featured_races',
       featuredRace.toMap(),
@@ -342,6 +378,7 @@ class DatabaseHelper {
     );
   }
 
+  /// 保存されている全ての注目レースを取得します。
   Future<List<FeaturedRace>> getAllFeaturedRaces() async {
     final db = await database;
     final maps = await db.query('featured_races', orderBy: 'last_scraped DESC');
@@ -350,6 +387,7 @@ class DatabaseHelper {
     });
   }
 
+  /// レースIDを指定して注目レースを取得します。
   Future<FeaturedRace?> getFeaturedRace(String raceId) async {
     final db = await database;
     final maps = await db.query(
@@ -364,12 +402,13 @@ class DatabaseHelper {
     return null;
   }
 
+  /// 全ての注目レースデータを削除します。
   Future<int> deleteAllFeaturedRaces() async {
     final db = await database;
     return await db.delete('featured_races');
   }
 
-  // UserMark 関連のメソッド
+  /// ユーザーが付けた印を挿入または更新します。
   Future<int> insertOrUpdateUserMark(UserMark mark) async {
     final db = await database;
     return await db.insert(
@@ -379,6 +418,7 @@ class DatabaseHelper {
     );
   }
 
+  /// 特定のレースの特定の馬に対するユーザーの印を取得します。
   Future<UserMark?> getUserMark(String raceId, String horseId) async {
     final db = await database;
     final maps = await db.query(
@@ -393,6 +433,7 @@ class DatabaseHelper {
     return null;
   }
 
+  /// 特定のレースに付けられた全てのユーザーの印を取得します。
   Future<List<UserMark>> getAllUserMarksForRace(String raceId) async {
     final db = await database;
     final maps = await db.query(
@@ -405,6 +446,7 @@ class DatabaseHelper {
     });
   }
 
+  /// 特定のレースの特定の馬に付けられた印を削除します。
   Future<int> deleteUserMark(String raceId, String horseId) async {
     final db = await database;
     return await db.delete(
@@ -414,12 +456,13 @@ class DatabaseHelper {
     );
   }
 
-  // UserFeed 関連のメソッド
+  /// 新しいフィードを挿入します。
   Future<int> insertFeed(Feed feed) async {
     final db = await database;
     return await db.insert('user_feeds', feed.toMap());
   }
 
+  /// 保存されている全てのフィードを取得します。
   Future<List<Feed>> getAllFeeds() async {
     final db = await database;
     final maps = await db.query('user_feeds', orderBy: 'display_order ASC');
@@ -428,6 +471,7 @@ class DatabaseHelper {
     });
   }
 
+  /// 既存のフィード情報を更新します。
   Future<int> updateFeed(Feed feed) async {
     final db = await database;
     return await db.update(
@@ -438,6 +482,7 @@ class DatabaseHelper {
     );
   }
 
+  /// IDを指定してフィードを削除します。
   Future<int> deleteFeed(int id) async {
     final db = await database;
     return await db.delete(
@@ -447,8 +492,10 @@ class DatabaseHelper {
     );
   }
 
+  /// フィードの表示順を一括で更新します。
   Future<void> updateFeedOrder(List<Feed> feeds) async {
     final db = await database;
+    // 複数の更新処理を1つのバッチにまとめることで、パフォーマンスを向上させます。
     final batch = db.batch();
     for (int i = 0; i < feeds.length; i++) {
       final feed = feeds[i];
@@ -459,16 +506,15 @@ class DatabaseHelper {
         whereArgs: [feed.id],
       );
     }
+    // バッチ処理を実行
     await batch.commit(noResult: true);
   }
 
-  // ★★★ 修正箇所：古いキャッシュ関連メソッドを全て削除 ★★★
-  // AnalyticsSummary (キャッシュ) 関連のメソッドは不要になったため削除
-  // CategorySummaryCache 関連のメソッドは不要になったため削除
-
-  /// 全てのデータを削除します。
+  /// 全てのテーブルから全てのデータを削除します。
+  /// 主にデバッグやリセット機能のために使用します。
   Future<void> deleteAllData() async {
     final db = await database;
+    // アプリのデータをリセットするなどのデバッグ目的で使用します。
     await db.delete('qr_data');
     await db.delete('race_results');
     await db.delete('horse_performance');
@@ -476,15 +522,16 @@ class DatabaseHelper {
     await db.delete('user_marks');
     await db.delete('user_feeds');
     await db.delete('analytics_aggregates');
-    print('DEBUG: All data deleted from all tables.');
   }
 
-  // --- Analytics Aggregates (New Methods) ---
-
+  /// 分析用の集計データを更新します。
+  /// 投資額、払戻額、的中数、ベット数などの差分を受け取り、データベースの値を更新します。
   Future<void> updateAggregates(Map<String, Map<String, int>> updates) async {
     final db = await database;
+    // トランザクション内で処理を行い、一連の更新が全て成功するか、全て失敗するかのどちらかになることを保証します（原子性）。
     await db.transaction((txn) async {
       for (final key in updates.keys) {
+        // 現在の集計値を取得
         final current = await txn.query(
           'analytics_aggregates',
           where: 'aggregate_key = ?',
@@ -493,7 +540,7 @@ class DatabaseHelper {
 
         final Map<String, dynamic> updateValues = updates[key]!;
         if (current.isEmpty) {
-          // Insert new record
+          // データが存在しない場合は、新しい行として挿入
           await txn.insert('analytics_aggregates', {
             'aggregate_key': key,
             'total_investment': updateValues['investment_delta'] ?? 0,
@@ -502,7 +549,7 @@ class DatabaseHelper {
             'bet_count': updateValues['bet_delta'] ?? 0,
           });
         } else {
-          // Update existing record
+          // データが存在する場合は、現在の値に差分を加算して更新
           await txn.update(
             'analytics_aggregates',
             {
@@ -519,8 +566,10 @@ class DatabaseHelper {
     });
   }
 
+  /// 年単位の集計サマリーを取得します。
   Future<List<Map<String, dynamic>>> getYearlySummaries() async {
     final db = await database;
+    // 'total_YYYY' 形式のキーを持つデータを検索
     return await db.query(
       'analytics_aggregates',
       where: "aggregate_key LIKE 'total_%' AND aggregate_key NOT LIKE 'total_%-%'",
@@ -528,8 +577,10 @@ class DatabaseHelper {
     );
   }
 
+  /// 指定された年の月別データを取得します。
   Future<List<Map<String, dynamic>>> getMonthlyDataForYear(int year) async {
     final db = await database;
+    // 'total_YYYY-MM' 形式のキーを持つデータを検索
     return await db.query(
       'analytics_aggregates',
       where: "aggregate_key LIKE ?",
@@ -538,8 +589,10 @@ class DatabaseHelper {
     );
   }
 
+  /// カテゴリ（競馬場、騎手など）ごとの集計サマリーを取得します。
   Future<List<Map<String, dynamic>>> getCategorySummaries(String prefix, {int? year}) async {
     final db = await database;
+    // SQLインジェクションを防ぐため、引数はwhereArgsで渡す
     final whereClause = year != null ? "aggregate_key LIKE ?" : "aggregate_key LIKE ?";
     final whereArgs = year != null ? ['${prefix}_%_$year'] : ['${prefix}_%'];
     return await db.query(
@@ -549,14 +602,18 @@ class DatabaseHelper {
     );
   }
 
+  /// データベースファイルへの絶対パスを取得します。
   Future<String> getDbPath() async {
     final databasePath = await getDatabasesPath();
     return join(databasePath, 'hetaumakeiba_v2.db');
   }
 
+  /// データベース接続を閉じます。
   Future<void> closeDb() async {
+    // データベースがnullでなく、かつ開いている場合のみ閉じる
     if (_database != null && _database!.isOpen) {
       await _database!.close();
+      // シングルトンのインスタンスもnullにして、次回アクセス時に再初期化されるようにする
       _database = null;
     }
   }
