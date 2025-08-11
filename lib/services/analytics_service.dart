@@ -101,7 +101,7 @@ class AnalyticsService {
     if (venue != '不明') keys.add('venue_${venue}_$year');
 
     // 3. グレードのキー
-    final gradePattern = RegExp(r'\((G(?:I{1,3}|[1-3])|Jpn[1-3])\)', caseSensitive: false);
+    final gradePattern = RegExp(r'\(((?:J[・.]?)?G(?:I{1,3}|[1-3])|Jpn[1-3])\)', caseSensitive: false);
     final gradeMatch = gradePattern.firstMatch(raceResult.raceTitle);
     String grade = 'その他';
     if (gradeMatch != null) grade = _normalizeGrade(gradeMatch.group(1)!);
