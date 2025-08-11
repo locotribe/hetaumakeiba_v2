@@ -49,6 +49,14 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
   void _setupTabController() {
     _tabController?.dispose();
     _tabController = TabController(length: _visibleCards.length, vsync: this);
+    _tabController!.addListener(() {
+      if (!_tabController!.indexIsChanging) {
+        setState(() {
+          // This setState call will trigger a rebuild,
+          // allowing the build method to check the new index.
+        });
+      }
+    });
   }
 
   Future<void> _loadInitialSettingsAndData() async {
@@ -242,6 +250,14 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
 
   @override
   Widget build(BuildContext context) {
+    bool isFilterVisible = true;
+    if (_tabController != null && _visibleCards.isNotEmpty && _tabController!.index < _visibleCards.length) {
+      final currentKey = _visibleCards[_tabController!.index];
+      if (currentKey == 'grand_total_summary') {
+        isFilterVisible = false;
+      }
+    }
+
     return Scaffold(
       body: Stack(
         children: [
@@ -269,7 +285,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
                     }).toList(),
                   ),
                 ),
-              _buildPeriodFilter(),
+              if (isFilterVisible) _buildPeriodFilter(),
               Expanded(child: _buildBody()),
             ],
           ),
@@ -424,6 +440,14 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Align(
+              alignment: Alignment.center,
+              child: SizedBox(
+                height: 300,
+                child: _buildGrandTotalPieChart(summary),
+              ),
+            ),
+            const Divider(height: 32),
             const Text(
               '総合計サマリー',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -442,11 +466,114 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
                 _buildSummaryTableRow('的中率', '${summary.hitRate.toStringAsFixed(1)}%'),
               ],
             ),
+            if (_analysisData.topPayout != null)
+              const Divider(height: 32, thickness: 1),
+            if (_analysisData.topPayout != null)
+              _buildTopPayoutContent(),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildGrandTotalPieChart(CategorySummary summary) {
+    final currencyFormatter = NumberFormat.decimalPattern('ja');
+    final profit = summary.profit;
+    final investment = summary.investment;
+    final payout = summary.payout;
+
+    List<PieChartSectionData> sections = [];
+    if (investment == 0) {
+      return const Center(child: Text('データがありません'));
+    }
+
+    if (profit >= 0) {
+      sections = [
+        PieChartSectionData(
+          color: Colors.blue.shade700,
+          value: profit.toDouble(),
+          title: '${(profit / investment * 100).toStringAsFixed(1)}%',
+          radius: 60,
+          titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+        PieChartSectionData(
+          color: Colors.grey.shade400,
+          value: investment.toDouble(),
+          title: '',
+          radius: 50,
+        ),
+      ];
+    } else { // 損失が出ている場合
+      sections = [
+        PieChartSectionData(
+          color: Colors.green.shade600,
+          value: payout.toDouble(),
+          title: '${(payout / investment * 100).toStringAsFixed(1)}%',
+          radius: 60,
+          titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+        PieChartSectionData(
+          color: Colors.red.shade700,
+          value: (profit * -1).toDouble(),
+          title: '',
+          radius: 50,
+        ),
+      ];
+    }
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        SizedBox(
+          height: 150,
+          width: 150,
+          child: PieChart(
+            PieChartData(
+              sections: sections,
+              centerSpaceRadius: 40,
+              sectionsSpace: 2,
+            ),
+          ),
+        ),
+        const SizedBox(height: 30),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: profit >= 0
+              ? [
+            _buildLegend(Colors.blue.shade700, '純利益', currencyFormatter.format(profit)),
+            const SizedBox(width: 16),
+            _buildLegend(Colors.grey.shade400, '払戻原資', currencyFormatter.format(investment)),
+          ]
+              : [
+            _buildLegend(Colors.green.shade600, '払戻額', currencyFormatter.format(payout)),
+            const SizedBox(width: 16),
+            _buildLegend(Colors.red.shade700, '損失額', currencyFormatter.format(profit * -1)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegend(Color color, String text, String amount) {
+    return Row(
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          color: color,
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(text, style: const TextStyle(fontSize: 14)),
+            Text('$amount円', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ],
+    );
+  }
+
 
   TableRow _buildSummaryTableRow(String label, String value, {Color? valueColor}) {
     return TableRow(
