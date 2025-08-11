@@ -103,9 +103,13 @@ class AnalyticsService {
     // 3. グレードのキー
     final gradePattern = RegExp(r'\(((?:J[・.]?)?G(?:I{1,3}|[1-3])|Jpn[1-3])\)', caseSensitive: false);
     final gradeMatch = gradePattern.firstMatch(raceResult.raceTitle);
-    String grade = 'その他';
-    if (gradeMatch != null) grade = _normalizeGrade(gradeMatch.group(1)!);
-    if (grade != 'その他') keys.add('grade_${grade}_$year');
+    String grade;
+    if (gradeMatch != null) {
+      grade = _normalizeGrade(gradeMatch.group(1)!);
+    } else {
+      grade = raceResult.raceGrade.isNotEmpty ? raceResult.raceGrade : 'その他';
+    }
+    keys.add('grade_${grade}_$year');
 
     // 4. 距離とトラックのキー
     final raceInfoParts = raceResult.raceInfo.split('/');
@@ -148,8 +152,6 @@ class AnalyticsService {
       'J.GII': 'J.G2', 'J・GII': 'J.G2',
       'J.G3': 'J.G3', 'J・G3': 'J.G3',
       'J.GIII': 'J.G3', 'J・GIII': 'J.G3',
-
-      // 既存の平地グレード定義
       'G1': 'G1', 'GI': 'G1',
       'G2': 'G2', 'GII': 'G2',
       'G3': 'G3', 'GIII': 'G3',
