@@ -101,6 +101,8 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     // 3. 過去最高払戻は都度計算が必要なため、別途ロジックを呼び出す
     final topPayout = await _calculateTopPayout(filterYear: filterYear);
 
+    final grandTotalSummary = await _dbHelper.getGrandTotalSummary();
+
     // 4. DBから取得したデータをUIで使うためのAnalyticsDataモデルに変換
     final Map<int, YearlySummary> yearlySummaries = {};
     for (var map in yearlySummariesMaps) {
@@ -140,6 +142,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       ticketTypeSummaries: ticketTypeSummaries.map((m) => _mapToCategorySummary(m, 'ticket_type_')).toList(),
       purchaseMethodSummaries: purchaseMethodSummaries.map((m) => _mapToCategorySummary(m, 'purchase_method_')).toList(),
       topPayout: topPayout,
+      grandTotalSummary: grandTotalSummary,
     );
 
     if (!mounted) return;
@@ -292,7 +295,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4.0),
               child: ChoiceChip(
-                label: Text(period == '総合' ? '総合' : '$period年'),
+                label: Text(period == '総合' ? '年別総合' : '$period年'),
                 selected: _selectedPeriod == period,
                 onSelected: (isSelected) {
                   if (isSelected) {
@@ -337,6 +340,8 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
 
   Widget _buildPageContent(String key) {
     switch (key) {
+      case 'grand_total_summary':
+        return _buildGrandTotalContent();
       case 'yearly_summary':
         final bool isOverallMode = _selectedPeriod == '総合';
         final yearlySummaries = _analysisData.yearlySummaries.values.toList()
@@ -392,6 +397,74 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  Widget _buildGrandTotalContent() {
+    final summary = _analysisData.grandTotalSummary;
+    if (summary == null) {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+            child: Text('表示できるデータがありません。',
+                style: TextStyle(color: Colors.grey[600]))),
+      );
+    }
+
+    final currencyFormatter = NumberFormat.decimalPattern('ja');
+    final profit = summary.profit;
+    Color profitColor = Colors.black87;
+    if (profit > 0) profitColor = Colors.blue.shade700;
+    if (profit < 0) profitColor = Colors.red.shade700;
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '総合計サマリー',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 24),
+            Table(
+              columnWidths: const {
+                0: FlexColumnWidth(2),
+                1: FlexColumnWidth(3),
+              },
+              children: [
+                _buildSummaryTableRow('総投資額', '${currencyFormatter.format(summary.investment)}円'),
+                _buildSummaryTableRow('総払戻額', '${currencyFormatter.format(summary.payout)}円'),
+                _buildSummaryTableRow('総収支', '${currencyFormatter.format(profit)}円', valueColor: profitColor),
+                _buildSummaryTableRow('回収率', '${summary.recoveryRate.toStringAsFixed(1)}%'),
+                _buildSummaryTableRow('的中率', '${summary.hitRate.toStringAsFixed(1)}%'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  TableRow _buildSummaryTableRow(String label, String value, {Color? valueColor}) {
+    return TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: valueColor ?? Colors.black87),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildOverallContent(List<YearlySummary> summaries) {

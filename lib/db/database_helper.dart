@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
+import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -599,6 +600,35 @@ class DatabaseHelper {
       'analytics_aggregates',
       where: whereClause,
       whereArgs: whereArgs,
+    );
+  }
+
+  Future<CategorySummary?> getGrandTotalSummary() async {
+    final db = await database;
+    final yearlySummaries = await getYearlySummaries();
+
+    if (yearlySummaries.isEmpty) {
+      return null;
+    }
+
+    int totalInvestment = 0;
+    int totalPayout = 0;
+    int hitCount = 0;
+    int betCount = 0;
+
+    for (final summary in yearlySummaries) {
+      totalInvestment += summary['total_investment'] as int;
+      totalPayout += summary['total_payout'] as int;
+      hitCount += summary['hit_count'] as int;
+      betCount += summary['bet_count'] as int;
+    }
+
+    return CategorySummary(
+      name: '総合計',
+      investment: totalInvestment,
+      payout: totalPayout,
+      hitCount: hitCount,
+      betCount: betCount,
     );
   }
 

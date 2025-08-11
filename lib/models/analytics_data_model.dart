@@ -184,6 +184,7 @@ class AnalyticsData {
   final List<CategorySummary> ticketTypeSummaries;
   final List<CategorySummary> purchaseMethodSummaries;
   final TopPayoutInfo? topPayout;
+  final CategorySummary? grandTotalSummary;
 
   AnalyticsData({
     required this.yearlySummaries,
@@ -194,6 +195,7 @@ class AnalyticsData {
     required this.ticketTypeSummaries,
     required this.purchaseMethodSummaries,
     this.topPayout,
+    this.grandTotalSummary,
   });
 
   factory AnalyticsData.empty() {
@@ -206,6 +208,7 @@ class AnalyticsData {
       ticketTypeSummaries: [],
       purchaseMethodSummaries: [],
       topPayout: null,
+      grandTotalSummary: null,
     );
   }
 
@@ -219,6 +222,7 @@ class AnalyticsData {
       'ticketTypeSummaries': ticketTypeSummaries.map((x) => x.toMap()).toList(),
       'purchaseMethodSummaries': purchaseMethodSummaries.map((x) => x.toMap()).toList(),
       'topPayout': topPayout?.toMap(),
+      'grandTotalSummary': grandTotalSummary?.toMap(),
     };
   }
 
@@ -232,6 +236,7 @@ class AnalyticsData {
       ticketTypeSummaries: List<CategorySummary>.from(map['ticketTypeSummaries']?.map((x) => CategorySummary.fromMap(x))),
       purchaseMethodSummaries: List<CategorySummary>.from(map['purchaseMethodSummaries']?.map((x) => CategorySummary.fromMap(x))),
       topPayout: map['topPayout'] != null ? TopPayoutInfo.fromMap(map['topPayout']) : null,
+      grandTotalSummary: map['grandTotalSummary'] != null ? CategorySummary.fromMap(map['grandTotalSummary']) : null,
     );
   }
 
