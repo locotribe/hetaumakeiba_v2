@@ -660,9 +660,9 @@ class ScraperService {
     if (gradeElement != null) {
       final className = gradeElement.className;
       // 障害グレードを先に判定する
-      if (className.contains('Icon_GradeType4')) raceGrade = 'J.G1';
+      if (className.contains('Icon_GradeType10')) raceGrade = 'J.G1';
       // ※J.G2のクラス名は仮です。必要に応じて確認・修正してください。
-      else if (className.contains('Icon_GradeType5')) raceGrade = 'J.G2';
+      else if (className.contains('Icon_GradeType11')) raceGrade = 'J.G2';
       else if (className.contains('Icon_GradeType12')) raceGrade = 'J.G3';
 
       // 次に平地グレードを判定する

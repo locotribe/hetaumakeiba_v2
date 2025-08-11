@@ -142,6 +142,14 @@ class AnalyticsService {
   String _normalizeGrade(String rawGrade) {
     final upperGrade = rawGrade.toUpperCase().replaceAll('Ⅰ', 'I').replaceAll('Ⅱ', 'II').replaceAll('Ⅲ', 'III');
     const gradeMap = {
+      'J.G1': 'J.G1', 'J・G1': 'J.G1',
+      'J.GI': 'J.G1', 'J・GI': 'J.G1',
+      'J.G2': 'J.G2', 'J・G2': 'J.G2',
+      'J.GII': 'J.G2', 'J・GII': 'J.G2',
+      'J.G3': 'J.G3', 'J・G3': 'J.G3',
+      'J.GIII': 'J.G3', 'J・GIII': 'J.G3',
+
+      // 既存の平地グレード定義
       'G1': 'G1', 'GI': 'G1',
       'G2': 'G2', 'GII': 'G2',
       'G3': 'G3', 'GIII': 'G3',
