@@ -175,6 +175,46 @@ class TopPayoutInfo {
   }
 }
 
+class PredictionStat {
+  final String mark;
+  final int totalCount;
+  final int winCount;
+  final int placeCount;
+  final int showCount;
+
+  PredictionStat({
+    required this.mark,
+    required this.totalCount,
+    required this.winCount,
+    required this.placeCount,
+    required this.showCount,
+  });
+
+  double get winRate => totalCount == 0 ? 0.0 : (winCount / totalCount) * 100;
+  double get placeRate => totalCount == 0 ? 0.0 : (placeCount / totalCount) * 100;
+  double get showRate => totalCount == 0 ? 0.0 : (showCount / totalCount) * 100;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'mark': mark,
+      'totalCount': totalCount,
+      'winCount': winCount,
+      'placeCount': placeCount,
+      'showCount': showCount,
+    };
+  }
+
+  factory PredictionStat.fromMap(Map<String, dynamic> map) {
+    return PredictionStat(
+      mark: map['mark'] as String,
+      totalCount: map['totalCount'] as int,
+      winCount: map['winCount'] as int,
+      placeCount: map['placeCount'] as int,
+      showCount: map['showCount'] as int,
+    );
+  }
+}
+
 class AnalyticsData {
   final Map<int, YearlySummary> yearlySummaries;
   final List<CategorySummary> gradeSummaries;
@@ -183,6 +223,7 @@ class AnalyticsData {
   final List<CategorySummary> trackSummaries;
   final List<CategorySummary> ticketTypeSummaries;
   final List<CategorySummary> purchaseMethodSummaries;
+  final List<PredictionStat> predictionStats;
   final TopPayoutInfo? topPayout;
   final CategorySummary? grandTotalSummary;
 
@@ -194,6 +235,7 @@ class AnalyticsData {
     required this.trackSummaries,
     required this.ticketTypeSummaries,
     required this.purchaseMethodSummaries,
+    required this.predictionStats,
     this.topPayout,
     this.grandTotalSummary,
   });
@@ -207,6 +249,7 @@ class AnalyticsData {
       trackSummaries: [],
       ticketTypeSummaries: [],
       purchaseMethodSummaries: [],
+      predictionStats: [],
       topPayout: null,
       grandTotalSummary: null,
     );
@@ -221,6 +264,7 @@ class AnalyticsData {
       'trackSummaries': trackSummaries.map((x) => x.toMap()).toList(),
       'ticketTypeSummaries': ticketTypeSummaries.map((x) => x.toMap()).toList(),
       'purchaseMethodSummaries': purchaseMethodSummaries.map((x) => x.toMap()).toList(),
+      'predictionStats': predictionStats.map((x) => x.toMap()).toList(),
       'topPayout': topPayout?.toMap(),
       'grandTotalSummary': grandTotalSummary?.toMap(),
     };
@@ -235,6 +279,7 @@ class AnalyticsData {
       trackSummaries: List<CategorySummary>.from(map['trackSummaries']?.map((x) => CategorySummary.fromMap(x))),
       ticketTypeSummaries: List<CategorySummary>.from(map['ticketTypeSummaries']?.map((x) => CategorySummary.fromMap(x))),
       purchaseMethodSummaries: List<CategorySummary>.from(map['purchaseMethodSummaries']?.map((x) => CategorySummary.fromMap(x))),
+      predictionStats: List<PredictionStat>.from(map['predictionStats']?.map((x) => PredictionStat.fromMap(x))),
       topPayout: map['topPayout'] != null ? TopPayoutInfo.fromMap(map['topPayout']) : null,
       grandTotalSummary: map['grandTotalSummary'] != null ? CategorySummary.fromMap(map['grandTotalSummary']) : null,
     );

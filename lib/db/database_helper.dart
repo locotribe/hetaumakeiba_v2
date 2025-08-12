@@ -797,6 +797,41 @@ class DatabaseHelper {
     );
   }
 
+  Future<List<PredictionStat>> getPredictionStats(String userId) async {
+    final db = await database;
+    // キーが 'prediction_'で始まり、'_stats'で終わるデータを検索
+    final maps = await db.query(
+      'analytics_aggregates',
+      where: "aggregate_key LIKE 'prediction_%_stats' AND userId = ?",
+      whereArgs: [userId],
+    );
+
+    if (maps.isEmpty) {
+      return [];
+    }
+
+    final keyPattern = RegExp(r'^prediction_(.+)_(stats)$');
+    final List<PredictionStat> resultList = [];
+
+    for (final map in maps) {
+      final key = map['aggregate_key'] as String;
+      final match = keyPattern.firstMatch(key);
+      if (match != null) {
+        final mark = match.group(1)!;
+        resultList.add(PredictionStat(
+          mark: mark,
+          totalCount: map['bet_count'] as int,
+          winCount: map['hit_count'] as int,
+          placeCount: map['total_investment'] as int,
+          showCount: map['total_payout'] as int,
+        ));
+      }
+    }
+    resultList.sort((a, b) => a.mark.compareTo(b.mark));
+    return resultList;
+  }
+
+
   /// データベースファイルへの絶対パスを取得します。
   Future<String> getDbPath() async {
     final databasePath = await getDatabasesPath();

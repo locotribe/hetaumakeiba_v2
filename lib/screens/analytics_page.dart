@@ -89,7 +89,6 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       _isLoading = true;
     });
 
-    // ★★★ ここからが修正箇所 ★★★
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) {
       setState(() {
@@ -102,32 +101,34 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       );
       return;
     }
-    // ★★★ ここまでが修正箇所 ★★★
 
     final int? filterYear = (_selectedPeriod == '総合') ? null : int.tryParse(_selectedPeriod);
 
     // --- データ取得ロジックをDBからの直接クエリに変更 ---
 
     // 1. 利用可能な年のリストと、総合表示用の年別サマリーを取得
-    final yearlySummariesMaps = await _dbHelper.getYearlySummaries(userId); // ★★★ 修正箇所 ★★★
+    final yearlySummariesMaps = await _dbHelper.getYearlySummaries(userId);
     final availableYears = yearlySummariesMaps
         .map((e) => int.parse(e['aggregate_key'].split('_').last))
         .toList()..sort((a, b) => b.compareTo(a));
 
     // 2. 各カテゴリのサマリーを取得
-    // ★★★ ここからが修正箇所 ★★★
     final gradeSummaries = await _dbHelper.getCategorySummaries(userId, 'grade', year: filterYear);
     final venueSummaries = await _dbHelper.getCategorySummaries(userId, 'venue', year: filterYear);
     final distanceSummaries = await _dbHelper.getCategorySummaries(userId, 'distance', year: filterYear);
     final trackSummaries = await _dbHelper.getCategorySummaries(userId, 'track', year: filterYear);
     final ticketTypeSummaries = await _dbHelper.getCategorySummaries(userId, 'ticket_type', year: filterYear);
     final purchaseMethodSummaries = await _dbHelper.getCategorySummaries(userId, 'purchase_method', year: filterYear);
+
+    // ★★★ ここからが修正箇所 ★★★
+    // 予想成績データを取得
+    final predictionStats = await _dbHelper.getPredictionStats(userId);
     // ★★★ ここまでが修正箇所 ★★★
 
     // 3. 過去最高払戻は都度計算が必要なため、別途ロジックを呼び出す
     final topPayout = await _calculateTopPayoutOptimized(userId, filterYear: filterYear);
 
-    final grandTotalSummary = await _dbHelper.getGrandTotalSummary(userId); // ★★★ 修正箇所 ★★★
+    final grandTotalSummary = await _dbHelper.getGrandTotalSummary(userId);
 
     // 4. DBから取得したデータをUIで使うためのAnalyticsDataモデルに変換
     final Map<int, YearlySummary> yearlySummaries = {};
@@ -142,7 +143,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     }
 
     if (filterYear != null) {
-      final monthlyDataMaps = await _dbHelper.getMonthlyDataForYear(userId, filterYear); // ★★★ 修正箇所 ★★★
+      final monthlyDataMaps = await _dbHelper.getMonthlyDataForYear(userId, filterYear);
       final yearSummary = yearlySummaries.putIfAbsent(filterYear, () => YearlySummary(year: filterYear));
 
       // monthlyPurchaseDetailsは新しい集計方法では直接取得しないため空リストとする
@@ -167,6 +168,9 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       trackSummaries: trackSummaries.map((m) => _mapToCategorySummary(m, 'track_')).toList(),
       ticketTypeSummaries: ticketTypeSummaries.map((m) => _mapToCategorySummary(m, 'ticket_type_')).toList(),
       purchaseMethodSummaries: purchaseMethodSummaries.map((m) => _mapToCategorySummary(m, 'purchase_method_')).toList(),
+      // ★★★ ここからが修正箇所 ★★★
+      predictionStats: predictionStats,
+      // ★★★ ここまでが修正箇所 ★★★
       topPayout: topPayout,
       grandTotalSummary: grandTotalSummary,
     );
@@ -307,7 +311,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     bool isFilterVisible = true;
     if (_tabController != null && _visibleCards.isNotEmpty && _tabController!.index < _visibleCards.length) {
       final currentKey = _visibleCards[_tabController!.index];
-      if (currentKey == 'grand_total_summary') {
+      if (currentKey == 'grand_total_summary' || currentKey == 'prediction_summary') { // ★★★ 修正箇所 ★★★
         isFilterVisible = false;
       }
     }
@@ -464,10 +468,112 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
           title: '方式別 収支',
           summaries: _analysisData.purchaseMethodSummaries,
         );
+    // ★★★ ここからが修正箇所 ★★★
+      case 'prediction_summary':
+        return _buildPredictionSummaryContent();
+    // ★★★ ここまでが修正箇所 ★★★
       default:
         return const SizedBox.shrink();
     }
   }
+
+  // ★★★ ここからが修正箇所 ★★★
+  Widget _buildPredictionSummaryContent() {
+    if (_analysisData.predictionStats.isEmpty) {
+      return _buildPredictionEmptyState();
+    }
+
+    // データをソートする（例：試行回数が多い順）
+    final sortedStats = List<PredictionStat>.from(_analysisData.predictionStats)
+      ..sort((a, b) => b.totalCount.compareTo(a.totalCount));
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '予想傾向分析',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 24,
+                columns: const [
+                  DataColumn(label: Text('印')),
+                  DataColumn(label: Text('勝率'), numeric: true),
+                  DataColumn(label: Text('連対率'), numeric: true),
+                  DataColumn(label: Text('複勝率'), numeric: true),
+                  DataColumn(label: Text('試行'), numeric: true),
+                ],
+                rows: sortedStats.map((stat) {
+                  return DataRow(cells: [
+                    DataCell(Text(stat.mark, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                    DataCell(Text('${stat.winRate.toStringAsFixed(1)}%')),
+                    DataCell(Text('${stat.placeRate.toStringAsFixed(1)}%')),
+                    DataCell(Text('${stat.showRate.toStringAsFixed(1)}%')),
+                    DataCell(Text('${stat.totalCount} 回')),
+                  ]);
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '※勝率: 1着 / 連対率: 2着以内 / 複勝率: 3着以内',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPredictionEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.assignment_turned_in_outlined, size: 80, color: Colors.grey.shade400),
+            const SizedBox(height: 24),
+            Text(
+              'まだ予想印がありません',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '重賞レースで予想印を登録して\nあなただけの傾向を分析しましょう！',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600, height: 1.5),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.search),
+              label: const Text('重賞レースを探す'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                textStyle: const TextStyle(fontSize: 16),
+              ),
+              onPressed: () {
+                // TODO: 実際の重賞レース一覧ページに遷移する
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('（未実装）重賞レース一覧ページへ遷移します。')),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  // ★★★ ここまでが修正箇所 ★★★
+
 
   Widget _buildGrandTotalContent() {
     final summary = _analysisData.grandTotalSummary;

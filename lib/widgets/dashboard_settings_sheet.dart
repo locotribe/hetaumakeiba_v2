@@ -13,6 +13,7 @@ const Map<String, String> availableCards = {
   'track_summary': '馬場状態別収支',
   'ticket_type_summary': '式別収支',
   'purchase_method_summary': '方式別収支',
+  'prediction_summary': '予想傾向分析',
 };
 
 class DashboardSettingsSheet extends StatefulWidget {

@@ -11,14 +11,14 @@ class AnalyticsService {
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   /// 特定のレースIDの結果が確定した際に、関連する全ての集計値を更新する
-  Future<void> updateAggregatesOnResultConfirmed(String raceId, String userId) async { // ★★★ 修正箇所 ★★★
+  Future<void> updateAggregatesOnResultConfirmed(String raceId, String userId) async {
     final raceResult = await _dbHelper.getRaceResult(raceId);
     if (raceResult == null || raceResult.isIncomplete) {
       return; // レース結果が存在しない、または未確定の場合は何もしない
     }
 
     // このraceIdに紐づく全てのQrDataを取得
-    final allQrData = await _dbHelper.getAllQrData(userId); // ★★★ 修正箇所 ★★★
+    final allQrData = await _dbHelper.getAllQrData(userId);
     final List<QrData> relevantTickets = [];
     for (final qrData in allQrData) {
       final parsedData = json.decode(qrData.parsedDataJson) as Map<String, dynamic>;
@@ -28,40 +28,92 @@ class AnalyticsService {
       }
     }
 
-    if (relevantTickets.isEmpty) {
-      return; // 対象の馬券がなければ何もしない
-    }
-
     final Map<String, Map<String, int>> updates = {};
 
-    for (final ticket in relevantTickets) {
-      final parsedTicket = json.decode(ticket.parsedDataJson) as Map<String, dynamic>;
-      final hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
+    if (relevantTickets.isNotEmpty) {
+      for (final ticket in relevantTickets) {
+        final parsedTicket = json.decode(ticket.parsedDataJson) as Map<String, dynamic>;
+        final hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
 
-      final int investment = parsedTicket['合計金額'] as int? ?? 0;
-      final int payout = hitResult.totalPayout + hitResult.totalRefund;
-      final int isHit = hitResult.isHit ? 1 : 0;
-      final int betCount = 1;
+        final int investment = parsedTicket['合計金額'] as int? ?? 0;
+        final int payout = hitResult.totalPayout + hitResult.totalRefund;
+        final int isHit = hitResult.isHit ? 1 : 0;
+        final int betCount = 1;
 
-      // この馬券が影響を与える全ての集計キーを生成
-      final keys = _generateAggregateKeys(parsedTicket, raceResult);
+        // この馬券が影響を与える全ての集計キーを生成
+        final keys = _generateAggregateKeys(parsedTicket, raceResult);
 
-      for (final key in keys) {
-        _applyDeltas(
-          updates: updates,
-          key: key,
-          investmentDelta: investment,
-          payoutDelta: payout,
-          hitDelta: isHit,
-          betDelta: betCount,
-        );
+        for (final key in keys) {
+          _applyDeltas(
+            updates: updates,
+            key: key,
+            investmentDelta: investment,
+            payoutDelta: payout,
+            hitDelta: isHit,
+            betDelta: betCount,
+          );
+        }
       }
     }
 
+    // 予想印の成績を更新
+    await _updatePredictionStats(updates, raceResult, userId);
+
     if (updates.isNotEmpty) {
-      await _dbHelper.updateAggregates(userId, updates); // ★★★ 修正箇所 ★★★
+      await _dbHelper.updateAggregates(userId, updates);
     }
   }
+
+  /// 予想印の成績を集計・更新する
+  Future<void> _updatePredictionStats(Map<String, Map<String, int>> updates, RaceResult raceResult, String userId) async {
+    final userMarks = await _dbHelper.getAllUserMarksForRace(userId, raceResult.raceId);
+    if (userMarks.isEmpty) {
+      return;
+    }
+
+    for (final mark in userMarks) {
+      final key = 'prediction_${mark.mark}_stats';
+
+      // 対応する馬の着順を取得
+      HorseResult? horseResult;
+      try {
+        // ★★★ ここが修正箇所 ★★★
+        horseResult = raceResult.horseResults.firstWhere((r) => r.horseId == mark.horseId);
+      } catch (e) {
+        // レース結果に馬が見つからない場合（取消など）はスキップ
+        continue;
+      }
+
+      final rank = int.tryParse(horseResult.rank);
+      if (rank == null) continue; // 着順が数値でない場合はスキップ
+
+      // 集計用のマップを初期化
+      updates.putIfAbsent(key, () => {
+        'investment_delta': 0, // placeCount (2着以内)
+        'payout_delta': 0,     // showCount (3着以内)
+        'hit_delta': 0,        // winCount (1着)
+        'bet_delta': 0,        // totalCount (試行回数)
+      });
+
+      // 各カウンターをインクリメント
+      // totalCount (試行回数)
+      updates[key]!['bet_delta'] = (updates[key]!['bet_delta'] ?? 0) + 1;
+
+      // winCount (1着)
+      if (rank == 1) {
+        updates[key]!['hit_delta'] = (updates[key]!['hit_delta'] ?? 0) + 1;
+      }
+      // placeCount (2着以内)
+      if (rank <= 2) {
+        updates[key]!['investment_delta'] = (updates[key]!['investment_delta'] ?? 0) + 1;
+      }
+      // showCount (3着以内)
+      if (rank <= 3) {
+        updates[key]!['payout_delta'] = (updates[key]!['payout_delta'] ?? 0) + 1;
+      }
+    }
+  }
+
 
   /// 解析済み馬券データからレースIDを生成するヘルパー
   String _getRaceIdFromParsedTicket(Map<String, dynamic> parsedTicket) {
