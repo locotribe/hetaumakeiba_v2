@@ -5,6 +5,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class GalleryQrCodeProcessor {
   final DatabaseHelper _dbHelper;
@@ -152,8 +153,19 @@ class GalleryQrCodeProcessor {
   // ▼▼▼ ★★★ ここからが修正箇所 ★★★ ▼▼▼
   /// 解析、DB保存、スクレイピング実行のロジックをTicketProcessingServiceに委譲
   Future<void> _processCombinedQrCode(String qrCode) async {
+    // ★★★ ここからが修正箇所 ★★★
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      _setWarningStatus(true, 'ユーザー情報の取得に失敗しました。');
+      await Future.delayed(const Duration(seconds: 3));
+      _setWarningStatus(false, null);
+      onProcessingComplete({'isNotTicket': true, 'エラー': 'ユーザー情報なし', '詳細': 'ログイン状態を確認できませんでした。'});
+      return;
+    }
+
     // サービスを呼び出してQRコードの処理と保存を行う
-    final parsedData = await _ticketProcessingService.processAndSaveTicket(qrCode, savedListKey);
+    final parsedData = await _ticketProcessingService.processAndSaveTicket(userId, qrCode, savedListKey);
+    // ★★★ ここまでが修正箇所 ★★★
 
     // サービスからの戻り値をチェック
     if (parsedData.containsKey('エラー')) {
@@ -173,7 +185,9 @@ class GalleryQrCodeProcessor {
     onProcessingComplete(parsedData);
 
     // スクレイピングはawaitせずに実行（Fire-and-forget）
-    _ticketProcessingService.triggerBackgroundScraping(parsedData, _dbHelper).catchError((e) {
+    // ★★★ ここからが修正箇所 ★★★
+    _ticketProcessingService.triggerBackgroundScraping(userId, parsedData, _dbHelper).catchError((e) {
+      // ★★★ ここまでが修正箇所 ★★★
       // バックグラウンド処理のエラーはコンソールに出力するのみ
       print('ERROR: バックグラウンドスクレイピング中にエラーが発生しました: $e');
     });

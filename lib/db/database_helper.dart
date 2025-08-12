@@ -9,6 +9,8 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -17,6 +19,7 @@ class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   /// データベース接続を保持するためのプライベート変数。
   static Database? _database;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   /// `DatabaseHelper`のシングルトンインスタンスを返します。
   // このファクトリコンストラクタにより、常に同じインスタンスが返されます。
@@ -50,7 +53,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 6,
+      version: 7,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。
       onCreate: (db, version) async {
@@ -58,6 +61,7 @@ class DatabaseHelper {
         await db.execute('''
           CREATE TABLE qr_data(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId TEXT NOT NULL,
             qr_code TEXT UNIQUE,
             timestamp TEXT,
             parsed_data_json TEXT
@@ -125,17 +129,19 @@ class DatabaseHelper {
         await db.execute('''
           CREATE TABLE user_marks(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId TEXT NOT NULL,
             raceId TEXT NOT NULL,
             horseId TEXT NOT NULL,
             mark TEXT NOT NULL,
             timestamp TEXT NOT NULL,
-            UNIQUE(raceId, horseId) ON CONFLICT REPLACE
+            UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
           )
         ''');
         // ユーザーが設定したフィード（RSSなど）のデータテーブル作成
         await db.execute('''
           CREATE TABLE user_feeds(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId TEXT NOT NULL,
             title TEXT NOT NULL,
             url TEXT NOT NULL,
             type TEXT NOT NULL,
@@ -145,11 +151,13 @@ class DatabaseHelper {
         // 分析用の集計データテーブル作成
         await db.execute('''
           CREATE TABLE analytics_aggregates(
-            aggregate_key TEXT PRIMARY KEY,
+            aggregate_key TEXT NOT NULL,
+            userId TEXT NOT NULL,
             total_investment INTEGER NOT NULL DEFAULT 0,
             total_payout INTEGER NOT NULL DEFAULT 0,
             hit_count INTEGER NOT NULL DEFAULT 0,
-            bet_count INTEGER NOT NULL DEFAULT 0
+            bet_count INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (aggregate_key, userId)
           )
         ''');
       },
@@ -223,8 +231,54 @@ class DatabaseHelper {
             )
           ''');
         }
+        if (oldVersion < 7) {
+          await db.execute("ALTER TABLE qr_data ADD COLUMN userId TEXT NOT NULL DEFAULT ''");
+          await db.execute("ALTER TABLE user_feeds ADD COLUMN userId TEXT NOT NULL DEFAULT ''");
+
+          await db.execute('ALTER TABLE analytics_aggregates RENAME TO analytics_aggregates_old');
+          await db.execute('''
+            CREATE TABLE analytics_aggregates(
+              aggregate_key TEXT NOT NULL,
+              userId TEXT NOT NULL,
+              total_investment INTEGER NOT NULL DEFAULT 0,
+              total_payout INTEGER NOT NULL DEFAULT 0,
+              hit_count INTEGER NOT NULL DEFAULT 0,
+              bet_count INTEGER NOT NULL DEFAULT 0,
+              PRIMARY KEY (aggregate_key, userId)
+            )
+          ''');
+          await db.execute('''
+            INSERT INTO analytics_aggregates (aggregate_key, userId, total_investment, total_payout, hit_count, bet_count)
+            SELECT aggregate_key, '', total_investment, total_payout, hit_count, bet_count FROM analytics_aggregates_old
+          ''');
+          await db.execute('DROP TABLE analytics_aggregates_old');
+
+          await db.execute('ALTER TABLE user_marks RENAME TO user_marks_old');
+          await db.execute('''
+            CREATE TABLE user_marks(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              userId TEXT NOT NULL,
+              raceId TEXT NOT NULL,
+              horseId TEXT NOT NULL,
+              mark TEXT NOT NULL,
+              timestamp TEXT NOT NULL,
+              UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
+            )
+          ''');
+          await db.execute('''
+            INSERT INTO user_marks (id, userId, raceId, horseId, mark, timestamp)
+            SELECT id, '', raceId, horseId, mark, timestamp FROM user_marks_old
+          ''');
+          await db.execute('DROP TABLE user_marks_old');
+        }
       },
     );
+  }
+
+  /// クラウド同期が有効かチェックするヘルパー
+  Future<bool> _isCloudSyncEnabled(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('isCloudSyncEnabled_$userId') ?? false;
   }
 
   /// 指定されたQRコードがデータベースに存在するかを確認します。
@@ -241,12 +295,12 @@ class DatabaseHelper {
   }
 
   /// IDを指定して単一のQRコードデータを取得します。
-  Future<QrData?> getQrData(int id) async {
+  Future<QrData?> getQrData(int id, String userId) async {
     final db = await database;
     final maps = await db.query(
       'qr_data',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? AND userId = ?',
+      whereArgs: [id, userId],
     );
     if (maps.isNotEmpty) {
       return QrData.fromMap(maps.first);
@@ -255,9 +309,14 @@ class DatabaseHelper {
   }
 
   /// 保存されている全てのQRコードデータを取得します。
-  Future<List<QrData>> getAllQrData() async {
+  Future<List<QrData>> getAllQrData(String userId) async {
     final db = await database;
-    final maps = await db.query('qr_data', orderBy: 'timestamp DESC');
+    final maps = await db.query(
+        'qr_data',
+        where: 'userId = ?',
+        whereArgs: [userId],
+        orderBy: 'timestamp DESC'
+    );
     // クエリ結果のMapリストをQrDataオブジェクトのリストに変換します。
     return List.generate(maps.length, (i) {
       return QrData.fromMap(maps[i]);
@@ -265,7 +324,11 @@ class DatabaseHelper {
   }
 
   /// 新しいQRコードデータをデータベースに挿入します。
-  Future<int> insertQrData(QrData qrData) async {
+  Future<int> insertQrData(QrData qrData, {bool fromCloud = false}) async {
+    if (!fromCloud && await _isCloudSyncEnabled(qrData.userId)) {
+      // クラウドが有効な場合、Firestoreに先に書き込む
+      await _firestore.collection('users').doc(qrData.userId).collection('qr_data').add(qrData.toMap());
+    }
     final db = await database;
     return await db.insert(
       'qr_data',
@@ -276,12 +339,32 @@ class DatabaseHelper {
   }
 
   /// IDを指定してQRコードデータを削除します。
-  Future<int> deleteQrData(int id) async {
+  Future<int> deleteQrData(int id, String userId, {bool fromCloud = false}) async {
     final db = await database;
+
+    // クラウド同期が有効な場合、先にFirestoreから削除するためのデータを取得
+    if (!fromCloud && await _isCloudSyncEnabled(userId)) {
+      // 削除対象のqr_codeを取得するために、安全なクエリでデータをまず取得
+      final maps = await db.query('qr_data', columns: ['qr_code'], where: 'id = ? AND userId = ?', whereArgs: [id, userId]);
+      if (maps.isNotEmpty) {
+        final qrCodeToDelete = maps.first['qr_code'] as String;
+        final querySnapshot = await _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('qr_data')
+            .where('qr_code', isEqualTo: qrCodeToDelete)
+            .get();
+        for (var doc in querySnapshot.docs) {
+          await doc.reference.delete();
+        }
+      }
+    }
+
+    // ローカルDBから削除
     return await db.delete(
       'qr_data',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? AND userId = ?',
+      whereArgs: [id, userId],
     );
   }
 
@@ -298,6 +381,27 @@ class DatabaseHelper {
       return raceResultFromJson(maps.first['race_result_json'] as String);
     }
     return null;
+  }
+
+  Future<Map<String, RaceResult>> getMultipleRaceResults(List<String> raceIds) async {
+    if (raceIds.isEmpty) {
+      return {};
+    }
+    final db = await database;
+    // `IN`句のプレースホルダ (?) を動的に生成
+    final placeholders = List.filled(raceIds.length, '?').join(',');
+    final maps = await db.query(
+      'race_results',
+      where: 'race_id IN ($placeholders)',
+      whereArgs: raceIds,
+    );
+
+    final Map<String, RaceResult> results = {};
+    for (final map in maps) {
+      final result = raceResultFromJson(map['race_result_json'] as String);
+      results[result.raceId] = result;
+    }
+    return results;
   }
 
   /// レース結果を挿入または更新します。
@@ -410,7 +514,15 @@ class DatabaseHelper {
   }
 
   /// ユーザーが付けた印を挿入または更新します。
-  Future<int> insertOrUpdateUserMark(UserMark mark) async {
+  Future<int> insertOrUpdateUserMark(UserMark mark, {bool fromCloud = false}) async {
+    if (!fromCloud && await _isCloudSyncEnabled(mark.userId)) {
+      final docRef = _firestore
+          .collection('users')
+          .doc(mark.userId)
+          .collection('user_marks')
+          .doc('${mark.raceId}_${mark.horseId}');
+      await docRef.set(mark.toMap());
+    }
     final db = await database;
     return await db.insert(
       'user_marks',
@@ -420,12 +532,12 @@ class DatabaseHelper {
   }
 
   /// 特定のレースの特定の馬に対するユーザーの印を取得します。
-  Future<UserMark?> getUserMark(String raceId, String horseId) async {
+  Future<UserMark?> getUserMark(String userId, String raceId, String horseId) async {
     final db = await database;
     final maps = await db.query(
       'user_marks',
-      where: 'raceId = ? AND horseId = ?',
-      whereArgs: [raceId, horseId],
+      where: 'userId = ? AND raceId = ? AND horseId = ?',
+      whereArgs: [userId, raceId, horseId],
       limit: 1,
     );
     if (maps.isNotEmpty) {
@@ -435,12 +547,12 @@ class DatabaseHelper {
   }
 
   /// 特定のレースに付けられた全てのユーザーの印を取得します。
-  Future<List<UserMark>> getAllUserMarksForRace(String raceId) async {
+  Future<List<UserMark>> getAllUserMarksForRace(String userId, String raceId) async {
     final db = await database;
     final maps = await db.query(
       'user_marks',
-      where: 'raceId = ?',
-      whereArgs: [raceId],
+      where: 'userId = ? AND raceId = ?',
+      whereArgs: [userId, raceId],
     );
     return List.generate(maps.length, (i) {
       return UserMark.fromMap(maps[i]);
@@ -448,32 +560,60 @@ class DatabaseHelper {
   }
 
   /// 特定のレースの特定の馬に付けられた印を削除します。
-  Future<int> deleteUserMark(String raceId, String horseId) async {
+  Future<int> deleteUserMark(String userId, String raceId, String horseId, {bool fromCloud = false}) async {
+    if (!fromCloud && await _isCloudSyncEnabled(userId)) {
+      final docRef = _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('user_marks')
+          .doc('${raceId}_${horseId}');
+      await docRef.delete();
+    }
     final db = await database;
     return await db.delete(
       'user_marks',
-      where: 'raceId = ? AND horseId = ?',
-      whereArgs: [raceId, horseId],
+      where: 'userId = ? AND raceId = ? AND horseId = ?',
+      whereArgs: [userId, raceId, horseId],
     );
   }
 
   /// 新しいフィードを挿入します。
-  Future<int> insertFeed(Feed feed) async {
+  Future<int> insertFeed(Feed feed, {bool fromCloud = false}) async {
+    if (!fromCloud && await _isCloudSyncEnabled(feed.userId)) {
+      await _firestore.collection('users').doc(feed.userId).collection('user_feeds').add(feed.toMap());
+    }
     final db = await database;
     return await db.insert('user_feeds', feed.toMap());
   }
 
   /// 保存されている全てのフィードを取得します。
-  Future<List<Feed>> getAllFeeds() async {
+  Future<List<Feed>> getAllFeeds(String userId) async {
     final db = await database;
-    final maps = await db.query('user_feeds', orderBy: 'display_order ASC');
+    final maps = await db.query(
+        'user_feeds',
+        where: 'userId = ?',
+        whereArgs: [userId],
+        orderBy: 'display_order ASC'
+    );
     return List.generate(maps.length, (i) {
       return Feed.fromMap(maps[i]);
     });
   }
 
   /// 既存のフィード情報を更新します。
-  Future<int> updateFeed(Feed feed) async {
+  Future<int> updateFeed(Feed feed, {bool fromCloud = false}) async {
+    if (!fromCloud && await _isCloudSyncEnabled(feed.userId)) {
+      final querySnapshot = await _firestore
+          .collection('users')
+          .doc(feed.userId)
+          .collection('user_feeds')
+          .where('id', isEqualTo: feed.id)
+          .limit(1)
+          .get();
+      if (querySnapshot.docs.isNotEmpty) {
+        await querySnapshot.docs.first.reference.update(feed.toMap());
+      }
+    }
     final db = await database;
     return await db.update(
       'user_feeds',
@@ -484,8 +624,24 @@ class DatabaseHelper {
   }
 
   /// IDを指定してフィードを削除します。
-  Future<int> deleteFeed(int id) async {
+  Future<int> deleteFeed(int id, {bool fromCloud = false}) async {
     final db = await database;
+    final maps = await db.query('user_feeds', where: 'id = ?', whereArgs: [id]);
+    if (maps.isNotEmpty) {
+      final feedToDelete = Feed.fromMap(maps.first);
+      if (!fromCloud && await _isCloudSyncEnabled(feedToDelete.userId)) {
+        final querySnapshot = await _firestore
+            .collection('users')
+            .doc(feedToDelete.userId)
+            .collection('user_feeds')
+            .where('id', isEqualTo: id)
+            .limit(1)
+            .get();
+        if (querySnapshot.docs.isNotEmpty) {
+          await querySnapshot.docs.first.reference.delete();
+        }
+      }
+    }
     return await db.delete(
       'user_feeds',
       where: 'id = ?',
@@ -513,21 +669,28 @@ class DatabaseHelper {
 
   /// 全てのテーブルから全てのデータを削除します。
   /// 主にデバッグやリセット機能のために使用します。
-  Future<void> deleteAllData() async {
+  Future<void> deleteAllDataForUser(String userId, {bool fromCloud = false}) async {
+    if (!fromCloud && await _isCloudSyncEnabled(userId)) {
+      final collections = ['qr_data', 'user_marks', 'user_feeds', 'analytics_aggregates'];
+      for (var collection in collections) {
+        final snapshot = await _firestore.collection('users').doc(userId).collection(collection).get();
+        for (var doc in snapshot.docs) {
+          await doc.reference.delete();
+        }
+      }
+    }
     final db = await database;
-    // アプリのデータをリセットするなどのデバッグ目的で使用します。
-    await db.delete('qr_data');
-    await db.delete('race_results');
-    await db.delete('horse_performance');
-    await db.delete('featured_races');
-    await db.delete('user_marks');
-    await db.delete('user_feeds');
-    await db.delete('analytics_aggregates');
+    // ユーザーに紐づくデータのみを削除
+    await db.delete('qr_data', where: 'userId = ?', whereArgs: [userId]);
+    await db.delete('user_marks', where: 'userId = ?', whereArgs: [userId]);
+    await db.delete('user_feeds', where: 'userId = ?', whereArgs: [userId]);
+    await db.delete('analytics_aggregates', where: 'userId = ?', whereArgs: [userId]);
+    // グローバルなデータ（race_resultsなど）は削除しない
   }
 
   /// 分析用の集計データを更新します。
   /// 投資額、払戻額、的中数、ベット数などの差分を受け取り、データベースの値を更新します。
-  Future<void> updateAggregates(Map<String, Map<String, int>> updates) async {
+  Future<void> updateAggregates(String userId, Map<String, Map<String, int>> updates) async {
     final db = await database;
     // トランザクション内で処理を行い、一連の更新が全て成功するか、全て失敗するかのどちらかになることを保証します（原子性）。
     await db.transaction((txn) async {
@@ -535,8 +698,8 @@ class DatabaseHelper {
         // 現在の集計値を取得
         final current = await txn.query(
           'analytics_aggregates',
-          where: 'aggregate_key = ?',
-          whereArgs: [key],
+          where: 'aggregate_key = ? AND userId = ?',
+          whereArgs: [key, userId],
         );
 
         final Map<String, dynamic> updateValues = updates[key]!;
@@ -544,6 +707,7 @@ class DatabaseHelper {
           // データが存在しない場合は、新しい行として挿入
           await txn.insert('analytics_aggregates', {
             'aggregate_key': key,
+            'userId': userId,
             'total_investment': updateValues['investment_delta'] ?? 0,
             'total_payout': updateValues['payout_delta'] ?? 0,
             'hit_count': updateValues['hit_delta'] ?? 0,
@@ -559,8 +723,8 @@ class DatabaseHelper {
               'hit_count': (current.first['hit_count'] as int) + (updateValues['hit_delta'] ?? 0),
               'bet_count': (current.first['bet_count'] as int) + (updateValues['bet_delta'] ?? 0),
             },
-            where: 'aggregate_key = ?',
-            whereArgs: [key],
+            where: 'aggregate_key = ? AND userId = ?',
+            whereArgs: [key, userId],
           );
         }
       }
@@ -568,34 +732,35 @@ class DatabaseHelper {
   }
 
   /// 年単位の集計サマリーを取得します。
-  Future<List<Map<String, dynamic>>> getYearlySummaries() async {
+  Future<List<Map<String, dynamic>>> getYearlySummaries(String userId) async {
     final db = await database;
     // 'total_YYYY' 形式のキーを持つデータを検索
     return await db.query(
       'analytics_aggregates',
-      where: "aggregate_key LIKE 'total_%' AND aggregate_key NOT LIKE 'total_%-%'",
+      where: "aggregate_key LIKE 'total_%' AND aggregate_key NOT LIKE 'total_%-%' AND userId = ?",
+      whereArgs: [userId],
       orderBy: 'aggregate_key ASC',
     );
   }
 
   /// 指定された年の月別データを取得します。
-  Future<List<Map<String, dynamic>>> getMonthlyDataForYear(int year) async {
+  Future<List<Map<String, dynamic>>> getMonthlyDataForYear(String userId, int year) async {
     final db = await database;
     // 'total_YYYY-MM' 形式のキーを持つデータを検索
     return await db.query(
       'analytics_aggregates',
-      where: "aggregate_key LIKE ?",
-      whereArgs: ['total_$year-%'],
+      where: "aggregate_key LIKE ? AND userId = ?",
+      whereArgs: ['total_$year-%', userId],
       orderBy: 'aggregate_key ASC',
     );
   }
 
   /// カテゴリ（競馬場、騎手など）ごとの集計サマリーを取得します。
-  Future<List<Map<String, dynamic>>> getCategorySummaries(String prefix, {int? year}) async {
+  Future<List<Map<String, dynamic>>> getCategorySummaries(String userId, String prefix, {int? year}) async {
     final db = await database;
     // SQLインジェクションを防ぐため、引数はwhereArgsで渡す
-    final whereClause = year != null ? "aggregate_key LIKE ?" : "aggregate_key LIKE ?";
-    final whereArgs = year != null ? ['${prefix}_%_$year'] : ['${prefix}_%'];
+    final whereClause = year != null ? "aggregate_key LIKE ? AND userId = ?" : "aggregate_key LIKE ? AND userId = ?";
+    final whereArgs = year != null ? ['${prefix}_%_$year', userId] : ['${prefix}_%', userId];
     return await db.query(
       'analytics_aggregates',
       where: whereClause,
@@ -603,9 +768,9 @@ class DatabaseHelper {
     );
   }
 
-  Future<CategorySummary?> getGrandTotalSummary() async {
+  Future<CategorySummary?> getGrandTotalSummary(String userId) async {
     final db = await database;
-    final yearlySummaries = await getYearlySummaries();
+    final yearlySummaries = await getYearlySummaries(userId);
 
     if (yearlySummaries.isEmpty) {
       return null;

@@ -5,6 +5,7 @@ import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/feed_card_widget.dart';
 import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -26,7 +27,15 @@ class _HomePageState extends State<HomePage> {
   void _refreshFeeds() {
     if (mounted) {
       setState(() {
-        _feedsFuture = _dbHelper.getAllFeeds();
+        // ★★★ ここからが修正箇所 ★★★
+        final userId = FirebaseAuth.instance.currentUser?.uid;
+        if (userId == null) {
+          // ユーザーIDが取得できない場合、空のリストを返すFutureを設定
+          _feedsFuture = Future.value([]);
+        } else {
+          _feedsFuture = _dbHelper.getAllFeeds(userId);
+        }
+        // ★★★ ここまでが修正箇所 ★★★
       });
     }
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeSettingsPage extends StatefulWidget {
   const HomeSettingsPage({super.key});
@@ -27,7 +28,19 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
     setState(() {
       _isLoading = true;
     });
-    final feeds = await _dbHelper.getAllFeeds();
+    // ★★★ ここからが修正箇所 ★★★
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      if (mounted) {
+        setState(() {
+          _feeds = [];
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+    final feeds = await _dbHelper.getAllFeeds(userId);
+    // ★★★ ここまでが修正箇所 ★★★
     if (mounted) {
       setState(() {
         _feeds = feeds;
@@ -117,6 +130,16 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
             TextButton(
               onPressed: () {
                 if (formKey.currentState!.validate()) {
+                  // ★★★ ここからが修正箇所 ★★★
+                  final userId = FirebaseAuth.instance.currentUser?.uid;
+                  if (userId == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('ユーザー情報の取得に失敗しました。')),
+                    );
+                    return;
+                  }
+                  // ★★★ ここまでが修正箇所 ★★★
+
                   // ★★★ 修正箇所：保存時にURLを自動生成するロジックを追加 ★★★
                   String finalUrl = urlController.text.trim();
                   if (selectedType == 'youtube' && !finalUrl.contains('youtube.com')) {
@@ -125,6 +148,9 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
 
                   final newFeed = Feed(
                     id: existingFeed?.id,
+                    // ★★★ ここからが修正箇所 ★★★
+                    userId: userId,
+                    // ★★★ ここまでが修正箇所 ★★★
                     title: titleController.text,
                     url: finalUrl, // 加工したURLを保存
                     type: selectedType,

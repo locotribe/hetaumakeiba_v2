@@ -11,6 +11,7 @@ import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class TicketListItem {
   final String raceId; // 新しいアーキテクチャで必要なraceId
@@ -79,7 +80,23 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     if (!mounted) return;
     setState(() { _isLoading = true; });
 
-    final allQrData = await _dbHelper.getAllQrData();
+    // ★★★ ここからが修正箇所 ★★★
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      setState(() {
+        _isLoading = false;
+        _allTicketItems = [];
+        _filteredTicketItems = [];
+      });
+      // オプション：ユーザーにエラーメッセージを表示
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ユーザー情報の取得に失敗しました。')),
+      );
+      return;
+    }
+
+    final allQrData = await _dbHelper.getAllQrData(userId);
+    // ★★★ ここまでが修正箇所 ★★★
     final List<TicketListItem> tempItems = [];
     for (final qrData in allQrData) {
       try {
@@ -509,10 +526,17 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             ) ?? false;
           },
           onDismissed: (direction) async {
-            // ★★★ 修正箇所：古いキャッシュ無効化ロジックを削除 ★★★
-            // このブロックは不要になるため削除されました。
-
-            await _dbHelper.deleteQrData(item.qrData.id!);
+            final userId = FirebaseAuth.instance.currentUser?.uid;
+            if (userId == null) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('エラー: ログイン状態を確認できませんでした。')),
+                );
+                reloadData();
+              }
+              return;
+            }
+            await _dbHelper.deleteQrData(item.qrData.id!, userId);
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('「${item.displayTitle}」を削除しました。')));
               reloadData();

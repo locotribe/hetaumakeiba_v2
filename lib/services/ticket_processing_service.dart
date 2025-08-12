@@ -18,12 +18,18 @@ class TicketProcessingService {
 
   /// QRコードを解析してDBに保存し、解析結果を返す
   Future<Map<String, dynamic>> processAndSaveTicket(
+      // ★★★ ここからが修正箇所 ★★★
+      String userId,
+      // ★★★ ここまでが修正箇所 ★★★
       String combinedQrCode, GlobalKey<SavedTicketsListPageState> savedListKey) async {
     Map<String, dynamic> parsedData;
     try {
       parsedData = parseHorseracingTicketQr(combinedQrCode);
       if (parsedData['QR'] != null) {
         final qrDataToSave = QrData(
+          // ★★★ ここからが修正箇所 ★★★
+          userId: userId,
+          // ★★★ ここまでが修正箇所 ★★★
           qrCode: parsedData['QR'] as String,
           timestamp: DateTime.now(),
           parsedDataJson: json.encode(parsedData),
@@ -45,6 +51,9 @@ class TicketProcessingService {
 
   /// バックグラウンドでレース関連情報をスクレイピングする
   Future<void> triggerBackgroundScraping(
+      // ★★★ ここからが修正箇所 ★★★
+      String userId,
+      // ★★★ ここまでが修正箇所 ★★★
       Map<String, dynamic> parsedData, DatabaseHelper dbHelper) async {
     try {
       final String year = parsedData['年'].toString();
@@ -108,7 +117,9 @@ class TicketProcessingService {
         }
 
         // ★★★ 修正箇所：新しい集計サービスを呼び出すトリガーを追加 ★★★
-        await AnalyticsService().updateAggregatesOnResultConfirmed(raceId);
+        // ★★★ ここからが修正箇所 ★★★
+        await AnalyticsService().updateAggregatesOnResultConfirmed(raceId, userId);
+        // ★★★ ここまでが修正箇所 ★★★
       }
     } catch (e) {
       print('ERROR: バックグラウンドスクレイピング処理全体でエラーが発生しました: $e');

@@ -15,6 +15,7 @@ import 'package:hetaumakeiba_v2/widgets/category_summary_card.dart';
 import 'package:hetaumakeiba_v2/widgets/dashboard_settings_sheet.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -88,28 +89,45 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       _isLoading = true;
     });
 
+    // ★★★ ここからが修正箇所 ★★★
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      setState(() {
+        _isLoading = false;
+        _analysisData = AnalyticsData.empty();
+        _availableYears = [];
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ユーザー情報の取得に失敗しました。')),
+      );
+      return;
+    }
+    // ★★★ ここまでが修正箇所 ★★★
+
     final int? filterYear = (_selectedPeriod == '総合') ? null : int.tryParse(_selectedPeriod);
 
     // --- データ取得ロジックをDBからの直接クエリに変更 ---
 
     // 1. 利用可能な年のリストと、総合表示用の年別サマリーを取得
-    final yearlySummariesMaps = await _dbHelper.getYearlySummaries();
+    final yearlySummariesMaps = await _dbHelper.getYearlySummaries(userId); // ★★★ 修正箇所 ★★★
     final availableYears = yearlySummariesMaps
         .map((e) => int.parse(e['aggregate_key'].split('_').last))
         .toList()..sort((a, b) => b.compareTo(a));
 
     // 2. 各カテゴリのサマリーを取得
-    final gradeSummaries = await _dbHelper.getCategorySummaries('grade', year: filterYear);
-    final venueSummaries = await _dbHelper.getCategorySummaries('venue', year: filterYear);
-    final distanceSummaries = await _dbHelper.getCategorySummaries('distance', year: filterYear);
-    final trackSummaries = await _dbHelper.getCategorySummaries('track', year: filterYear);
-    final ticketTypeSummaries = await _dbHelper.getCategorySummaries('ticket_type', year: filterYear);
-    final purchaseMethodSummaries = await _dbHelper.getCategorySummaries('purchase_method', year: filterYear);
+    // ★★★ ここからが修正箇所 ★★★
+    final gradeSummaries = await _dbHelper.getCategorySummaries(userId, 'grade', year: filterYear);
+    final venueSummaries = await _dbHelper.getCategorySummaries(userId, 'venue', year: filterYear);
+    final distanceSummaries = await _dbHelper.getCategorySummaries(userId, 'distance', year: filterYear);
+    final trackSummaries = await _dbHelper.getCategorySummaries(userId, 'track', year: filterYear);
+    final ticketTypeSummaries = await _dbHelper.getCategorySummaries(userId, 'ticket_type', year: filterYear);
+    final purchaseMethodSummaries = await _dbHelper.getCategorySummaries(userId, 'purchase_method', year: filterYear);
+    // ★★★ ここまでが修正箇所 ★★★
 
     // 3. 過去最高払戻は都度計算が必要なため、別途ロジックを呼び出す
-    final topPayout = await _calculateTopPayout(filterYear: filterYear);
+    final topPayout = await _calculateTopPayoutOptimized(userId, filterYear: filterYear);
 
-    final grandTotalSummary = await _dbHelper.getGrandTotalSummary();
+    final grandTotalSummary = await _dbHelper.getGrandTotalSummary(userId); // ★★★ 修正箇所 ★★★
 
     // 4. DBから取得したデータをUIで使うためのAnalyticsDataモデルに変換
     final Map<int, YearlySummary> yearlySummaries = {};
@@ -124,7 +142,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     }
 
     if (filterYear != null) {
-      final monthlyDataMaps = await _dbHelper.getMonthlyDataForYear(filterYear);
+      final monthlyDataMaps = await _dbHelper.getMonthlyDataForYear(userId, filterYear); // ★★★ 修正箇所 ★★★
       final yearSummary = yearlySummaries.putIfAbsent(filterYear, () => YearlySummary(year: filterYear));
 
       // monthlyPurchaseDetailsは新しい集計方法では直接取得しないため空リストとする
@@ -178,12 +196,47 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     );
   }
 
-  Future<TopPayoutInfo?> _calculateTopPayout({int? filterYear}) async {
-    final allQrData = await _dbHelper.getAllQrData();
+  Future<TopPayoutInfo?> _calculateTopPayoutOptimized(String userId, {int? filterYear}) async {
+    final allQrData = await _dbHelper.getAllQrData(userId);
+    if (allQrData.isEmpty) {
+      return null;
+    }
+
+    // 1. 全QRデータからユニークなraceIdを収集
+    final raceIds = allQrData.map((qr) {
+      try {
+        final parsedTicket = json.decode(qr.parsedDataJson) as Map<String, dynamic>;
+        final url = generateNetkeibaUrl(
+          year: parsedTicket['年'].toString(),
+          racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
+          round: parsedTicket['回'].toString(),
+          day: parsedTicket['日'].toString(),
+          race: parsedTicket['レース'].toString(),
+        );
+        return ScraperService.getRaceIdFromUrl(url);
+      } catch (e) {
+        return null; // パース失敗などは無視
+      }
+    }).where((id) => id != null).toSet().toList();
+
+    if (raceIds.isEmpty) {
+      return null;
+    }
+
+    // 2. 必要なレース結果をDBから一括取得
+    final raceResultsMap = await _dbHelper.getMultipleRaceResults(raceIds.cast<String>());
+
     TopPayoutInfo? topPayoutInfo;
 
+    // 3. 再度QRデータをループし、今度はメモリ上のレース結果Mapを使って計算
     for (final qrData in allQrData) {
-      final parsedTicket = json.decode(qrData.parsedDataJson) as Map<String, dynamic>;
+      Map<String, dynamic> parsedTicket;
+      try {
+        parsedTicket = json.decode(qrData.parsedDataJson) as Map<String, dynamic>;
+      } catch (e) {
+        continue; // JSONパース失敗
+      }
+
       final url = generateNetkeibaUrl(
         year: parsedTicket['年'].toString(),
         racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
@@ -194,15 +247,16 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       final raceId = ScraperService.getRaceIdFromUrl(url);
       if (raceId == null) continue;
 
-      final raceResult = await _dbHelper.getRaceResult(raceId);
-
+      // メモリ上のMapからレース結果を取得 (DBアクセスなし)
+      final raceResult = raceResultsMap[raceId];
       if (raceResult == null || raceResult.isIncomplete) continue;
 
+      // 年フィルタのチェック
       if (filterYear != null) {
         try {
-          final year = int.parse(raceResult.raceDate.split(RegExp(r'[年月日]')).first);
-          if (year != filterYear) continue;
-        } catch(e) {
+          final raceDateYear = int.parse(raceResult.raceDate.split(RegExp(r'[年月日]')).first);
+          if (raceDateYear != filterYear) continue;
+        } catch (e) {
           continue;
         }
       }
@@ -210,9 +264,9 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       final hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
       if (hitResult.isHit && (topPayoutInfo == null || hitResult.totalPayout > topPayoutInfo.payout)) {
         topPayoutInfo = TopPayoutInfo(
-            payout: hitResult.totalPayout,
-            raceName: raceResult.raceTitle,
-            raceDate: raceResult.raceDate
+          payout: hitResult.totalPayout,
+          raceName: raceResult.raceTitle,
+          raceDate: raceResult.raceDate,
         );
       }
     }

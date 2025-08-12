@@ -11,14 +11,14 @@ class AnalyticsService {
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   /// 特定のレースIDの結果が確定した際に、関連する全ての集計値を更新する
-  Future<void> updateAggregatesOnResultConfirmed(String raceId) async {
+  Future<void> updateAggregatesOnResultConfirmed(String raceId, String userId) async { // ★★★ 修正箇所 ★★★
     final raceResult = await _dbHelper.getRaceResult(raceId);
     if (raceResult == null || raceResult.isIncomplete) {
       return; // レース結果が存在しない、または未確定の場合は何もしない
     }
 
     // このraceIdに紐づく全てのQrDataを取得
-    final allQrData = await _dbHelper.getAllQrData();
+    final allQrData = await _dbHelper.getAllQrData(userId); // ★★★ 修正箇所 ★★★
     final List<QrData> relevantTickets = [];
     for (final qrData in allQrData) {
       final parsedData = json.decode(qrData.parsedDataJson) as Map<String, dynamic>;
@@ -59,7 +59,7 @@ class AnalyticsService {
     }
 
     if (updates.isNotEmpty) {
-      await _dbHelper.updateAggregates(updates);
+      await _dbHelper.updateAggregates(userId, updates); // ★★★ 修正箇所 ★★★
     }
   }
 

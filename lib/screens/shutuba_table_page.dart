@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ShutubaTablePage extends StatefulWidget {
   final String raceId;
@@ -28,9 +29,39 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
   Future<void> _loadShutubaData() async {
     setState(() {
-      _predictionRaceDataFuture = ScraperService.scrapeFullPredictionData(widget.raceId);
+      _predictionRaceDataFuture = _loadDataWithUserMarks();
     });
   }
+
+  // ★★★ ここからが修正箇所 ★★★
+  /// ユーザーの印情報を取得し、レースデータにマージする
+  Future<PredictionRaceData?> _loadDataWithUserMarks() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      // ユーザーがいない場合は印なしのデータを表示
+      return await ScraperService.scrapeFullPredictionData(widget.raceId);
+    }
+
+    // 1. まず、スクレイピングで基本的なレースデータを取得
+    final raceData = await ScraperService.scrapeFullPredictionData(widget.raceId);
+    if (raceData == null) {
+      return null;
+    }
+
+    // 2. 次に、このユーザーの印データをDBから取得
+    final userMarks = await _dbHelper.getAllUserMarksForRace(userId, widget.raceId);
+    final marksMap = {for (var mark in userMarks) mark.horseId: mark};
+
+    // 3. レースデータにユーザーの印情報を付加する
+    for (var horse in raceData.horses) {
+      if (marksMap.containsKey(horse.horseId)) {
+        horse.userMark = marksMap[horse.horseId];
+      }
+    }
+
+    return raceData;
+  }
+  // ★★★ ここまでが修正箇所 ★★★
 
   /// 過去レースの詳細情報をポップアップで表示するメソッド
   void _showPastRaceDetailsPopup(BuildContext context, HorseRaceRecord record) {
@@ -226,8 +257,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           );
         }).toList(),
         onChanged: (String? newValue) async {
-          if (newValue != null) {
+          // ★★★ ここからが修正箇所 ★★★
+          final userId = FirebaseAuth.instance.currentUser?.uid;
+          if (newValue != null && userId != null) {
             final userMark = UserMark(
+              userId: userId,
+              // ★★★ ここまでが修正箇所 ★★★
               raceId: widget.raceId,
               horseId: horse.horseId,
               mark: newValue,

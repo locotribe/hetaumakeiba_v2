@@ -487,6 +487,7 @@ class ScraperService {
     return gradedRaces;
   }
 
+  // ★★★ ここからが修正箇所 ★★★
   static Future<void> syncPastMonthlyRaceResults(List<FeaturedRace> races, DatabaseHelper dbHelper) async {
     print('[Past Race Sync Start] 過去の重賞レース結果の同期を開始します...');
     for (final race in races) {
@@ -504,7 +505,30 @@ class ScraperService {
             final resultUrl = 'https://db.netkeiba.com/race/$officialRaceId';
             final raceResult = await scrapeRaceDetails(resultUrl);
             await dbHelper.insertOrUpdateRaceResult(raceResult);
-            await AnalyticsService().updateAggregatesOnResultConfirmed(raceResult.raceId);
+
+            // 1. 全てのQRデータを取得
+            final db = await dbHelper.database;
+            final allQrDataMaps = await db.query('qr_data');
+
+            // 2. このレースの馬券を持つユーザーIDを特定
+            final Set<String> userIdsToUpdate = {};
+            for (final map in allQrDataMaps) {
+              try {
+                final parsedData = json.decode(map['parsed_data_json'] as String) as Map<String, dynamic>;
+                final qrRaceId = _getRaceIdFromParsedTicket(parsedData);
+                if (qrRaceId == officialRaceId) {
+                  userIdsToUpdate.add(map['userId'] as String);
+                }
+              } catch (e) {
+                // JSON parse error, skip
+              }
+            }
+
+            // 3. 該当するユーザー全員の集計を更新
+            for (final userId in userIdsToUpdate) {
+              await AnalyticsService().updateAggregatesOnResultConfirmed(raceResult.raceId, userId);
+            }
+
             print('結果をDBに保存しました: ${race.raceName}');
             await Future.delayed(const Duration(milliseconds: 500));
           }
@@ -515,6 +539,7 @@ class ScraperService {
     }
     print('[Past Race Sync End] 過去の重賞レース結果の同期が完了しました。');
   }
+  // ★★★ ここまでが修正箇所 ★★★
 
   static Future<String?> getOfficialRaceId(String relativeUrl) async {
     try {
@@ -722,4 +747,20 @@ class ScraperService {
     }
     return horses;
   }
+
+  // ★★★ ここからが修正箇所 ★★★
+  /// 解析済み馬券データからレースIDを生成するヘルパー
+  static String _getRaceIdFromParsedTicket(Map<String, dynamic> parsedTicket) {
+    try {
+      final year = parsedTicket['年'].toString().padLeft(2, '0');
+      final racecourseCode = racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key;
+      final round = parsedTicket['回'].toString().padLeft(2, '0');
+      final day = parsedTicket['日'].toString().padLeft(2, '0');
+      final race = parsedTicket['レース'].toString().padLeft(2, '0');
+      return '20$year$racecourseCode$round$day$race';
+    } catch (e) {
+      return ''; // 失敗した場合は空文字を返す
+    }
+  }
+// ★★★ ここまでが修正箇所 ★★★
 }

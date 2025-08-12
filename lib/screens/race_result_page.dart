@@ -12,6 +12,7 @@ import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class PageData {
   final Map<String, dynamic>? parsedTicket;
@@ -89,6 +90,18 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
   Future<void> _handleRefresh() async {
     try {
+      // ★★★ ここからが修正箇所 ★★★
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ユーザー情報の取得に失敗しました。')),
+          );
+        }
+        return;
+      }
+      // ★★★ ここまでが修正箇所 ★★★
+
       final raceId = widget.raceId;
       print('DEBUG: Refreshing race data for raceId: $raceId');
       final newRaceResult = await ScraperService.scrapeRaceDetails(
@@ -97,7 +110,9 @@ class _RaceResultPageState extends State<RaceResultPage> {
       await _dbHelper.insertOrUpdateRaceResult(newRaceResult);
 
       // ★★★ 修正箇所：新しい集計サービスを呼び出すトリガーを追加 ★★★
-      await AnalyticsService().updateAggregatesOnResultConfirmed(newRaceResult.raceId);
+      // ★★★ ここからが修正箇所 ★★★
+      await AnalyticsService().updateAggregatesOnResultConfirmed(newRaceResult.raceId, userId);
+      // ★★★ ここまでが修正箇所 ★★★
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -18,6 +18,14 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hetaumakeiba_v2/services/auth_service.dart';
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
+import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
+import 'package:hetaumakeiba_v2/models/feed_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 class MainScaffold extends StatefulWidget {
@@ -35,10 +43,23 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   final DatabaseHelper _dbHelper = DatabaseHelper();
   bool _isBusy = false;
+  User? _user;
+  final AuthService _authService = AuthService();
+  // ★★★ ここからが修正箇所 ★★★
+  List<StreamSubscription> _firestoreSubscriptions = [];
+  // ★★★ ここまでが修正箇所 ★★★
 
   /// ★★★ 新しく追加したメソッド ★★★
   /// 分析データを再構築する
   Future<void> _rebuildAnalyticsData() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ユーザー情報が取得できませんでした。')),
+      );
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -80,10 +101,10 @@ class _MainScaffoldState extends State<MainScaffold> {
     try {
       // 1. 既存の集計データをクリア
       final db = await _dbHelper.database;
-      await db.delete('analytics_aggregates');
+      await db.delete('analytics_aggregates', where: 'userId = ?', whereArgs: [userId]);
 
       // 2. 全ての購入履歴からユニークなレースIDを抽出
-      final allQrData = await _dbHelper.getAllQrData();
+      final allQrData = await _dbHelper.getAllQrData(userId);
       final Set<String> raceIds = {};
       for (final qrData in allQrData) {
         try {
@@ -106,7 +127,7 @@ class _MainScaffoldState extends State<MainScaffold> {
 
       // 3. 各レースIDに対して集計処理を再実行
       for (final raceId in raceIds) {
-        await AnalyticsService().updateAggregatesOnResultConfirmed(raceId);
+        await AnalyticsService().updateAggregatesOnResultConfirmed(raceId, userId);
       }
 
       if (mounted) {
@@ -133,6 +154,14 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   /// 全データを削除する
   Future<void> _deleteAllData() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ユーザー情報が取得できませんでした。')),
+      );
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -158,7 +187,7 @@ class _MainScaffoldState extends State<MainScaffold> {
     });
 
     try {
-      await _dbHelper.deleteAllData();
+      await _dbHelper.deleteAllDataForUser(userId);
       _savedListKey.currentState?.reloadData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -330,6 +359,16 @@ class _MainScaffoldState extends State<MainScaffold> {
   @override
   void initState() {
     super.initState();
+    FirebaseAuth.instance
+        .authStateChanges()
+        .listen((User? user) {
+      if (mounted) {
+        setState(() {
+          _user = user;
+        });
+        _setupFirestoreListener(user);
+      }
+    });
     _pages = <Widget>[
       const HomePage(),
       const JyusyoIchiranPage(),
@@ -337,6 +376,108 @@ class _MainScaffoldState extends State<MainScaffold> {
       AnalyticsPage(key: _analyticsPageKey),
     ];
   }
+
+  // ★★★ ここからが修正箇所 ★★★
+  @override
+  void dispose() {
+    for (var sub in _firestoreSubscriptions) {
+      sub.cancel();
+    }
+    super.dispose();
+  }
+
+  Future<void> _setupFirestoreListener(User? user) async {
+    // 既存のリスナーがあれば全てキャンセル
+    for (var sub in _firestoreSubscriptions) {
+      await sub.cancel();
+    }
+    _firestoreSubscriptions.clear();
+
+    if (user == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final isCloudSyncEnabled = prefs.getBool('isCloudSyncEnabled_${user.uid}') ?? false;
+
+    if (!isCloudSyncEnabled) {
+      // クラウド同期が有効でなければ何もしない
+      return;
+    }
+
+    // 1. qr_dataのリスナー
+    final qrDataSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('qr_data')
+        .snapshots()
+        .listen((snapshot) async {
+      for (var change in snapshot.docChanges) {
+        final data = change.doc.data();
+        if (data == null) continue;
+        final qrData = QrData.fromMap(data);
+
+        if (change.type == DocumentChangeType.added || change.type == DocumentChangeType.modified) {
+          await _dbHelper.insertQrData(qrData, fromCloud: true);
+        } else if (change.type == DocumentChangeType.removed) {
+          // qr_codeを使ってローカルのデータを特定して削除
+          final db = await _dbHelper.database;
+          final localData = await db.query('qr_data', where: 'qr_code = ? AND userId = ?', whereArgs: [qrData.qrCode, user.uid]);
+          if (localData.isNotEmpty) {
+            final id = localData.first['id'] as int;
+            await _dbHelper.deleteQrData(id, user.uid, fromCloud: true);
+          }
+        }
+      }
+      _savedListKey.currentState?.reloadData();
+    });
+    _firestoreSubscriptions.add(qrDataSub);
+
+    // 2. user_marksのリスナー
+    final userMarksSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('user_marks')
+        .snapshots()
+        .listen((snapshot) async {
+      for (var change in snapshot.docChanges) {
+        final data = change.doc.data();
+        if (data == null) continue;
+        final userMark = UserMark.fromMap(data);
+
+        if (change.type == DocumentChangeType.added || change.type == DocumentChangeType.modified) {
+          await _dbHelper.insertOrUpdateUserMark(userMark, fromCloud: true);
+        } else if (change.type == DocumentChangeType.removed) {
+          await _dbHelper.deleteUserMark(userMark.userId, userMark.raceId, userMark.horseId, fromCloud: true);
+        }
+      }
+    });
+    _firestoreSubscriptions.add(userMarksSub);
+
+    // 3. user_feedsのリスナー
+    final userFeedsSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('user_feeds')
+        .snapshots()
+        .listen((snapshot) async {
+      for (var change in snapshot.docChanges) {
+        final data = change.doc.data();
+        if (data == null) continue;
+        final feed = Feed.fromMap(data);
+
+        if (change.type == DocumentChangeType.added) {
+          await _dbHelper.insertFeed(feed, fromCloud: true);
+        } else if (change.type == DocumentChangeType.modified) {
+          await _dbHelper.updateFeed(feed, fromCloud: true);
+        } else if (change.type == DocumentChangeType.removed) {
+          if (feed.id != null) {
+            await _dbHelper.deleteFeed(feed.id!, fromCloud: true);
+          }
+        }
+      }
+    });
+    _firestoreSubscriptions.add(userFeedsSub);
+  }
+  // ★★★ ここまでが修正箇所 ★★★
 
   void _onItemTapped(int index) {
     if (index == 2) {
@@ -390,6 +531,28 @@ class _MainScaffoldState extends State<MainScaffold> {
                 ),
               ),
             ),
+            if (_user != null && _user!.isAnonymous)
+              ListTile(
+                leading: const Icon(Icons.cloud_sync, color: Colors.blueAccent),
+                title: const Text('アカウントを作成してデータを同期'),
+                subtitle: const Text('データをクラウドにバックアップします。'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _authService.linkAccountAndMigrateData(context);
+                },
+              ),
+            if (_user != null && !_user!.isAnonymous)
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.grey),
+                title: const Text('ログアウト'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  await FirebaseAuth.instance.signOut();
+                  // ログアウト後に匿名ユーザーとして再ログイン
+                  await FirebaseAuth.instance.signInAnonymously();
+                },
+              ),
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.home_work_outlined),
               title: const Text('ニュースフィード設定'),
