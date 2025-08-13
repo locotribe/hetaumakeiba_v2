@@ -3,6 +3,7 @@
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
+import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
 
 /// レース全体の予想データを保持するコンテナです。
 class PredictionRaceData {
@@ -15,6 +16,7 @@ class PredictionRaceData {
   final String raceGrade;
   final String? raceDetails1;
   final List<PredictionHorseDetail> horses;
+  RacePacePrediction? racePacePrediction;
 
   PredictionRaceData({
     required this.raceId,
@@ -26,6 +28,7 @@ class PredictionRaceData {
     required this.raceGrade,
     this.raceDetails1,
     required this.horses,
+    this.racePacePrediction,
   });
 }
 
@@ -45,6 +48,7 @@ class PredictionHorseDetail {
   UserMark? userMark;
   HorseMemo? userMemo;
   final bool isScratched;
+  HorsePredictionScore? predictionScore;
 
   PredictionHorseDetail({
     required this.horseId,
@@ -61,6 +65,7 @@ class PredictionHorseDetail {
     this.userMark,
     this.userMemo,
     required this.isScratched,
+    this.predictionScore,
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {

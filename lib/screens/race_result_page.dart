@@ -14,14 +14,21 @@ import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
+import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
+import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
 
 class PageData {
   final Map<String, dynamic>? parsedTicket;
   final RaceResult? raceResult;
+  final Map<String, HorsePredictionScore>? analysisScores;
+  final RacePacePrediction? pacePrediction;
 
   PageData({
     this.parsedTicket,
     this.raceResult,
+    this.analysisScores,
+    this.pacePrediction,
   });
 }
 
@@ -83,12 +90,41 @@ class _RaceResultPageState extends State<RaceResultPage> {
       if (raceResult != null && userId != null) {
         final memos = await _dbHelper.getMemosForRace(userId, widget.raceId);
         final memosMap = {for (var memo in memos) memo.horseId: memo};
+        final Map<String, HorsePredictionScore> scores = {};
+        final List<PredictionHorseDetail> horseDetailsForPacePrediction = [];
 
         for (var horseResult in raceResult.horseResults) {
           if (memosMap.containsKey(horseResult.horseId)) {
             horseResult.userMemo = memosMap[horseResult.horseId];
           }
+          final pastRecords = await _dbHelper.getHorsePerformanceRecords(horseResult.horseId);
+          if (pastRecords.isNotEmpty) {
+            scores[horseResult.horseId] = PredictionAnalyzer.calculateScores(pastRecords);
+          }
+          // 展開予測のためにPredictionHorseDetailのリストを作成（ダミーデータを含む）
+          horseDetailsForPacePrediction.add(
+              PredictionHorseDetail(
+                horseId: horseResult.horseId,
+                horseNumber: int.tryParse(horseResult.horseNumber) ?? 0,
+                gateNumber: int.tryParse(horseResult.frameNumber) ?? 0,
+                horseName: horseResult.horseName,
+                sexAndAge: horseResult.sexAndAge,
+                jockey: horseResult.jockeyName,
+                carriedWeight: double.tryParse(horseResult.weightCarried) ?? 0.0,
+                trainer: horseResult.trainerName,
+                isScratched: false,
+              )
+          );
         }
+
+        final pacePrediction = PredictionAnalyzer.predictRacePace(horseDetailsForPacePrediction);
+
+        return PageData(
+          parsedTicket: parsedTicket,
+          raceResult: raceResult,
+          analysisScores: scores,
+          pacePrediction: pacePrediction,
+        );
       }
 
       return PageData(
@@ -299,8 +335,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
                         if (raceResult.isIncomplete)
                           _buildIncompleteRaceDataCard()
                         else ...[
-                          _buildRaceInfoCard(raceResult),
-                          _buildFullResultsCard(raceResult),
+                          _buildRaceInfoCard(raceResult, pageData.pacePrediction),
+                          _buildFullResultsCard(raceResult, pageData.analysisScores),
                           _buildRefundsCard(raceResult, userCombinationsByType), // 修正したMapを渡す
                         ]
                       ] else ...[
@@ -458,7 +494,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  Widget _buildRaceInfoCard(RaceResult raceResult) {
+  Widget _buildRaceInfoCard(RaceResult raceResult, RacePacePrediction? pacePrediction) {
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -475,13 +511,25 @@ class _RaceResultPageState extends State<RaceResultPage> {
             Text(raceResult.raceDate),
             Text(raceResult.raceInfo),
             Text(raceResult.raceGrade),
+            if (pacePrediction != null) ...[
+              const Divider(height: 24),
+              RichText(
+                text: TextSpan(
+                  style: DefaultTextStyle.of(context).style,
+                  children: <TextSpan>[
+                    const TextSpan(text: '展開予測: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    TextSpan(text: '${pacePrediction.predictedPace} (${pacePrediction.advantageousStyle})'),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildFullResultsCard(RaceResult raceResult) {
+  Widget _buildFullResultsCard(RaceResult raceResult, Map<String, HorsePredictionScore>? analysisScores) {
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -502,6 +550,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 columns: const [
                   DataColumn(label: Text('着')),
                   DataColumn(label: Text('メモ')),
+                  DataColumn(label: Text('適性スコア')),
                   DataColumn(label: Text('馬番')),
                   DataColumn(label: Text('馬名')),
                   DataColumn(label: Text('騎手')),
@@ -509,9 +558,17 @@ class _RaceResultPageState extends State<RaceResultPage> {
                   DataColumn(label: Text('人気')),
                 ],
                 rows: raceResult.horseResults.map((horse) {
+                  final score = analysisScores?[horse.horseId];
                   return DataRow(cells: [
                     DataCell(Text(horse.rank)),
                     DataCell(_buildMemoCell(horse)),
+                    DataCell(
+                      Text(
+                        score != null
+                            ? '距:${score.distanceScore.toStringAsFixed(0)}/コ:${score.courseScore.toStringAsFixed(0)}/騎:${score.jockeyCompatibilityScore.toStringAsFixed(0)}'
+                            : 'N/A',
+                      ),
+                    ),
                     DataCell(
                       Center(
                         child: Container(

@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
 
 
 class ShutubaTablePage extends StatefulWidget {
@@ -75,7 +76,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       if (memosMap.containsKey(horse.horseId)) {
         horse.userMemo = memosMap[horse.horseId];
       }
+      // ここから追加：各馬の過去成績を取得してスコアを計算
+      final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      if (pastRecords.isNotEmpty) {
+        horse.predictionScore = PredictionAnalyzer.calculateScores(pastRecords);
+      }
     }
+
+    // ここから追加：レース全体の展開を予測
+    raceData.racePacePrediction = PredictionAnalyzer.predictRacePace(raceData.horses);
 
     return raceData;
   }
@@ -371,6 +380,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
             ),
             const SizedBox(height: 8),
             Text(race.raceDetails1 ?? ''),
+            if (race.racePacePrediction != null) ...[
+              const Divider(height: 24),
+              RichText(
+                text: TextSpan(
+                  style: DefaultTextStyle.of(context).style,
+                  children: <TextSpan>[
+                    const TextSpan(text: '展開予測: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    TextSpan(text: '${race.racePacePrediction!.predictedPace} (${race.racePacePrediction!.advantageousStyle})'),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -391,6 +412,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         columns: const [
           DataColumn(label: Text('メモ')),
           DataColumn(label: Text('印')),
+          DataColumn(label: Text('適性スコア')),
           DataColumn(label: Text('枠')),
           DataColumn(label: Text('馬番')),
           DataColumn(label: Text('馬名')),
@@ -415,6 +437,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                 horse.isScratched
                     ? const Text('取消', style: TextStyle(color: Colors.red))
                     : _buildMarkDropdown(horse),
+              ),
+              DataCell(
+                Text(
+                  horse.predictionScore != null
+                      ? '距:${horse.predictionScore!.distanceScore.toStringAsFixed(0)}/コ:${horse.predictionScore!.courseScore.toStringAsFixed(0)}/騎:${horse.predictionScore!.jockeyCompatibilityScore.toStringAsFixed(0)}'
+                      : 'N/A',
+                ),
               ),
               DataCell(_buildGateNumber(horse.gateNumber)),
               DataCell(_buildHorseNumber(horse.horseNumber, horse.gateNumber)),
