@@ -26,6 +26,7 @@ import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hetaumakeiba_v2/main.dart';
 
 
 class MainScaffold extends StatefulWidget {
@@ -45,14 +46,12 @@ class _MainScaffoldState extends State<MainScaffold> {
   bool _isBusy = false;
   User? _user;
   final AuthService _authService = AuthService();
-  // ★★★ ここからが修正箇所 ★★★
   List<StreamSubscription> _firestoreSubscriptions = [];
-  // ★★★ ここまでが修正箇所 ★★★
 
   /// ★★★ 新しく追加したメソッド ★★★
   /// 分析データを再構築する
   Future<void> _rebuildAnalyticsData() async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ユーザー情報が取得できませんでした。')),
@@ -154,7 +153,7 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   /// 全データを削除する
   Future<void> _deleteAllData() async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ユーザー情報が取得できませんでした。')),
@@ -377,7 +376,6 @@ class _MainScaffoldState extends State<MainScaffold> {
     ];
   }
 
-  // ★★★ ここからが修正箇所 ★★★
   @override
   void dispose() {
     for (var sub in _firestoreSubscriptions) {
@@ -477,7 +475,6 @@ class _MainScaffoldState extends State<MainScaffold> {
     });
     _firestoreSubscriptions.add(userFeedsSub);
   }
-  // ★★★ ここまでが修正箇所 ★★★
 
   void _onItemTapped(int index) {
     if (index == 2) {

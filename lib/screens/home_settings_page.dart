@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hetaumakeiba_v2/main.dart'; // この行を追加
 
 class HomeSettingsPage extends StatefulWidget {
   const HomeSettingsPage({super.key});
@@ -29,7 +29,7 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
       _isLoading = true;
     });
     // ★★★ ここからが修正箇所 ★★★
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       if (mounted) {
         setState(() {
@@ -131,7 +131,7 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
               onPressed: () {
                 if (formKey.currentState!.validate()) {
                   // ★★★ ここからが修正箇所 ★★★
-                  final userId = FirebaseAuth.instance.currentUser?.uid;
+                  final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
                   if (userId == null) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('ユーザー情報の取得に失敗しました。')),

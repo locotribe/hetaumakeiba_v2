@@ -6,9 +6,26 @@ import 'package:hetaumakeiba_v2/main_scaffold.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart'; // この行を追加
+import 'package:shared_preferences/shared_preferences.dart'; // この行を追加
+import 'package:uuid/uuid.dart'; // この行を追加
+
+// アプリ全体で利用する永続的なローカルIDを保持する変数
+String? localUserId;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 永続的なローカルユーザーIDの初期化
+  final prefs = await SharedPreferences.getInstance();
+  localUserId = prefs.getString('local_user_id');
+  if (localUserId == null) {
+    localUserId = const Uuid().v4();
+    await prefs.setString('local_user_id', localUserId!);
+    print("Generated new local user ID: $localUserId");
+  } else {
+    print("Loaded existing local user ID: $localUserId");
+  }
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform, // この行を追加
   );

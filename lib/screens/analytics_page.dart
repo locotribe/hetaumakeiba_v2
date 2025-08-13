@@ -15,7 +15,7 @@ import 'package:hetaumakeiba_v2/widgets/category_summary_card.dart';
 import 'package:hetaumakeiba_v2/widgets/dashboard_settings_sheet.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hetaumakeiba_v2/main.dart'; // この行を追加
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -89,7 +89,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       _isLoading = true;
     });
 
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       setState(() {
         _isLoading = false;
@@ -120,10 +120,8 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     final ticketTypeSummaries = await _dbHelper.getCategorySummaries(userId, 'ticket_type', year: filterYear);
     final purchaseMethodSummaries = await _dbHelper.getCategorySummaries(userId, 'purchase_method', year: filterYear);
 
-    // ★★★ ここからが修正箇所 ★★★
     // 予想成績データを取得
     final predictionStats = await _dbHelper.getPredictionStats(userId);
-    // ★★★ ここまでが修正箇所 ★★★
 
     // 3. 過去最高払戻は都度計算が必要なため、別途ロジックを呼び出す
     final topPayout = await _calculateTopPayoutOptimized(userId, filterYear: filterYear);
@@ -168,9 +166,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       trackSummaries: trackSummaries.map((m) => _mapToCategorySummary(m, 'track_')).toList(),
       ticketTypeSummaries: ticketTypeSummaries.map((m) => _mapToCategorySummary(m, 'ticket_type_')).toList(),
       purchaseMethodSummaries: purchaseMethodSummaries.map((m) => _mapToCategorySummary(m, 'purchase_method_')).toList(),
-      // ★★★ ここからが修正箇所 ★★★
       predictionStats: predictionStats,
-      // ★★★ ここまでが修正箇所 ★★★
       topPayout: topPayout,
       grandTotalSummary: grandTotalSummary,
     );
@@ -468,16 +464,13 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
           title: '方式別 収支',
           summaries: _analysisData.purchaseMethodSummaries,
         );
-    // ★★★ ここからが修正箇所 ★★★
       case 'prediction_summary':
         return _buildPredictionSummaryContent();
-    // ★★★ ここまでが修正箇所 ★★★
       default:
         return const SizedBox.shrink();
     }
   }
 
-  // ★★★ ここからが修正箇所 ★★★
   Widget _buildPredictionSummaryContent() {
     if (_analysisData.predictionStats.isEmpty) {
       return _buildPredictionEmptyState();
@@ -572,7 +565,6 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       ),
     );
   }
-  // ★★★ ここまでが修正箇所 ★★★
 
 
   Widget _buildGrandTotalContent() {

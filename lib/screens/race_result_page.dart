@@ -12,7 +12,7 @@ import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 
 class PageData {
@@ -79,8 +79,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
       RaceResult? raceResult = await _dbHelper.getRaceResult(widget.raceId);
 
-      // ★★★ ここからが修正箇所 ★★★
-      final userId = FirebaseAuth.instance.currentUser?.uid;
+      final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
       if (raceResult != null && userId != null) {
         final memos = await _dbHelper.getMemosForRace(userId, widget.raceId);
         final memosMap = {for (var memo in memos) memo.horseId: memo};
@@ -91,7 +90,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
           }
         }
       }
-      // ★★★ ここまでが修正箇所 ★★★
 
       return PageData(
         parsedTicket: parsedTicket,
@@ -105,8 +103,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
   Future<void> _handleRefresh() async {
     try {
-      // ★★★ ここからが修正箇所 ★★★
-      final userId = FirebaseAuth.instance.currentUser?.uid;
+      final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
       if (userId == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -115,7 +112,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
         }
         return;
       }
-      // ★★★ ここまでが修正箇所 ★★★
 
       final raceId = widget.raceId;
       print('DEBUG: Refreshing race data for raceId: $raceId');
@@ -124,10 +120,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
       );
       await _dbHelper.insertOrUpdateRaceResult(newRaceResult);
 
-      // ★★★ 修正箇所：新しい集計サービスを呼び出すトリガーを追加 ★★★
-      // ★★★ ここからが修正箇所 ★★★
       await AnalyticsService().updateAggregatesOnResultConfirmed(newRaceResult.raceId, userId);
-      // ★★★ ここまでが修正箇所 ★★★
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -149,7 +142,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   Future<void> _showMemoDialog(HorseResult horse) async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),

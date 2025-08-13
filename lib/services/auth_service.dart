@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hetaumakeiba_v2/main.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -36,14 +37,18 @@ class AuthService {
 
     try {
       // 匿名アカウントに新しい認証情報（メール・パスワード）をリンクする
-      await user.linkWithCredential(credentials);
+      final userCredential = await user.linkWithCredential(credentials);
+      final newFirebaseUser = userCredential.user;
+      if (newFirebaseUser == null) {
+        throw Exception('アカウントの作成に失敗しました。');
+      }
 
-      // データ移行処理
-      await _migrateLocalDataToFirestore(user.uid);
+      // データ移行処理 (ローカルIDを元にデータを移行)
+      await _migrateLocalDataToFirestore(newFirebaseUser.uid);
 
       // 同期フラグを有効にする
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isCloudSyncEnabled_${user.uid}', true);
+      await prefs.setBool('isCloudSyncEnabled_${newFirebaseUser.uid}', true);
 
       if (context.mounted) {
         Navigator.of(context).pop(); // ローディングを閉じる
@@ -130,33 +135,59 @@ class AuthService {
   }
 
   // 実際のデータ移行処理
-  Future<void> _migrateLocalDataToFirestore(String userId) async {
+  Future<void> _migrateLocalDataToFirestore(String newFirebaseUserId) async {
+    final db = await _dbHelper.database;
     final batch = _firestore.batch();
 
+    // 移行元のIDとして永続ローカルIDを使用
+    final String? sourceUserId = localUserId;
+    if (sourceUserId == null) {
+      // ローカルIDがない場合は移行するデータもないので終了
+      return;
+    }
+
     // 1. QRデータを移行
-    final qrDataList = await _dbHelper.getAllQrData(userId);
+    final qrDataList = await _dbHelper.getAllQrData(sourceUserId);
     for (final qrData in qrDataList) {
-      final docRef = _firestore.collection('users').doc(userId).collection('qr_data').doc();
-      batch.set(docRef, qrData.toMap());
+      final docRef = _firestore.collection('users').doc(newFirebaseUserId).collection('qr_data').doc();
+      final firestoreMap = qrData.toMap();
+      firestoreMap['userId'] = newFirebaseUserId; // userIdを新しいFirebaseのものに書き換える
+      batch.set(docRef, firestoreMap);
     }
 
     // 2. ユーザーの印データを移行
-    // (特定のレースIDを必要としない全件取得メソッドがDB Helperに必要だが、今回は直接クエリで対応)
-    final db = await _dbHelper.database;
-    final userMarksMaps = await db.query('user_marks', where: 'userId = ?', whereArgs: [userId]);
+    final userMarksMaps = await db.query('user_marks', where: 'userId = ?', whereArgs: [sourceUserId]);
     for (final markMap in userMarksMaps) {
-      final docRef = _firestore.collection('users').doc(userId).collection('user_marks').doc();
-      batch.set(docRef, markMap);
+      final docRef = _firestore.collection('users').doc(newFirebaseUserId).collection('user_marks').doc();
+      final firestoreMap = Map<String, dynamic>.from(markMap);
+      firestoreMap['userId'] = newFirebaseUserId; // userIdを新しいFirebaseのものに書き換える
+      batch.set(docRef, firestoreMap);
     }
 
     // 3. フィードデータを移行
-    final feedList = await _dbHelper.getAllFeeds(userId);
+    final feedList = await _dbHelper.getAllFeeds(sourceUserId);
     for (final feed in feedList) {
-      final docRef = _firestore.collection('users').doc(userId).collection('user_feeds').doc();
-      batch.set(docRef, feed.toMap());
+      final docRef = _firestore.collection('users').doc(newFirebaseUserId).collection('user_feeds').doc();
+      final firestoreMap = feed.toMap();
+      firestoreMap['userId'] = newFirebaseUserId; // userIdを新しいFirebaseのものに書き換える
+      batch.set(docRef, firestoreMap);
     }
 
     // バッチ処理を実行して、全てのデータを一度に書き込む
     await batch.commit();
+
+    // 移行完了後、ローカルDBのIDも新しいFirebaseのものに更新する
+    await db.transaction((txn) async {
+      await txn.update('qr_data', {'userId': newFirebaseUserId}, where: 'userId = ?', whereArgs: [sourceUserId]);
+      await txn.update('user_marks', {'userId': newFirebaseUserId}, where: 'userId = ?', whereArgs: [sourceUserId]);
+      await txn.update('user_feeds', {'userId': newFirebaseUserId}, where: 'userId = ?', whereArgs: [sourceUserId]);
+      await txn.update('horse_memos', {'userId': newFirebaseUserId}, where: 'userId = ?', whereArgs: [sourceUserId]);
+      await txn.update('analytics_aggregates', {'userId': newFirebaseUserId}, where: 'userId = ?', whereArgs: [sourceUserId]);
+    });
+
+    // 最後に、端末に保存されているローカルID自体も新しいFirebaseIDに書き換える
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('local_user_id', newFirebaseUserId);
+    localUserId = newFirebaseUserId; // グローバル変数も更新
   }
 }

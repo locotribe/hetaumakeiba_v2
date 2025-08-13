@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hetaumakeiba_v2/main.dart';
 
 class QrCodeProcessor {
   final DatabaseHelper _dbHelper;
@@ -12,7 +12,7 @@ class QrCodeProcessor {
   final Function(bool) onScannerControl;
   final Function(Map<String, dynamic> parsedData) onProcessingComplete;
   final GlobalKey<SavedTicketsListPageState> savedListKey;
-  final TicketProcessingService _ticketProcessingService; // ★ 新しいサービスを追加
+  final TicketProcessingService _ticketProcessingService;
 
   final List<String> _qrResults = [];
 
@@ -25,7 +25,6 @@ class QrCodeProcessor {
     required this.onProcessingComplete,
     required this.savedListKey,
   })  : _dbHelper = dbHelper,
-  // ★ コンストラクタでサービスを初期化
         _ticketProcessingService = TicketProcessingService(dbHelper: dbHelper);
 
   void _setWarningStatus(bool status, String? message) {
@@ -131,11 +130,9 @@ class QrCodeProcessor {
     }
   }
 
-  // ▼▼▼ ★★★ ここからが修正箇所 ★★★ ▼▼▼
   /// 解析、DB保存、スクレイピング実行のロジックをTicketProcessingServiceに委譲
   Future<void> _processCombinedQrCode(String qrCode) async {
-    // ★★★ ここからが修正箇所 ★★★
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       _setWarningStatus(true, 'ユーザー情報の取得に失敗しました。');
       await Future.delayed(const Duration(seconds: 3));
@@ -146,7 +143,6 @@ class QrCodeProcessor {
 
     // サービスを呼び出してQRコードの処理と保存を行う
     final parsedData = await _ticketProcessingService.processAndSaveTicket(userId, qrCode, savedListKey);
-    // ★★★ ここまでが修正箇所 ★★★
 
     // サービスからの戻り値をチェック
     if (parsedData.containsKey('エラー')) {
@@ -163,14 +159,9 @@ class QrCodeProcessor {
     onProcessingComplete(parsedData);
 
     // スクレイピングはawaitせずに実行（Fire-and-forget）
-    // ★★★ ここからが修正箇所 ★★★
     _ticketProcessingService.triggerBackgroundScraping(userId, parsedData, _dbHelper).catchError((e) {
-      // ★★★ ここまでが修正箇所 ★★★
       // バックグラウンド処理のエラーはコンソールに出力するのみ
       print('ERROR: バックグラウンドスクレイピング中にエラーが発生しました: $e');
     });
   }
-// ▲▲▲ ★★★ ここまでが修正箇所 ★★★ ▲▲▲
-
-// _performBackgroundScraping メソッドは削除されました
 }

@@ -6,7 +6,7 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
@@ -40,10 +40,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     });
   }
 
-  // ★★★ ここからが修正箇所 ★★★
   /// ユーザーの印情報を取得し、レースデータにマージする
   Future<PredictionRaceData?> _loadDataWithUserMarks() async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       // ユーザーがいない場合は印なしのデータを表示
       return await ScraperService.scrapeFullPredictionData(widget.raceId);
@@ -80,7 +79,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
     return raceData;
   }
-  // ★★★ ここまでが修正箇所 ★★★
 
   /// 過去レースの詳細情報をポップアップで表示するメソッド
   void _showPastRaceDetailsPopup(BuildContext context, HorseRaceRecord record) {
@@ -145,7 +143,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   }
 
   Future<void> _showMemoDialog(PredictionHorseDetail horse) async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),
@@ -232,7 +230,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   }
 
   Future<void> _importMemosFromCsv() async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),
@@ -454,12 +452,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           );
         }).toList(),
         onChanged: (String? newValue) async {
-          // ★★★ ここからが修正箇所 ★★★
-          final userId = FirebaseAuth.instance.currentUser?.uid;
+          final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
           if (newValue != null && userId != null) {
             final userMark = UserMark(
               userId: userId,
-              // ★★★ ここまでが修正箇所 ★★★
               raceId: widget.raceId,
               horseId: horse.horseId,
               mark: newValue,
