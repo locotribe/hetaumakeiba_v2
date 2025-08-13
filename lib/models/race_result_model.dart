@@ -1,6 +1,7 @@
 // lib/models/race_result_model.dart
 
 import 'dart:convert';
+import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 
 // JSON文字列とRaceResultオブジェクトを相互変換するためのトップレベル関数
 String raceResultToJson(RaceResult data) => json.encode(data.toJson());
@@ -87,6 +88,7 @@ class HorseResult {
   final String trainerName; // 調教師
   final String ownerName; // 馬主
   final String prizeMoney; // 賞金(万円)
+  HorseMemo? userMemo;
 
   HorseResult({
     required this.rank,
@@ -107,6 +109,7 @@ class HorseResult {
     required this.trainerName,
     required this.ownerName,
     required this.prizeMoney,
+    this.userMemo,
   });
 
   factory HorseResult.fromJson(Map<String, dynamic> json) => HorseResult(

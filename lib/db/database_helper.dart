@@ -11,6 +11,7 @@ import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -53,7 +54,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 7,
+      version: 8,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。
       onCreate: (db, version) async {
@@ -158,6 +159,19 @@ class DatabaseHelper {
             hit_count INTEGER NOT NULL DEFAULT 0,
             bet_count INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (aggregate_key, userId)
+          )
+        ''');
+        // 競走馬メモデータテーブルの作成
+        await db.execute('''
+          CREATE TABLE horse_memos(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId TEXT NOT NULL,
+            raceId TEXT NOT NULL,
+            horseId TEXT NOT NULL,
+            predictionMemo TEXT,
+            reviewMemo TEXT,
+            timestamp TEXT NOT NULL,
+            UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
           )
         ''');
       },
@@ -270,6 +284,20 @@ class DatabaseHelper {
             SELECT id, '', raceId, horseId, mark, timestamp FROM user_marks_old
           ''');
           await db.execute('DROP TABLE user_marks_old');
+        }
+        if (oldVersion < 8) {
+          await db.execute('''
+            CREATE TABLE horse_memos(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              userId TEXT NOT NULL,
+              raceId TEXT NOT NULL,
+              horseId TEXT NOT NULL,
+              predictionMemo TEXT,
+              reviewMemo TEXT,
+              timestamp TEXT NOT NULL,
+              UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
+            )
+          ''');
         }
       },
     );
@@ -846,5 +874,42 @@ class DatabaseHelper {
       // シングルトンのインスタンスもnullにして、次回アクセス時に再初期化されるようにする
       _database = null;
     }
+  }
+
+  /// 競走馬のメモを挿入または更新します。
+  Future<int> insertOrUpdateHorseMemo(HorseMemo memo) async {
+    final db = await database;
+    return await db.insert(
+      'horse_memos',
+      memo.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// 複数の競走馬メモを一度に挿入または更新します（バッチ処理）。
+  Future<void> insertOrUpdateMultipleMemos(List<HorseMemo> memos) async {
+    final db = await database;
+    final batch = db.batch();
+    for (final memo in memos) {
+      batch.insert(
+        'horse_memos',
+        memo.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// 特定のレースに紐づく全てのメモを取得します。
+  Future<List<HorseMemo>> getMemosForRace(String userId, String raceId) async {
+    final db = await database;
+    final maps = await db.query(
+      'horse_memos',
+      where: 'userId = ? AND raceId = ?',
+      whereArgs: [userId, raceId],
+    );
+    return List.generate(maps.length, (i) {
+      return HorseMemo.fromMap(maps[i]);
+    });
   }
 }

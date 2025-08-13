@@ -7,6 +7,13 @@ import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
+import 'package:csv/csv.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+
 
 class ShutubaTablePage extends StatefulWidget {
   final String raceId;
@@ -48,14 +55,26 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       return null;
     }
 
-    // 2. 次に、このユーザーの印データをDBから取得
-    final userMarks = await _dbHelper.getAllUserMarksForRace(userId, widget.raceId);
-    final marksMap = {for (var mark in userMarks) mark.horseId: mark};
+    // 2. 次に、このユーザーの印データとメモデータをDBから並行して取得
+    final results = await Future.wait([
+      _dbHelper.getAllUserMarksForRace(userId, widget.raceId),
+      _dbHelper.getMemosForRace(userId, widget.raceId),
+    ]);
 
-    // 3. レースデータにユーザーの印情報を付加する
+    final userMarks = results[0] as List<UserMark>;
+    final userMemos = results[1] as List<HorseMemo>;
+
+    final marksMap = {for (var mark in userMarks) mark.horseId: mark};
+    final memosMap = {for (var memo in userMemos) memo.horseId: memo};
+
+
+    // 3. レースデータにユーザーの印とメモ情報を付加する
     for (var horse in raceData.horses) {
       if (marksMap.containsKey(horse.horseId)) {
         horse.userMark = marksMap[horse.horseId];
+      }
+      if (memosMap.containsKey(horse.horseId)) {
+        horse.userMemo = memosMap[horse.horseId];
       }
     }
 
@@ -125,11 +144,185 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     );
   }
 
+  Future<void> _showMemoDialog(PredictionHorseDetail horse) async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ログインが必要です。')),
+      );
+      return;
+    }
+
+    final memoController = TextEditingController(text: horse.userMemo?.predictionMemo);
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('${horse.horseName} - 予想メモ'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: memoController,
+              autofocus: true,
+              maxLines: null, // 複数行の入力を許可
+              decoration: const InputDecoration(
+                hintText: 'ここにメモを入力...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  final newMemo = HorseMemo(
+                    // 既存のメモがあればそのIDと総評メモを引き継ぐ
+                    id: horse.userMemo?.id,
+                    userId: userId,
+                    raceId: widget.raceId,
+                    horseId: horse.horseId,
+                    predictionMemo: memoController.text,
+                    reviewMemo: horse.userMemo?.reviewMemo, // 既存の総評メモを保持
+                    timestamp: DateTime.now(),
+                  );
+                  await _dbHelper.insertOrUpdateHorseMemo(newMemo);
+                  Navigator.of(context).pop();
+                  _loadShutubaData(); // データを再読み込みしてUIを更新
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _exportMemosAsCsv(PredictionRaceData raceData) async {
+    final List<List<dynamic>> rows = [];
+    // ヘッダー行
+    rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'predictionMemo', 'reviewMemo']);
+
+    // データ行
+    for (final horse in raceData.horses) {
+      rows.add([
+        widget.raceId,
+        horse.horseId,
+        horse.horseNumber,
+        horse.horseName,
+        horse.userMemo?.predictionMemo ?? '',
+        horse.userMemo?.reviewMemo ?? '',
+      ]);
+    }
+
+    final String csv = const ListToCsvConverter().convert(rows);
+
+    final directory = await getTemporaryDirectory();
+    final path = '${directory.path}/${widget.raceId}_memos.csv';
+    final file = File(path);
+    await file.writeAsString(csv);
+
+    await Share.shareXFiles([XFile(path)], text: '${raceData.raceName} のメモ');
+  }
+
+  Future<void> _importMemosFromCsv() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ログインが必要です。')),
+      );
+      return;
+    }
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+
+      if (result == null || result.files.single.path == null) {
+        return; // ユーザーがファイル選択をキャンセル
+      }
+
+      final filePath = result.files.single.path!;
+      final file = File(filePath);
+      final csvString = await file.readAsString();
+
+      final List<List<dynamic>> rows = const CsvToListConverter().convert(csvString);
+
+      if (rows.length < 2) {
+        throw Exception('CSVファイルにデータがありません。');
+      }
+      // ヘッダーの検証
+      final header = rows.first;
+      if (header.join(',') != 'raceId,horseId,horseNumber,horseName,predictionMemo,reviewMemo') {
+        throw Exception('CSVファイルのヘッダー形式が正しくありません。');
+      }
+
+      final List<HorseMemo> memosToUpdate = [];
+      for (int i = 1; i < rows.length; i++) {
+        final row = rows[i];
+        final csvRaceId = row[0].toString();
+
+        if (csvRaceId != widget.raceId) {
+          throw Exception('CSVファイルのレースIDが、現在表示しているレースと一致しません。');
+        }
+
+        memosToUpdate.add(HorseMemo(
+          userId: userId,
+          raceId: csvRaceId,
+          horseId: row[1].toString(),
+          predictionMemo: row[4].toString(),
+          reviewMemo: row[5].toString(),
+          timestamp: DateTime.now(),
+        ));
+      }
+
+      await _dbHelper.insertOrUpdateMultipleMemos(memosToUpdate);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${memosToUpdate.length}件のメモをインポートしました。')),
+      );
+      _loadShutubaData(); // データを再読み込み
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('インポートエラー: ${e.toString()}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('出馬表'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.file_upload),
+            tooltip: 'メモをインポート',
+            onPressed: _importMemosFromCsv,
+          ),
+          FutureBuilder<PredictionRaceData?>(
+            future: _predictionRaceDataFuture,
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data != null) {
+                return IconButton(
+                  icon: const Icon(Icons.ios_share),
+                  tooltip: 'メモをエクスポート',
+                  onPressed: () => _exportMemosAsCsv(snapshot.data!),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
       ),
       body: FutureBuilder<PredictionRaceData?>(
         future: _predictionRaceDataFuture,
@@ -198,6 +391,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         dataRowMinHeight: 48,
         dataRowMaxHeight: 56,
         columns: const [
+          DataColumn(label: Text('メモ')),
           DataColumn(label: Text('印')),
           DataColumn(label: Text('枠')),
           DataColumn(label: Text('馬番')),
@@ -216,6 +410,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         rows: horses.map((horse) {
           return DataRow(
             cells: [
+              DataCell(
+                _buildMemoCell(horse),
+              ),
               DataCell(
                 horse.isScratched
                     ? const Text('取消', style: TextStyle(color: Colors.red))
@@ -275,6 +472,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           }
         },
       ),
+    );
+  }
+
+  Widget _buildMemoCell(PredictionHorseDetail horse) {
+    bool hasMemo = horse.userMemo?.predictionMemo != null && horse.userMemo!.predictionMemo!.isNotEmpty;
+    return IconButton(
+      icon: Icon(
+        hasMemo ? Icons.speaker_notes : Icons.speaker_notes_off_outlined,
+        color: hasMemo ? Colors.blueAccent : Colors.grey,
+        size: 20,
+      ),
+      onPressed: horse.isScratched ? null : () => _showMemoDialog(horse),
     );
   }
 

@@ -40,6 +40,7 @@
     file_picker: ^8.0.0
     share_plus: ^9.0.0
     intl: ^0.20.2
+    csv: ^6.0.0
 
     # Firebase
     firebase_core: ^2.27.0

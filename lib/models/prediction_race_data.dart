@@ -2,6 +2,7 @@
 
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 
 /// レース全体の予想データを保持するコンテナです。
 class PredictionRaceData {
@@ -42,6 +43,7 @@ class PredictionHorseDetail {
   int? popularity;
   String? horseWeight;
   UserMark? userMark;
+  HorseMemo? userMemo;
   final bool isScratched;
 
   PredictionHorseDetail({
@@ -57,6 +59,7 @@ class PredictionHorseDetail {
     this.popularity,
     this.horseWeight,
     this.userMark,
+    this.userMemo,
     required this.isScratched,
   });
 

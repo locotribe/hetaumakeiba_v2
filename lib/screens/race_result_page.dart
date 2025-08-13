@@ -13,6 +13,7 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 
 class PageData {
   final Map<String, dynamic>? parsedTicket;
@@ -78,6 +79,20 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
       RaceResult? raceResult = await _dbHelper.getRaceResult(widget.raceId);
 
+      // ★★★ ここからが修正箇所 ★★★
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (raceResult != null && userId != null) {
+        final memos = await _dbHelper.getMemosForRace(userId, widget.raceId);
+        final memosMap = {for (var memo in memos) memo.horseId: memo};
+
+        for (var horseResult in raceResult.horseResults) {
+          if (memosMap.containsKey(horseResult.horseId)) {
+            horseResult.userMemo = memosMap[horseResult.horseId];
+          }
+        }
+      }
+      // ★★★ ここまでが修正箇所 ★★★
+
       return PageData(
         parsedTicket: parsedTicket,
         raceResult: raceResult,
@@ -133,6 +148,88 @@ class _RaceResultPageState extends State<RaceResultPage> {
     });
   }
 
+  Future<void> _showMemoDialog(HorseResult horse) async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ログインが必要です。')),
+      );
+      return;
+    }
+
+    final memoController = TextEditingController(text: horse.userMemo?.reviewMemo);
+    final formKey = GlobalKey<FormState>();
+    final predictionMemo = horse.userMemo?.predictionMemo;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('${horse.horseName} - メモ'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (predictionMemo != null && predictionMemo.isNotEmpty) ...[
+                    const Text('予想メモ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8.0),
+                      margin: const EdgeInsets.only(top: 4.0, bottom: 16.0),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(4.0),
+                      ),
+                      child: Text(predictionMemo),
+                    ),
+                  ],
+                  const Text('総評メモ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  TextFormField(
+                    controller: memoController,
+                    autofocus: true,
+                    maxLines: null,
+                    decoration: const InputDecoration(
+                      hintText: 'ここに総評メモを入力...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  final newMemo = HorseMemo(
+                    id: horse.userMemo?.id,
+                    userId: userId,
+                    raceId: widget.raceId,
+                    horseId: horse.horseId,
+                    predictionMemo: horse.userMemo?.predictionMemo, // 既存の予想メモを保持
+                    reviewMemo: memoController.text,
+                    timestamp: DateTime.now(),
+                  );
+                  await _dbHelper.insertOrUpdateHorseMemo(newMemo);
+                  Navigator.of(context).pop();
+                  _loadPageData(); // データを再読み込み
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -265,7 +362,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
       color: Colors.orange.shade50,
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: const Padding(
-        padding: EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16.0),
         child: Center(
           child: Text(
             'レース結果のデータはまだありません。\nレース確定後に再度ご確認ください。',
@@ -411,6 +508,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 columnSpacing: 16,
                 columns: const [
                   DataColumn(label: Text('着')),
+                  DataColumn(label: Text('メモ')),
                   DataColumn(label: Text('馬番')),
                   DataColumn(label: Text('馬名')),
                   DataColumn(label: Text('騎手')),
@@ -420,6 +518,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 rows: raceResult.horseResults.map((horse) {
                   return DataRow(cells: [
                     DataCell(Text(horse.rank)),
+                    DataCell(_buildMemoCell(horse)),
                     DataCell(
                       Center(
                         child: Container(
@@ -494,8 +593,10 @@ class _RaceResultPageState extends State<RaceResultPage> {
                               case 'ワイド':
                               case '3連複':
                               case '枠連':
+                              // 順序不問の券種はSetで比較
                                 return setEquals(userCombo.toSet(), payout.combinationNumbers.toSet());
                               default:
+                              // 順序が重要な券種はListで比較
                                 return listEquals(userCombo, payout.combinationNumbers);
                             }
                           });
@@ -520,6 +621,31 @@ class _RaceResultPageState extends State<RaceResultPage> {
             }).toList(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMemoCell(HorseResult horse) {
+    bool hasPredictionMemo = horse.userMemo?.predictionMemo != null && horse.userMemo!.predictionMemo!.isNotEmpty;
+    bool hasReviewMemo = horse.userMemo?.reviewMemo != null && horse.userMemo!.reviewMemo!.isNotEmpty;
+
+    return InkWell(
+      onTap: () => _showMemoDialog(horse),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.description_outlined,
+            color: hasPredictionMemo ? Colors.blueAccent : Colors.grey,
+            size: 20,
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            Icons.rate_review_outlined,
+            color: hasReviewMemo ? Colors.orange.shade700 : Colors.grey,
+            size: 20,
+          ),
+        ],
       ),
     );
   }
