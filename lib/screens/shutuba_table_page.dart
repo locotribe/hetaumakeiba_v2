@@ -67,6 +67,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     final marksMap = {for (var mark in userMarks) mark.horseId: mark};
     final memosMap = {for (var memo in userMemos) memo.horseId: memo};
 
+    final Map<String, List<HorseRaceRecord>> allPastRecords = {};
 
     // 3. レースデータにユーザーの印とメモ情報を付加する
     for (var horse in raceData.horses) {
@@ -78,13 +79,14 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       }
       // ここから追加：各馬の過去成績を取得してスコアを計算
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      allPastRecords[horse.horseId] = pastRecords; // 取得したデータをMapに保存
       if (pastRecords.isNotEmpty) {
         horse.predictionScore = PredictionAnalyzer.calculateScores(pastRecords);
       }
     }
 
     // ここから追加：レース全体の展開を予測
-    raceData.racePacePrediction = PredictionAnalyzer.predictRacePace(raceData.horses);
+    raceData.racePacePrediction = PredictionAnalyzer.predictRacePace(raceData.horses, allPastRecords);
 
     return raceData;
   }

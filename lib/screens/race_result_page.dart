@@ -17,6 +17,7 @@ import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 
 class PageData {
   final Map<String, dynamic>? parsedTicket;
@@ -92,12 +93,14 @@ class _RaceResultPageState extends State<RaceResultPage> {
         final memosMap = {for (var memo in memos) memo.horseId: memo};
         final Map<String, HorsePredictionScore> scores = {};
         final List<PredictionHorseDetail> horseDetailsForPacePrediction = [];
+        final Map<String, List<HorseRaceRecord>> allPastRecords = {};
 
         for (var horseResult in raceResult.horseResults) {
           if (memosMap.containsKey(horseResult.horseId)) {
             horseResult.userMemo = memosMap[horseResult.horseId];
           }
           final pastRecords = await _dbHelper.getHorsePerformanceRecords(horseResult.horseId);
+          allPastRecords[horseResult.horseId] = pastRecords;
           if (pastRecords.isNotEmpty) {
             scores[horseResult.horseId] = PredictionAnalyzer.calculateScores(pastRecords);
           }
@@ -117,7 +120,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
           );
         }
 
-        final pacePrediction = PredictionAnalyzer.predictRacePace(horseDetailsForPacePrediction);
+        final pacePrediction = PredictionAnalyzer.predictRacePace(horseDetailsForPacePrediction, allPastRecords);
 
         return PageData(
           parsedTicket: parsedTicket,
