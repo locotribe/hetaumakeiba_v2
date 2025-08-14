@@ -1,4 +1,4 @@
-// lib/main_scaffold.dart
+// main_scaffold.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/screens/home_page.dart';
@@ -23,7 +23,8 @@ import 'package:hetaumakeiba_v2/main.dart';
 
 
 class MainScaffold extends StatefulWidget {
-  const MainScaffold({super.key});
+  final VoidCallback onLogout;
+  const MainScaffold({super.key, required this.onLogout});
 
   @override
   State<MainScaffold> createState() => _MainScaffoldState();
@@ -474,6 +475,12 @@ class _MainScaffoldState extends State<MainScaffold> {
                 Navigator.of(context).pop();
                 _importDatabase();
               },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.grey),
+              title: const Text('ログアウト'),
+              onTap: widget.onLogout,
             ),
           ],
         ),
