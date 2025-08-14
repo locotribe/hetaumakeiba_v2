@@ -487,7 +487,6 @@ class ScraperService {
     return gradedRaces;
   }
 
-  // ★★★ ここからが修正箇所 ★★★
   static Future<void> syncPastMonthlyRaceResults(List<FeaturedRace> races, DatabaseHelper dbHelper) async {
     print('[Past Race Sync Start] 過去の重賞レース結果の同期を開始します...');
     for (final race in races) {
@@ -506,11 +505,9 @@ class ScraperService {
             final raceResult = await scrapeRaceDetails(resultUrl);
             await dbHelper.insertOrUpdateRaceResult(raceResult);
 
-            // 1. 全てのQRデータを取得
             final db = await dbHelper.database;
             final allQrDataMaps = await db.query('qr_data');
 
-            // 2. このレースの馬券を持つユーザーIDを特定
             final Set<String> userIdsToUpdate = {};
             for (final map in allQrDataMaps) {
               try {
@@ -524,7 +521,6 @@ class ScraperService {
               }
             }
 
-            // 3. 該当するユーザー全員の集計を更新
             for (final userId in userIdsToUpdate) {
               await AnalyticsService().updateAggregatesOnResultConfirmed(raceResult.raceId, userId);
             }
@@ -539,7 +535,6 @@ class ScraperService {
     }
     print('[Past Race Sync End] 過去の重賞レース結果の同期が完了しました。');
   }
-  // ★★★ ここまでが修正箇所 ★★★
 
   static Future<String?> getOfficialRaceId(String relativeUrl) async {
     try {
@@ -570,55 +565,6 @@ class ScraperService {
     }
   }
 
-  static Future<Map<String, Map<String, num>>> _fetchAndParseNetkeibaOddsHtml(String raceId) async {
-    try {
-      final uri = Uri.https(
-        'race.netkeiba.com',
-        '/odds/odds_get_form.html',
-        {
-          'race_id': raceId,
-          'type': '1', // 単勝・人気を取得
-          'housiki': '',
-        },
-      );
-
-      final requestHeaders = Map<String, String>.from(_headers);
-      requestHeaders['Referer'] = 'https://race.netkeiba.com/race/shutuba.html?race_id=$raceId';
-
-      final res = await http.get(uri, headers: requestHeaders);
-
-      if (res.statusCode != 200) {
-        print('警告: オッズHTMLスニペットの取得に失敗 (Code: ${res.statusCode})');
-        return {'odds': {}, 'popularity': {}};
-      }
-
-      final document = html.parse(res.body);
-      final Map<String, num> oddsMap = {};
-      final Map<String, num> popMap = {};
-
-      final rows = document.querySelectorAll('#odds_view_result table tr');
-      for (var row in rows.skip(1)) {
-        final cells = row.querySelectorAll('td');
-        if (cells.length < 3) continue;
-
-        final umaban = cells[0].text.trim();
-        final odds = cells[1].text.trim();
-        final pop = cells[2].text.trim();
-
-        if (umaban.isNotEmpty && odds.isNotEmpty) {
-          oddsMap[umaban] = num.tryParse(odds) ?? 0;
-        }
-        if (umaban.isNotEmpty && pop.isNotEmpty) {
-          popMap[umaban] = num.tryParse(pop) ?? 0;
-        }
-      }
-      return {'odds': oddsMap, 'popularity': popMap};
-    } catch (e) {
-      print('[ERROR] netkeibaオッズHTMLの処理中にエラーが発生しました: $e');
-      return {'odds': {}, 'popularity': {}};
-    }
-  }
-
   static Future<PredictionRaceData> scrapeFullPredictionData(String raceId) async {
     try {
       final shutubaUrl = 'https://race.netkeiba.com/race/shutuba.html?race_id=$raceId';
@@ -633,19 +579,8 @@ class ScraperService {
       final featuredRace = _parseFeaturedRaceFromDocument(document, raceId, shutubaUrl);
       final netkeibaHorses = _parseShutubaHorsesFromDocument(document);
 
-      final oddsData = await _fetchAndParseNetkeibaOddsHtml(raceId);
-      final oddsMap = oddsData['odds'] ?? {};
-      final popularityMap = oddsData['popularity'] ?? {};
-
       final List<PredictionHorseDetail> finalHorses = [];
       for (final netkeibaHorse in netkeibaHorses) {
-        final horseNumberStr = netkeibaHorse.horseNumber.toString().padLeft(2, '0');
-        if (oddsMap.containsKey(horseNumberStr)) {
-          netkeibaHorse.odds = oddsMap[horseNumberStr]?.toDouble();
-        }
-        if (popularityMap.containsKey(horseNumberStr)) {
-          netkeibaHorse.popularity = popularityMap[horseNumberStr]?.toInt();
-        }
         finalHorses.add(PredictionHorseDetail.fromShutubaHorseDetail(netkeibaHorse));
       }
 
@@ -684,13 +619,9 @@ class ScraperService {
     final gradeElement = raceNameBox?.querySelector('.RaceName [class*="Icon_GradeType"]');
     if (gradeElement != null) {
       final className = gradeElement.className;
-      // 障害グレードを先に判定する
       if (className.contains('Icon_GradeType10')) raceGrade = 'J.G1';
-      // ※J.G2のクラス名は仮です。必要に応じて確認・修正してください。
       else if (className.contains('Icon_GradeType11')) raceGrade = 'J.G2';
       else if (className.contains('Icon_GradeType12')) raceGrade = 'J.G3';
-
-      // 次に平地グレードを判定する
       else if (className.contains('Icon_GradeType1')) raceGrade = 'G1';
       else if (className.contains('Icon_GradeType2')) raceGrade = 'G2';
       else if (className.contains('Icon_GradeType3')) raceGrade = 'G3';
@@ -719,11 +650,9 @@ class ScraperService {
     final List<ShutubaHorseDetail> horses = [];
     final rows = document.querySelectorAll('table.Shutuba_Table tr.HorseList');
     for (final row in rows) {
-      // ▼▼▼ 修正箇所 ▼▼▼
       final bool isScratched = row.classes.contains('Cancel');
 
       final cells = row.querySelectorAll('td');
-      // 取消馬はセルの数が異なる場合があるため、柔軟に処理
       if (cells.isEmpty) continue;
 
       final horseInfoCell = row.querySelector('td.HorseInfo');
@@ -748,8 +677,6 @@ class ScraperService {
     return horses;
   }
 
-  // ★★★ ここからが修正箇所 ★★★
-  /// 解析済み馬券データからレースIDを生成するヘルパー
   static String _getRaceIdFromParsedTicket(Map<String, dynamic> parsedTicket) {
     try {
       final year = parsedTicket['年'].toString().padLeft(2, '0');
@@ -759,8 +686,7 @@ class ScraperService {
       final race = parsedTicket['レース'].toString().padLeft(2, '0');
       return '20$year$racecourseCode$round$day$race';
     } catch (e) {
-      return ''; // 失敗した場合は空文字を返す
+      return '';
     }
   }
-// ★★★ ここまでが修正箇所 ★★★
 }
