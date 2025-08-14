@@ -25,28 +25,34 @@ class LocalAuthService {
         hashedPassword: hashedPassword,
         createdAt: DateTime.now(),
       );
+      print('[AUTH_SERVICE] Registering user: ${newUser.username}, uuid: ${newUser.uuid}');
       await _dbHelper.insertUser(newUser);
+      print('[AUTH_SERVICE] User registration successful.');
       return newUser;
     } catch (e) {
       // ユーザー名の重複などでエラーが発生した場合
-      print('User registration failed: $e');
+      print('[AUTH_SERVICE] User registration failed: $e');
       return null;
     }
   }
 
   // ログイン処理
   Future<User?> login(String username, String password) async {
+    print('[AUTH_SERVICE] Attempting to log in user: $username');
     final userFromDb = await _dbHelper.getUserByUsername(username);
 
     if (userFromDb == null) {
+      print('[AUTH_SERVICE] Login failed: User not found in DB.');
       return null; // ユーザーが存在しない
     }
 
     final hashedPassword = hashPassword(password);
     if (userFromDb.hashedPassword == hashedPassword) {
+      print('[AUTH_SERVICE] Login successful for user: ${userFromDb.username}');
       return userFromDb; // パスワードが一致
     }
 
+    print('[AUTH_SERVICE] Login failed: Password does not match.');
     return null; // パスワードが不一致
   }
 }

@@ -175,6 +175,15 @@ class DatabaseHelper {
             UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
           )
         ''');
+        await db.execute('''
+          CREATE TABLE users(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            username TEXT NOT NULL UNIQUE,
+            hashedPassword TEXT NOT NULL,
+            createdAt TEXT NOT NULL
+          )
+        ''');
       },
       /// データベースのバージョンがアップグレードされたときに呼び出されます。
       /// スキーマの変更（テーブルの追加やカラムの変更など）をここで行います。
@@ -877,6 +886,28 @@ class DatabaseHelper {
       'users',
       where: 'username = ?',
       whereArgs: [username],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      final map = maps.first;
+      return User(
+        id: map['id'] as int,
+        uuid: map['uuid'] as String,
+        username: map['username'] as String,
+        hashedPassword: map['hashedPassword'] as String,
+        createdAt: DateTime.parse(map['createdAt'] as String),
+      );
+    }
+    return null;
+  }
+
+  /// UUIDでユーザー情報を取得します。
+  Future<User?> getUserByUuid(String uuid) async {
+    final db = await database;
+    final maps = await db.query(
+      'users',
+      where: 'uuid = ?',
+      whereArgs: [uuid],
       limit: 1,
     );
     if (maps.isNotEmpty) {
