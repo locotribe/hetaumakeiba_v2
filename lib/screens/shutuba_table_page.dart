@@ -14,6 +14,8 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
+import 'package:url_launcher/url_launcher.dart'; // url_launcherをインポート
+import 'package:hetaumakeiba_v2/logic/paste_parser.dart'; // 新しく作成したパーサーをインポート
 
 
 class ShutubaTablePage extends StatefulWidget {
@@ -26,7 +28,8 @@ class ShutubaTablePage extends StatefulWidget {
 }
 
 class _ShutubaTablePageState extends State<ShutubaTablePage> {
-  late Future<PredictionRaceData?> _predictionRaceDataFuture;
+  PredictionRaceData? _predictionRaceData;
+  bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   @override
@@ -35,27 +38,34 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     _loadShutubaData();
   }
 
-  Future<void> _loadShutubaData() async {
-    setState(() {
-      _predictionRaceDataFuture = _loadDataWithUserMarks();
-    });
+  Future<void> _loadShutubaData({bool refresh = false}) async {
+    if (!refresh) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
+
+    final data = await _fetchDataWithUserMarks();
+
+    if (mounted) {
+      setState(() {
+        _predictionRaceData = data;
+        _isLoading = false;
+      });
+    }
   }
 
-  /// ユーザーの印情報を取得し、レースデータにマージする
-  Future<PredictionRaceData?> _loadDataWithUserMarks() async {
-    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+  Future<PredictionRaceData?> _fetchDataWithUserMarks() async {
+    final userId = localUserId;
     if (userId == null) {
-      // ユーザーがいない場合は印なしのデータを表示
       return await ScraperService.scrapeFullPredictionData(widget.raceId);
     }
 
-    // 1. まず、スクレイピングで基本的なレースデータを取得
     final raceData = await ScraperService.scrapeFullPredictionData(widget.raceId);
     if (raceData == null) {
       return null;
     }
 
-    // 2. 次に、このユーザーの印データとメモデータをDBから並行して取得
     final results = await Future.wait([
       _dbHelper.getAllUserMarksForRace(userId, widget.raceId),
       _dbHelper.getMemosForRace(userId, widget.raceId),
@@ -69,7 +79,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
 
-    // 3. レースデータにユーザーの印とメモ情報を付加する
     for (var horse in raceData.horses) {
       if (marksMap.containsKey(horse.horseId)) {
         horse.userMark = marksMap[horse.horseId];
@@ -77,19 +86,125 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       if (memosMap.containsKey(horse.horseId)) {
         horse.userMemo = memosMap[horse.horseId];
       }
-      // ここから追加：各馬の過去成績を取得してスコアを計算
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
-      allPastRecords[horse.horseId] = pastRecords; // 取得したデータをMapに保存
+      allPastRecords[horse.horseId] = pastRecords;
       if (pastRecords.isNotEmpty) {
         horse.predictionScore = PredictionAnalyzer.calculateScores(pastRecords);
       }
     }
 
-    // ここから追加：レース全体の展開を予測
     raceData.racePacePrediction = PredictionAnalyzer.predictRacePace(raceData.horses, allPastRecords);
 
     return raceData;
   }
+
+  Future<void> _launchNetkeibaUrl() async {
+    if (_predictionRaceData == null) return;
+    final url = Uri.parse(_predictionRaceData!.shutubaTableUrl);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('URLを開けませんでした: ${url.toString()}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showPasteAndUpdateDialog() async {
+    final clipboardText = await PasteParser.getTextFromClipboard();
+    final textController = TextEditingController(text: clipboardText);
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('出馬表を貼り付け'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('netkeiba.comの出馬表ページでコピーした内容を貼り付けてください。'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: textController,
+                  maxLines: 10,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'ここに貼り付け',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _updateOddsFromPastedText(textController.text);
+                Navigator.of(context).pop();
+              },
+              child: const Text('オッズを更新'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _updateOddsFromPastedText(String text) {
+    if (_predictionRaceData == null) return;
+
+    final parsedResults = PasteParser.parseShutubaDataFromPastedText(text);
+
+    if (parsedResults.isEmpty) {
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('有効なデータを抽出できませんでした。コピーする範囲を確認してください。')),
+        );
+      }
+      return;
+    }
+
+    int updatedCount = 0;
+    setState(() {
+      for (var appHorse in _predictionRaceData!.horses) {
+        // 優先度1: 馬番で照合
+        PasteParseResult? foundResult = parsedResults.firstWhere(
+                (p) => p.horseNumber != null && p.horseNumber == appHorse.horseNumber,
+            orElse: () => PasteParseResult(horseName: '') // 見つからなかった場合のダミー
+        );
+
+        // 優先度2: 馬名で照合
+        if (foundResult.horseName == '') {
+          foundResult = parsedResults.firstWhere(
+                  (p) => p.horseName == appHorse.horseName,
+              orElse: () => PasteParseResult(horseName: '') // 見つからなかった場合のダミー
+          );
+        }
+
+        if (foundResult.horseName != '') {
+          appHorse.odds = foundResult.odds;
+          appHorse.popularity = foundResult.popularity;
+          appHorse.horseWeight = foundResult.horseWeight;
+          updatedCount++;
+        }
+      }
+    });
+
+    if(mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$updatedCount頭の情報を更新しました。')),
+      );
+    }
+  }
+
 
   /// 過去レースの詳細情報をポップアップで表示するメソッド
   void _showPastRaceDetailsPopup(BuildContext context, HorseRaceRecord record) {
@@ -314,51 +429,42 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         title: const Text('出馬表'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.open_in_browser),
+            tooltip: 'netkeibaで最新情報を確認',
+            onPressed: _launchNetkeibaUrl,
+          ),
+          IconButton(
+            icon: const Icon(Icons.paste),
+            tooltip: 'コピーした情報を貼り付け',
+            onPressed: _showPasteAndUpdateDialog,
+          ),
+          IconButton(
             icon: const Icon(Icons.file_upload),
             tooltip: 'メモをインポート',
             onPressed: _importMemosFromCsv,
           ),
-          FutureBuilder<PredictionRaceData?>(
-            future: _predictionRaceDataFuture,
-            builder: (context, snapshot) {
-              if (snapshot.hasData && snapshot.data != null) {
-                return IconButton(
-                  icon: const Icon(Icons.ios_share),
-                  tooltip: 'メモをエクスポート',
-                  onPressed: () => _exportMemosAsCsv(snapshot.data!),
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
+          if (_predictionRaceData != null)
+            IconButton(
+              icon: const Icon(Icons.ios_share),
+              tooltip: 'メモをエクスポート',
+              onPressed: () => _exportMemosAsCsv(_predictionRaceData!),
+            ),
         ],
       ),
-      body: FutureBuilder<PredictionRaceData?>(
-        future: _predictionRaceDataFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('エラー: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData || snapshot.data == null) {
-            return Center(child: Text('レース情報が見つかりませんでした。ID: ${widget.raceId}'));
-          }
-
-          final predictionData = snapshot.data!;
-          return RefreshIndicator(
-            onRefresh: _loadShutubaData,
-            child: ListView(
-              padding: const EdgeInsets.all(8.0),
-              children: [
-                _buildRaceInfoCard(predictionData),
-                const SizedBox(height: 8),
-                _buildHorseDataTable(predictionData.horses),
-              ],
-            ),
-          );
-        },
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _predictionRaceData == null
+          ? Center(child: Text('レース情報が見つかりませんでした。ID: ${widget.raceId}'))
+          : RefreshIndicator(
+        onRefresh: () => _loadShutubaData(refresh: true),
+        child: ListView(
+          padding: const EdgeInsets.all(8.0),
+          children: [
+            _buildRaceInfoCard(_predictionRaceData!),
+            const SizedBox(height: 8),
+            _buildHorseDataTable(_predictionRaceData!.horses),
+          ],
+        ),
       ),
     );
   }
@@ -422,6 +528,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           DataColumn(label: Text('斤量')),
           DataColumn(label: Text('騎手')),
           DataColumn(label: Text('調教師')),
+          DataColumn(label: Text('オッズ'), numeric: true),
+          DataColumn(label: Text('人気'), numeric: true),
           DataColumn(label: Text('馬体重')),
           DataColumn(label: Text('前走')),
           DataColumn(label: Text('前々走')),
@@ -461,6 +569,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
               DataCell(Text(horse.carriedWeight.toString())),
               DataCell(Text(horse.jockey)),
               DataCell(Text(horse.trainer)),
+              DataCell(Text(horse.odds?.toString() ?? '--')),
+              DataCell(Text(horse.popularity?.toString() ?? '--')),
               DataCell(Text(horse.horseWeight ?? '--')),
               ..._buildPastRaceCells(horse.horseId),
             ],
