@@ -2,27 +2,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:hetaumakeiba_v2/main_scaffold.dart';
+import 'package:hetaumakeiba_v2/screens/auth_gate.dart';
 
-import 'package:shared_preferences/shared_preferences.dart'; // この行を追加
-import 'package:uuid/uuid.dart'; // この行を追加
 
 // アプリ全体で利用する永続的なローカルIDを保持する変数
 String? localUserId;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 永続的なローカルユーザーIDの初期化
-  final prefs = await SharedPreferences.getInstance();
-  localUserId = prefs.getString('local_user_id');
-  if (localUserId == null) {
-    localUserId = const Uuid().v4();
-    await prefs.setString('local_user_id', localUserId!);
-    print("Generated new local user ID: $localUserId");
-  } else {
-    print("Loaded existing local user ID: $localUserId");
-  }
 
   runApp(const MyApp());
 }
@@ -37,7 +24,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color.fromRGBO(172, 234, 231, 1.0),
+          backgroundColor: Color.fromRGBO(172, 234, 234, 1.0),
           foregroundColor: Colors.black87,
           elevation: 0,
         ),
@@ -56,7 +43,7 @@ class MyApp extends StatelessWidget {
         Locale('ja', ''),
       ],
       // アプリの開始点をMainScaffoldに変更
-      home: const MainScaffold(),
+      home: const AuthGate(),
     );
   }
 }

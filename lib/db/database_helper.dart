@@ -9,6 +9,7 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
+import 'package:hetaumakeiba_v2/models/user_model.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
@@ -54,7 +55,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 8,
+      version: 9,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。
       onCreate: (db, version) async {
@@ -296,6 +297,17 @@ class DatabaseHelper {
               reviewMemo TEXT,
               timestamp TEXT NOT NULL,
               UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
+            )
+          ''');
+        }
+        if (oldVersion < 9) {
+          await db.execute('''
+            CREATE TABLE users(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              uuid TEXT NOT NULL UNIQUE,
+              username TEXT NOT NULL UNIQUE,
+              hashedPassword TEXT NOT NULL,
+              createdAt TEXT NOT NULL
             )
           ''');
         }
@@ -841,5 +853,42 @@ class DatabaseHelper {
     return List.generate(maps.length, (i) {
       return HorseMemo.fromMap(maps[i]);
     });
+  }
+
+  /// 新しいユーザーをデータベースに挿入します。
+  Future<int> insertUser(User user) async {
+    final db = await database;
+    return await db.insert(
+      'users',
+      {
+        'uuid': user.uuid,
+        'username': user.username,
+        'hashedPassword': user.hashedPassword,
+        'createdAt': user.createdAt.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.fail, // ユーザー名はユニークであるべき
+    );
+  }
+
+  /// ユーザー名でユーザー情報を取得します。
+  Future<User?> getUserByUsername(String username) async {
+    final db = await database;
+    final maps = await db.query(
+      'users',
+      where: 'username = ?',
+      whereArgs: [username],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      final map = maps.first;
+      return User(
+        id: map['id'] as int,
+        uuid: map['uuid'] as String,
+        username: map['username'] as String,
+        hashedPassword: map['hashedPassword'] as String,
+        createdAt: DateTime.parse(map['createdAt'] as String),
+      );
+    }
+    return null;
   }
 }
