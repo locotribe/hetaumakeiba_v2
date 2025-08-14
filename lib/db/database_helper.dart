@@ -9,7 +9,7 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 
@@ -20,7 +20,7 @@ class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   /// データベース接続を保持するためのプライベート変数。
   static Database? _database;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
 
   /// `DatabaseHelper`のシングルトンインスタンスを返します。
   // このファクトリコンストラクタにより、常に同じインスタンスが返されます。
@@ -352,11 +352,8 @@ class DatabaseHelper {
   }
 
   /// 新しいQRコードデータをデータベースに挿入します。
-  Future<int> insertQrData(QrData qrData, {bool fromCloud = false}) async {
-    if (!fromCloud && await _isCloudSyncEnabled(qrData.userId)) {
-      // クラウドが有効な場合、Firestoreに先に書き込む
-      await _firestore.collection('users').doc(qrData.userId).collection('qr_data').add(qrData.toMap());
-    }
+  Future<int> insertQrData(QrData qrData) async {
+
     final db = await database;
     return await db.insert(
       'qr_data',
@@ -367,26 +364,9 @@ class DatabaseHelper {
   }
 
   /// IDを指定してQRコードデータを削除します。
-  Future<int> deleteQrData(int id, String userId, {bool fromCloud = false}) async {
+  Future<int> deleteQrData(int id, String userId) async {
     final db = await database;
 
-    // クラウド同期が有効な場合、先にFirestoreから削除するためのデータを取得
-    if (!fromCloud && await _isCloudSyncEnabled(userId)) {
-      // 削除対象のqr_codeを取得するために、安全なクエリでデータをまず取得
-      final maps = await db.query('qr_data', columns: ['qr_code'], where: 'id = ? AND userId = ?', whereArgs: [id, userId]);
-      if (maps.isNotEmpty) {
-        final qrCodeToDelete = maps.first['qr_code'] as String;
-        final querySnapshot = await _firestore
-            .collection('users')
-            .doc(userId)
-            .collection('qr_data')
-            .where('qr_code', isEqualTo: qrCodeToDelete)
-            .get();
-        for (var doc in querySnapshot.docs) {
-          await doc.reference.delete();
-        }
-      }
-    }
 
     // ローカルDBから削除
     return await db.delete(
@@ -542,15 +522,8 @@ class DatabaseHelper {
   }
 
   /// ユーザーが付けた印を挿入または更新します。
-  Future<int> insertOrUpdateUserMark(UserMark mark, {bool fromCloud = false}) async {
-    if (!fromCloud && await _isCloudSyncEnabled(mark.userId)) {
-      final docRef = _firestore
-          .collection('users')
-          .doc(mark.userId)
-          .collection('user_marks')
-          .doc('${mark.raceId}_${mark.horseId}');
-      await docRef.set(mark.toMap());
-    }
+  Future<int> insertOrUpdateUserMark(UserMark mark) async {
+
     final db = await database;
     return await db.insert(
       'user_marks',
@@ -588,15 +561,8 @@ class DatabaseHelper {
   }
 
   /// 特定のレースの特定の馬に付けられた印を削除します。
-  Future<int> deleteUserMark(String userId, String raceId, String horseId, {bool fromCloud = false}) async {
-    if (!fromCloud && await _isCloudSyncEnabled(userId)) {
-      final docRef = _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('user_marks')
-          .doc('${raceId}_${horseId}');
-      await docRef.delete();
-    }
+  Future<int> deleteUserMark(String userId, String raceId, String horseId) async {
+
     final db = await database;
     return await db.delete(
       'user_marks',
@@ -606,10 +572,8 @@ class DatabaseHelper {
   }
 
   /// 新しいフィードを挿入します。
-  Future<int> insertFeed(Feed feed, {bool fromCloud = false}) async {
-    if (!fromCloud && await _isCloudSyncEnabled(feed.userId)) {
-      await _firestore.collection('users').doc(feed.userId).collection('user_feeds').add(feed.toMap());
-    }
+  Future<int> insertFeed(Feed feed) async {
+
     final db = await database;
     return await db.insert('user_feeds', feed.toMap());
   }
@@ -629,19 +593,8 @@ class DatabaseHelper {
   }
 
   /// 既存のフィード情報を更新します。
-  Future<int> updateFeed(Feed feed, {bool fromCloud = false}) async {
-    if (!fromCloud && await _isCloudSyncEnabled(feed.userId)) {
-      final querySnapshot = await _firestore
-          .collection('users')
-          .doc(feed.userId)
-          .collection('user_feeds')
-          .where('id', isEqualTo: feed.id)
-          .limit(1)
-          .get();
-      if (querySnapshot.docs.isNotEmpty) {
-        await querySnapshot.docs.first.reference.update(feed.toMap());
-      }
-    }
+  Future<int> updateFeed(Feed feed) async {
+
     final db = await database;
     return await db.update(
       'user_feeds',
@@ -652,24 +605,9 @@ class DatabaseHelper {
   }
 
   /// IDを指定してフィードを削除します。
-  Future<int> deleteFeed(int id, {bool fromCloud = false}) async {
+  Future<int> deleteFeed(int id) async {
     final db = await database;
-    final maps = await db.query('user_feeds', where: 'id = ?', whereArgs: [id]);
-    if (maps.isNotEmpty) {
-      final feedToDelete = Feed.fromMap(maps.first);
-      if (!fromCloud && await _isCloudSyncEnabled(feedToDelete.userId)) {
-        final querySnapshot = await _firestore
-            .collection('users')
-            .doc(feedToDelete.userId)
-            .collection('user_feeds')
-            .where('id', isEqualTo: id)
-            .limit(1)
-            .get();
-        if (querySnapshot.docs.isNotEmpty) {
-          await querySnapshot.docs.first.reference.delete();
-        }
-      }
-    }
+
     return await db.delete(
       'user_feeds',
       where: 'id = ?',
@@ -697,16 +635,8 @@ class DatabaseHelper {
 
   /// 全てのテーブルから全てのデータを削除します。
   /// 主にデバッグやリセット機能のために使用します。
-  Future<void> deleteAllDataForUser(String userId, {bool fromCloud = false}) async {
-    if (!fromCloud && await _isCloudSyncEnabled(userId)) {
-      final collections = ['qr_data', 'user_marks', 'user_feeds', 'analytics_aggregates'];
-      for (var collection in collections) {
-        final snapshot = await _firestore.collection('users').doc(userId).collection(collection).get();
-        for (var doc in snapshot.docs) {
-          await doc.reference.delete();
-        }
-      }
-    }
+  Future<void> deleteAllDataForUser(String userId) async {
+
     final db = await database;
     // ユーザーに紐づくデータのみを削除
     await db.delete('qr_data', where: 'userId = ?', whereArgs: [userId]);

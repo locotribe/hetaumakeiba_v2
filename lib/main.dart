@@ -3,9 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hetaumakeiba_v2/main_scaffold.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'firebase_options.dart'; // この行を追加
+
 import 'package:shared_preferences/shared_preferences.dart'; // この行を追加
 import 'package:uuid/uuid.dart'; // この行を追加
 
@@ -26,19 +24,6 @@ void main() async {
     print("Loaded existing local user ID: $localUserId");
   }
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform, // この行を追加
-  );
-  // 匿名認証によるサインイン処理
-  User? currentUser = FirebaseAuth.instance.currentUser;
-  if (currentUser == null) {
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-      print("Signed in with temporary account.");
-    } catch (e) {
-      print("Error signing in anonymously: $e");
-    }
-  }
   runApp(const MyApp());
 }
 

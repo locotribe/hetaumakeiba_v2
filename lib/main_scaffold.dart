@@ -1,4 +1,4 @@
-// main_scaffold.dart
+// lib/main_scaffold.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/screens/home_page.dart';
@@ -18,14 +18,7 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:hetaumakeiba_v2/services/auth_service.dart';
-import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
-import 'package:hetaumakeiba_v2/models/feed_model.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:hetaumakeiba_v2/main.dart';
 
 
@@ -44,9 +37,7 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   final DatabaseHelper _dbHelper = DatabaseHelper();
   bool _isBusy = false;
-  User? _user;
-  final AuthService _authService = AuthService();
-  List<StreamSubscription> _firestoreSubscriptions = [];
+
 
   /// ★★★ 新しく追加したメソッド ★★★
   /// 分析データを再構築する
@@ -358,16 +349,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   @override
   void initState() {
     super.initState();
-    FirebaseAuth.instance
-        .authStateChanges()
-        .listen((User? user) {
-      if (mounted) {
-        setState(() {
-          _user = user;
-        });
-        _setupFirestoreListener(user);
-      }
-    });
+
     _pages = <Widget>[
       const HomePage(),
       const JyusyoIchiranPage(),
@@ -378,103 +360,11 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   @override
   void dispose() {
-    for (var sub in _firestoreSubscriptions) {
-      sub.cancel();
-    }
+
     super.dispose();
   }
 
-  Future<void> _setupFirestoreListener(User? user) async {
-    // 既存のリスナーがあれば全てキャンセル
-    for (var sub in _firestoreSubscriptions) {
-      await sub.cancel();
-    }
-    _firestoreSubscriptions.clear();
 
-    if (user == null) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final isCloudSyncEnabled = prefs.getBool('isCloudSyncEnabled_${user.uid}') ?? false;
-
-    if (!isCloudSyncEnabled) {
-      // クラウド同期が有効でなければ何もしない
-      return;
-    }
-
-    // 1. qr_dataのリスナー
-    final qrDataSub = FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('qr_data')
-        .snapshots()
-        .listen((snapshot) async {
-      for (var change in snapshot.docChanges) {
-        final data = change.doc.data();
-        if (data == null) continue;
-        final qrData = QrData.fromMap(data);
-
-        if (change.type == DocumentChangeType.added || change.type == DocumentChangeType.modified) {
-          await _dbHelper.insertQrData(qrData, fromCloud: true);
-        } else if (change.type == DocumentChangeType.removed) {
-          // qr_codeを使ってローカルのデータを特定して削除
-          final db = await _dbHelper.database;
-          final localData = await db.query('qr_data', where: 'qr_code = ? AND userId = ?', whereArgs: [qrData.qrCode, user.uid]);
-          if (localData.isNotEmpty) {
-            final id = localData.first['id'] as int;
-            await _dbHelper.deleteQrData(id, user.uid, fromCloud: true);
-          }
-        }
-      }
-      _savedListKey.currentState?.reloadData();
-    });
-    _firestoreSubscriptions.add(qrDataSub);
-
-    // 2. user_marksのリスナー
-    final userMarksSub = FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('user_marks')
-        .snapshots()
-        .listen((snapshot) async {
-      for (var change in snapshot.docChanges) {
-        final data = change.doc.data();
-        if (data == null) continue;
-        final userMark = UserMark.fromMap(data);
-
-        if (change.type == DocumentChangeType.added || change.type == DocumentChangeType.modified) {
-          await _dbHelper.insertOrUpdateUserMark(userMark, fromCloud: true);
-        } else if (change.type == DocumentChangeType.removed) {
-          await _dbHelper.deleteUserMark(userMark.userId, userMark.raceId, userMark.horseId, fromCloud: true);
-        }
-      }
-    });
-    _firestoreSubscriptions.add(userMarksSub);
-
-    // 3. user_feedsのリスナー
-    final userFeedsSub = FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('user_feeds')
-        .snapshots()
-        .listen((snapshot) async {
-      for (var change in snapshot.docChanges) {
-        final data = change.doc.data();
-        if (data == null) continue;
-        final feed = Feed.fromMap(data);
-
-        if (change.type == DocumentChangeType.added) {
-          await _dbHelper.insertFeed(feed, fromCloud: true);
-        } else if (change.type == DocumentChangeType.modified) {
-          await _dbHelper.updateFeed(feed, fromCloud: true);
-        } else if (change.type == DocumentChangeType.removed) {
-          if (feed.id != null) {
-            await _dbHelper.deleteFeed(feed.id!, fromCloud: true);
-          }
-        }
-      }
-    });
-    _firestoreSubscriptions.add(userFeedsSub);
-  }
 
   void _onItemTapped(int index) {
     if (index == 2) {
@@ -528,27 +418,7 @@ class _MainScaffoldState extends State<MainScaffold> {
                 ),
               ),
             ),
-            if (_user != null && _user!.isAnonymous)
-              ListTile(
-                leading: const Icon(Icons.cloud_sync, color: Colors.blueAccent),
-                title: const Text('アカウントを作成してデータを同期'),
-                subtitle: const Text('データをクラウドにバックアップします。'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _authService.linkAccountAndMigrateData(context);
-                },
-              ),
-            if (_user != null && !_user!.isAnonymous)
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.grey),
-                title: const Text('ログアウト'),
-                onTap: () async {
-                  Navigator.of(context).pop();
-                  await FirebaseAuth.instance.signOut();
-                  // ログアウト後に匿名ユーザーとして再ログイン
-                  await FirebaseAuth.instance.signInAnonymously();
-                },
-              ),
+
             const Divider(),
             ListTile(
               leading: const Icon(Icons.home_work_outlined),
