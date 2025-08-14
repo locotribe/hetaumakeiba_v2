@@ -1,21 +1,17 @@
 // lib/logic/paste_parser.dart
 
 import 'package:flutter/services.dart';
+import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
+
 
 // 解析結果を保持するためのデータクラス
 class PasteParseResult {
-  final int? horseNumber;
-  final String horseName;
   final double? odds;
   final int? popularity;
-  final String? horseWeight;
 
   PasteParseResult({
-    this.horseNumber,
-    required this.horseName,
     this.odds,
     this.popularity,
-    this.horseWeight,
   });
 }
 
@@ -26,80 +22,70 @@ class PasteParser {
     return clipboardData?.text ?? '';
   }
 
-  // ペーストされた出馬表テキストを解析するメインの関数
-  static List<PasteParseResult> parseShutubaDataFromPastedText(String text) {
-    final List<PasteParseResult> results = [];
-    // 行を分割し、前後の空白を除去し、空行や区切り線を除外
-    final lines = text.split('\n')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty && e != '--' && !e.startsWith('編集') && !e.contains('◎'))
-        .toList();
+  // ペーストされたテキストと、アプリ内の馬リストを基に解析するメイン関数
+  static Map<String, PasteParseResult> parseDataByHorseName(String text, List<PredictionHorseDetail> horses) {
+    final Map<String, PasteParseResult> resultMap = {};
 
-    for (int i = 0; i < lines.length; i++) {
-      final line1 = lines[i];
+    for (int i = 0; i < horses.length; i++) {
+      final currentHorse = horses[i];
+      final horseName = currentHorse.horseName;
 
-      // パターン1: 枠順確定後など、1行に全ての情報が含まれる形式
-      // 例: "1 1 ホウオウビスケッツ 牡5 58.0 岩田康 3.9 1 (美)奥村武 480(+2)"
-      final singleLineRegExp = RegExp(
-          r'^\s*\d{1,2}\s+'      // 枠番
-          r'(\d{1,2})\s+'          // 馬番 (グループ1)
-          r'(.+?)\s+'             // 馬名 (グループ2)
-          r'[牡牝セせん]\d\s+'   // 性齢
-          r'[\d\.]+\s+'            // 斤量
-          r'.+?\s+'                // 騎手
-          r'([\d\.]+)\s+'          // 単勝オッズ (グループ3)
-          r'(\d+)'                 // 人気 (グループ4)
-          r'(?:\s+.+?\s+(\d{3}\(.+?\)))?\s*$' // 調教師と馬体重(任意 グループ5)
-      );
+      // テキスト全体から現在の馬の名前を探す
+      final nameIndex = text.indexOf(horseName);
+      if (nameIndex == -1) continue;
 
-      var match = singleLineRegExp.firstMatch(line1);
-      if (match != null) {
-        try {
-          results.add(PasteParseResult(
-            horseNumber: int.parse(match.group(1)!),
-            horseName: match.group(2)!.trim(),
-            odds: double.parse(match.group(3)!),
-            popularity: int.parse(match.group(4)!),
-            horseWeight: match.group(5),
-          ));
-          continue; // マッチしたので次の行の処理へ
-        } catch (e) {
-          // パースに失敗した場合は無視して次の行へ
+      // 次の馬の名前の位置を探し、検索範囲を限定する
+      int endIndex;
+      if (i < horses.length - 1) {
+        final nextHorseName = horses[i + 1].horseName;
+        endIndex = text.indexOf(nextHorseName, nameIndex);
+        if (endIndex == -1) {
+          endIndex = text.length;
+        }
+      } else {
+        endIndex = text.length;
+      }
+
+      // 現在の馬の情報のブロックを切り出す
+      final targetBlock = text.substring(nameIndex, endIndex);
+
+      // ブロック内のすべての数字（整数と小数）を抽出する
+      final numberRegExp = RegExp(r'\d+\.\d+|\d+');
+      final allNumbersInBlock = numberRegExp.allMatches(targetBlock).map((m) => m.group(0)!).toList();
+
+      // --- ここからが新しいロジック ---
+      // アプリが既に知っている静的データ（性齢、斤量）を文字列として準備
+      final sexAgeStr = currentHorse.sexAndAge.replaceAll(RegExp(r'[^0-9]'), ''); // "セ10" -> "10"
+      final weightStr = currentHorse.carriedWeight.toString(); // 60.0 -> "60.0"
+
+      // 抽出した数字リストから、既知の静的データを除外する
+      final List<String> dynamicNumbers = [];
+      for(final numStr in allNumbersInBlock) {
+        if (numStr != sexAgeStr && numStr != weightStr) {
+          dynamicNumbers.add(numStr);
         }
       }
 
-      // パターン2: 枠順確定前など、2行で1頭の情報が構成される形式
-      if (i + 1 < lines.length) {
-        final line2 = lines[i + 1];
-        // line1 (馬名): アウスヴァール
-        // line2 (データ): セ758.0古川吉栗東昆174.316
-        final twoLineRegExp = RegExp(
-            r'^[牡牝セせん]\d'      // 性齢
-            r'[\d\.]+'            // 斤量
-            r'.+?'                // 騎手、調教師など
-            r'([\d\.]+)'           // 単勝オッズ (グループ1)
-            r'(\d+)$'              // 人気 (グループ2)
-        );
-        match = twoLineRegExp.firstMatch(line2);
+      // 除外後に残った数字のリストからオッズと人気を特定する
+      if (dynamicNumbers.isNotEmpty) {
+        double? odds;
+        int? popularity;
 
-        // line2がデータ行のパターンに一致し、かつline1がデータ行のパターンに一致しないことを確認
-        if (match != null && !twoLineRegExp.hasMatch(line1) && !singleLineRegExp.hasMatch(line1)) {
-          try {
-            results.add(PasteParseResult(
-              horseNumber: null, // この形式では馬番は取得不可
-              horseName: line1.trim(),
-              odds: double.parse(match.group(1)!),
-              popularity: int.parse(match.group(2)!),
-              horseWeight: null, // この形式では馬体重は取得不可
-            ));
-            i++; // 2行分処理したのでインデックスを1つ余分に進める
-            continue; // マッチしたので次のループの処理へ
-          } catch(e) {
-            // パースに失敗した場合は無視して次の行へ
-          }
+        // 残ったリストの最初の数字をオッズとして試す
+        odds = double.tryParse(dynamicNumbers[0]);
+
+        // 2番目の数字を人気として試す
+        if (dynamicNumbers.length > 1) {
+          final popStr = dynamicNumbers[1].replaceAll('人気', '');
+          popularity = int.tryParse(popStr);
+        }
+
+        // オッズと人気の両方が正しく取得できた場合のみ結果を保存
+        if (odds != null && popularity != null) {
+          resultMap[horseName] = PasteParseResult(odds: odds, popularity: popularity);
         }
       }
     }
-    return results;
+    return resultMap;
   }
 }

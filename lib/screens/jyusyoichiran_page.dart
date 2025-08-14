@@ -17,6 +17,9 @@ class JyusyoIchiranPage extends StatefulWidget {
 }
 
 class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
+  // ▼▼▼ ここからが修正箇所 ▼▼▼
+  late Future<void> _loadDataFuture;
+  // ▲▲▲ ここまでが修正箇所 ▲▲▲
   List<FeaturedRace> _weeklyGradedRaces = [];
   List<FeaturedRace> _yearlyGradedRaces = [];
   bool _isLoading = true;
@@ -32,7 +35,9 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   void initState() {
     super.initState();
     _currentMonth = DateTime.now().month;
-    _loadJyusyoIchiranPageData();
+    // ▼▼▼ ここからが修正箇所 ▼▼▼
+    _loadDataFuture = _loadJyusyoIchiranPageData();
+    // ▲▲▲ ここまでが修正箇所 ▲▲▲
   }
 
   @override
@@ -42,10 +47,9 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   }
 
   Future<void> _loadJyusyoIchiranPageData() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-    });
+    // ▼▼▼ ここからが修正箇所 ▼▼▼
+    // setStateを削除し、FutureBuilderが状態を管理するように変更
+    // ▲▲▲ ここまでが修正箇所 ▲▲▲
 
     try {
       final results = await Future.wait([
@@ -67,32 +71,41 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         initialPage = 0;
       }
 
+      // ▼▼▼ ここからが修正箇所 ▼▼▼
+      // Stateの更新はFutureBuilderの完了後に行うため、ここではローカル変数に保持
+      final newWeeklyRaces = weeklyRaces;
+      final newYearlyRaces = yearlyRaces;
+      final newAvailableMonths = availableMonths;
+      // ▲▲▲ ここまでが修正箇所 ▲▲▲
+
       _pageController = PageController(initialPage: initialPage);
 
       if (!mounted) return;
+      // ▼▼▼ ここからが修正箇所 ▼▼▼
       setState(() {
-        _weeklyGradedRaces = weeklyRaces;
-        _yearlyGradedRaces = yearlyRaces;
-        _availableMonths = availableMonths;
+        _weeklyGradedRaces = newWeeklyRaces;
+        _yearlyGradedRaces = newYearlyRaces;
+        _availableMonths = newAvailableMonths;
         if (_availableMonths.isNotEmpty) {
           _currentMonth = _availableMonths[initialPage];
         }
         _isLoading = false;
       });
+      // ▲▲▲ ここまでが修正箇所 ▲▲▲
 
       if (!_isHorseDataSynced && _weeklyGradedRaces.isNotEmpty) {
         _isHorseDataSynced = true;
+        // fire-and-forget
         ScraperService.syncNewHorseData(_weeklyGradedRaces, _dbHelper);
       }
 
-      // 未来のレースは除外して同期処理に渡す
       final today = DateTime.now();
       final pastRaces = _yearlyGradedRaces.where((race) {
         final raceDate = _parseDateStringAsDateTime(race.raceDate);
-        // レース開催日が今日より前の場合のみ同期対象とする
         return raceDate.isBefore(DateTime(today.year, today.month, today.day));
       }).toList();
 
+      // fire-and-forget
       ScraperService.syncPastMonthlyRaceResults(pastRaces, _dbHelper);
 
     } catch (e) {
@@ -138,8 +151,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   String _getDayOfWeek(FeaturedRace race) {
     try {
       final dateTime = _parseDateStringAsDateTime(race.raceDate);
-      // DateTime.weekdayは月曜日が1、日曜日が7を返す
-      // リストのインデックス（0から6）に合わせるため、1を引く
       const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
       return weekdays[dateTime.weekday - 1];
     } catch (e) {
@@ -159,26 +170,47 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
             fillColor: Color.fromRGBO(172, 234, 231, 1.0),
           ),
         ),
-        _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : (_weeklyGradedRaces.isEmpty && _yearlyGradedRaces.isEmpty)
-            ? _buildEmptyState()
-            : RefreshIndicator(
-          onRefresh: _loadJyusyoIchiranPageData,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildWeeklyRaces(),
-                const SizedBox(height: 24),
-                if (_yearlyGradedRaces.isNotEmpty)
-                  _buildMonthlyRacesPageView(),
-              ],
-            ),
-          ),
+        // ▼▼▼ ここからが修正箇所 ▼▼▼
+        FutureBuilder<void>(
+          future: _loadDataFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting || _isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(child: Text('エラーが発生しました: ${snapshot.error}'));
+            }
+
+            if (_weeklyGradedRaces.isEmpty && _yearlyGradedRaces.isEmpty) {
+              return _buildEmptyState();
+            }
+
+            return RefreshIndicator(
+              onRefresh: () async {
+                setState(() {
+                  _isLoading = true;
+                  _loadDataFuture = _loadJyusyoIchiranPageData();
+                });
+                await _loadDataFuture;
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildWeeklyRaces(),
+                    const SizedBox(height: 24),
+                    if (_yearlyGradedRaces.isNotEmpty)
+                      _buildMonthlyRacesPageView(),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
+        // ▲▲▲ ここまでが修正箇所 ▲▲▲
       ],
     );
   }
@@ -186,7 +218,13 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   Widget _buildEmptyState() {
     return Center(
       child: RefreshIndicator(
-        onRefresh: _loadJyusyoIchiranPageData,
+        onRefresh: () async {
+          setState(() {
+            _isLoading = true;
+            _loadDataFuture = _loadJyusyoIchiranPageData();
+          });
+          await _loadDataFuture;
+        },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Container(

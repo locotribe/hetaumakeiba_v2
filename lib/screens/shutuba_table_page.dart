@@ -14,8 +14,8 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
-import 'package:url_launcher/url_launcher.dart'; // url_launcherをインポート
-import 'package:hetaumakeiba_v2/logic/paste_parser.dart'; // 新しく作成したパーサーをインポート
+import 'package:url_launcher/url_launcher.dart';
+import 'package:hetaumakeiba_v2/logic/paste_parser.dart';
 
 
 class ShutubaTablePage extends StatefulWidget {
@@ -45,13 +45,21 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       });
     }
 
-    final data = await _fetchDataWithUserMarks();
-
-    if (mounted) {
-      setState(() {
-        _predictionRaceData = data;
-        _isLoading = false;
-      });
+    try {
+      final data = await _fetchDataWithUserMarks();
+      if (mounted) {
+        setState(() {
+          _predictionRaceData = data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('出馬表データの読み込みに失敗: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -161,7 +169,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   void _updateOddsFromPastedText(String text) {
     if (_predictionRaceData == null) return;
 
-    final parsedResults = PasteParser.parseShutubaDataFromPastedText(text);
+    final parsedResults = PasteParser.parseDataByHorseName(text, _predictionRaceData!.horses);
 
     if (parsedResults.isEmpty) {
       if(mounted) {
@@ -175,24 +183,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     int updatedCount = 0;
     setState(() {
       for (var appHorse in _predictionRaceData!.horses) {
-        // 優先度1: 馬番で照合
-        PasteParseResult? foundResult = parsedResults.firstWhere(
-                (p) => p.horseNumber != null && p.horseNumber == appHorse.horseNumber,
-            orElse: () => PasteParseResult(horseName: '') // 見つからなかった場合のダミー
-        );
-
-        // 優先度2: 馬名で照合
-        if (foundResult.horseName == '') {
-          foundResult = parsedResults.firstWhere(
-                  (p) => p.horseName == appHorse.horseName,
-              orElse: () => PasteParseResult(horseName: '') // 見つからなかった場合のダミー
-          );
-        }
-
-        if (foundResult.horseName != '') {
-          appHorse.odds = foundResult.odds;
-          appHorse.popularity = foundResult.popularity;
-          appHorse.horseWeight = foundResult.horseWeight;
+        if (parsedResults.containsKey(appHorse.horseName)) {
+          final result = parsedResults[appHorse.horseName]!;
+          appHorse.odds = result.odds;
+          appHorse.popularity = result.popularity;
+          // appHorse.horseWeightは現状のパーサーでは更新対象外
           updatedCount++;
         }
       }
@@ -454,7 +449,19 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _predictionRaceData == null
-          ? Center(child: Text('レース情報が見つかりませんでした。ID: ${widget.raceId}'))
+          ? Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('レース情報の読み込みに失敗しました。'),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: () => _loadShutubaData(),
+              child: const Text('再試行'),
+            )
+          ],
+        ),
+      )
           : RefreshIndicator(
         onRefresh: () => _loadShutubaData(refresh: true),
         child: ListView(
