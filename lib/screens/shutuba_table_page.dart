@@ -31,6 +31,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   PredictionRaceData? _predictionRaceData;
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  // ▼▼▼ ここからが追加箇所 ▼▼▼
+  // 貼り付けられた動的データを一時的に保持するためのキャッシュ
+  final Map<String, PasteParseResult> _pastedDataCache = {};
+  // ▲▲▲ ここまでが追加箇所 ▲▲▲
 
   @override
   void initState() {
@@ -73,6 +77,19 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     if (raceData == null) {
       return null;
     }
+
+    // ▼▼▼ ここからが追加箇所 ▼▼▼
+    // 更新前に、キャッシュに保持されているオッズ・人気情報を新しいデータにマージする
+    if (_pastedDataCache.isNotEmpty) {
+      for (var horse in raceData.horses) {
+        if (_pastedDataCache.containsKey(horse.horseName)) {
+          final cachedData = _pastedDataCache[horse.horseName]!;
+          horse.odds = cachedData.odds;
+          horse.popularity = cachedData.popularity;
+        }
+      }
+    }
+    // ▲▲▲ ここまでが追加箇所 ▲▲▲
 
     final results = await Future.wait([
       _dbHelper.getAllUserMarksForRace(userId, widget.raceId),
@@ -180,6 +197,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       return;
     }
 
+    // ▼▼▼ ここからが追加箇所 ▼▼▼
+    // パースした結果をキャッシュに保存する
+    _pastedDataCache.addAll(parsedResults);
+    // ▲▲▲ ここまでが追加箇所 ▲▲▲
+
     int updatedCount = 0;
     setState(() {
       for (var appHorse in _predictionRaceData!.horses) {
@@ -187,7 +209,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           final result = parsedResults[appHorse.horseName]!;
           appHorse.odds = result.odds;
           appHorse.popularity = result.popularity;
-          // appHorse.horseWeightは現状のパーサーでは更新対象外
           updatedCount++;
         }
       }
