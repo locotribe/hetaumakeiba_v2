@@ -20,6 +20,7 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:hetaumakeiba_v2/main.dart';
+import 'package:hetaumakeiba_v2/screens/prediction_settings_page.dart';
 
 
 class MainScaffold extends StatefulWidget {
@@ -429,6 +430,19 @@ class _MainScaffoldState extends State<MainScaffold> {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => const HomeSettingsPage(),
+                  ),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.tune),
+              title: const Text('AI予測チューニング'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const PredictionSettingsPage(),
                   ),
                 );
               },

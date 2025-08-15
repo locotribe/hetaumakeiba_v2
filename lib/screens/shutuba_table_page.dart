@@ -16,6 +16,7 @@ import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hetaumakeiba_v2/logic/paste_parser.dart';
 import 'package:hetaumakeiba_v2/screens/comprehensive_prediction_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 class ShutubaTablePage extends StatefulWidget {
@@ -58,7 +59,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       final data = await _fetchDataWithUserMarks();
       // ▼▼▼ ここからが追加箇所 ▼▼▼
       if (data != null) {
-        _calculatePredictionScores(data);
+        await _calculatePredictionScores(data);
       }
       // ▲▲▲ ここまでが追加箇所 ▲▲▲
       if (mounted) {
@@ -79,6 +80,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
   // ▼▼▼ ここからが追加箇所 ▼▼▼
   Future<void> _calculatePredictionScores(PredictionRaceData raceData) async {
+    final prefs = await SharedPreferences.getInstance();
+    final customWeights = {
+      'legType': prefs.getDouble('legTypeWeight') ?? 30.0,
+      'courseFit': prefs.getDouble('courseFitWeight') ?? 25.0,
+      'trackCondition': prefs.getDouble('trackConditionWeight') ?? 20.0,
+      'humanFactor': prefs.getDouble('humanFactorWeight') ?? 15.0,
+      'condition': prefs.getDouble('conditionWeight') ?? 10.0,
+    };
+
     final Map<String, double> scores = {};
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
     final Map<String, String> legStyles = {};
@@ -91,6 +101,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         horse,
         raceData,
         pastRecords,
+        customWeights: customWeights,
       );
       legStyles[horse.horseId] = PredictionAnalyzer.getRunningStyle(pastRecords);
     }

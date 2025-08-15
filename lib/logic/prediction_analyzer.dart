@@ -2,47 +2,47 @@
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
-import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'dart:math';
 
 class PredictionAnalyzer {
-  // --- 既存の簡易スコア算出ロジックは計画書通り完全に破棄 ---
 
-  // #################################################
-  // ## フェーズ2.2: 「的中重視」ロジック
-  // #################################################
+  static const Map<String, double> _defaultWeights = {
+    'legType': 30.0, 'courseFit': 25.0, 'trackCondition': 20.0, 'humanFactor': 15.0, 'condition': 10.0,
+  };
 
   /// 様々なファクターを総合評価し、0〜100点の「総合適性スコア」を算出します。
   /// このメソッドが、各ファクター評価メソッドを呼び出す司令塔となります。
   static double calculateOverallAptitudeScore(
       PredictionHorseDetail horse,
       PredictionRaceData raceData,
-      List<HorseRaceRecord> pastRecords,
-      ) {
+      List<HorseRaceRecord> pastRecords, {
+        Map<String, double>? customWeights,
+      }) {
     // 各ファクターのスコアを0-100点で算出
     final legTypeScore = _evaluateLegTypeAndPaceFit(horse, raceData, pastRecords); // 1. 脚質・展開適性
-    final courseFitScore = _evaluateCourseFit(horse, raceData); // 2. コース適性
+    final courseFitScore = _evaluateCourseFit(horse, raceData, pastRecords); // 2. コース適性
     final trackConditionScore = _evaluateTrackConditionFit(horse, raceData, pastRecords); // 3. 馬場適性
-    final humanFactorScore = _evaluateHumanFactors(horse); // 4. 人的要因
-    final conditionScore = _evaluateCondition(horse); // 5. コンディション
+    final humanFactorScore = _evaluateHumanFactors(horse, pastRecords); // 4. 人的要因
+    final conditionScore = _evaluateCondition(horse, raceData, pastRecords); // 5. コンディション
 
-    // 各ファクターの重要度に応じて重み付けを行う (例)
-    final weights = {
-      'legType': 0.30,
-      'courseFit': 0.25,
-      'trackCondition': 0.20,
-      'humanFactor': 0.15,
-      'condition': 0.10,
-    };
+    // カスタム設定が渡されなければ、デフォルトの重み付けを使用
+    final weights = customWeights ?? _defaultWeights;
 
     // 重み付け加算して総合スコアを算出
-    final totalScore = (legTypeScore * weights['legType']!) +
-        (courseFitScore * weights['courseFit']!) +
-        (trackConditionScore * weights['trackCondition']!) +
-        (humanFactorScore * weights['humanFactor']!) +
-        (conditionScore * weights['condition']!);
+    final totalScore = (legTypeScore * (weights['legType']! / 100)) +
+        (courseFitScore * (weights['courseFit']! / 100)) +
+        (trackConditionScore * (weights['trackCondition']! / 100)) +
+        (humanFactorScore * (weights['humanFactor']! / 100)) +
+        (conditionScore * (weights['condition']! / 100));
 
-    return totalScore.clamp(0, 100); // 最終スコアを0-100の範囲に収める
+    final totalWeight = (weights['legType']! + weights['courseFit']! + weights['trackCondition']! + weights['humanFactor']! + weights['condition']!) / 100;
+
+    if (totalWeight == 0) return 0;
+
+    // 重みの合計で割ることで、スケールを0-100に正規化
+    final normalizedScore = totalScore / totalWeight;
+
+    return normalizedScore.clamp(0, 100); // 最終スコアを0-100の範囲に収める
   }
 
   // 1. 脚質・展開適性評価
@@ -51,20 +51,95 @@ class PredictionAnalyzer {
       PredictionRaceData raceData,
       List<HorseRaceRecord> pastRecords,
       ) {
-    // 擬似的なロジック: 本来はRaceDataParser等で精密な分析が必要
-    if (raceData.racePacePrediction?.predictedPace == "ハイペース") {
-      // ハイペースなら差し・追込が有利と仮定
-      return horse.horseNumber % 2 == 0 ? 85.0 : 60.0;
-    } else {
-      // それ以外なら先行が有利と仮定
-      return horse.horseNumber % 2 != 0 ? 85.0 : 60.0;
+    final predictedPace = raceData.racePacePrediction?.predictedPace ?? 'ミドル';
+    final horseStyle = getRunningStyle(pastRecords);
+
+    switch (predictedPace) {
+      case 'ハイペース':
+        if (horseStyle == '差し' || horseStyle == '追込') {
+          return 95.0; // 展開が向く
+        } else {
+          return 60.0; // 展開が向かない
+        }
+      case 'スローペース':
+        if (horseStyle == '逃げ' || horseStyle == '先行') {
+          return 95.0; // 展開が向く
+        } else {
+          return 60.0; // 展開が向かない
+        }
+      case 'ミドルペース':
+      default:
+        return 80.0; // 平均的な評価
     }
   }
 
   // 2. コース適性評価
-  static double _evaluateCourseFit(PredictionHorseDetail horse, PredictionRaceData raceData) {
-    // 擬似的なロジック: 枠番が内側ほど有利と仮定
-    return max(0.0, 100.0 - (horse.gateNumber * 5));
+  static double _evaluateCourseFit(
+      PredictionHorseDetail horse,
+      PredictionRaceData raceData,
+      List<HorseRaceRecord> pastRecords,
+      ) {
+    // 1. 現在のレース条件を解析
+    final raceInfo = raceData.raceDetails1 ?? '';
+    final venueName = raceData.venue;
+
+    String trackType;
+    if (raceInfo.startsWith('障')) {
+      trackType = '障';
+    } else if (raceInfo.startsWith('ダ')) {
+      trackType = 'ダ';
+    } else {
+      trackType = '芝';
+    }
+
+    final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceInfo);
+    if (distanceMatch == null) {
+      return 60.0; // 距離が不明な場合は平均点
+    }
+    final distance = distanceMatch.group(1)!;
+
+    // 2. 同一コースの実績を抽出
+    final relevantRaces = pastRecords.where((record) {
+      final recordVenueMatch = record.venue.contains(venueName);
+      final recordDistance = record.distance.replaceAll(RegExp(r'[^0-9]'), '');
+
+      String recordTrackType;
+      if (record.distance.startsWith('障')) {
+        recordTrackType = '障';
+      } else if (record.distance.startsWith('ダ')) {
+        recordTrackType = 'ダ';
+      } else {
+        recordTrackType = '芝';
+      }
+
+      return recordVenueMatch && recordDistance == distance && recordTrackType == trackType;
+    }).toList();
+
+    // 3. スコアリング
+    if (relevantRaces.isEmpty) {
+      return 60.0; // 同コースでの出走経験がない場合は平均点
+    }
+
+    int topThreeFinishes = 0;
+    for (final race in relevantRaces) {
+      final rank = int.tryParse(race.rank);
+      if (rank != null && rank <= 3) {
+        topThreeFinishes++;
+      }
+    }
+
+    final placeRate = topThreeFinishes / relevantRaces.length;
+
+    // 複勝率をベースにスコアリング
+    if (placeRate >= 0.5) {
+      return 100.0;
+    } else if (placeRate >= 0.3) {
+      return 80.0;
+    } else if (placeRate > 0) {
+      return 70.0;
+    } else {
+      return 50.0; // 出走経験はあるが3着以内がない場合
+    }
   }
 
   // 3. 馬場適性評価
@@ -73,31 +148,122 @@ class PredictionAnalyzer {
       PredictionRaceData raceData,
       List<HorseRaceRecord> pastRecords,
       ) {
-    // 擬似的なロジック: ダートならパワーがありそうな馬名、そうでなければランダム
-    if (raceData.raceDetails1?.contains('ダ') ?? false) {
-      return horse.horseName.contains('パワー') ? 95.0 : 70.0;
+    // 1. 現在のレースの馬場状態を取得
+    final raceInfo = raceData.raceDetails1 ?? '';
+    final raceInfoParts = raceInfo.split('/');
+    String currentCondition = '良'; // デフォルトは良馬場
+    if (raceInfoParts.length > 2) {
+      final conditionPart = raceInfoParts[2].trim();
+      if (conditionPart.contains('稍重')) currentCondition = '稍重';
+      else if (conditionPart.contains('重')) currentCondition = '重';
+      else if (conditionPart.contains('不良')) currentCondition = '不良';
     }
-    return 60.0 + Random().nextDouble() * 30.0;
+
+    // 2. 過去の道悪実績を抽出
+    final heavyTrackRaces = pastRecords.where((record) {
+      return record.trackCondition == '稍重' || record.trackCondition == '重' || record.trackCondition == '不良';
+    }).toList();
+
+    // 3. スコアリング
+    if (currentCondition == '良') {
+      // 良馬場の場合、道悪実績が悪ければ減点
+      if (heavyTrackRaces.isNotEmpty) {
+        final avgRankInHeavy = heavyTrackRaces.map((r) => int.tryParse(r.rank) ?? 18).reduce((a,b) => a+b) / heavyTrackRaces.length;
+        if (avgRankInHeavy > 10) return 50.0; // 道悪で大敗している場合
+      }
+      return 80.0; // 良馬場なら基本高評価
+    } else {
+      // 道悪の場合
+      if (heavyTrackRaces.isEmpty) {
+        return 60.0; // 道悪未経験の場合は平均点
+      }
+
+      int topThreeFinishes = 0;
+      for (final race in heavyTrackRaces) {
+        final rank = int.tryParse(race.rank);
+        if (rank != null && rank <= 3) {
+          topThreeFinishes++;
+        }
+      }
+      final placeRateInHeavy = topThreeFinishes / heavyTrackRaces.length;
+
+      if (placeRateInHeavy >= 0.5) return 100.0; // 道悪巧者
+      if (placeRateInHeavy > 0) return 85.0; // 道悪実績あり
+      return 40.0; // 道悪実績で掲示板外のみ
+    }
   }
 
   // 4. 人的要因評価
-  static double _evaluateHumanFactors(PredictionHorseDetail horse) {
-    // 擬似的なロジック: 特定の騎手なら高評価
-    if (horse.jockey.contains('ルメール') || horse.jockey.contains('川田')) {
-      return 98.0;
+  static double _evaluateHumanFactors(PredictionHorseDetail horse, List<HorseRaceRecord> pastRecords) {
+    // 1. 今回と同じ騎手が騎乗した過去レースを抽出
+    final sameJockeyRaces = pastRecords.where((record) => record.jockey == horse.jockey).toList();
+
+    if (sameJockeyRaces.isEmpty) {
+      // トップジョッキーなら初騎乗でも高評価
+      if (horse.jockey.contains('ルメール') || horse.jockey.contains('川田')) {
+        return 85.0;
+      }
+      return 70.0; // コンビ実績がない場合は平均的な点数
     }
-    return 75.0;
+
+    // 2. コンビでの複勝率を計算
+    int topThreeFinishes = 0;
+    for (final race in sameJockeyRaces) {
+      final rank = int.tryParse(race.rank);
+      if (rank != null && rank <= 3) {
+        topThreeFinishes++;
+      }
+    }
+    final placeRate = topThreeFinishes / sameJockeyRaces.length;
+
+    // 3. スコアリング
+    if (placeRate >= 0.8) {
+      return 100.0; // ゴールデンコンビ
+    } else if (placeRate >= 0.5) {
+      return 90.0; // 好相性
+    } else if (placeRate > 0) {
+      return 75.0; // 実績あり
+    } else {
+      return 60.0; // 相性が良くない可能性
+    }
   }
 
   // 5. コンディション評価
-  static double _evaluateCondition(PredictionHorseDetail horse) {
-    // 擬似的なロジック: 馬体重が変動していないほど良いと仮定
+  static double _evaluateCondition(
+      PredictionHorseDetail horse,
+      PredictionRaceData raceData,
+      List<HorseRaceRecord> pastRecords,
+      ) {
+    double score = 70.0; // ベーススコア
+
+    // 1. 馬体重増減の評価
     final weightChangeMatch = RegExp(r'\(([\+\-]\d+)\)').firstMatch(horse.horseWeight ?? "");
     if (weightChangeMatch != null) {
       final change = int.tryParse(weightChangeMatch.group(1)!) ?? 0;
-      return max(0.0, 100.0 - (change.abs() * 10));
+      // 増減が少ないほど高評価
+      score += (10 - change.abs()).clamp(0, 10); // max 10点
     }
-    return 80.0; // 馬体重不明の場合
+
+    // 2. レース間隔の評価
+    if (pastRecords.isNotEmpty) {
+      try {
+        final currentRaceDate = DateTime.parse(raceData.raceDate.replaceAll('年', '-').replaceAll('月', '-').replaceAll('日', ''));
+        final lastRaceDate = DateTime.parse(pastRecords.first.date.replaceAll('/', '-'));
+        final interval = currentRaceDate.difference(lastRaceDate).inDays;
+
+        if (interval > 180) { // 半年以上の休み明け
+          score -= 20;
+        } else if (interval < 14) { // 連闘・連闘に近い
+          score -= 10;
+        } else if (interval > 28 && interval < 90) { // いわゆる「叩き2走目」や理想的な間隔
+          score += 15;
+        }
+      } catch (e) {
+        // 日付のパースに失敗した場合は何もしない
+      }
+    }
+
+    return score.clamp(0, 100);
   }
 
 
