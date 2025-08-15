@@ -161,14 +161,12 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 左側: 的中重視
-            Expanded(child: _buildPredictionColumn('的中重視 (◎〇▲)', hitHorses, true)),
-            const VerticalDivider(width: 24),
-            // 右側: 回収率重視
-            Expanded(child: _buildPredictionColumn('回収率重視 (穴妙)', recoveryHorses, false)),
+            _buildPredictionColumn('的中重視 (◎〇▲)', hitHorses, true),
+            const Divider(height: 24),
+            _buildPredictionColumn('回収率重視 (穴妙)', recoveryHorses, false),
           ],
         ),
       ),
@@ -177,7 +175,9 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
   Widget _buildPredictionColumn(String title, List<PredictionHorseDetail> horses, bool isHitFocus) {
     const marks = ['◎', '〇', '▲'];
+    const recoveryMarks = ['穴', '妙', '激'];
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
@@ -189,7 +189,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         else
           ...List.generate(min(horses.length, 3), (index) {
             final horse = horses[index];
-            return _buildRecommendedHorseTile(horse, marks[index], isHitFocus);
+            final mark = isHitFocus ? marks[index] : recoveryMarks[index];
+            return _buildRecommendedHorseTile(horse, mark, isHitFocus);
           }),
       ],
     );
@@ -209,33 +210,44 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
+        color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 1段目: 予想印とスコア/期待値
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('$mark ${horse.horseNumber} ${horse.horseName}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(mark, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              if (isHitFocus)
+                Text('総合スコア: ${score.toStringAsFixed(1)}', style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold))
+              else
+                Text('期待値: ${expectedValue.toStringAsFixed(2)}', style: TextStyle(color: Colors.amber.shade800, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 4),
+          // 2段目: 馬番と馬名
+          Text('${horse.horseNumber} ${horse.horseName}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          // 3段目: 詳細
           if (isHitFocus)
-            Row(
+            const Row(
               children: [
-                Text('総合スコア: ${score.toStringAsFixed(1)}', style: TextStyle(color: Colors.blue.shade700)),
-                const Spacer(),
-                const Chip(label: Text('#コース巧者', style: TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
+                Chip(label: Text('#コース巧者', style: TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
+                SizedBox(width: 4),
+                Chip(label: Text('#騎手得意', style: TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
               ],
             )
           else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('期待値: ${expectedValue.toStringAsFixed(2)}', style: TextStyle(color: Colors.amber.shade800)),
-                Text('アプリ勝率${appWinRate.toStringAsFixed(1)}% > 市場勝率${marketWinRate.toStringAsFixed(1)}%', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-              ],
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                  'アプリ勝率${appWinRate.toStringAsFixed(1)}% > 市場勝率${marketWinRate.toStringAsFixed(1)}%',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700)
+              ),
             ),
         ],
       ),
