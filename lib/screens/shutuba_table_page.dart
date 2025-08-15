@@ -444,27 +444,65 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       appBar: AppBar(
         title: const Text('出馬表'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.open_in_browser),
-            tooltip: 'netkeibaで最新情報を確認',
-            onPressed: _launchNetkeibaUrl,
+          // 既存のIconButtonをPopupMenuButtonに集約
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert), // 3点リーダーアイコン
+            onSelected: (value) {
+              // メニュー項目が選択されたときに、既存の各機能を呼び出します
+              switch (value) {
+                case 'netkeiba':
+                  _launchNetkeibaUrl();
+                  break;
+                case 'paste':
+                  _showPasteAndUpdateDialog();
+                  break;
+                case 'import':
+                  _importMemosFromCsv();
+                  break;
+                case 'export':
+                  if (_predictionRaceData != null) {
+                    _exportMemosAsCsv(_predictionRaceData!);
+                  }
+                  break;
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              // 1. netkeibaで最新情報を確認
+              const PopupMenuItem<String>(
+                value: 'netkeiba',
+                child: ListTile(
+                  leading: Icon(Icons.open_in_browser),
+                  title: Text('netkeibaで最新情報を確認'),
+                ),
+              ),
+              // 2. コピーした情報を貼り付け
+              const PopupMenuItem<String>(
+                value: 'paste',
+                child: ListTile(
+                  leading: Icon(Icons.paste),
+                  title: Text('コピーした情報を貼り付け'),
+                ),
+              ),
+              const PopupMenuDivider(), // 区切り線
+              // 3. メモをインポート
+              const PopupMenuItem<String>(
+                value: 'import',
+                child: ListTile(
+                  leading: Icon(Icons.file_download),
+                  title: Text('メモをインポート'),
+                ),
+              ),
+              // 4. メモをエクスポート (データがある場合のみ有効化)
+              PopupMenuItem<String>(
+                value: 'export',
+                enabled: _predictionRaceData != null, // データがなければ非活性
+                child: const ListTile(
+                  leading: Icon(Icons.ios_share),
+                  title: Text('メモをエクスポート'),
+                ),
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.paste),
-            tooltip: 'コピーした情報を貼り付け',
-            onPressed: _showPasteAndUpdateDialog,
-          ),
-          IconButton(
-            icon: const Icon(Icons.file_upload),
-            tooltip: 'メモをインポート',
-            onPressed: _importMemosFromCsv,
-          ),
-          if (_predictionRaceData != null)
-            IconButton(
-              icon: const Icon(Icons.ios_share),
-              tooltip: 'メモをエクスポート',
-              onPressed: () => _exportMemosAsCsv(_predictionRaceData!),
-            ),
         ],
       ),
       body: _isLoading
@@ -522,7 +560,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                 text: TextSpan(
                   style: DefaultTextStyle.of(context).style,
                   children: <TextSpan>[
-                    const TextSpan(text: '展開予測 \n', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const TextSpan(text: '展開予想 \n', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                     TextSpan(
                         text: '${race.racePacePrediction!.predictedPace} (${race.racePacePrediction!.advantageousStyle})',
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
