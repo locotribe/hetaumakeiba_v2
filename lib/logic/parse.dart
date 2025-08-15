@@ -1,6 +1,5 @@
 // lib/logic/parse.dart
 
-// --- 定数定義 (変更なし) ---
 const Map<String, String> racecourseDict = {
   "01": "札幌", "02": "函館", "03": "福島", "04": "新潟", "05": "東京",
   "06": "中山", "07": "中京", "08": "京都", "09": "阪神", "10": "小倉",
@@ -35,7 +34,6 @@ const Map<String, String> wheelTrifectaDict = {
   "1": "1・2着ながし", "2": "1・3着ながし", "3": "2・3着ながし",
   "4": "1着ながし", "5": "2着ながし", "6": "3着ながし",
 };
-// --- 定数定義ここまで ---
 
 // ▼▼▼ 組み合わせ計算のロジックを、既存の`calculatePoints`とは別に、安全な場所に追加 ▼▼▼
 Iterable<List<T>> _combinations<T>(List<T> elements, int k) sync* {
@@ -138,25 +136,25 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
                 }
               }
             } else { // マルチではない通常のながし
-              if (di['ながし種別'] == '軸1頭ながし') {
-                final nagashiType = di['ながし'];
-                final otherHorses = secondAxis.isNotEmpty ? secondAxis : thirdAxis;
-                for(final p in _permutations(otherHorses, 2)) {
-                  if(nagashiType == '1着ながし') allCombinations.add([firstAxis.first, p[0], p[1]]);
-                  if(nagashiType == '2着ながし') allCombinations.add([p[0], firstAxis.first, p[1]]);
-                  if(nagashiType == '3着ながし') allCombinations.add([p[0], p[1], firstAxis.first]);
-                }
-              } else if (di['ながし種別'] == '軸2頭ながし') {
-                final nagashiType = di['ながし'];
-                final axisHorses = firstAxis; // 軸は1頭ずつのはず
-                final opponentHorses = secondAxis; // 2頭軸の場合の相手
-                final thirdOpponents = thirdAxis; // 1-2着流しなどの相手
-                for(final ap in _permutations([...axisHorses, ...opponentHorses], 2)) {
-                  for(final o in thirdOpponents) {
-                    if(!ap.contains(o)) {
-                      if(nagashiType == '1・2着ながし') allCombinations.add([ap[0], ap[1], o]);
-                      if(nagashiType == '1・3着ながし') allCombinations.add([ap[0], o, ap[1]]);
-                      if(nagashiType == '2・3着ながし') allCombinations.add([o, ap[0], ap[1]]);
+              if (di['ながし種別'] == '軸2頭ながし') {
+                final nagashiType = di['ながし']; // 例: '1・2着ながし'
+                // 軸馬は1番目のリスト、相手馬は2番目のリストから取得
+                final axisHorses = firstAxis;
+                final otherHorses = secondAxis;
+
+                // 軸馬2頭の全ての着順パターンを生成 (例: [1,2] -> [1,2]と[2,1])
+                for (final p in _permutations(axisHorses, 2)) {
+                  // 各相手馬と組み合わせる
+                  for (final o in otherHorses) {
+                    // 軸馬と相手馬が重複していないことを確認
+                    if (p[0] != o && p[1] != o) {
+                      if (nagashiType == '1・2着ながし') {
+                        allCombinations.add([p[0], p[1], o]);
+                      } else if (nagashiType == '1・3着ながし') {
+                        allCombinations.add([p[0], o, p[1]]);
+                      } else if (nagashiType == '2・3着ながし') {
+                        allCombinations.add([o, p[0], p[1]]);
+                      }
                     }
                   }
                 }
@@ -188,9 +186,7 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
         allCombinations = (di['馬番'] as List).map((c) => (c as List).cast<int>()).toList();
         break;
     }
-    // ▼▼▼ ここに追加 ▼▼▼
     print('DEBUG: 生成直後の組み合わせ (ソート前): $allCombinations');
-    // ▲▲▲ ここまで ▲▲▲
 
     if (['馬連', 'ワイド', '枠連', '3連複'].contains(ticketType)) {
       final unique = <String, List<int>>{};
@@ -199,14 +195,10 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
         unique[sorted.join('-')] = sorted;
       }
       di['all_combinations'] = unique.values.toList();
-      // ▼▼▼ ここに追加 ▼▼▼
       print('DEBUG: DB保存直前の組み合わせ (3連複など): ${di['all_combinations']}');
-      // ▲▲▲ ここまで ▲▲▲
     } else {
       di['all_combinations'] = allCombinations;
-      // ▼▼▼ ここに追加 ▼▼▼
       print('DEBUG: DB保存直前の組み合わせ (3連単など): ${di['all_combinations']}');
-      // ▲▲▲ ここまで ▲▲▲
     }
   } catch (e) {
     print('Error generating combinations for $ticketType ($bettingMethod): $e');
@@ -215,7 +207,6 @@ void _generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMetho
 }
 
 
-// ▼▼▼ `calculatePoints`関数を元の状態に復元 ▼▼▼
 int calculatePoints({
   required String ticketType,
   required String method,
@@ -337,7 +328,6 @@ int _combinationsCount(int n, int k) {
   for (int i = 1; i <= k; ++i) res = res * (n - i + 1) ~/ i;
   return res;
 }
-// ▲▲▲ ここまで復元 ▲▲▲
 
 
 Map<String, dynamic> parseHorseracingTicketQr(String s) {
@@ -377,7 +367,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
 
   int totalAmount = 0;
 
-  // ▼▼▼ QRコード解析ロジックを完全に元の状態に戻す ▼▼▼
   switch (typeCode) {
     case "0": // 通常
     case "5": // 応援馬券
@@ -572,7 +561,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
     default:
       throw ArgumentError("Unknown type code: $typeCode");
   }
-  // ▲▲▲ ここまで復元 ▲▲▲
 
   if (d.containsKey('購入内容') && d['購入内容'] is List) {
     for (var detail in (d['購入内容'] as List)) {
@@ -585,7 +573,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
   }
   d['合計金額'] = totalAmount;
 
-  // ▼▼▼ 解析完了後に、安全に組み合わせリストを追加 ▼▼▼
   if (d.containsKey('購入内容') && d['購入内容'] is List) {
     for (var detail in (d['購入内容'] as List)) {
       if (detail is Map<String, dynamic>) {
@@ -593,7 +580,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       }
     }
   }
-  // ▲▲▲ ここまで ▲▲▲
 
   d["下端番号"] = _joinWithSpaces(underDigits);
   return d;
