@@ -1,5 +1,4 @@
 // lib/screens/shutuba_table_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -16,6 +15,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hetaumakeiba_v2/logic/paste_parser.dart';
+import 'package:hetaumakeiba_v2/screens/comprehensive_prediction_page.dart';
 
 
 class ShutubaTablePage extends StatefulWidget {
@@ -35,6 +35,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   // 貼り付けられた動的データを一時的に保持するためのキャッシュ
   final Map<String, PasteParseResult> _pastedDataCache = {};
   // ▲▲▲ ここまでが追加箇所 ▲▲▲
+  // ▼▼▼ ここからが追加箇所 ▼▼▼
+  Map<String, double> _overallScores = {};
+  Map<String, double> _expectedValues = {};
+  // ▲▲▲ ここまでが追加箇所 ▲▲▲
 
   @override
   void initState() {
@@ -51,6 +55,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
     try {
       final data = await _fetchDataWithUserMarks();
+      // ▼▼▼ ここからが追加箇所 ▼▼▼
+      if (data != null) {
+        _calculatePredictionScores(data);
+      }
+      // ▲▲▲ ここまでが追加箇所 ▲▲▲
       if (mounted) {
         setState(() {
           _predictionRaceData = data;
@@ -66,6 +75,58 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       }
     }
   }
+
+  // ▼▼▼ ここからが追加箇所 ▼▼▼
+  Future<void> _calculatePredictionScores(PredictionRaceData raceData) async {
+    final Map<String, double> scores = {};
+    final Map<String, List<HorseRaceRecord>> allPastRecords = {};
+
+    // まず全馬の過去成績を取得し、総合適性スコアを計算
+    for (var horse in raceData.horses) {
+      final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      allPastRecords[horse.horseId] = pastRecords;
+      scores[horse.horseId] = PredictionAnalyzer.calculateOverallAptitudeScore(
+        horse,
+        raceData,
+        pastRecords,
+      );
+    }
+
+    // 全馬のスコア合計を算出
+    final double totalScore = scores.values.fold(0.0, (sum, score) => sum + score);
+
+    final Map<String, double> expectedValues = {};
+    // 各馬の期待値を計算
+    for (var horse in raceData.horses) {
+      final score = scores[horse.horseId] ?? 0.0;
+      final odds = horse.odds ?? 0.0;
+      expectedValues[horse.horseId] = PredictionAnalyzer.calculateExpectedValue(
+        score,
+        odds,
+        totalScore,
+      );
+    }
+
+    if (mounted) {
+      setState(() {
+        _overallScores = scores;
+        _expectedValues = expectedValues;
+      });
+    }
+  }
+
+  // ランク表示用のヘルパー関数
+  String _getRankFromScore(double score) {
+    if (score >= 90) return 'S';
+    if (score >= 85) return 'A+';
+    if (score >= 80) return 'A';
+    if (score >= 75) return 'B+';
+    if (score >= 70) return 'B';
+    if (score >= 60) return 'C+';
+    if (score >= 50) return 'C';
+    return 'D';
+  }
+  // ▲▲▲ ここまでが追加箇所 ▲▲▲
 
   Future<PredictionRaceData?> _fetchDataWithUserMarks() async {
     final userId = localUserId;
@@ -113,9 +174,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       }
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
-      if (pastRecords.isNotEmpty) {
-        horse.predictionScore = PredictionAnalyzer.calculateScores(pastRecords);
-      }
     }
 
     raceData.racePacePrediction = PredictionAnalyzer.predictRacePace(raceData.horses, allPastRecords);
@@ -212,6 +270,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           updatedCount++;
         }
       }
+      // ▼▼▼ ここからが追加箇所 ▼▼▼
+      // オッズ更新後に予測スコアも再計算する
+      if (_predictionRaceData != null) {
+        _calculatePredictionScores(_predictionRaceData!);
+      }
+      // ▲▲▲ ここまでが追加箇所 ▲▲▲
     });
 
     if(mounted) {
@@ -444,6 +508,28 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       appBar: AppBar(
         title: const Text('出馬表'),
         actions: [
+          // ▼▼▼ ここからが修正箇所 ▼▼▼
+          if (!_isLoading && _predictionRaceData != null)
+            TextButton.icon(
+              icon: const Icon(Icons.analytics_outlined),
+              label: const Text('AI総合予測を見る'),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ComprehensivePredictionPage(
+                      raceData: _predictionRaceData!,
+                      overallScores: _overallScores,
+                      expectedValues: _expectedValues,
+                    ),
+                  ),
+                );
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).primaryColorDark,
+              ),
+            ),
+          // ▲▲▲ ここまでが修正箇所 ▲▲▲
           // 既存のIconButtonをPopupMenuButtonに集約
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert), // 3点リーダーアイコン
@@ -588,7 +674,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         columns: const [
           DataColumn(label: Text('メモ')),
           DataColumn(label: Text('印')),
-          DataColumn(label: Text('適性スコア')),
+          // ▼▼▼ ここからが修正箇所 ▼▼▼
+          DataColumn(label: Text('総合評価')),
+          // ▲▲▲ ここまでが修正箇所 ▲▲▲
           DataColumn(label: Text('枠')),
           DataColumn(label: Text('馬番')),
           DataColumn(label: Text('馬名')),
@@ -606,6 +694,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           DataColumn(label: Text('5走前')),
         ],
         rows: horses.map((horse) {
+          // ▼▼▼ ここからが追加箇所 ▼▼▼
+          final score = _overallScores[horse.horseId] ?? 0.0;
+          final rank = _getRankFromScore(score);
+          // ▲▲▲ ここまでが追加箇所 ▲▲▲
           return DataRow(
             cells: [
               DataCell(
@@ -616,13 +708,14 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                     ? const Text('取消', style: TextStyle(color: Colors.red))
                     : _buildMarkDropdown(horse),
               ),
+              // ▼▼▼ ここからが修正箇所 ▼▼▼
               DataCell(
                 Text(
-                  horse.predictionScore != null
-                      ? '距:${horse.predictionScore!.distanceScore.toStringAsFixed(0)}/コ:${horse.predictionScore!.courseScore.toStringAsFixed(0)}/騎:${horse.predictionScore!.jockeyCompatibilityScore.toStringAsFixed(0)}'
-                      : 'N/A',
+                  '$rank (${score.toStringAsFixed(1)})',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
+              // ▲▲▲ ここまでが修正箇所 ▲▲▲
               DataCell(_buildGateNumber(horse.gateNumber)),
               DataCell(_buildHorseNumber(horse.horseNumber, horse.gateNumber)),
               DataCell(

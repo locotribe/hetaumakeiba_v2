@@ -1,0 +1,77 @@
+// lib/logic/race_data_parser.dart
+class RaceDataParser {
+  /// コーナー通過順位の文字列（例: "1角:1-2-3 / 2角:2-1-3"）を解析し、
+  /// 構造化データ（Map<String, List<int>>）に変換します。
+  static Map<String, List<int>> parseCornerPassages(String cornerData) {
+    final Map<String, List<int>> cornerMap = {};
+    if (cornerData.isEmpty) {
+      return cornerMap;
+    }
+
+    // " / "で各コーナーのデータを分割
+    final parts = cornerData.split(' / ');
+    for (final part in parts) {
+      // ":"でコーナー名と順位リストを分割
+      final cornerParts = part.split(':');
+      if (cornerParts.length == 2) {
+        final cornerName = cornerParts[0].trim();
+        final passages = cornerParts[1]
+            .trim()
+            .replaceAll(RegExp(r'[\(\)]'), '') // カッコを削除
+            .split(',') // カンマ区切りの場合に対応
+            .expand((s) => s.split('-')) // ハイフン区切りでさらに分割
+            .map((s) => int.tryParse(s.trim()))
+            .where((i) => i != null)
+            .cast<int>()
+            .toList();
+        cornerMap[cornerName] = passages;
+      }
+    }
+    return cornerMap;
+  }
+
+  /// ラップタイムの文字列（例: "12.5 - 10.8 - 11.2"）を解析し、
+  /// ラップのリスト（List<double>）に変換します。
+  static List<double> parseLapTimes(String lapData) {
+    if (lapData.isEmpty) {
+      return [];
+    }
+
+    return lapData
+        .split('-')
+        .map((s) => double.tryParse(s.trim()))
+        .where((d) => d != null)
+        .cast<double>()
+        .toList();
+  }
+
+  /// 前半・後半3ハロンのタイム文字列（例: "34.5-35.0"）から、
+  /// レースペース（ハイ/ミドル/スロー）を判定します。
+  static String calculatePace(String paceData) {
+    if (paceData.isEmpty || !paceData.contains('-')) {
+      return 'ミドル'; // 不明な場合はミドルペースとする
+    }
+
+    final parts = paceData.split('-');
+    if (parts.length < 2) {
+      return 'ミドル';
+    }
+
+    final zenhan = double.tryParse(parts[0].trim());
+    final kouhan = double.tryParse(parts[1].trim());
+
+    if (zenhan == null || kouhan == null) {
+      return 'ミドル';
+    }
+
+    final difference = kouhan - zenhan;
+
+    if (difference >= 1.0) {
+      return 'スロー';
+    } else if (difference <= -1.0) {
+      return 'ハイ';
+    } else {
+      return 'ミドル';
+    }
+  }
+}
