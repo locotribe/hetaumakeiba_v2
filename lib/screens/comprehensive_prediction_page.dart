@@ -1,6 +1,10 @@
 // lib/screens/comprehensive_prediction_page.dart
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
+import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 
 class ComprehensivePredictionPage extends StatefulWidget {
@@ -19,13 +23,18 @@ class ComprehensivePredictionPage extends StatefulWidget {
   State<ComprehensivePredictionPage> createState() => _ComprehensivePredictionPageState();
 }
 
-class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPage> {
+class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPage>
+    with SingleTickerProviderStateMixin {
   // ソート用の状態変数
   int _sortColumnIndex = 0;
   bool _sortAscending = true;
 
   // ソート対象の馬リスト
   late List<PredictionHorseDetail> _sortedHorses;
+  late TabController _tabController;
+  Map<String, String> _legStyles = {};
+  Map<String, String> _raceDevelopment = {};
+  final DatabaseHelper _dbHelper = DatabaseHelper();
 
   @override
   void initState() {
@@ -33,6 +42,30 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     // 初期状態では馬番順にソート
     _sortedHorses = List.from(widget.raceData.horses);
     _sortHorses();
+    _tabController = TabController(length: 3, vsync: this);
+    _calculateLegStylesAndDevelopment();
+  }
+
+  void _calculateLegStylesAndDevelopment() async {
+    final Map<String, String> legStyles = {};
+    for (var horse in widget.raceData.horses) {
+      final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      legStyles[horse.horseId] = PredictionAnalyzer.getRunningStyle(pastRecords);
+    }
+    final development = PredictionAnalyzer.simulateRaceDevelopment(widget.raceData.horses, legStyles);
+
+    if (mounted) {
+      setState(() {
+        _legStyles = legStyles;
+        _raceDevelopment = development;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   String _getRankFromScore(double score) {
@@ -94,7 +127,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       body: ListView(
         padding: const EdgeInsets.all(12.0),
         children: [
-          _buildRaceSummaryCard(), // エリア1
+          _buildRaceSummaryCard(),
           const SizedBox(height: 16),
           _buildDualPredictionCard(hitFocusHorses.take(3).toList(), recoveryFocusHorses.take(3).toList()), // エリア2
           const SizedBox(height: 16),
@@ -125,13 +158,64 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               ],
             ),
             const SizedBox(height: 16),
-            // TODO: 脚質構成グラフ
-            Center(
-              child: Container(
-                height: 50,
-                color: Colors.grey.shade200,
-                alignment: Alignment.center,
-                child: const Text('(脚質構成グラフ表示エリア)'),
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: Colors.grey.shade300, width: 1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              clipBehavior: Clip.antiAlias,
+              margin: EdgeInsets.zero,
+              child: DefaultTabController(
+                length: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      color: Colors.grey.shade100,
+                      child: TabBar(
+                        controller: _tabController,
+                        labelColor: Theme.of(context).primaryColorDark,
+                        unselectedLabelColor: Colors.grey.shade600,
+                        indicatorColor: Theme.of(context).primaryColor,
+                        tabs: const [
+                          Tab(text: '脚質構成'),
+                          Tab(text: 'コーナー予測'),
+                          Tab(text: '能力・人気'),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      height: 150, // TabBarViewの高さを指定
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildLegStyleCompositionTab(),
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: ListView(
+                              children: _raceDevelopment.entries.map((entry) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style,
+                                      children: [
+                                        TextSpan(text: '${entry.key}: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        TextSpan(text: entry.value),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                          _buildAbilityPopularityTab(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -143,6 +227,125 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         ),
       ),
     );
+  }
+
+  Widget _buildLegStyleCompositionTab() {
+    final Map<String, List<PredictionHorseDetail>> groupedByLegStyle = {
+      '逃げ': [], '先行': [], '差し': [], '追込': [], '不明': [],
+    };
+    for (final horse in widget.raceData.horses) {
+      final style = _legStyles[horse.horseId] ?? '不明';
+      groupedByLegStyle[style]?.add(horse);
+    }
+
+    final barGroups = groupedByLegStyle.entries
+        .where((entry) => entry.value.isNotEmpty)
+        .map((entry) {
+      return BarChartGroupData(
+        x: ['逃げ', '先行', '差し', '追込', '不明'].indexOf(entry.key),
+        barRods: [
+          BarChartRodData(
+            toY: entry.value.length.toDouble(),
+            color: Colors.teal,
+            width: 20,
+          )
+        ],
+      );
+    }).toList();
+
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: BarChart(
+        BarChartData(
+          barGroups: barGroups,
+          titlesData: FlTitlesData(
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  const styles = ['逃げ', '先行', '差し', '追込', '不明'];
+                  return Text(styles[value.toInt()]);
+                },
+              ),
+            ),
+          ),
+          barTouchData: BarTouchData(
+            touchCallback: (event, response) {
+              if (response?.spot != null) {
+                final index = response!.spot!.touchedBarGroup.x;
+                final style = ['逃げ', '先行', '差し', '追込', '不明'][index];
+                final horses = groupedByLegStyle[style]!;
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text('脚質: $style'),
+                    content: SizedBox(
+                      width: double.minPositive,
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: horses.length,
+                        itemBuilder: (context, i) => Text('${horses[i].horseNumber} ${horses[i].horseName}'),
+                      ),
+                    ),
+                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('閉じる'))],
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAbilityPopularityTab() {
+    final spots = widget.raceData.horses.map((horse) {
+      final score = widget.overallScores[horse.horseId] ?? 0.0;
+      final popularity = horse.popularity?.toDouble() ?? (widget.raceData.horses.length + 1).toDouble();
+      final style = _legStyles[horse.horseId] ?? '不明';
+      return ScatterSpot(
+        popularity,
+        score,
+        dotPainter: FlDotCirclePainter(
+          radius: 6,
+          color: _getColorForLegStyle(style),
+        ),
+      );
+    }).toList();
+
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: ScatterChart(
+        ScatterChartData(
+          scatterSpots: spots,
+          minX: 0,
+          maxX: (widget.raceData.horses.length + 1).toDouble(),
+          minY: 0,
+          maxY: 100,
+          titlesData: const FlTitlesData(
+            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(axisNameWidget: Text('人気 →')),
+            leftTitles: AxisTitles(axisNameWidget: Text('スコア →')),
+          ),
+          gridData: const FlGridData(show: true),
+          borderData: FlBorderData(show: true),
+        ),
+      ),
+    );
+  }
+
+  Color _getColorForLegStyle(String style) {
+    switch(style) {
+      case '逃げ': return Colors.red;
+      case '先行': return Colors.blue;
+      case '差し': return Colors.orange;
+      case '追込': return Colors.purple;
+      default: return Colors.grey;
+    }
   }
 
   Widget _buildSummaryItem(String title, String value) {

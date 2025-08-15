@@ -39,6 +39,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   Map<String, double> _overallScores = {};
   Map<String, double> _expectedValues = {};
   // ▲▲▲ ここまでが追加箇所 ▲▲▲
+  Map<String, String> _legStyles = {};
 
   @override
   void initState() {
@@ -80,8 +81,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   Future<void> _calculatePredictionScores(PredictionRaceData raceData) async {
     final Map<String, double> scores = {};
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
+    final Map<String, String> legStyles = {};
 
-    // まず全馬の過去成績を取得し、総合適性スコアを計算
+    // まず全馬の過去成績を取得し、総合適性スコアと脚質を計算
     for (var horse in raceData.horses) {
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
@@ -90,6 +92,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         raceData,
         pastRecords,
       );
+      legStyles[horse.horseId] = PredictionAnalyzer.getRunningStyle(pastRecords);
     }
 
     // 全馬のスコア合計を算出
@@ -111,6 +114,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       setState(() {
         _overallScores = scores;
         _expectedValues = expectedValues;
+        _legStyles = legStyles;
       });
     }
   }
@@ -674,9 +678,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         columns: const [
           DataColumn(label: Text('メモ')),
           DataColumn(label: Text('印')),
-          // ▼▼▼ ここからが修正箇所 ▼▼▼
           DataColumn(label: Text('総合評価')),
-          // ▲▲▲ ここまでが修正箇所 ▲▲▲
+          DataColumn(label: Text('脚質')),
           DataColumn(label: Text('枠')),
           DataColumn(label: Text('馬番')),
           DataColumn(label: Text('馬名')),
@@ -694,10 +697,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           DataColumn(label: Text('5走前')),
         ],
         rows: horses.map((horse) {
-          // ▼▼▼ ここからが追加箇所 ▼▼▼
           final score = _overallScores[horse.horseId] ?? 0.0;
           final rank = _getRankFromScore(score);
-          // ▲▲▲ ここまでが追加箇所 ▲▲▲
+          final legStyle = _legStyles[horse.horseId] ?? '不明';
           return DataRow(
             cells: [
               DataCell(
@@ -708,14 +710,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                     ? const Text('取消', style: TextStyle(color: Colors.red))
                     : _buildMarkDropdown(horse),
               ),
-              // ▼▼▼ ここからが修正箇所 ▼▼▼
               DataCell(
                 Text(
                   '$rank (${score.toStringAsFixed(1)})',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
-              // ▲▲▲ ここまでが修正箇所 ▲▲▲
+              DataCell(Text(legStyle)),
               DataCell(_buildGateNumber(horse.gateNumber)),
               DataCell(_buildHorseNumber(horse.horseNumber, horse.gateNumber)),
               DataCell(
