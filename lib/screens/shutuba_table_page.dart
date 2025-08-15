@@ -32,14 +32,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   PredictionRaceData? _predictionRaceData;
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  // ▼▼▼ ここからが追加箇所 ▼▼▼
   // 貼り付けられた動的データを一時的に保持するためのキャッシュ
   final Map<String, PasteParseResult> _pastedDataCache = {};
-  // ▲▲▲ ここまでが追加箇所 ▲▲▲
-  // ▼▼▼ ここからが追加箇所 ▼▼▼
   Map<String, double> _overallScores = {};
   Map<String, double> _expectedValues = {};
-  // ▲▲▲ ここまでが追加箇所 ▲▲▲
   Map<String, String> _legStyles = {};
 
   @override
@@ -57,11 +53,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
     try {
       final data = await _fetchDataWithUserMarks();
-      // ▼▼▼ ここからが追加箇所 ▼▼▼
       if (data != null) {
         await _calculatePredictionScores(data);
       }
-      // ▲▲▲ ここまでが追加箇所 ▲▲▲
       if (mounted) {
         setState(() {
           _predictionRaceData = data;
@@ -78,7 +72,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     }
   }
 
-  // ▼▼▼ ここからが追加箇所 ▼▼▼
   Future<void> _calculatePredictionScores(PredictionRaceData raceData) async {
     final prefs = await SharedPreferences.getInstance();
     final customWeights = {
@@ -141,7 +134,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     if (score >= 50) return 'C';
     return 'D';
   }
-  // ▲▲▲ ここまでが追加箇所 ▲▲▲
 
   Future<PredictionRaceData?> _fetchDataWithUserMarks() async {
     final userId = localUserId;
@@ -154,7 +146,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       return null;
     }
 
-    // ▼▼▼ ここからが追加箇所 ▼▼▼
     // 更新前に、キャッシュに保持されているオッズ・人気情報を新しいデータにマージする
     if (_pastedDataCache.isNotEmpty) {
       for (var horse in raceData.horses) {
@@ -165,7 +156,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
         }
       }
     }
-    // ▲▲▲ ここまでが追加箇所 ▲▲▲
 
     final results = await Future.wait([
       _dbHelper.getAllUserMarksForRace(userId, widget.raceId),
@@ -270,10 +260,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       return;
     }
 
-    // ▼▼▼ ここからが追加箇所 ▼▼▼
     // パースした結果をキャッシュに保存する
     _pastedDataCache.addAll(parsedResults);
-    // ▲▲▲ ここまでが追加箇所 ▲▲▲
 
     int updatedCount = 0;
     setState(() {
@@ -285,12 +273,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           updatedCount++;
         }
       }
-      // ▼▼▼ ここからが追加箇所 ▼▼▼
       // オッズ更新後に予測スコアも再計算する
       if (_predictionRaceData != null) {
         _calculatePredictionScores(_predictionRaceData!);
       }
-      // ▲▲▲ ここまでが追加箇所 ▲▲▲
     });
 
     if(mounted) {
@@ -523,7 +509,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       appBar: AppBar(
         title: const Text('出馬表'),
         actions: [
-          // ▼▼▼ ここからが修正箇所 ▼▼▼
           if (!_isLoading && _predictionRaceData != null)
             TextButton.icon(
               icon: const Icon(Icons.analytics_outlined),
@@ -544,7 +529,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                 foregroundColor: Theme.of(context).primaryColorDark,
               ),
             ),
-          // ▲▲▲ ここまでが修正箇所 ▲▲▲
           // 既存のIconButtonをPopupMenuButtonに集約
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert), // 3点リーダーアイコン

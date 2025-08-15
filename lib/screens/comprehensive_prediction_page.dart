@@ -186,7 +186,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                       ),
                     ),
                     SizedBox(
-                      height: 150, // TabBarViewの高さを指定
+                      height: 250, // TabBarViewの高さを指定
                       child: TabBarView(
                         controller: _tabController,
                         children: [
@@ -201,8 +201,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                                     text: TextSpan(
                                       style: DefaultTextStyle.of(context).style,
                                       children: [
-                                        TextSpan(text: '${entry.key}: ', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                        TextSpan(text: entry.value),
+                                        TextSpan(text: '${entry.key} \n', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                                        TextSpan(text: entry.value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                                       ],
                                     ),
                                   ),

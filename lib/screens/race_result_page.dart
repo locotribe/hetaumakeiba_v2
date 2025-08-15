@@ -507,16 +507,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
             Text(raceResult.raceInfo),
             Text(raceResult.raceGrade),
             if (pacePrediction != null) ...[
-              const Divider(height: 24),
-              RichText(
-                text: TextSpan(
-                  style: DefaultTextStyle.of(context).style,
-                  children: <TextSpan>[
-                    const TextSpan(text: '展開予測: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                    TextSpan(text: '${pacePrediction.predictedPace} (${pacePrediction.advantageousStyle})'),
-                  ],
-                ),
-              ),
             ],
           ],
         ),
