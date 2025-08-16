@@ -176,6 +176,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       }
       if (memosMap.containsKey(horse.horseId)) {
         horse.userMemo = memosMap[horse.horseId];
+        // DBから読み込んだメモにオッズ・人気情報があれば、表示データに反映
+        if (memosMap[horse.horseId]!.odds != null) {
+          horse.odds = memosMap[horse.horseId]!.odds;
+        }
+        if (memosMap[horse.horseId]!.popularity != null) {
+          horse.popularity = memosMap[horse.horseId]!.popularity;
+        }
       }
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
@@ -246,8 +253,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     );
   }
 
-  void _updateOddsFromPastedText(String text) {
+  void _updateOddsFromPastedText(String text) async {
     if (_predictionRaceData == null) return;
+    final userId = localUserId;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ログインが必要です。')),
+      );
+      return;
+    }
 
     final parsedResults = PasteParser.parseDataByHorseName(text, _predictionRaceData!.horses);
 
@@ -260,29 +274,42 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       return;
     }
 
-    // パースした結果をキャッシュに保存する
-    _pastedDataCache.addAll(parsedResults);
-
     int updatedCount = 0;
-    setState(() {
-      for (var appHorse in _predictionRaceData!.horses) {
-        if (parsedResults.containsKey(appHorse.horseName)) {
-          final result = parsedResults[appHorse.horseName]!;
-          appHorse.odds = result.odds;
-          appHorse.popularity = result.popularity;
-          updatedCount++;
-        }
+    for (var horse in _predictionRaceData!.horses) {
+      if (parsedResults.containsKey(horse.horseName)) {
+        final result = parsedResults[horse.horseName]!;
+
+        // 既存のメモを取得（なければ新規作成）
+        final existingMemo = horse.userMemo ?? HorseMemo(
+          userId: userId,
+          raceId: widget.raceId,
+          horseId: horse.horseId,
+          timestamp: DateTime.now(),
+        );
+
+        // 新しいオッズと人気で上書きしてDBに保存
+        final newMemo = HorseMemo(
+          id: existingMemo.id,
+          userId: userId,
+          raceId: widget.raceId,
+          horseId: horse.horseId,
+          predictionMemo: existingMemo.predictionMemo,
+          reviewMemo: existingMemo.reviewMemo,
+          odds: result.odds,
+          popularity: result.popularity,
+          timestamp: DateTime.now(),
+        );
+        await _dbHelper.insertOrUpdateHorseMemo(newMemo);
+        updatedCount++;
       }
-      // オッズ更新後に予測スコアも再計算する
-      if (_predictionRaceData != null) {
-        _calculatePredictionScores(_predictionRaceData!);
-      }
-    });
+    }
 
     if(mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$updatedCount頭の情報を更新しました。')),
       );
+      // データを再読み込みしてUIを更新
+      _loadShutubaData();
     }
   }
 
@@ -394,6 +421,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                     horseId: horse.horseId,
                     predictionMemo: memoController.text,
                     reviewMemo: horse.userMemo?.reviewMemo, // 既存の総評メモを保持
+                    odds: horse.userMemo?.odds,
+                    popularity: horse.userMemo?.popularity,
                     timestamp: DateTime.now(),
                   );
                   await _dbHelper.insertOrUpdateHorseMemo(newMemo);
@@ -841,15 +870,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
                 switch (record.rank) {
                   case '1':
-                    backgroundColor = Colors.red.withOpacity(0.4);
+                    backgroundColor = Colors.red.withValues(alpha: 0.4);
                     isTopThree = true;
                     break;
                   case '2':
-                    backgroundColor = Colors.grey.withOpacity(0.5);
+                    backgroundColor = Colors.grey.withValues(alpha: 0.5);
                     isTopThree = true;
                     break;
                   case '3':
-                    backgroundColor = Colors.yellow.withOpacity(0.5);
+                    backgroundColor = Colors.yellow.withValues(alpha: 0.5);
                     isTopThree = true;
                     break;
                 }

@@ -6,6 +6,8 @@ class HorseMemo {
   final String horseId; // どの馬のメモか識別するためのID
   final String? predictionMemo; // 予想メモの文字列（nullable）
   final String? reviewMemo; // 総評メモの文字列（nullable）
+  final double? odds;
+  final int? popularity;
   final DateTime timestamp; // 最終更新日時
 
   HorseMemo({
@@ -15,6 +17,8 @@ class HorseMemo {
     required this.horseId,
     this.predictionMemo,
     this.reviewMemo,
+    this.odds,
+    this.popularity,
     required this.timestamp,
   });
 
@@ -26,6 +30,8 @@ class HorseMemo {
       'horseId': horseId,
       'predictionMemo': predictionMemo,
       'reviewMemo': reviewMemo,
+      'odds': odds,
+      'popularity': popularity,
       'timestamp': timestamp.toIso8601String(),
     };
   }
@@ -38,6 +44,8 @@ class HorseMemo {
       horseId: map['horseId'] as String,
       predictionMemo: map['predictionMemo'] as String?,
       reviewMemo: map['reviewMemo'] as String?,
+      odds: map['odds'] as double?,
+      popularity: map['popularity'] as int?,
       timestamp: DateTime.parse(map['timestamp'] as String),
     );
   }

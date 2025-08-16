@@ -137,7 +137,7 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
+                              color: Colors.black.withValues(alpha: 0.15),
                               spreadRadius: 2,
                               blurRadius: 6,
                               offset: const Offset(0, 3),
@@ -183,9 +183,9 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                            color: Colors.redAccent.withOpacity(0.15),
+                            color: Colors.redAccent.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.redAccent.withOpacity(0.5))
+                            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5))
                         ),
                         child: Text(
                           _errorMessage!,

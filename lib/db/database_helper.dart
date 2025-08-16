@@ -55,7 +55,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 9,
+      version: 10,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。
       onCreate: (db, version) async {
@@ -319,6 +319,10 @@ class DatabaseHelper {
               createdAt TEXT NOT NULL
             )
           ''');
+        }
+        if (oldVersion < 10) {
+          await db.execute('ALTER TABLE horse_memos ADD COLUMN odds REAL');
+          await db.execute('ALTER TABLE horse_memos ADD COLUMN popularity INTEGER');
         }
       },
     );

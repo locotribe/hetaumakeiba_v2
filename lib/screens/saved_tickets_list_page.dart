@@ -372,7 +372,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
               borderRadius: BorderRadius.circular(20),
               boxShadow: isSelected ? [
                 BoxShadow(
-                  color: activeColor.withOpacity(0.5),
+                  color: activeColor.withValues(alpha: 0.5),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -481,7 +481,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
