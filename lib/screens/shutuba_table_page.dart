@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:hetaumakeiba_v2/logic/paste_parser.dart';
 import 'package:hetaumakeiba_v2/screens/comprehensive_prediction_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
 
 
 class ShutubaTablePage extends StatefulWidget {
@@ -532,6 +533,40 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     }
   }
 
+  Future<void> _navigateToStatisticsPage() async {
+    final stats = await _dbHelper.getRaceStatistics(widget.raceId);
+    if (stats == null) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('過去データの取得'),
+          content: const Text('このレースの過去10年分のデータを取得しますか？\nデータ量に応じて時間がかかる場合があります。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('取得する'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm != true || !mounted) return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => RaceStatisticsPage(
+          raceId: widget.raceId,
+          raceName: _predictionRaceData!.raceName,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -668,20 +703,24 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
             ),
             const SizedBox(height: 8),
             Text(race.raceDetails1 ?? ''),
-            if (race.racePacePrediction != null) ...[
-              const Divider(height: 24),
-              RichText(
-                text: TextSpan(
-                  style: DefaultTextStyle.of(context).style,
-                  children: <TextSpan>[
-                    const TextSpan(text: '展開予想 \n', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    TextSpan(
-                        text: '${race.racePacePrediction!.predictedPace} (${race.racePacePrediction!.advantageousStyle})',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('展開予想', style: TextStyle(fontWeight: FontWeight.bold)),
+                    if (race.racePacePrediction != null)
+                      Text('${race.racePacePrediction!.predictedPace} (${race.racePacePrediction!.advantageousStyle})'),
                   ],
                 ),
-              ),
-            ],
+                ElevatedButton(
+                  onPressed: _navigateToStatisticsPage,
+                  child: const Text('過去データ分析'),
+                ),
+              ],
+            ),
           ],
         ),
       ),

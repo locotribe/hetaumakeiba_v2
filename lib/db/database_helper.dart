@@ -13,6 +13,7 @@ import 'package:hetaumakeiba_v2/models/user_model.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
+import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -55,7 +56,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 10,
+      version: 11,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。
       onCreate: (db, version) async {
@@ -323,6 +324,16 @@ class DatabaseHelper {
         if (oldVersion < 10) {
           await db.execute('ALTER TABLE horse_memos ADD COLUMN odds REAL');
           await db.execute('ALTER TABLE horse_memos ADD COLUMN popularity INTEGER');
+        }
+        if (oldVersion < 11) {
+          await db.execute('''
+            CREATE TABLE race_statistics(
+              raceId TEXT PRIMARY KEY,
+              raceName TEXT NOT NULL,
+              statisticsJson TEXT NOT NULL,
+              lastUpdatedAt TEXT NOT NULL
+            )
+          ''');
         }
       },
     );
@@ -923,6 +934,29 @@ class DatabaseHelper {
         hashedPassword: map['hashedPassword'] as String,
         createdAt: DateTime.parse(map['createdAt'] as String),
       );
+    }
+    return null;
+  }
+
+  Future<int> insertOrUpdateRaceStatistics(RaceStatistics stats) async {
+    final db = await database;
+    return await db.insert(
+      'race_statistics',
+      stats.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<RaceStatistics?> getRaceStatistics(String raceId) async {
+    final db = await database;
+    final maps = await db.query(
+      'race_statistics',
+      where: 'raceId = ?',
+      whereArgs: [raceId],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return RaceStatistics.fromMap(maps.first);
     }
     return null;
   }
