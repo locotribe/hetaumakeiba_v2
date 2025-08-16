@@ -1,4 +1,5 @@
 // lib/utils/url_generator.dart
+
 import 'package:charset_converter/charset_converter.dart';
 
 const Map<String, String> umaXVenueCodes = {
