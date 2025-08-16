@@ -15,7 +15,7 @@ class StatisticsService {
   // 外部から直接呼び出されるメインの処理
   Future<RaceStatistics?> processAndSaveRaceStatistics(String raceId, String raceName) async {
     // 1. 過去10年分のレースIDリストを取得
-    final pastRaceIds = await _fetchPast10RaceIds(raceId);
+    final pastRaceIds = await ScraperService.fetchPastRaceIdsByName(raceName);
     if (pastRaceIds.isEmpty) {
       throw Exception('過去のレースIDを取得できませんでした。');
     }

@@ -689,4 +689,54 @@ class ScraperService {
       return '';
     }
   }
+
+  /// レース名から過去10年分のレースIDリストをスクレイピングする
+  static Future<List<String>> fetchPastRaceIdsByName(String raceName) async {
+    final searchUrl = await generateNetkeibaRaceSearchUrl(raceName: raceName);
+    final List<String> pastIds = [];
+
+    try {
+      final response = await http.get(Uri.parse(searchUrl), headers: _headers);
+      if (response.statusCode != 200) {
+        print('レース名検索ページの取得に失敗: $searchUrl (Status: ${response.statusCode})');
+        return [];
+      }
+
+      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
+      final document = html.parse(decodedBody);
+
+      final table = document.querySelector('table.race_table_01');
+      if (table == null) return [];
+
+      final rows = table.querySelectorAll('tr');
+      final currentYear = DateTime.now().year;
+
+      for (final row in rows) {
+        final cells = row.querySelectorAll('td');
+        if (cells.length < 5) continue;
+
+        // 日付セルから年を抽出してフィルタリング
+        final dateText = _safeGetText(cells[0]);
+        final yearMatch = RegExp(r'(\d{4})/\d{2}/\d{2}').firstMatch(dateText);
+        if (yearMatch != null) {
+          final year = int.parse(yearMatch.group(1)!);
+          if (year >= currentYear - 10) {
+            // レース名セルからリンクを取得してIDを抽出
+            final raceLink = cells[4].querySelector('a');
+            final href = raceLink?.attributes['href'];
+            if (href != null) {
+              final id = getRaceIdFromUrl(href);
+              if (id != null) {
+                pastIds.add(id);
+              }
+            }
+          }
+        }
+      }
+      return pastIds;
+    } catch (e) {
+      print('Error fetching past race IDs by name: $e');
+      return [];
+    }
+  }
 }

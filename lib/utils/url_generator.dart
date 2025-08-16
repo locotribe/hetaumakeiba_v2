@@ -1,4 +1,5 @@
 // lib/utils/url_generator.dart
+import 'package:charset_converter/charset_converter.dart';
 
 const Map<String, String> umaXVenueCodes = {
   '札幌': '1',
@@ -58,4 +59,16 @@ String generateUmaXShutubaUrl({
 
   final umaXRaceId = '$venueCode$raceIdWithoutRound$formattedDate';
   return 'https://uma-x.jp/race_card/$umaXRaceId';
+}
+
+/// netkeibaのレース名検索ページのURLを生成します。
+/// [raceName] は検索したいレース名（例: "札幌記念"）です。
+Future<String> generateNetkeibaRaceSearchUrl({
+  required String raceName,
+}) async {
+  // netkeiba.comの検索クエリはEUC-JPでエンコードする必要がある
+  final eucJpBytes = await CharsetConverter.encode("EUC-JP", raceName);
+  // バイトリストをパーセントエンコーディング形式の文字列に変換
+  final encodedWord = eucJpBytes.map((byte) => '%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}').join('');
+  return 'https://db.netkeiba.com/?pid=race_list&word=$encodedWord';
 }
