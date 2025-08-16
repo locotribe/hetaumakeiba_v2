@@ -80,9 +80,9 @@ class StatisticsService {
     // 例：人気別勝率、配当金の平均・最高・最低など
 
     // (今回はプレースホルダーとして簡単な集計のみ実装)
-    final Map<int, Map<String, int>> popularityStats = {};
+    final Map<String, Map<String, int>> popularityStats = {};
     for (int i = 1; i <= 18; i++) {
-      popularityStats[i] = {'total': 0, 'win': 0, 'place': 0, 'show': 0};
+      popularityStats[i.toString()] = {'total': 0, 'win': 0, 'place': 0, 'show': 0};
     }
 
     for (final result in results) {
@@ -90,11 +90,12 @@ class StatisticsService {
         final popularity = int.tryParse(horse.popularity);
         final rank = int.tryParse(horse.rank);
         if (popularity != null && rank != null) {
-          if (popularityStats.containsKey(popularity)) {
-            popularityStats[popularity]!['total'] = (popularityStats[popularity]!['total'] ?? 0) + 1;
-            if (rank == 1) popularityStats[popularity]!['win'] = (popularityStats[popularity]!['win'] ?? 0) + 1;
-            if (rank <= 2) popularityStats[popularity]!['place'] = (popularityStats[popularity]!['place'] ?? 0) + 1;
-            if (rank <= 3) popularityStats[popularity]!['show'] = (popularityStats[popularity]!['show'] ?? 0) + 1;
+          final key = popularity.toString();
+          if (popularityStats.containsKey(key)) {
+            popularityStats[key]!['total'] = (popularityStats[key]!['total'] ?? 0) + 1;
+            if (rank == 1) popularityStats[key]!['win'] = (popularityStats[key]!['win'] ?? 0) + 1;
+            if (rank <= 2) popularityStats[key]!['place'] = (popularityStats[key]!['place'] ?? 0) + 1;
+            if (rank <= 3) popularityStats[key]!['show'] = (popularityStats[key]!['show'] ?? 0) + 1;
           }
         }
       }

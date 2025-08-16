@@ -29,8 +29,8 @@ class ScraperService {
     if (uri.path.contains('/race/')) {
       final raceId = uri.queryParameters['race_id'];
       if (raceId != null) return raceId;
-      if(pathSegments.isNotEmpty && pathSegments.first == 'race') {
-        return pathSegments.last;
+      if(pathSegments.length > 1 && pathSegments[0] == 'race') {
+        return pathSegments[1];
       }
     }
     // Fallback for just race_id parameter
@@ -694,6 +694,7 @@ class ScraperService {
   static Future<List<String>> fetchPastRaceIdsByName(String raceName) async {
     final searchUrl = await generateNetkeibaRaceSearchUrl(raceName: raceName);
     final List<String> pastIds = [];
+    final currentYear = DateTime.now().year;
 
     try {
       final response = await http.get(Uri.parse(searchUrl), headers: _headers);
@@ -709,11 +710,19 @@ class ScraperService {
       if (table == null) return [];
 
       final rows = table.querySelectorAll('tr');
-      final currentYear = DateTime.now().year;
 
       for (final row in rows) {
         final cells = row.querySelectorAll('td');
         if (cells.length < 5) continue;
+
+        // レース名セルからテキストを取得して前方一致チェック
+        final raceNameCell = cells[4].querySelector('a');
+        if (raceNameCell == null) continue;
+
+        final scrapedRaceName = _safeGetText(raceNameCell);
+        if (!scrapedRaceName.startsWith(raceName)) {
+          continue;
+        }
 
         // 日付セルから年を抽出してフィルタリング
         final dateText = _safeGetText(cells[0]);
@@ -721,9 +730,7 @@ class ScraperService {
         if (yearMatch != null) {
           final year = int.parse(yearMatch.group(1)!);
           if (year >= currentYear - 10) {
-            // レース名セルからリンクを取得してIDを抽出
-            final raceLink = cells[4].querySelector('a');
-            final href = raceLink?.attributes['href'];
+            final href = raceNameCell.attributes['href'];
             if (href != null) {
               final id = getRaceIdFromUrl(href);
               if (id != null) {
