@@ -4,9 +4,6 @@ import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html;
-import 'package:charset_converter/charset_converter.dart';
 import 'dart:convert';
 
 class StatisticsService {
@@ -14,8 +11,14 @@ class StatisticsService {
 
   // 外部から直接呼び出されるメインの処理
   Future<RaceStatistics?> processAndSaveRaceStatistics(String raceId, String raceName) async {
-    // 1. 過去10年分のレースIDリストを取得
-    final pastRaceIds = await ScraperService.fetchPastRaceIdsByName(raceName);
+    // ★追加: まず基準となる最新レースの詳細を取得
+    final baseRaceResult = await ScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$raceId');
+
+    // 1. 過去10年分のレースIDリストを取得 (引数を変更)
+    final pastRaceIds = await ScraperService.fetchPastRaceIdsByName(
+      raceName: raceName,
+      baseRaceResult: baseRaceResult, // ★追加
+    );
     if (pastRaceIds.isEmpty) {
       throw Exception('過去のレースIDを取得できませんでした。');
     }
@@ -45,34 +48,6 @@ class StatisticsService {
     return statsToSave;
   }
 
-  // netkeibaから過去10年分のレースIDをスクレイピングする
-  Future<List<String>> _fetchPast10RaceIds(String raceId) async {
-    final url = 'https://race.netkeiba.com/race/past10.html?race_id=$raceId';
-    final List<String> pastIds = [];
-
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode != 200) return [];
-
-      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
-      final document = html.parse(decodedBody);
-
-      final links = document.querySelectorAll('td.Race_Name a');
-      for (final link in links) {
-        final href = link.attributes['href'];
-        if (href != null) {
-          final id = ScraperService.getRaceIdFromUrl(href);
-          if (id != null) {
-            pastIds.add(id);
-          }
-        }
-      }
-      return pastIds;
-    } catch (e) {
-      print('Error fetching past 10 race IDs: $e');
-      return [];
-    }
-  }
 
   // 取得したレース結果リストから統計を計算する
   Map<String, dynamic> _calculateStatistics(List<RaceResult> results) {
