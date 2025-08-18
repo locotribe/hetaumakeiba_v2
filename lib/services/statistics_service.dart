@@ -10,33 +10,49 @@ import 'package:hetaumakeiba_v2/logic/parse.dart';
 class StatisticsService {
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  // 外部から直接呼び出されるメインの処理
-  Future<RaceStatistics?> processAndSaveRaceStatistics(String raceId, String raceName) async {
-    // ★追加: まず基準となる最新レースの詳細を取得
+  // ▼▼▼【修正箇所】▼▼▼
+  /// 分析のために、指定されたレースの過去結果リストを取得する
+  Future<List<RaceResult>> fetchPastRacesForAnalysis(String raceName, String raceId) async {
     final baseRaceResult = await ScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$raceId');
 
-    // 1. 過去10年分のレースIDリストを取得 (引数を変更)
     final pastRaceIds = await ScraperService.fetchPastRaceIdsByName(
       raceName: raceName,
-      baseRaceResult: baseRaceResult, // ★追加
+      baseRaceResult: baseRaceResult,
     );
+
     if (pastRaceIds.isEmpty) {
-      throw Exception('過去のレースIDを取得できませんでした。');
+      print('警告: $raceName の過去レースIDが見つかりませんでした。');
+      return [];
     }
 
-    // 2. 各レースIDの結果を取得してDBに保存
     final List<RaceResult> pastResults = [];
     for (final pastId in pastRaceIds) {
-      // 既存のレース結果取得ロジックを再利用
-      final result = await ScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
-      await _dbHelper.insertOrUpdateRaceResult(result);
+      // まずDBから試みる
+      RaceResult? result = await _dbHelper.getRaceResult(pastId);
+      if (result == null) {
+        // DBになければスクレイピング
+        result = await ScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
+        await _dbHelper.insertOrUpdateRaceResult(result);
+      }
       pastResults.add(result);
     }
+    return pastResults;
+  }
+  // ▲▲▲【修正箇所】▲▲▲
 
-    // 3. 統計データを計算
+  // 外部から直接呼び出されるメインの処理
+  Future<RaceStatistics?> processAndSaveRaceStatistics(String raceId, String raceName) async {
+    // 1. 過去レース結果のリストを取得 (新メソッドを利用)
+    final pastResults = await fetchPastRacesForAnalysis(raceName, raceId);
+
+    if (pastResults.isEmpty) {
+      throw Exception('過去のレース結果を取得できませんでした。');
+    }
+
+    // 2. 統計データを計算
     final statistics = _calculateStatistics(pastResults);
 
-    // 4. 計算結果をDBに保存するためのモデルを作成
+    // 3. 計算結果をDBに保存するためのモデルを作成
     final statsToSave = RaceStatistics(
       raceId: raceId,
       raceName: raceName,
@@ -44,10 +60,11 @@ class StatisticsService {
       lastUpdatedAt: DateTime.now(),
     );
 
-    // 5. DBに保存
+    // 4. DBに保存
     await _dbHelper.insertOrUpdateRaceStatistics(statsToSave);
     return statsToSave;
   }
+
 
   // 取得したレース結果リストから統計を計算する
   Map<String, dynamic> _calculateStatistics(List<RaceResult> results) {

@@ -424,54 +424,62 @@ class PredictionAnalyzer {
   static Map<String, String> simulateRaceDevelopment(
       List<PredictionHorseDetail> horses,
       Map<String, String> legStyles,
+      List<String> cornersToPredict,
       ) {
-    final Map<String, List<PredictionHorseDetail>> groupedByLegStyle = {
-      '逃げ': [], '先行': [], '差し': [], '追込': [], '不明': [],
-    };
-
-    for (final horse in horses) {
+    // ▼▼▼【修正箇所】▼▼▼
+    final positionScores = <PredictionHorseDetail, double>{};
+    for(final horse in horses) {
       final style = legStyles[horse.horseId] ?? '不明';
-      groupedByLegStyle[style]?.add(horse);
+      switch(style) {
+        case '逃げ': positionScores[horse] = 1.0; break;
+        case '先行': positionScores[horse] = 2.0; break;
+        case '差し': positionScores[horse] = 3.0; break;
+        case '追込': positionScores[horse] = 4.0; break;
+        default: positionScores[horse] = 2.5; // 不明な場合は中団と仮定
+      }
+      // 内枠ほど前に出やすいと仮定し、スコアを微調整
+      positionScores[horse] = positionScores[horse]! - (horse.gateNumber * 0.01);
     }
 
-    // 各脚質グループ内で枠番順（内枠が先）にソート
-    groupedByLegStyle.forEach((style, horseList) {
-      horseList.sort((a, b) => a.gateNumber.compareTo(b.gateNumber));
-    });
+    final sortedHorses = horses.toList()
+      ..sort((a, b) => positionScores[a]!.compareTo(positionScores[b]!));
 
-    // 1-2コーナーの予測 (脚質 > 枠番)
-    final initialOrder = [
-      ...groupedByLegStyle['逃げ']!,
-      ...groupedByLegStyle['先行']!,
-      ...groupedByLegStyle['差し']!,
-      ...groupedByLegStyle['追込']!,
-      ...groupedByLegStyle['不明']!,
-    ];
-    final corner1_2 = initialOrder.map((h) => h.horseNumber).join('-');
-
-    // 4コーナーの予測 (簡易シミュレーション)
-    // 差し・追込馬が少し前に、逃げ・先行馬が少し後ろになるように調整
-    final finalOrder = List<PredictionHorseDetail>.from(initialOrder);
-    // 簡単な入れ替えロジック
-    if (finalOrder.length > 5) {
-      final sashiHorse = finalOrder.firstWhere((h) => (legStyles[h.horseId] ?? '') == '差し', orElse: () => finalOrder.last);
-      final senkoHorse = finalOrder.firstWhere((h) => (legStyles[h.horseId] ?? '') == '先行', orElse: () => finalOrder.first);
-      final sashiIndex = finalOrder.indexOf(sashiHorse);
-      final senkoIndex = finalOrder.indexOf(senkoHorse);
-
-      if (sashiIndex > senkoIndex) {
-        // 差し馬を先行馬の少し前に移動させる
-        final temp = finalOrder.removeAt(sashiIndex);
-        finalOrder.insert(max(0, senkoIndex + 1), temp);
+    final List<List<PredictionHorseDetail>> groups = [];
+    if (sortedHorses.isNotEmpty) {
+      groups.add([sortedHorses.first]);
+      for (int i = 1; i < sortedHorses.length; i++) {
+        // 位置取りスコアの差が大きければ新しいグループを作成
+        if ((positionScores[sortedHorses[i]]! - positionScores[sortedHorses[i-1]]!).abs() > 0.8) {
+          groups.add([]);
+        }
+        groups.last.add(sortedHorses[i]);
       }
     }
-    final corner4 = finalOrder.map((h) => h.horseNumber).join('-');
 
-    return {
-      '1-2コーナー': corner1_2,
-      '3コーナー': corner1_2, // 3コーナーは1-2コーナーと同じと仮定
-      '4コーナー': corner4,
-    };
+    final cornerPrediction = groups.map((group) {
+      // グループ内で枠番順にソートして内外を表現
+      group.sort((a, b) => a.gateNumber.compareTo(b.gateNumber));
+
+      // 並走グループを形成
+      final parallelGroups = <String>[];
+      for (int i = 0; i < group.length; ) {
+        if (i + 1 < group.length && (group[i+1].gateNumber - group[i].gateNumber) <= 2) {
+          parallelGroups.add('(${group[i].horseNumber},${group[i+1].horseNumber})');
+          i += 2;
+        } else {
+          parallelGroups.add(group[i].horseNumber.toString());
+          i += 1;
+        }
+      }
+      return parallelGroups.join(',');
+    }).join('-');
+
+    final Map<String, String> development = {};
+    for (final cornerName in cornersToPredict) {
+      development[cornerName] = cornerPrediction;
+    }
+    return development;
+    // ▲▲▲【修正箇所】▲▲▲
   }
 
   // 既存の predictRacePace は変更しない
@@ -507,12 +515,12 @@ class PredictionAnalyzer {
 
   // レースに出走する全馬のデータを受け取り、レース全体の展開を予測して返すメソッド
   static RacePacePrediction predictRacePace(List<PredictionHorseDetail> horses, Map<String, List<HorseRaceRecord>> allPastRecords) {
-    int frontRunnerCount = 0;
+    int frontRunners = 0;
     for (var horse in horses) {
       final records = allPastRecords[horse.horseId] ?? [];
       final style = getRunningStyle(records);
-      if (style == "逃げ・先行" || style == "逃げ") { // "逃げ"も先行力にカウント
-        frontRunnerCount++;
+      if (style == "逃げ" || style == "先行") {
+        frontRunners++;
       }
     }
 
@@ -520,10 +528,10 @@ class PredictionAnalyzer {
     String advantageousStyle;
 
     // 逃げ・先行タイプの馬の数に応じてペースを予測
-    if (frontRunnerCount >= (horses.length / 3)) {
+    if (frontRunners >= (horses.length / 3)) {
       predictedPace = "ハイペース";
       advantageousStyle = "差し・追込有利";
-    } else if (frontRunnerCount <= 1) {
+    } else if (frontRunners <= 1) {
       predictedPace = "スローペース";
       advantageousStyle = "逃げ・先行有利";
     } else {

@@ -6,6 +6,9 @@ import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
+import 'package:hetaumakeiba_v2/services/statistics_service.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+
 
 class ComprehensivePredictionPage extends StatefulWidget {
   final PredictionRaceData raceData;
@@ -93,7 +96,28 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       allPastRecords[horse.horseId] = pastRecords;
       legStyles[horse.horseId] = PredictionAnalyzer.getRunningStyle(pastRecords);
     }
-    final development = PredictionAnalyzer.simulateRaceDevelopment(widget.raceData.horses, legStyles);
+
+    // ▼▼▼【修正箇所】▼▼▼
+    final statisticsService = StatisticsService();
+    final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(widget.raceData.raceName, widget.raceData.raceId);
+    final cornersToPredict = <String>{};
+    for (final result in pastRaceResults) {
+      for (final cornerPassage in result.cornerPassages) {
+        final cornerName = cornerPassage.split(':').first.trim();
+        // 1-2コーナーのような表記を統一
+        if (cornerName.contains('1') || cornerName.contains('2')) {
+          cornersToPredict.add('1-2コーナー');
+        } else if (cornerName.contains('3')) {
+          cornersToPredict.add('3コーナー');
+        } else if (cornerName.contains('4')) {
+          cornersToPredict.add('4コーナー');
+        }
+      }
+    }
+    final sortedCorners = cornersToPredict.toList()..sort();
+
+    final development = PredictionAnalyzer.simulateRaceDevelopment(widget.raceData.horses, legStyles, sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']);
+    // ▲▲▲【修正箇所】▲▲▲
 
     if (mounted) {
       setState(() {
@@ -238,18 +262,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                             padding: const EdgeInsets.all(8.0),
                             child: ListView(
                               children: _raceDevelopment.entries.map((entry) {
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                  child: RichText(
-                                    text: TextSpan(
-                                      style: DefaultTextStyle.of(context).style,
-                                      children: [
-                                        TextSpan(text: '${entry.key} \n', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                                        TextSpan(text: entry.value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                      ],
-                                    ),
-                                  ),
-                                );
+                                return _buildCornerPredictionDisplay(entry.key, entry.value);
                               }).toList(),
                             ),
                           ),
@@ -273,6 +286,67 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       ),
     );
   }
+
+  // ▼▼▼【修正箇所】▼▼▼
+  Widget _buildCornerPredictionDisplay(String cornerName, String prediction) {
+    List<Widget> buildWidgetsFromString(String text) {
+      final widgets = <Widget>[];
+      String currentNumber = "";
+
+      for (int i = 0; i < text.length; i++) {
+        String char = text[i];
+        if (int.tryParse(char) != null) {
+          currentNumber += char;
+        } else {
+          if (currentNumber.isNotEmpty) {
+            widgets.add(_buildHorseNumberChip(currentNumber));
+            currentNumber = "";
+          }
+          if (['(', ')', ',', '-', '=', '*'].contains(char)) {
+            widgets.add(Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1.0),
+              child: Text(char, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            ));
+          }
+        }
+      }
+      if (currentNumber.isNotEmpty) {
+        widgets.add(_buildHorseNumberChip(currentNumber));
+      }
+      return widgets;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(cornerName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 2.0,
+            runSpacing: 4.0,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: buildWidgetsFromString(prediction),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHorseNumberChip(String number) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade400, width: 0.5)
+      ),
+      child: Text(number, style: const TextStyle(fontSize: 12)),
+    );
+  }
+  // ▲▲▲【修正箇所】▲▲▲
 
   Widget _buildLegStyleCompositionTab() {
     final Map<String, List<PredictionHorseDetail>> groupedByLegStyle = {
