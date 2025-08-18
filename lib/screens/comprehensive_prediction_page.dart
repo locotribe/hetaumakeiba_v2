@@ -505,7 +505,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     final scores = widget.overallScores.values;
     double minScore = scores.isNotEmpty ? scores.reduce(min) : 0;
     double maxScore = scores.isNotEmpty ? scores.reduce(max) : 100;
-    const padding = 5.0;
+    const padding = 2.0;
 
     return Padding(
       padding: const EdgeInsets.all(8.0),
@@ -516,9 +516,9 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               ScatterChartData(
                 scatterSpots: spots,
                 minX: 0,
-                maxX: (widget.raceData.horses.length + 1).toDouble(),
+                maxX: widget.raceData.horses.length + 2,
                 minY: (minScore - padding).floorToDouble(),
-                maxY: (maxScore - padding).ceilToDouble(),
+                maxY: (maxScore + 2).ceilToDouble(),
                 titlesData: const FlTitlesData(
                   topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
