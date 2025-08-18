@@ -159,7 +159,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
         rows.add(DataRow(
           cells: [
-            DataCell(Text('$key番人気')),
+            DataCell(Text('$key')),
             DataCell(Text('${(win / total * 100).toStringAsFixed(1)}% ($win/$total)')),
             DataCell(Text('${(place / total * 100).toStringAsFixed(1)}% ($place/$total)')),
             DataCell(Text('${(show / total * 100).toStringAsFixed(1)}% ($show/$total)')),
@@ -170,7 +170,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(10.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -179,6 +179,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
+                columnSpacing: 8.0,
                 columns: const [
                   DataColumn(label: Text('人気')),
                   DataColumn(label: Text('勝率'), numeric: true),
@@ -198,7 +199,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     final sortedKeys = stats.keys.toList()..sort((a, b) => int.parse(a).compareTo(int.parse(b)));
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -213,7 +214,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
               final showRate = (data['show'] / total * 100);
               return ListTile(
                 leading: Text('$key枠', style: const TextStyle(fontWeight: FontWeight.bold)),
-                title: Text('勝率 ${winRate.toStringAsFixed(1)}% / 連対率 ${placeRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}%'),
+                title: Text('勝率 ${winRate.toStringAsFixed(1)}% / 連対率 ${placeRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12)),
                 subtitle: Text('($total回)'),
               );
             }),
@@ -296,6 +297,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
+                columnSpacing: 24.0,
                 columns: const [
                   DataColumn(label: Text('騎手')),
                   DataColumn(label: Text('複勝率'), numeric: true),
@@ -336,6 +338,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
+                columnSpacing: 24.0,
                 columns: const [
                   DataColumn(label: Text('調教師')),
                   DataColumn(label: Text('複勝率'), numeric: true),
@@ -382,7 +385,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -391,6 +394,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
+                columnSpacing: 24.0,
                 columns: const [
                   DataColumn(label: Text('馬券種')),
                   DataColumn(label: Text('平均'), numeric: true),
