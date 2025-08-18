@@ -3,6 +3,8 @@
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/matchup_stats_model.dart';
 
 class HorseStatsAnalyzer {
   static HorseStats calculate({
@@ -72,5 +74,61 @@ class HorseStatsAnalyzer {
       winRecoveryRate: totalWinInvestment > 0 ? (totalWinPayout / totalWinInvestment) * 100 : 0,
       showRecoveryRate: totalShowInvestment > 0 ? (totalShowPayout / totalShowInvestment) * 100 : 0,
     );
+  }
+
+  static List<MatchupStats> analyzeMatchups({
+    required List<PredictionHorseDetail> horses,
+    required Map<String, List<HorseRaceRecord>> allPerformanceRecords,
+  }) {
+    final matchups = <MatchupStats>[];
+
+    // 全ての馬のペアを総当たりでチェック
+    for (int i = 0; i < horses.length; i++) {
+      for (int j = i + 1; j < horses.length; j++) {
+        final horseA = horses[i];
+        final horseB = horses[j];
+
+        final recordsA = allPerformanceRecords[horseA.horseId] ?? [];
+        final recordsB = allPerformanceRecords[horseB.horseId] ?? [];
+
+        // 両馬が出走した共通のレースIDを探す
+        final raceIdsA = recordsA.map((r) => r.raceId).toSet();
+        final raceIdsB = recordsB.map((r) => r.raceId).toSet();
+        final commonRaceIds = raceIdsA.intersection(raceIdsB).where((id) => id.isNotEmpty);
+
+        if (commonRaceIds.isEmpty) {
+          continue; // 対戦経験がなければ次のペアへ
+        }
+
+        int matchupCount = 0;
+        int horseAWins = 0;
+
+        for (final raceId in commonRaceIds) {
+          final recordA = recordsA.firstWhere((r) => r.raceId == raceId);
+          final recordB = recordsB.firstWhere((r) => r.raceId == raceId);
+
+          final rankA = int.tryParse(recordA.rank);
+          final rankB = int.tryParse(recordB.rank);
+
+          // 両馬の着順が有効な数値の場合のみ集計
+          if (rankA != null && rankB != null) {
+            matchupCount++;
+            if (rankA < rankB) {
+              horseAWins++; // Aの着順がBより良ければAの勝利
+            }
+          }
+        }
+
+        if (matchupCount > 0) {
+          matchups.add(MatchupStats(
+            horseIdA: horseA.horseId,
+            horseIdB: horseB.horseId,
+            matchupCount: matchupCount,
+            horseAWins: horseAWins,
+          ));
+        }
+      }
+    }
+    return matchups;
   }
 }

@@ -9,6 +9,7 @@ import 'package:hetaumakeiba_v2/models/horse_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
+import 'package:hetaumakeiba_v2/models/matchup_stats_model.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -26,18 +27,27 @@ class HorseStatsPage extends StatefulWidget {
   State<HorseStatsPage> createState() => _HorseStatsPageState();
 }
 
-class _HorseStatsPageState extends State<HorseStatsPage> {
+class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProviderStateMixin {
   final DatabaseHelper _dbHelper = DatabaseHelper();
   bool _isLoading = true;
   String _loadingMessage = '';
   double _loadingProgress = 0.0;
   Map<String, HorseStats> _statsMap = {};
   String? _errorMessage;
+  late TabController _tabController;
+  List<MatchupStats> _matchupStats = [];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadInitialData() async {
@@ -48,6 +58,8 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
 
     final cache = await _dbHelper.getHorseStatsCache(widget.raceId);
     if (cache != null) {
+      // Note: Matchup stats are not cached in this version, so they are recalculated.
+      await _recalculateMatchups(cache.statsMap);
       setState(() {
         _statsMap = cache.statsMap;
         _isLoading = false;
@@ -55,6 +67,22 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
     } else {
       _showConfirmationDialog();
     }
+  }
+
+  Future<void> _recalculateMatchups(Map<String, HorseStats> stats) async {
+    final Map<String, List<HorseRaceRecord>> allPerformanceRecords = {};
+    for (final horse in widget.horses) {
+      final records = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      allPerformanceRecords[horse.horseId] = records;
+    }
+
+    final matchups = HorseStatsAnalyzer.analyzeMatchups(
+      horses: widget.horses,
+      allPerformanceRecords: allPerformanceRecords,
+    );
+    setState(() {
+      _matchupStats = matchups;
+    });
   }
 
   Future<void> _showConfirmationDialog({bool isRefresh = false}) async {
@@ -160,6 +188,11 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
         );
       }
 
+      final newMatchupStats = HorseStatsAnalyzer.analyzeMatchups(
+        horses: widget.horses,
+        allPerformanceRecords: allPerformanceRecords,
+      );
+
       // 6. 計算結果をキャッシュに保存
       final cacheToSave = HorseStatsCache(
         raceId: widget.raceId,
@@ -171,6 +204,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
       if (!mounted) return;
       setState(() {
         _statsMap = newStatsMap;
+        _matchupStats = newMatchupStats;
         _isLoading = false;
       });
     } catch (e) {
@@ -195,6 +229,21 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
               tooltip: 'データを更新',
             ),
         ],
+        bottom: _isLoading
+            ? PreferredSize(
+          preferredSize: const Size.fromHeight(4.0),
+          child: LinearProgressIndicator(
+            value: _loadingProgress,
+            backgroundColor: Colors.transparent,
+          ),
+        )
+            : TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: '個別成績'),
+            Tab(text: '対戦成績'),
+          ],
+        ),
       ),
       body: _buildBody(),
     );
@@ -214,14 +263,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
                 _loadingMessage,
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: _loadingProgress,
-                  minHeight: 12,
-                ),
-              ),
             ],
           ),
         ),
@@ -237,6 +278,16 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
       );
     }
 
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _buildIndividualStatsTab(),
+        _buildMatchupStatsTab(),
+      ],
+    );
+  }
+
+  Widget _buildIndividualStatsTab() {
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
       child: SingleChildScrollView(
@@ -265,6 +316,60 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
                 DataCell(Text('${stats.showRate.toStringAsFixed(1)}%')),
                 DataCell(Text('${stats.winRecoveryRate.toStringAsFixed(1)}%')),
                 DataCell(Text('${stats.showRecoveryRate.toStringAsFixed(1)}%')),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMatchupStatsTab() {
+    if (_matchupStats.isEmpty) {
+      return const Center(child: Text('直接対決の成績はありません。'));
+    }
+
+    // 馬IDと馬名のマップを作成
+    final horseNameMap = {for (var horse in widget.horses) horse.horseId: horse.horseName};
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columnSpacing: 24.0,
+          columns: [
+            const DataColumn(label: Text('馬名')),
+            ...widget.horses.map((horse) => DataColumn(label: Text(horse.horseName))),
+          ],
+          rows: widget.horses.map((horseA) {
+            return DataRow(
+              cells: [
+                DataCell(Text(horseA.horseName, style: const TextStyle(fontWeight: FontWeight.bold))),
+                ...widget.horses.map((horseB) {
+                  if (horseA.horseId == horseB.horseId) {
+                    return const DataCell(Text('-')); // 自分自身との対戦
+                  }
+
+                  // 対戦成績を検索
+                  MatchupStats? stats;
+                  try {
+                    stats = _matchupStats.firstWhere((m) =>
+                    (m.horseIdA == horseA.horseId && m.horseIdB == horseB.horseId) ||
+                        (m.horseIdA == horseB.horseId && m.horseIdB == horseA.horseId));
+                  } catch (e) {
+                    stats = null;
+                  }
+
+                  if (stats == null) {
+                    return const DataCell(Text('')); // 対戦なし
+                  }
+
+                  int wins = (stats.horseIdA == horseA.horseId) ? stats.horseAWins : stats.horseBWins;
+                  int losses = stats.matchupCount - wins;
+
+                  return DataCell(Text('$wins-$losses'));
+                }).toList(),
               ],
             );
           }).toList(),
