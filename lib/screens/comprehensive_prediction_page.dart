@@ -435,18 +435,28 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       );
     }).toList();
 
+    // ▼▼▼【ここから下を新しく追加】▼▼▼
+    // 全スコアのリストから最大値と最小値を計算
+    final scores = widget.overallScores.values;
+    double minScore = scores.isNotEmpty ? scores.reduce(min) : 0;
+    double maxScore = scores.isNotEmpty ? scores.reduce(max) : 100;
+    const padding = 5.0; // 上下の余白
+    // ▲▲▲【ここまでを新しく追加】▲▲▲
+
     return Padding(
       padding: const EdgeInsets.all(8.0),
-      child: Column( // Columnで囲む
+      child: Column(
         children: [
-          Expanded( // Expandedでグラフの高さを確保
+          Expanded(
             child: ScatterChart(
               ScatterChartData(
                 scatterSpots: spots,
                 minX: 0,
                 maxX: (widget.raceData.horses.length + 1).toDouble(),
-                minY: 0,
-                maxY: 100,
+                // ▼▼▼【ここの2行を修正】▼▼▼
+                minY: (minScore - padding).floorToDouble(),
+                maxY: (maxScore + padding).ceilToDouble(),
+                // ▲▲▲【ここの2行を修正】▲▲▲
                 titlesData: const FlTitlesData(
                   topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -458,8 +468,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               ),
             ),
           ),
-          const SizedBox(height: 8), // グラフと凡例の間のスペース
-          // ▼▼▼【ここから下を新しく追加】▼▼▼
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -470,7 +479,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               _buildLegendItem(_getColorForLegStyle('不明'), '不明'),
             ],
           )
-          // ▲▲▲【ここまでを新しく追加】▲▲▲
         ],
       ),
     );
