@@ -10,8 +10,6 @@ import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
 import 'package:hetaumakeiba_v2/models/user_model.dart';
-
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 
@@ -337,12 +335,6 @@ class DatabaseHelper {
         }
       },
     );
-  }
-
-  /// クラウド同期が有効かチェックするヘルパー
-  Future<bool> _isCloudSyncEnabled(String userId) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('isCloudSyncEnabled_$userId') ?? false;
   }
 
   /// 指定されたQRコードがデータベースに存在するかを確認します。
@@ -959,5 +951,11 @@ class DatabaseHelper {
       return RaceStatistics.fromMap(maps.first);
     }
     return null;
+  }
+
+  /// 分析キャッシュ（race_statisticsテーブル）をクリアします。
+  Future<void> clearRaceStatistics() async {
+    final db = await database;
+    await db.delete('race_statistics');
   }
 }

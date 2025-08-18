@@ -369,6 +369,9 @@ class ScraperService {
         if (ticketTypeName == '三連複') {
           ticketTypeName = '3連複';
         }
+        if (ticketTypeName == '三連単') {
+          ticketTypeName = '3連単';
+        }
 
         String ticketTypeId = bettingDict.entries
             .firstWhere((entry) => entry.value == ticketTypeName, orElse: () => const MapEntry('', ''))
@@ -460,7 +463,7 @@ class ScraperService {
         final raceNameElement = cells[1].querySelector('a');
         final raceName = raceNameElement != null ? _safeGetText(raceNameElement) : _safeGetText(cells[1]);
         final link = cells[1].querySelector('a')?.attributes['href'] ?? '';
-        final raceId = 'monthly_${dateStr.replaceAll(RegExp(r'[()/]'), '')}_${raceName.replaceAll(' ', '')}';
+        final raceId = 'monthly_${dateStr.replaceAll(RegExp(r'[/\(\)]'), '')}_${raceName.replaceAll(' ', '')}';
 
         gradedRaces.add(FeaturedRace(
           raceId: raceId,

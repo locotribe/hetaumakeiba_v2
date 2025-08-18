@@ -716,9 +716,28 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                       Text('${race.racePacePrediction!.predictedPace} (${race.racePacePrediction!.advantageousStyle})'),
                   ],
                 ),
-                ElevatedButton(
-                  onPressed: _navigateToStatisticsPage,
-                  child: const Text('過去データ分析'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    ElevatedButton(
+                      onPressed: _navigateToStatisticsPage,
+                      child: const Text('過去データ分析'),
+                    ),
+                    // --- FOR TEST ---
+                    // このボタンは検証用です。検証完了後に削除してください。
+                    TextButton(
+                      child: const Text('分析キャッシュをクリア', style: TextStyle(color: Colors.red, fontSize: 12)),
+                      onPressed: () async {
+                        await _dbHelper.clearRaceStatistics();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('分析キャッシュをクリアしました。')),
+                          );
+                        }
+                      },
+                    ),
+                    // --- END TEST ---
+                  ],
                 ),
               ],
             ),
@@ -910,15 +929,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
                 switch (record.rank) {
                   case '1':
-                    backgroundColor = Colors.red.withValues(alpha: 0.4);
+                    backgroundColor = Colors.red.withOpacity(0.4);
                     isTopThree = true;
                     break;
                   case '2':
-                    backgroundColor = Colors.grey.withValues(alpha: 0.5);
+                    backgroundColor = Colors.grey.withOpacity(0.5);
                     isTopThree = true;
                     break;
                   case '3':
-                    backgroundColor = Colors.yellow.withValues(alpha: 0.5);
+                    backgroundColor = Colors.yellow.withOpacity(0.5);
                     isTopThree = true;
                     break;
                 }
