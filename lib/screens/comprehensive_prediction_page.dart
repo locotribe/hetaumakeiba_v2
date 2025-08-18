@@ -437,25 +437,59 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
     return Padding(
       padding: const EdgeInsets.all(8.0),
-      child: ScatterChart(
-        ScatterChartData(
-          scatterSpots: spots,
-          minX: 0,
-          maxX: (widget.raceData.horses.length + 1).toDouble(),
-          minY: 0,
-          maxY: 100,
-          titlesData: const FlTitlesData(
-            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: AxisTitles(axisNameWidget: Text('人気 →')),
-            leftTitles: AxisTitles(axisNameWidget: Text('スコア →')),
+      child: Column( // Columnで囲む
+        children: [
+          Expanded( // Expandedでグラフの高さを確保
+            child: ScatterChart(
+              ScatterChartData(
+                scatterSpots: spots,
+                minX: 0,
+                maxX: (widget.raceData.horses.length + 1).toDouble(),
+                minY: 0,
+                maxY: 100,
+                titlesData: const FlTitlesData(
+                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(axisNameWidget: Text('人気 →')),
+                  leftTitles: AxisTitles(axisNameWidget: Text('スコア →')),
+                ),
+                gridData: const FlGridData(show: true),
+                borderData: FlBorderData(show: true),
+              ),
+            ),
           ),
-          gridData: const FlGridData(show: true),
-          borderData: FlBorderData(show: true),
-        ),
+          const SizedBox(height: 8), // グラフと凡例の間のスペース
+          // ▼▼▼【ここから下を新しく追加】▼▼▼
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildLegendItem(_getColorForLegStyle('逃げ'), '逃げ'),
+              _buildLegendItem(_getColorForLegStyle('先行'), '先行'),
+              _buildLegendItem(_getColorForLegStyle('差し'), '差し'),
+              _buildLegendItem(_getColorForLegStyle('追込'), '追込'),
+              _buildLegendItem(_getColorForLegStyle('不明'), '不明'),
+            ],
+          )
+          // ▲▲▲【ここまでを新しく追加】▲▲▲
+        ],
       ),
     );
   }
+
+  // ▼▼▼【このメソッドを新しく追加】▼▼▼
+  Widget _buildLegendItem(Color color, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+      child: Row(
+        children: [
+          Container(width: 12, height: 12, color: color),
+          const SizedBox(width: 4),
+          Text(text, style: const TextStyle(fontSize: 12)),
+        ],
+      ),
+    );
+  }
+  // ▲▲▲【ここまでを新しく追加】▲▲▲
 
   Color _getColorForLegStyle(String style) {
     switch(style) {
