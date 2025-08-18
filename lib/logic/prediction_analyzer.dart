@@ -7,7 +7,8 @@ import 'dart:math';
 class PredictionAnalyzer {
 
   static const Map<String, double> _defaultWeights = {
-    'legType': 30.0, 'courseFit': 25.0, 'trackCondition': 20.0, 'humanFactor': 15.0, 'condition': 10.0,
+    'legType': 20.0, 'courseFit': 20.0, 'trackCondition': 15.0, 'humanFactor': 15.0, 'condition': 10.0,
+    'earlySpeed': 5.0, 'finishingKick': 10.0, 'stamina': 5.0,
   };
 
   /// 様々なファクターを総合評価し、0〜100点の「総合適性スコア」を算出します。
@@ -24,18 +25,28 @@ class PredictionAnalyzer {
     final trackConditionScore = _evaluateTrackConditionFit(horse, raceData, pastRecords); // 3. 馬場適性
     final humanFactorScore = _evaluateHumanFactors(horse, pastRecords); // 4. 人的要因
     final conditionScore = _evaluateCondition(horse, raceData, pastRecords); // 5. コンディション
+    // ▼▼▼【テスト用コード】▼▼▼
+    final earlySpeedScore = evaluateEarlySpeedFit(horse, raceData, pastRecords); // 6. 天のスピード
+    final finishingKickScore = evaluateFinishingKickFit(horse, raceData, pastRecords); // 7. 末脚のキレ
+    final staminaScore = evaluateStaminaFit(horse, raceData, pastRecords); // 8. スタミナ
+    // ▲▲▲【テスト用コード】▲▲▲
 
     // カスタム設定が渡されなければ、デフォルトの重み付けを使用
     final weights = customWeights ?? _defaultWeights;
 
+    // ▼▼▼【テスト用コード】▼▼▼
     // 重み付け加算して総合スコアを算出
     final totalScore = (legTypeScore * (weights['legType']! / 100)) +
         (courseFitScore * (weights['courseFit']! / 100)) +
         (trackConditionScore * (weights['trackCondition']! / 100)) +
         (humanFactorScore * (weights['humanFactor']! / 100)) +
-        (conditionScore * (weights['condition']! / 100));
+        (conditionScore * (weights['condition']! / 100)) +
+        (earlySpeedScore * (weights['earlySpeed']! / 100)) +
+        (finishingKickScore * (weights['finishingKick']! / 100)) +
+        (staminaScore * (weights['stamina']! / 100));
 
-    final totalWeight = (weights['legType']! + weights['courseFit']! + weights['trackCondition']! + weights['humanFactor']! + weights['condition']!) / 100;
+    final totalWeight = (weights['legType']! + weights['courseFit']! + weights['trackCondition']! + weights['humanFactor']! + weights['condition']! + weights['earlySpeed']! + weights['finishingKick']! + weights['stamina']!) / 100;
+    // ▲▲▲【テスト用コード】▲▲▲
 
     if (totalWeight == 0) return 0;
 
@@ -265,6 +276,128 @@ class PredictionAnalyzer {
 
     return score.clamp(0, 100);
   }
+
+
+  // ▼▼▼【テスト用コード】▼▼▼
+  // 6. 天のスピード評価
+  static double evaluateEarlySpeedFit(
+      PredictionHorseDetail horse,
+      PredictionRaceData raceData,
+      List<HorseRaceRecord> pastRecords,
+      ) {
+    if (pastRecords.isEmpty) return 60.0;
+    // 直近5走の2コーナー通過順位率の平均を計算
+    double totalPositionRate = 0;
+    int count = 0;
+    for (final record in pastRecords.take(5)) {
+      final horseCount = int.tryParse(record.numberOfHorses);
+      final positions = record.cornerPassage.split('-').map((p) => int.tryParse(p)).toList();
+      if (horseCount != null && horseCount > 0 && positions.length >= 2 && positions[1] != null) {
+        totalPositionRate += positions[1]! / horseCount;
+        count++;
+      }
+    }
+    if (count == 0) return 60.0;
+    final avgPositionRate = totalPositionRate / count;
+    // 先行力があるほど高スコア
+    return ((1 - avgPositionRate) * 100).clamp(0, 100);
+  }
+
+  // 7. 末脚のキレ評価
+  static double evaluateFinishingKickFit(
+      PredictionHorseDetail horse,
+      PredictionRaceData raceData,
+      List<HorseRaceRecord> pastRecords,
+      ) {
+    if (pastRecords.isEmpty) return 60.0;
+    // 直近5走の上がり3ハロンタイムの平均を計算
+    double totalAgari = 0;
+    int count = 0;
+    for (final record in pastRecords.take(5)) {
+      final agari = double.tryParse(record.agari);
+      if (agari != null && agari > 0) {
+        totalAgari += agari;
+        count++;
+      }
+    }
+    if (count == 0) return 60.0;
+    final avgAgari = totalAgari / count;
+    // 上がりタイムが速いほど高スコア (例: 33秒なら高評価, 38秒なら低評価)
+    final score = (100 - (avgAgari - 34.0) * 10).clamp(0, 100).toDouble();
+    return score;
+  }
+
+  // 8. スタミナ評価
+  static double evaluateStaminaFit(
+      PredictionHorseDetail horse,
+      PredictionRaceData raceData,
+      List<HorseRaceRecord> pastRecords,
+      ) {
+    if (pastRecords.isEmpty) return 60.0;
+    // 今回のレース距離を取得
+    final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceData.raceDetails1 ?? '');
+    if (distanceMatch == null) return 60.0;
+    final currentDistance = int.parse(distanceMatch.group(1)!);
+
+    // 過去に今回より長い距離で3着以内に入ったことがあるか
+    final hasLongDistanceRecord = pastRecords.any((record) {
+      final recordDistance = int.tryParse(record.distance.replaceAll(RegExp(r'[^0-9]'), ''));
+      final rank = int.tryParse(record.rank);
+      return recordDistance != null && rank != null && recordDistance > currentDistance && rank <= 3;
+    });
+
+    return hasLongDistanceRecord ? 95.0 : 70.0;
+  }
+
+  /// AI予測のサマリーと解説文を生成する
+  static String generatePredictionSummary(
+      PredictionRaceData raceData,
+      Map<String, double> overallScores,
+      Map<String, List<HorseRaceRecord>> allPastRecords,
+      ) {
+    final sentences = <String>[];
+
+    // 1. 脚質構成の分析
+    int nigeCount = 0;
+    int senkoCount = 0;
+    for (var horse in raceData.horses) {
+      final style = getRunningStyle(allPastRecords[horse.horseId] ?? []);
+      if (style == '逃げ') nigeCount++;
+      if (style == '先行') senkoCount++;
+    }
+
+    final frontRunners = nigeCount + senkoCount;
+    if (frontRunners == 0) sentences.add('明確な逃げ・先行馬が不在。');
+    else if (frontRunners >= raceData.horses.length / 2) sentences.add('先行馬が揃い、ペースは速くなる可能性がある。');
+    else if (nigeCount > 1) sentences.add('逃げ馬が複数おり、先行争いが激化しそう。');
+
+    // 2. 予測ペースと展開の言語化
+    final pace = raceData.racePacePrediction?.predictedPace ?? 'ミドル';
+    final advantageousStyle = raceData.racePacePrediction?.advantageousStyle ?? '展開次第';
+    sentences.add('AIの予測ペースは「$pace」。$advantageousStyleと分析。');
+
+    // 3. 本命馬の強み分析
+    final sortedHorses = raceData.horses.toList()
+      ..sort((a, b) => (overallScores[b.horseId] ?? 0.0).compareTo(overallScores[a.horseId] ?? 0.0));
+
+    if (sortedHorses.isNotEmpty) {
+      final topHorse = sortedHorses.first;
+      final topHorseRecords = allPastRecords[topHorse.horseId] ?? [];
+
+      final scores = {
+        '先行力': evaluateEarlySpeedFit(topHorse, raceData, topHorseRecords),
+        '瞬発力': evaluateFinishingKickFit(topHorse, raceData, topHorseRecords),
+        'スタミナ': evaluateStaminaFit(topHorse, raceData, topHorseRecords),
+      };
+
+      final topAbility = scores.entries.reduce((a, b) => a.value > b.value ? a : b);
+
+      sentences.add('総合評価1位の「${topHorse.horseName}」は、特に「${topAbility.key}」のスコアが高い。');
+    }
+
+    return sentences.join(' ');
+  }
+  // ▲▲▲【テスト用コード】▲▲▲
 
 
   // #################################################

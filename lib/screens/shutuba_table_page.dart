@@ -77,11 +77,14 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   Future<void> _calculatePredictionScores(PredictionRaceData raceData) async {
     final prefs = await SharedPreferences.getInstance();
     final customWeights = {
-      'legType': prefs.getDouble('legTypeWeight') ?? 30.0,
-      'courseFit': prefs.getDouble('courseFitWeight') ?? 25.0,
-      'trackCondition': prefs.getDouble('trackConditionWeight') ?? 20.0,
+      'legType': prefs.getDouble('legTypeWeight') ?? 20.0,
+      'courseFit': prefs.getDouble('courseFitWeight') ?? 20.0,
+      'trackCondition': prefs.getDouble('trackConditionWeight') ?? 15.0,
       'humanFactor': prefs.getDouble('humanFactorWeight') ?? 15.0,
       'condition': prefs.getDouble('conditionWeight') ?? 10.0,
+      'earlySpeed': prefs.getDouble('earlySpeedWeight') ?? 5.0,
+      'finishingKick': prefs.getDouble('finishingKickWeight') ?? 10.0,
+      'stamina': prefs.getDouble('staminaWeight') ?? 5.0,
     };
 
     final Map<String, double> scores = {};
@@ -723,7 +726,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                       onPressed: _navigateToStatisticsPage,
                       child: const Text('過去データ分析'),
                     ),
-                    // --- FOR TEST ---
+                    // ▼▼▼【テスト用コード】▼▼▼
                     // このボタンは検証用です。検証完了後に削除してください。
                     TextButton(
                       child: const Text('分析キャッシュをクリア', style: TextStyle(color: Colors.red, fontSize: 12)),
@@ -736,7 +739,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                         }
                       },
                     ),
-                    // --- END TEST ---
+                    // ▲▲▲【テスト用コード】▲▲▲
                   ],
                 ),
               ],
@@ -929,15 +932,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
 
                 switch (record.rank) {
                   case '1':
-                    backgroundColor = Colors.red.withOpacity(0.4);
+                    backgroundColor = Colors.red.withValues(alpha: 0.4);
                     isTopThree = true;
                     break;
                   case '2':
-                    backgroundColor = Colors.grey.withOpacity(0.5);
+                    backgroundColor = Colors.grey.withValues(alpha: 0.5);
                     isTopThree = true;
                     break;
                   case '3':
-                    backgroundColor = Colors.yellow.withOpacity(0.5);
+                    backgroundColor = Colors.yellow.withValues(alpha: 0.5);
                     isTopThree = true;
                     break;
                 }

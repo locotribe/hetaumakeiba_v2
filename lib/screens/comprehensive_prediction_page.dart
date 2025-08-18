@@ -35,6 +35,13 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   Map<String, String> _legStyles = {};
   Map<String, String> _raceDevelopment = {};
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  // ▼▼▼【テスト用コード】▼▼▼
+  String _predictionSummary = '';
+  Map<String, double> _earlySpeedScores = {};
+  Map<String, double> _finishingKickScores = {};
+  Map<String, double> _staminaScores = {};
+  Map<String, List<HorseRaceRecord>> _allPastRecords = {};
+  // ▲▲▲【テスト用コード】▲▲▲
 
   @override
   void initState() {
@@ -44,12 +51,46 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     _sortHorses();
     _tabController = TabController(length: 3, vsync: this);
     _calculateLegStylesAndDevelopment();
+    // ▼▼▼【テスト用コード】▼▼▼
+    _calculateDetailedScores();
+    // ▲▲▲【テスト用コード】▲▲▲
   }
+
+  // ▼▼▼【テスト用コード】▼▼▼
+  void _generateSummary() {
+    setState(() {
+      _predictionSummary = PredictionAnalyzer.generatePredictionSummary(widget.raceData, widget.overallScores, _allPastRecords);
+    });
+  }
+
+  Future<void> _calculateDetailedScores() async {
+    final Map<String, double> earlySpeedScores = {};
+    final Map<String, double> finishingKickScores = {};
+    final Map<String, double> staminaScores = {};
+
+    for (var horse in widget.raceData.horses) {
+      final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      earlySpeedScores[horse.horseId] = PredictionAnalyzer.evaluateEarlySpeedFit(horse, widget.raceData, pastRecords);
+      finishingKickScores[horse.horseId] = PredictionAnalyzer.evaluateFinishingKickFit(horse, widget.raceData, pastRecords);
+      staminaScores[horse.horseId] = PredictionAnalyzer.evaluateStaminaFit(horse, widget.raceData, pastRecords);
+    }
+
+    if (mounted) {
+      setState(() {
+        _earlySpeedScores = earlySpeedScores;
+        _finishingKickScores = finishingKickScores;
+        _staminaScores = staminaScores;
+      });
+    }
+  }
+  // ▲▲▲【テスト用コード】▲▲▲
 
   void _calculateLegStylesAndDevelopment() async {
     final Map<String, String> legStyles = {};
+    final Map<String, List<HorseRaceRecord>> allPastRecords = {};
     for (var horse in widget.raceData.horses) {
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      allPastRecords[horse.horseId] = pastRecords;
       legStyles[horse.horseId] = PredictionAnalyzer.getRunningStyle(pastRecords);
     }
     final development = PredictionAnalyzer.simulateRaceDevelopment(widget.raceData.horses, legStyles);
@@ -58,6 +99,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       setState(() {
         _legStyles = legStyles;
         _raceDevelopment = development;
+        _allPastRecords = allPastRecords;
+        _generateSummary();
       });
     }
   }
@@ -219,10 +262,12 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               ),
             ),
             const SizedBox(height: 16),
+            // ▼▼▼【テスト用コード】▼▼▼
             Text(
-              '解説: 逃げ馬不在で前残りに注意。内枠の先行馬がレースの鍵を握る可能性が高い。',
+              '解説: $_predictionSummary',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
+            // ▲▲▲【テスト用コード】▲▲▲
           ],
         ),
       ),
@@ -507,17 +552,32 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                     },
                   ),
                   const DataColumn(label: Text('馬名')),
+                  // ▼▼▼【テスト用コード】▼▼▼
+                  const DataColumn(label: Text('先行力'), numeric: true),
+                  const DataColumn(label: Text('瞬発力'), numeric: true),
+                  const DataColumn(label: Text('スタミナ'), numeric: true),
+                  // ▲▲▲【テスト用コード】▲▲▲
                 ],
                 rows: _sortedHorses.map((horse) {
                   final score = widget.overallScores[horse.horseId] ?? 0.0;
                   final rank = _getRankFromScore(score);
                   final expectedValue = widget.expectedValues[horse.horseId] ?? -1.0;
+                  // ▼▼▼【テスト用コード】▼▼▼
+                  final earlySpeed = _earlySpeedScores[horse.horseId] ?? 0.0;
+                  final finishingKick = _finishingKickScores[horse.horseId] ?? 0.0;
+                  final stamina = _staminaScores[horse.horseId] ?? 0.0;
+                  // ▲▲▲【テスト用コード】▲▲▲
                   return DataRow(
                     cells: [
                       DataCell(Text(horse.horseNumber.toString())),
                       DataCell(Text('$rank (${score.toStringAsFixed(1)})')),
                       DataCell(Text(expectedValue.toStringAsFixed(2))),
                       DataCell(Text(horse.horseName)),
+                      // ▼▼▼【テスト用コード】▼▼▼
+                      DataCell(_buildScoreIndicator(earlySpeed)),
+                      DataCell(_buildScoreIndicator(finishingKick)),
+                      DataCell(_buildScoreIndicator(stamina)),
+                      // ▲▲▲【テスト用コード】▲▲▲
                     ],
                   );
                 }).toList(),
@@ -528,4 +588,30 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       ),
     );
   }
+
+  // ▼▼▼【テスト用コード】▼▼▼
+  Widget _buildScoreIndicator(double score) {
+    return Tooltip(
+      message: score.toStringAsFixed(1),
+      child: Container(
+        width: 60,
+        height: 12,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade300,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: FractionallySizedBox(
+          widthFactor: score / 100,
+          alignment: Alignment.centerLeft,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Color.lerp(Colors.red, Colors.green, score / 100),
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+// ▲▲▲【テスト用コード】▲▲▲
 }
