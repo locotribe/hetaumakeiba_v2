@@ -142,8 +142,9 @@ class StatisticsService {
           final lastCornerPosition = cornerRanks.last;
           final positionRate = lastCornerPosition / horseCount;
           String style;
-          if (positionRate <= 0.25) style = '逃げ・先行';
-          else if (positionRate <= 0.75) style = '差し';
+          if (positionRate <= 0.15) style = '逃げ';
+          else if (positionRate <= 0.40) style = '先行';
+          else if (positionRate <= 0.80) style = '差し';
           else style = '追込';
           legStyleStats.putIfAbsent(style, () => {'total': 0, 'win': 0, 'place': 0, 'show': 0});
           legStyleStats[style]!['total'] = (legStyleStats[style]!['total'] ?? 0) + 1;

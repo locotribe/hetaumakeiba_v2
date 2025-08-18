@@ -214,7 +214,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
               final showRate = (data['show'] / total * 100);
               return ListTile(
                 leading: Text('$key枠', style: const TextStyle(fontWeight: FontWeight.bold)),
-                title: Text('勝率 ${winRate.toStringAsFixed(1)}% / 連対率 ${placeRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12)),
+                title: Text('勝率 ${winRate.toStringAsFixed(1)}% / 連対率 ${placeRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 13)),
                 subtitle: Text('($total回)'),
               );
             }),
@@ -225,7 +225,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   }
 
   Widget _buildLegStyleStatsCard(Map<String, dynamic> stats) {
-    final sortedKeys = stats.keys.toList()..sort();
+    final order = ['逃げ', '先行', '差し', '追込'];
+    final sortedKeys = stats.keys.toList()..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -239,10 +240,11 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
               final total = data['total'] as int;
               if (total == 0) return const SizedBox.shrink();
               final winRate = (data['win'] / total * 100);
+              final placeRate = (data['place'] / total * 100);
               final showRate = (data['show'] / total * 100);
               return ListTile(
                 title: Text(key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('勝率 ${winRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}% ($total頭)'),
+                subtitle: Text('勝率 ${winRate.toStringAsFixed(1)}% / 連対率 ${placeRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}%\n($total頭)'),
               );
             }),
           ],
@@ -268,10 +270,12 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             ...categories.where((cat) => stats.containsKey(cat) && (stats[cat]['total'] as int) > 0).map((key) {
               final data = stats[key];
               final total = data['total'] as int;
+              final winRate = (data['win'] / total * 100);
+              final placeRate = (data['place'] / total * 100);
               final showRate = (data['show'] / total * 100);
               return ListTile(
                 title: Text(key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('複勝率 ${showRate.toStringAsFixed(1)}% ($total頭)'),
+                subtitle: Text('勝率 ${winRate.toStringAsFixed(1)}% / 連対率 ${placeRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}% \n($total頭)'),
               );
             }),
           ],
@@ -297,18 +301,24 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
-                columnSpacing: 24.0,
+                columnSpacing: 16.0,
                 columns: const [
                   DataColumn(label: Text('騎手')),
+                  DataColumn(label: Text('勝率'), numeric: true),
+                  DataColumn(label: Text('連対率'), numeric: true),
                   DataColumn(label: Text('複勝率'), numeric: true),
                   DataColumn(label: Text('度数')),
                 ],
                 rows: sortedJockeys.take(10).map((entry) {
                   final data = entry.value;
                   final total = data['total'] as int;
+                  final winRate = (data['win'] / total * 100);
+                  final placeRate = (data['place'] / total * 100);
                   final showRate = (data['show'] / total * 100);
                   return DataRow(cells: [
                     DataCell(Text(entry.key)),
+                    DataCell(Text('${winRate.toStringAsFixed(1)}%')),
+                    DataCell(Text('${placeRate.toStringAsFixed(1)}%')),
                     DataCell(Text('${showRate.toStringAsFixed(1)}%')),
                     DataCell(Text('(${data['win']}-${data['place']-data['win']}-${data['show']-data['place']}-${total-data['show']})')),
                   ]);
@@ -338,18 +348,24 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
-                columnSpacing: 24.0,
+                columnSpacing: 16.0,
                 columns: const [
                   DataColumn(label: Text('調教師')),
+                  DataColumn(label: Text('勝率'), numeric: true),
+                  DataColumn(label: Text('連対率'), numeric: true),
                   DataColumn(label: Text('複勝率'), numeric: true),
                   DataColumn(label: Text('度数')),
                 ],
                 rows: sortedTrainers.take(10).map((entry) {
                   final data = entry.value;
                   final total = data['total'] as int;
+                  final winRate = (data['win'] / total * 100);
+                  final placeRate = (data['place'] / total * 100);
                   final showRate = (data['show'] / total * 100);
                   return DataRow(cells: [
                     DataCell(Text(entry.key)),
+                    DataCell(Text('${winRate.toStringAsFixed(1)}%')),
+                    DataCell(Text('${placeRate.toStringAsFixed(1)}%')),
                     DataCell(Text('${showRate.toStringAsFixed(1)}%')),
                     DataCell(Text('(${data['win']}-${data['place']-data['win']}-${data['show']-data['place']}-${total-data['show']})')),
                   ]);
