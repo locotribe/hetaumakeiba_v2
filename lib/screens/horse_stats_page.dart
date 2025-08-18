@@ -161,17 +161,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.raceName),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4.0),
-          child: AnimatedOpacity(
-            opacity: _isLoading ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: LinearProgressIndicator(
-              value: _loadingProgress,
-              backgroundColor: Colors.transparent,
-            ),
-          ),
-        ),
       ),
       body: _buildBody(),
     );
@@ -180,13 +169,27 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
   Widget _buildBody() {
     if (_isLoading) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 20),
-            Text(_loadingMessage),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 24),
+              Text(
+                _loadingMessage,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: _loadingProgress,
+                  minHeight: 12,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
