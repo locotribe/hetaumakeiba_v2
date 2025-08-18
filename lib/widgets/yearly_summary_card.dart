@@ -71,10 +71,7 @@ class YearlySummaryCard extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (double value, TitleMeta meta) {
-                return SideTitleWidget(
-                  axisSide: meta.axisSide,
-                  child: Text('${value.toInt()}月', style: const TextStyle(fontSize: 10)),
-                );
+                return Text('${value.toInt()}月', style: const TextStyle(fontSize: 10));
               },
               reservedSize: 20,
             ),

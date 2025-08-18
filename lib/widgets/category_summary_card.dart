@@ -131,9 +131,8 @@ class CategorySummaryCard extends StatelessWidget {
                     ? (bettingDict[summary.name] ?? summary.name)
                     : summary.name;
 
-                return SideTitleWidget(
-                  axisSide: meta.axisSide,
-                  space: 4,
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
                   child: Text(
                     displayName,
                     style: const TextStyle(fontSize: 10),

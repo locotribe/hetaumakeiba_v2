@@ -9,6 +9,72 @@ import 'dart:math';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
+// lib/screens/comprehensive_prediction_page.dart のファイル末尾などにあるクラス
+
+// ▼▼▼【このクラスを完全に置き換え】▼▼▼
+class _HorseNumberDotPainter extends FlDotPainter {
+  final Color color;
+  final String horseNumber;
+  final double radius;
+
+  _HorseNumberDotPainter(this.color, this.horseNumber, {this.radius = 9});
+
+  @override
+  void draw(Canvas canvas, FlSpot spot, Offset center) {
+    final paint = Paint()..color = color;
+    canvas.drawCircle(center, radius, paint);
+
+    final textStyle = TextStyle(
+      color: Colors.white,
+      fontSize: 10,
+      fontWeight: FontWeight.bold,
+    );
+    final textSpan = TextSpan(
+      text: horseNumber,
+      style: textStyle,
+    );
+    final textPainter = TextPainter(
+      text: textSpan,
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(center.dx - textPainter.width / 2, center.dy - textPainter.height / 2),
+    );
+  }
+
+  @override
+  Size getSize(FlSpot spot) {
+    return Size(radius * 2, radius * 2);
+  }
+
+  @override
+  List<Object?> get props => [color, horseNumber, radius];
+
+  @override
+  Color get mainColor => color;
+
+  @override
+  FlDotPainter lerp(FlDotPainter a, FlDotPainter b, double t) {
+    return this;
+  }
+
+  @override
+  FlDotPainter copyWith({
+    Color? color,
+    String? horseNumber,
+    double? radius,
+  }) {
+    return _HorseNumberDotPainter(
+      color ?? this.color,
+      horseNumber ?? this.horseNumber,
+      radius: radius ?? this.radius,
+    );
+  }
+}
+// ▲▲▲【ここまでを完全に置き換え】▲▲▲
 
 class ComprehensivePredictionPage extends StatefulWidget {
   final PredictionRaceData raceData;
@@ -428,20 +494,18 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       return ScatterSpot(
         popularity,
         score,
-        dotPainter: FlDotCirclePainter(
-          radius: 6,
-          color: _getColorForLegStyle(style),
+        dotPainter: _HorseNumberDotPainter(
+          _getColorForLegStyle(style),
+          horse.horseNumber.toString(),
+          radius: 9,
         ),
       );
     }).toList();
 
-    // ▼▼▼【ここから下を新しく追加】▼▼▼
-    // 全スコアのリストから最大値と最小値を計算
     final scores = widget.overallScores.values;
     double minScore = scores.isNotEmpty ? scores.reduce(min) : 0;
     double maxScore = scores.isNotEmpty ? scores.reduce(max) : 100;
-    const padding = 5.0; // 上下の余白
-    // ▲▲▲【ここまでを新しく追加】▲▲▲
+    const padding = 5.0;
 
     return Padding(
       padding: const EdgeInsets.all(8.0),
@@ -453,10 +517,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 scatterSpots: spots,
                 minX: 0,
                 maxX: (widget.raceData.horses.length + 1).toDouble(),
-                // ▼▼▼【ここの2行を修正】▼▼▼
                 minY: (minScore - padding).floorToDouble(),
-                maxY: (maxScore + padding).ceilToDouble(),
-                // ▲▲▲【ここの2行を修正】▲▲▲
+                maxY: (maxScore - padding).ceilToDouble(),
                 titlesData: const FlTitlesData(
                   topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -465,6 +527,35 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 ),
                 gridData: const FlGridData(show: true),
                 borderData: FlBorderData(show: true),
+                scatterTouchData: ScatterTouchData(
+                  enabled: true,
+                  touchTooltipData: ScatterTouchTooltipData(
+                    getTooltipColor: (spot) => Colors.black.withOpacity(0.8),
+                    tooltipBorderRadius: BorderRadius.circular(4),
+                    tooltipPadding: const EdgeInsets.all(8),
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipItems: (touchedSpot) {
+                      final index = spots.indexWhere(
+                            (s) => s.x == touchedSpot.x && s.y == touchedSpot.y,
+                      );
+                      if (index != -1 && index < widget.raceData.horses.length) {
+                        final horse = widget.raceData.horses[index];
+                        return ScatterTooltipItem(
+                          '${horse.horseName}\nスコア: ${touchedSpot.y.toStringAsFixed(1)}',
+                          textStyle: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        );
+                      }
+                      return ScatterTooltipItem(
+                        '',
+                        textStyle: const TextStyle(),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ),
@@ -484,7 +575,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  // ▼▼▼【このメソッドを新しく追加】▼▼▼
   Widget _buildLegendItem(Color color, String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4.0),
@@ -497,7 +587,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       ),
     );
   }
-  // ▲▲▲【ここまでを新しく追加】▲▲▲
 
   Color _getColorForLegStyle(String style) {
     switch(style) {

@@ -32,7 +32,7 @@
         rss_dart: ^1.0.0
 
         # Chart/Graph
-        fl_chart: ^0.68.0
+        fl_chart: ^1.0.0
 
         # Local Storage
         shared_preferences: ^2.2.3
