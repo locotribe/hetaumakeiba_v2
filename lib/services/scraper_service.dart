@@ -307,7 +307,7 @@ class ScraperService {
 
         for (final horseId in horseIdsToSync.toSet()) {
           final existingRecord = await dbHelper.getLatestHorsePerformanceRecord(horseId);
-          if (existingRecord != null) {
+          if (existingRecord != null && existingRecord.raceId.isNotEmpty) {
             continue;
           }
           print('競走馬データ取得/更新中... Horse ID: $horseId');
