@@ -41,6 +41,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
   Map<String, double> _expectedValues = {};
   Map<String, String> _legStyles = {};
 
+  // === ▼▼▼ 修正箇所 ▼▼▼ ===
+  // テーブルのソート状態を管理する変数
+  int _sortColumnIndex = 5; // デフォルトは馬番でソート
+  bool _isAscending = true;
+  // === ▲▲▲ 修正箇所 ▲▲▲ ===
+
   @override
   void initState() {
     super.initState();
@@ -751,37 +757,110 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
     );
   }
 
+  // === ▼▼▼ 修正箇所 ▼▼▼ ===
   /// 馬リストを表形式で表示するウィジェット
   Widget _buildHorseDataTable(List<PredictionHorseDetail> horses) {
-    horses.sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
+    // ソート処理
+    horses.sort((a, b) {
+      int comparison;
+
+      // nullを常にリストの最後に配置するためのヘルパー関数
+      int compareNullsLast(Comparable? valA, Comparable? valB) {
+        if (valA == null && valB == null) return 0;
+        if (valA == null) return 1;
+        if (valB == null) return -1;
+        return valA.compareTo(valB);
+      }
+
+      switch (_sortColumnIndex) {
+        case 1: // 印
+          const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '消': 5, '　': 6};
+          final aMark = markOrder[a.userMark?.mark] ?? 99;
+          final bMark = markOrder[b.userMark?.mark] ?? 99;
+          comparison = aMark.compareTo(bMark);
+          break;
+        case 2: // 総合評価
+          final aScore = _overallScores[a.horseId];
+          final bScore = _overallScores[b.horseId];
+          comparison = compareNullsLast(aScore, bScore);
+          break;
+        case 3: // 脚質
+          final legStyleOrder = ['逃げ', '先行', '差し', '追い', '追込'];
+          final aStyle = legStyleOrder.indexOf(_legStyles[a.horseId] ?? '');
+          final bStyle = legStyleOrder.indexOf(_legStyles[b.horseId] ?? '');
+          final aIndex = aStyle == -1 ? 99 : aStyle;
+          final bIndex = bStyle == -1 ? 99 : bStyle;
+          comparison = aIndex.compareTo(bIndex);
+          break;
+        case 4: // 枠
+          comparison = a.gateNumber.compareTo(b.gateNumber);
+          break;
+        case 5: // 馬番
+          comparison = a.horseNumber.compareTo(b.horseNumber);
+          break;
+        case 6: // 馬名
+          comparison = a.horseName.compareTo(b.horseName);
+          break;
+        case 8: // 斤量
+          comparison = a.carriedWeight.compareTo(b.carriedWeight);
+          break;
+        case 11: // オッズ
+          comparison = compareNullsLast(a.odds, b.odds);
+          break;
+        case 12: // 人気
+          comparison = compareNullsLast(a.popularity, b.popularity);
+          break;
+        case 13: // 馬体重
+          final aWeight = int.tryParse(a.horseWeight?.split('(').first ?? '');
+          final bWeight = int.tryParse(b.horseWeight?.split('(').first ?? '');
+          comparison = compareNullsLast(aWeight, bWeight);
+          break;
+        default:
+        // デフォルトは馬番順
+          comparison = a.horseNumber.compareTo(b.horseNumber);
+          break;
+      }
+
+      return _isAscending ? comparison : -comparison;
+    });
+
+    // ソート用のコールバック関数
+    void onSort(int columnIndex, bool ascending) {
+      setState(() {
+        _sortColumnIndex = columnIndex;
+        _isAscending = ascending;
+      });
+    }
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
+        sortColumnIndex: _sortColumnIndex,
+        sortAscending: _isAscending,
         columnSpacing: 12.0,
         headingRowHeight: 40,
         dataRowMinHeight: 48,
         dataRowMaxHeight: 56,
-        columns: const [
-          DataColumn(label: Text('メモ')),
-          DataColumn(label: Text('印')),
-          DataColumn(label: Text('総合評価')),
-          DataColumn(label: Text('脚質')),
-          DataColumn(label: Text('枠')),
-          DataColumn(label: Text('馬番')),
-          DataColumn(label: Text('馬名')),
-          DataColumn(label: Text('性齢')),
-          DataColumn(label: Text('斤量')),
-          DataColumn(label: Text('騎手')),
-          DataColumn(label: Text('調教師')),
-          DataColumn(label: Text('オッズ'), numeric: true),
-          DataColumn(label: Text('人気'), numeric: true),
-          DataColumn(label: Text('馬体重')),
-          DataColumn(label: SizedBox(width: 100, child: Text('前走'))),
-          DataColumn(label: SizedBox(width: 100, child: Text('前々走'))),
-          DataColumn(label: SizedBox(width: 100, child: Text('3走前'))),
-          DataColumn(label: SizedBox(width: 100, child: Text('4走前'))),
-          DataColumn(label: SizedBox(width: 100, child: Text('5走前'))),
+        columns: [
+          const DataColumn(label: Text('メモ')),
+          DataColumn(label: const Text('印'), onSort: onSort),
+          DataColumn(label: const Text('総合評価'), onSort: onSort),
+          DataColumn(label: const Text('脚質'), onSort: onSort),
+          DataColumn(label: const Text('枠'), onSort: onSort),
+          DataColumn(label: const Text('馬番'), onSort: onSort),
+          DataColumn(label: const Text('馬名'), onSort: onSort),
+          const DataColumn(label: Text('性齢')),
+          DataColumn(label: const Text('斤量'), onSort: onSort),
+          const DataColumn(label: Text('騎手')),
+          const DataColumn(label: Text('調教師')),
+          DataColumn(label: const Text('オッズ'), numeric: true, onSort: onSort),
+          DataColumn(label: const Text('人気'), numeric: true, onSort: onSort),
+          DataColumn(label: const Text('馬体重'), onSort: onSort),
+          const DataColumn(label: SizedBox(width: 100, child: Text('前走'))),
+          const DataColumn(label: SizedBox(width: 100, child: Text('前々走'))),
+          const DataColumn(label: SizedBox(width: 100, child: Text('3走前'))),
+          const DataColumn(label: SizedBox(width: 100, child: Text('4走前'))),
+          const DataColumn(label: SizedBox(width: 100, child: Text('5走前'))),
         ],
         rows: horses.map((horse) {
           final score = _overallScores[horse.horseId] ?? 0.0;
@@ -828,6 +907,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       ),
     );
   }
+  // === ▲▲▲ 修正箇所 ▲▲▲ ===
+
 
   /// 印のドロップダウンを作成
   Widget _buildMarkDropdown(PredictionHorseDetail horse) {
@@ -835,7 +916,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
       child: DropdownButton<String>(
         value: horse.userMark?.mark,
         hint: const Icon(Icons.edit_note, size: 20),
-        items: <String>['◎', '〇', '▲', '△', '✕', '消', '　'].map((String value) {
+        items: <String>['◎', '〇', '▲', '△', '✕', '★', '消'].map((String value) {
           return DropdownMenuItem<String>(
             value: value,
             child: Text(value, style: const TextStyle(fontSize: 16.0)),
