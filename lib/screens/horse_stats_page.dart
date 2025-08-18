@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -27,7 +28,7 @@ class HorseStatsPage extends StatefulWidget {
 
 class _HorseStatsPageState extends State<HorseStatsPage> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  bool _isLoading = false;
+  bool _isLoading = true;
   String _loadingMessage = '';
   double _loadingProgress = 0.0;
   Map<String, HorseStats> _statsMap = {};
@@ -36,38 +37,55 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
   @override
   void initState() {
     super.initState();
-    _showConfirmationDialog();
+    _loadInitialData();
   }
 
-  Future<void> _showConfirmationDialog() async {
-    // WidgetsBinding.instance.addPostFrameCallback ensures that the dialog is shown
-    // after the first frame is rendered, which is necessary when showing a dialog in initState.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final bool? confirmed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Text('過去データ取得の確認'),
-          content: const Text('全出走馬の全過去レース結果を取得します。データ量に応じて時間がかかる場合があります。よろしいですか？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('キャンセル'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('取得開始'),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed == true) {
-        _fetchAndCalculateStats();
-      } else {
-        Navigator.of(context).pop();
-      }
+  Future<void> _loadInitialData() async {
+    setState(() {
+      _isLoading = true;
+      _loadingMessage = '分析データを確認中...';
     });
+
+    final cache = await _dbHelper.getHorseStatsCache(widget.raceId);
+    if (cache != null) {
+      setState(() {
+        _statsMap = cache.statsMap;
+        _isLoading = false;
+      });
+    } else {
+      _showConfirmationDialog();
+    }
+  }
+
+  Future<void> _showConfirmationDialog({bool isRefresh = false}) async {
+    // WidgetsBinding is not needed here if called from a user action like a button press
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(isRefresh ? 'データ更新の確認' : '過去データ取得の確認'),
+        content: Text(isRefresh
+            ? '最新のデータを再取得し、分析結果を更新します。よろしいですか？'
+            : '全出走馬の全過去レース結果を取得します。データ量に応じて時間がかかる場合があります。よろしいですか？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(isRefresh ? '更新' : '取得開始'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      _fetchAndCalculateStats();
+    } else if (!isRefresh) {
+      // Initial load was cancelled
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _fetchAndCalculateStats() async {
@@ -142,6 +160,14 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
         );
       }
 
+      // 6. 計算結果をキャッシュに保存
+      final cacheToSave = HorseStatsCache(
+        raceId: widget.raceId,
+        statsMap: newStatsMap,
+        lastUpdatedAt: DateTime.now(),
+      );
+      await _dbHelper.insertOrUpdateHorseStatsCache(cacheToSave);
+
       if (!mounted) return;
       setState(() {
         _statsMap = newStatsMap;
@@ -161,6 +187,14 @@ class _HorseStatsPageState extends State<HorseStatsPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.raceName),
+        actions: [
+          if (!_isLoading)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () => _showConfirmationDialog(isRefresh: true),
+              tooltip: 'データを更新',
+            ),
+        ],
       ),
       body: _buildBody(),
     );

@@ -12,6 +12,7 @@ import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
 import 'package:hetaumakeiba_v2/models/user_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -54,7 +55,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 12,
+      version: 13,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。
       onCreate: (db, version) async {
@@ -182,6 +183,13 @@ class DatabaseHelper {
             username TEXT NOT NULL UNIQUE,
             hashedPassword TEXT NOT NULL,
             createdAt TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE horse_stats_cache(
+            raceId TEXT PRIMARY KEY,
+            statsJson TEXT NOT NULL,
+            lastUpdatedAt TEXT NOT NULL
           )
         ''');
       },
@@ -336,6 +344,15 @@ class DatabaseHelper {
         }
         if (oldVersion < 12) {
           await db.execute("ALTER TABLE horse_performance ADD COLUMN race_id TEXT NOT NULL DEFAULT ''");
+        }
+        if (oldVersion < 13) {
+          await db.execute('''
+            CREATE TABLE horse_stats_cache(
+              raceId TEXT PRIMARY KEY,
+              statsJson TEXT NOT NULL,
+              lastUpdatedAt TEXT NOT NULL
+            )
+          ''');
         }
       },
     );
@@ -961,5 +978,28 @@ class DatabaseHelper {
   Future<void> clearRaceStatistics() async {
     final db = await database;
     await db.delete('race_statistics');
+  }
+
+  Future<int> insertOrUpdateHorseStatsCache(HorseStatsCache cache) async {
+    final db = await database;
+    return await db.insert(
+      'horse_stats_cache',
+      cache.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<HorseStatsCache?> getHorseStatsCache(String raceId) async {
+    final db = await database;
+    final maps = await db.query(
+      'horse_stats_cache',
+      where: 'raceId = ?',
+      whereArgs: [raceId],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return HorseStatsCache.fromMap(maps.first);
+    }
+    return null;
   }
 }
