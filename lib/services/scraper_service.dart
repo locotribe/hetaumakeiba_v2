@@ -108,13 +108,18 @@ class ScraperService {
           continue;
         }
 
+        final raceNameLink = cells[4].querySelector('a');
+        final raceHref = raceNameLink?.attributes['href'];
+        final raceId = raceHref != null ? getRaceIdFromUrl(raceHref) ?? '' : '';
+
         records.add(HorseRaceRecord(
           horseId: horseId,
+          raceId: raceId,
           date: _safeGetText(cells[0]),
           venue: _safeGetText(cells[1]),
           weather: _safeGetText(cells[2]),
           raceNumber: _safeGetText(cells[3]),
-          raceName: _safeGetText(cells[4].querySelector('a')),
+          raceName: _safeGetText(raceNameLink),
           numberOfHorses: _safeGetText(cells[6]),
           frameNumber: _safeGetText(cells[7]),
           horseNumber: _safeGetText(cells[8]),

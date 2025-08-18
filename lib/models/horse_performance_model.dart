@@ -6,6 +6,7 @@ import 'dart:convert';
 class HorseRaceRecord {
   final int? id; // データベースID (自動生成されるためnullable)
   final String horseId; // 競走馬のID (例: '2020101779')
+  final String raceId; // レースID (例: '202501010101')
   final String date; // 日付 (例: '2025/07/19')
   final String venue; // 開催 (例: '2福島7')
   final String weather; // 天気 (例: '曇')
@@ -33,6 +34,7 @@ class HorseRaceRecord {
   HorseRaceRecord({
     this.id,
     required this.horseId,
+    required this.raceId,
     required this.date,
     required this.venue,
     required this.weather,
@@ -63,6 +65,7 @@ class HorseRaceRecord {
     return HorseRaceRecord(
       id: map['id'] as int?,
       horseId: map['horse_id'] as String,
+      raceId: map['race_id'] as String? ?? '', // 古いデータとの互換性のためnull許容
       date: map['date'] as String,
       venue: map['venue'] as String,
       weather: map['weather'] as String,
@@ -94,6 +97,7 @@ class HorseRaceRecord {
     return {
       'id': id,
       'horse_id': horseId,
+      'race_id': raceId,
       'date': date,
       'venue': venue,
       'weather': weather,

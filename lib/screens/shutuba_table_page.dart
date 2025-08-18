@@ -20,6 +20,7 @@ import 'package:hetaumakeiba_v2/screens/comprehensive_prediction_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
+import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 
 
 class ShutubaTablePage extends StatefulWidget {
@@ -732,6 +733,23 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
                     ElevatedButton(
                       onPressed: _navigateToStatisticsPage,
                       child: const Text('過去データ分析'),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (_predictionRaceData != null) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => HorseStatsPage(
+                                raceId: widget.raceId,
+                                raceName: _predictionRaceData!.raceName,
+                                horses: _predictionRaceData!.horses,
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      child: const Text('全出走馬データ分析'),
                     ),
                     // ▼▼▼【テスト用コード】▼▼▼
                     // このボタンは検証用です。検証完了後に削除してください。

@@ -54,7 +54,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 11,
+      version: 12,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。
       onCreate: (db, version) async {
@@ -80,6 +80,7 @@ class DatabaseHelper {
           CREATE TABLE horse_performance(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             horse_id TEXT NOT NULL,
+            race_id TEXT NOT NULL,
             date TEXT NOT NULL,
             venue TEXT,
             weather TEXT,
@@ -332,6 +333,9 @@ class DatabaseHelper {
               lastUpdatedAt TEXT NOT NULL
             )
           ''');
+        }
+        if (oldVersion < 12) {
+          await db.execute("ALTER TABLE horse_performance ADD COLUMN race_id TEXT NOT NULL DEFAULT ''");
         }
       },
     );
