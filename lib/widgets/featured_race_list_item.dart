@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
+import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 
 DateTime _parseDateStringAsDateTime(String dateText) {
   try {
@@ -43,21 +44,6 @@ class FeaturedRaceListItem extends StatelessWidget {
     required this.onTap,
   });
 
-  // グレードに応じた色を返すヘルパーメソッド
-  Color _getGradeColor(String grade) {
-    // 障害グレードの判定を先に行う
-    if (grade.contains('J.G1')) return Colors.blue.shade700;   // J・G1
-    if (grade.contains('J.G2')) return Colors.red.shade700;     // J・G2
-    if (grade.contains('J.G3')) return Colors.green.shade700;   // J・G3
-
-    // 平地グレードの判定を後に行う
-    if (grade.contains('G1')) return Colors.blue.shade700;    // G1
-    if (grade.contains('G2')) return Colors.red.shade700;     // G2
-    if (grade.contains('G3')) return Colors.green.shade700;    // G3
-
-    return Colors.blueGrey;
-  }
-
   // グレードアイコンの文字色は白で統一
   Color _getGradeTextColor(String grade) {
     return Colors.white;
@@ -71,7 +57,8 @@ class FeaturedRaceListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gradeColor = _getGradeColor(race.raceGrade);
+    // getGradeColor 関数を直接使用
+    final gradeColor = getGradeColor(race.raceGrade);
     final bool hasDetails = race.raceDetails1 != null && race.raceDetails1!.isNotEmpty;
     final bool isMonthlyRace = !hasDetails;
 
@@ -117,7 +104,7 @@ class FeaturedRaceListItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(8.0),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.black.withOpacity(0.05),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),

@@ -7,11 +7,7 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
-// lib/screens/comprehensive_prediction_page.dart のファイル末尾などにあるクラス
-
-// ▼▼▼【このクラスを完全に置き換え】▼▼▼
 class _HorseNumberDotPainter extends FlDotPainter {
   final Color color;
   final String horseNumber;
@@ -74,7 +70,6 @@ class _HorseNumberDotPainter extends FlDotPainter {
     );
   }
 }
-// ▲▲▲【ここまでを完全に置き換え】▲▲▲
 
 class ComprehensivePredictionPage extends StatefulWidget {
   final PredictionRaceData raceData;
@@ -163,7 +158,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       legStyles[horse.horseId] = PredictionAnalyzer.getRunningStyle(pastRecords);
     }
 
-    // ▼▼▼【修正箇所】▼▼▼
     final statisticsService = StatisticsService();
     final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(widget.raceData.raceName, widget.raceData.raceId);
     final cornersToPredict = <String>{};
@@ -183,7 +177,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     final sortedCorners = cornersToPredict.toList()..sort();
 
     final development = PredictionAnalyzer.simulateRaceDevelopment(widget.raceData.horses, legStyles, sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']);
-    // ▲▲▲【修正箇所】▲▲▲
 
     if (mounted) {
       setState(() {
@@ -353,7 +346,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  // ▼▼▼【修正箇所】▼▼▼
   Widget _buildCornerPredictionDisplay(String cornerName, String prediction) {
     List<Widget> buildWidgetsFromString(String text) {
       final widgets = <Widget>[];
@@ -412,7 +404,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       child: Text(number, style: const TextStyle(fontSize: 12)),
     );
   }
-  // ▲▲▲【修正箇所】▲▲▲
 
   Widget _buildLegStyleCompositionTab() {
     final Map<String, List<PredictionHorseDetail>> groupedByLegStyle = {
@@ -530,7 +521,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 scatterTouchData: ScatterTouchData(
                   enabled: true,
                   touchTooltipData: ScatterTouchTooltipData(
-                    getTooltipColor: (spot) => Colors.black.withOpacity(0.8),
+                    getTooltipColor: (spot) => Colors.black.withValues(alpha: 0.8),
                     tooltipBorderRadius: BorderRadius.circular(4),
                     tooltipPadding: const EdgeInsets.all(8),
                     fitInsideHorizontally: true,

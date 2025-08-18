@@ -19,6 +19,7 @@ import 'package:hetaumakeiba_v2/logic/paste_parser.dart';
 import 'package:hetaumakeiba_v2/screens/comprehensive_prediction_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
+import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 
 
 class ShutubaTablePage extends StatefulWidget {
@@ -776,11 +777,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
           DataColumn(label: Text('オッズ'), numeric: true),
           DataColumn(label: Text('人気'), numeric: true),
           DataColumn(label: Text('馬体重')),
-          DataColumn(label: Text('前走')),
-          DataColumn(label: Text('前々走')),
-          DataColumn(label: Text('3走前')),
-          DataColumn(label: Text('4走前')),
-          DataColumn(label: Text('5走前')),
+          DataColumn(label: SizedBox(width: 100, child: Text('前走'))),
+          DataColumn(label: SizedBox(width: 100, child: Text('前々走'))),
+          DataColumn(label: SizedBox(width: 100, child: Text('3走前'))),
+          DataColumn(label: SizedBox(width: 100, child: Text('4走前'))),
+          DataColumn(label: SizedBox(width: 100, child: Text('5走前'))),
         ],
         rows: horses.map((horse) {
           final score = _overallScores[horse.horseId] ?? 0.0;
@@ -927,61 +928,92 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> {
               if (snapshot.hasData && snapshot.data!.length > i) {
                 final record = snapshot.data![i];
 
+                // レース名からグレードを抽出
+                String extractedGrade = '';
+                // 半角括弧と、J.GおよびGの後に続くローマ数字 (I, II, III) に対応する正規表現
+                // 例: (GII), (J.GI), (GIII)
+                final gradePattern = RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false);
+                final match = gradePattern.firstMatch(record.raceName);
+                if (match != null) {
+                  extractedGrade = match.group(1)!; // 例: "GII", "J.GI"
+                }
+
+                // グレードに応じた色を取得
+                final gradeColor = getGradeColor(extractedGrade); // grade_utils.dart からの関数を使用
+
                 Color backgroundColor = Colors.transparent;
                 bool isTopThree = false;
 
                 switch (record.rank) {
                   case '1':
-                    backgroundColor = Colors.red.withValues(alpha: 0.4);
+                    backgroundColor = Colors.red.withAlpha((0.4 * 255).toInt()); // 赤 40% 不透明
                     isTopThree = true;
                     break;
                   case '2':
-                    backgroundColor = Colors.grey.withValues(alpha: 0.5);
+                    backgroundColor = Colors.grey.withAlpha((0.5 * 255).toInt()); // グレー 50% 不透明
                     isTopThree = true;
                     break;
                   case '3':
-                    backgroundColor = Colors.yellow.withValues(alpha: 0.5);
+                    backgroundColor = Colors.yellow.withAlpha((0.5 * 255).toInt()); // 黄 50% 不透明
                     isTopThree = true;
                     break;
+                  default:
+                    backgroundColor = Colors.transparent;
+                    isTopThree = false;
                 }
 
                 return InkWell(
                   onTap: () => _showPastRaceDetailsPopup(context, record),
                   child: Container(
-                    width: double.infinity,
-                    height: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
                     decoration: BoxDecoration(
-                      color: backgroundColor,
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        if (isTopThree)
-                          Text(
-                            record.rank,
-                            style: const TextStyle(
-                              fontSize: 40,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        Text(
-                          record.raceName,
-                          style: const TextStyle(color: Colors.black),
-                          overflow: TextOverflow.ellipsis,
+                      color: backgroundColor, // 既存の着順による背景色
+                      border: Border(
+                        left: BorderSide(
+                          color: gradeColor, // グレードに応じた色を左ボーダーに適用
+                          width: 5.0, // 左ボーダーの幅
                         ),
-                      ],
+                      ),
+                    ),
+                    // 固定幅のコンテナでラップ
+                    child: SizedBox(
+                      width: 100, // 過去レースの列の固定幅
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          if (isTopThree)
+                          // 着順を背景に大きく表示する
+                            Center(
+                              child: Text(
+                                record.rank,
+                                style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                            ),
+                          // レース名を5文字に制限し、オーバーフロー時に省略記号を表示
+                          Text(
+                            record.raceName.length > 5
+                                ? '${record.raceName.substring(0, 5)}...'
+                                : record.raceName,
+                            style: const TextStyle(color: Colors.black, fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1, // 1行に制限
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
               }
-              return const Text('');
+              return Container(
+                width: 100, // 固定幅の空のコンテナ
+                child: const Text(''),
+              );
             },
           ),
         ),
     ];
   }
+
 
   // 枠番の色分けロジック
   Color _getGateColor(int gateNumber) {
