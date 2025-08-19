@@ -24,7 +24,6 @@ import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 
-// === ▼▼▼ 修正箇所 ▼▼▼ ===
 // ソート対象の列を識別するためのenum
 enum SortableColumn {
   mark,
@@ -37,7 +36,6 @@ enum SortableColumn {
   horseWeight,
   overallScore,
 }
-// === ▲▲▲ 修正箇所 ▲▲▲ ===
 
 
 class ShutubaTablePage extends StatefulWidget {
@@ -49,10 +47,8 @@ class ShutubaTablePage extends StatefulWidget {
   State<ShutubaTablePage> createState() => _ShutubaTablePageState();
 }
 
-// === ▼▼▼ 修正箇所 ▼▼▼ ===
 // SingleTickerProviderStateMixin を追加
 class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerProviderStateMixin {
-// === ▲▲▲ 修正箇所 ▲▲▲ ===
   PredictionRaceData? _predictionRaceData;
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
@@ -63,32 +59,26 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Map<String, String> _legStyles = {};
   Map<String, ConditionFitResult> _conditionFits = {};
 
-  // === ▼▼▼ 修正箇所 ▼▼▼ ===
   // テーブルのソート状態を管理する変数
   SortableColumn _sortColumn = SortableColumn.horseNumber; // デフォルトは馬番
   bool _isAscending = true;
   // タブコントローラー
   late TabController _tabController;
-  // === ▲▲▲ 修正箇所 ▲▲▲ ===
 
 
   @override
   void initState() {
     super.initState();
-    // === ▼▼▼ 修正箇所 ▼▼▼ ===
     // タブコントローラーの初期化
     _tabController = TabController(length: 6, vsync: this);
-    // === ▲▲▲ 修正箇所 ▲▲▲ ===
     _loadShutubaData();
   }
 
-  // === ▼▼▼ 修正箇所 ▼▼▼ ===
   @override
   void dispose() {
     _tabController.dispose(); // 不要になったコントローラーを破棄
     super.dispose();
   }
-  // === ▲▲▲ 修正箇所 ▲▲▲ ===
 
 
   Future<void> _loadShutubaData({bool refresh = false}) async {
@@ -711,13 +701,103 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           : RefreshIndicator(
         onRefresh: () => _loadShutubaData(refresh: true),
         // === ▼▼▼ 修正箇所 ▼▼▼ ===
-        // ListViewからColumnに変更し、タブUIを組み込む
-        child: Column(
-          children: [
-            _buildRaceInfoCard(_predictionRaceData!),
-            const SizedBox(height: 8),
-            _buildHorseDataTabs(_predictionRaceData!.horses),
-          ],
+        // ColumnからNestedScrollViewに変更し、全体をスクロール可能にする
+        child: NestedScrollView(
+          headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+            return <Widget>[
+              // 上部のレース情報カード
+              SliverToBoxAdapter(
+                child: _buildRaceInfoCard(_predictionRaceData!),
+              ),
+              // スクロール時に追従するタブバー
+              SliverPersistentHeader(
+                delegate: _SliverTabBarDelegate(
+                  TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    tabs: const [
+                      Tab(text: '出走馬'),
+                      Tab(text: '情報'),
+                      Tab(text: '騎手・調教師'),
+                      Tab(text: '分析'),
+                      Tab(text: '成績'),
+                      Tab(text: 'メモ'),
+                    ],
+                  ),
+                ),
+                pinned: true, // 上部に固定
+              ),
+            ];
+          },
+          // タブの中身
+          body: Builder(
+              builder: (context) {
+                // ソート処理
+                final sortedHorses = List<PredictionHorseDetail>.from(_predictionRaceData!.horses);
+                sortedHorses.sort((a, b) {
+                  int comparison;
+                  int compareNullsLast(Comparable? valA, Comparable? valB) {
+                    if (valA == null && valB == null) return 0;
+                    if (valA == null) return 1;
+                    if (valB == null) return -1;
+                    return valA.compareTo(valB);
+                  }
+
+                  switch (_sortColumn) {
+                    case SortableColumn.mark:
+                      const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '消': 5, '　': 6};
+                      final aMark = markOrder[a.userMark?.mark] ?? 99;
+                      final bMark = markOrder[b.userMark?.mark] ?? 99;
+                      comparison = aMark.compareTo(bMark);
+                      break;
+                    case SortableColumn.gateNumber:
+                      comparison = a.gateNumber.compareTo(b.gateNumber);
+                      break;
+                    case SortableColumn.horseNumber:
+                      comparison = a.horseNumber.compareTo(b.horseNumber);
+                      break;
+                    case SortableColumn.horseName:
+                      comparison = a.horseName.compareTo(b.horseName);
+                      break;
+                    case SortableColumn.popularity:
+                      comparison = compareNullsLast(a.popularity, b.popularity);
+                      break;
+                    case SortableColumn.odds:
+                      comparison = compareNullsLast(a.odds, b.odds);
+                      break;
+                    case SortableColumn.carriedWeight:
+                      comparison = a.carriedWeight.compareTo(b.carriedWeight);
+                      break;
+                    case SortableColumn.horseWeight:
+                      final aWeight = int.tryParse(a.horseWeight?.split('(').first ?? '');
+                      final bWeight = int.tryParse(b.horseWeight?.split('(').first ?? '');
+                      comparison = compareNullsLast(aWeight, bWeight);
+                      break;
+                    case SortableColumn.overallScore:
+                      final aScore = _overallScores[a.horseId];
+                      final bScore = _overallScores[b.horseId];
+                      comparison = compareNullsLast(aScore, bScore);
+                      break;
+                    default:
+                      comparison = a.horseNumber.compareTo(b.horseNumber);
+                      break;
+                  }
+                  return _isAscending ? comparison : -comparison;
+                });
+
+                return TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildStartersTab(sortedHorses),
+                    _buildInfoTab(sortedHorses),
+                    _buildJockeyTrainerTab(sortedHorses),
+                    _buildAnalysisTab(sortedHorses),
+                    _buildPerformanceTab(sortedHorses),
+                    _buildMemoTab(sortedHorses),
+                  ],
+                );
+              }
+          ),
         ),
         // === ▲▲▲ 修正箇所 ▲▲▲ ===
       ),
@@ -757,7 +837,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
             const Divider(),
             ListTile(
-                visualDensity: const VisualDensity(vertical: -4.0), // 変更点: 間隔を詰める
+              visualDensity: const VisualDensity(vertical: -4.0), // 変更点: 間隔を詰める
               leading: Icon(Icons.analytics_outlined, color: Theme.of(context).primaryColor),
               title: Text(
                 'AI総合予測を見る',
@@ -869,97 +949,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     return Text(rank, style: const TextStyle(fontWeight: FontWeight.bold));
   }
 
-
-  // === ▼▼▼ 修正箇所 ▼▼▼ ===
-  /// タブUI全体のウィジェット
-  Widget _buildHorseDataTabs(List<PredictionHorseDetail> horses) {
-    // ソート処理
-    horses.sort((a, b) {
-      int comparison;
-
-      // nullを常にリストの最後に配置するためのヘルパー関数
-      int compareNullsLast(Comparable? valA, Comparable? valB) {
-        if (valA == null && valB == null) return 0;
-        if (valA == null) return 1;
-        if (valB == null) return -1;
-        return valA.compareTo(valB);
-      }
-
-      switch (_sortColumn) {
-        case SortableColumn.mark:
-          const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '消': 5, '　': 6};
-          final aMark = markOrder[a.userMark?.mark] ?? 99;
-          final bMark = markOrder[b.userMark?.mark] ?? 99;
-          comparison = aMark.compareTo(bMark);
-          break;
-        case SortableColumn.gateNumber:
-          comparison = a.gateNumber.compareTo(b.gateNumber);
-          break;
-        case SortableColumn.horseNumber:
-          comparison = a.horseNumber.compareTo(b.horseNumber);
-          break;
-        case SortableColumn.horseName:
-          comparison = a.horseName.compareTo(b.horseName);
-          break;
-        case SortableColumn.popularity:
-          comparison = compareNullsLast(a.popularity, b.popularity);
-          break;
-        case SortableColumn.odds:
-          comparison = compareNullsLast(a.odds, b.odds);
-          break;
-        case SortableColumn.carriedWeight:
-          comparison = a.carriedWeight.compareTo(b.carriedWeight);
-          break;
-        case SortableColumn.horseWeight:
-          final aWeight = int.tryParse(a.horseWeight?.split('(').first ?? '');
-          final bWeight = int.tryParse(b.horseWeight?.split('(').first ?? '');
-          comparison = compareNullsLast(aWeight, bWeight);
-          break;
-        case SortableColumn.overallScore:
-          final aScore = _overallScores[a.horseId];
-          final bScore = _overallScores[b.horseId];
-          comparison = compareNullsLast(aScore, bScore);
-          break;
-        default:
-          comparison = a.horseNumber.compareTo(b.horseNumber);
-          break;
-      }
-
-      return _isAscending ? comparison : -comparison;
-    });
-
-    return Expanded(
-      child: Column(
-        children: [
-          TabBar(
-            controller: _tabController,
-            isScrollable: true,
-            tabs: const [
-              Tab(text: '出走馬'),
-              Tab(text: '情報'),
-              Tab(text: '騎手・調教師'),
-              Tab(text: '分析'),
-              Tab(text: '成績'),
-              Tab(text: 'メモ'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildStartersTab(horses),
-                _buildInfoTab(horses),
-                _buildJockeyTrainerTab(horses),
-                _buildAnalysisTab(horses),
-                _buildPerformanceTab(horses),
-                _buildMemoTab(horses),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   // ソート用のコールバック関数
   void _onSort(SortableColumn column) {
@@ -1191,7 +1180,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       ],
     );
   }
-  // === ▲▲▲ 修正箇所 ▲▲▲ ===
 
 
   /// 印のドロップダウンを作成
@@ -1405,3 +1393,33 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
   }
 }
+
+// === ▼▼▼ 修正箇所 ▼▼▼ ===
+/// SliverPersistentHeaderのためのカスタムDelegate
+/// スクロール時にTabBarを画面上部に固定する役割を担う
+class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
+  _SliverTabBarDelegate(this.tabBar);
+
+  final TabBar tabBar;
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    // スクロール中にタブバーが他のウィジェットの背後に隠れないように背景色を設定
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
+    return tabBar != oldDelegate.tabBar;
+  }
+}
+// === ▲▲▲ 修正箇所 ▲▲▲ ===
