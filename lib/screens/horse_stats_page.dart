@@ -10,6 +10,7 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/matchup_stats_model.dart';
+import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -36,11 +37,12 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   String? _errorMessage;
   late TabController _tabController;
   List<MatchupStats> _matchupStats = [];
+  Map<String, JockeyComboStats> _jockeyComboStats = {};
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadInitialData();
   }
 
@@ -59,7 +61,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     final cache = await _dbHelper.getHorseStatsCache(widget.raceId);
     if (cache != null) {
       // Note: Matchup stats are not cached in this version, so they are recalculated.
-      await _recalculateMatchups(cache.statsMap);
+      await _recalculateExtraStats(cache.statsMap);
       setState(() {
         _statsMap = cache.statsMap;
         _isLoading = false;
@@ -69,21 +71,41 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     }
   }
 
-  Future<void> _recalculateMatchups(Map<String, HorseStats> stats) async {
+  Future<void> _recalculateExtraStats(Map<String, HorseStats> stats) async {
     final Map<String, List<HorseRaceRecord>> allPerformanceRecords = {};
     for (final horse in widget.horses) {
       final records = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPerformanceRecords[horse.horseId] = records;
     }
 
+    final allPastRaceIds = allPerformanceRecords.values
+        .expand((records) => records)
+        .map((record) => record.raceId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    final allRaceResults = await _dbHelper.getMultipleRaceResults(allPastRaceIds.toList());
+
     final matchups = HorseStatsAnalyzer.analyzeMatchups(
       horses: widget.horses,
       allPerformanceRecords: allPerformanceRecords,
     );
+
+    final jockeyCombos = <String, JockeyComboStats>{};
+    for (final horse in widget.horses) {
+      jockeyCombos[horse.horseId] = HorseStatsAnalyzer.analyzeJockeyCombo(
+        currentJockey: horse.jockey,
+        performanceRecords: allPerformanceRecords[horse.horseId] ?? [],
+        raceResults: allRaceResults,
+      );
+    }
+
     setState(() {
       _matchupStats = matchups;
+      _jockeyComboStats = jockeyCombos;
     });
   }
+
 
   Future<void> _showConfirmationDialog({bool isRefresh = false}) async {
     // WidgetsBinding is not needed here if called from a user action like a button press
@@ -180,9 +202,15 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
 
       // 5. 各馬の統計を計算
       final newStatsMap = <String, HorseStats>{};
+      final newJockeyComboStats = <String, JockeyComboStats>{};
       for (final horse in widget.horses) {
         final records = allPerformanceRecords[horse.horseId] ?? [];
         newStatsMap[horse.horseId] = HorseStatsAnalyzer.calculate(
+          performanceRecords: records,
+          raceResults: allRaceResults,
+        );
+        newJockeyComboStats[horse.horseId] = HorseStatsAnalyzer.analyzeJockeyCombo(
+          currentJockey: horse.jockey,
           performanceRecords: records,
           raceResults: allRaceResults,
         );
@@ -205,6 +233,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
       setState(() {
         _statsMap = newStatsMap;
         _matchupStats = newMatchupStats;
+        _jockeyComboStats = newJockeyComboStats;
         _isLoading = false;
       });
     } catch (e) {
@@ -242,6 +271,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
           tabs: const [
             Tab(text: '個別成績'),
             Tab(text: '対戦成績'),
+            Tab(text: 'コンビ成績'),
           ],
         ),
       ),
@@ -291,6 +321,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
       children: [
         _buildIndividualStatsTab(),
         _buildMatchupStatsTab(),
+        _buildJockeyComboStatsTab(),
       ],
     );
   }
@@ -590,6 +621,47 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildJockeyComboStatsTab() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columnSpacing: 16.0,
+          columns: const [
+            DataColumn(label: Text('馬名')),
+            DataColumn(label: Text('騎手')),
+            DataColumn(label: Text('成績')),
+            DataColumn(label: Text('勝率'), numeric: true),
+            DataColumn(label: Text('連対率'), numeric: true),
+            DataColumn(label: Text('複勝率'), numeric: true),
+            DataColumn(label: Text('単回率'), numeric: true),
+            DataColumn(label: Text('複回率'), numeric: true),
+          ],
+          rows: widget.horses.map((horse) {
+            final stats = _jockeyComboStats[horse.horseId] ?? JockeyComboStats();
+            return DataRow(
+              cells: [
+                DataCell(Text(horse.horseName)),
+                DataCell(Text(horse.jockey)),
+                DataCell(
+                  stats.isFirstRide
+                      ? const Text('初', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold))
+                      : Text(stats.recordString),
+                ),
+                DataCell(Text('${stats.winRate.toStringAsFixed(1)}%')),
+                DataCell(Text('${stats.placeRate.toStringAsFixed(1)}%')),
+                DataCell(Text('${stats.showRate.toStringAsFixed(1)}%')),
+                DataCell(Text('${stats.winRecoveryRate.toStringAsFixed(1)}%')),
+                DataCell(Text('${stats.showRecoveryRate.toStringAsFixed(1)}%')),
+              ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }
