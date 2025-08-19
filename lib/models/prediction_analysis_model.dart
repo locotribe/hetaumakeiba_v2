@@ -20,3 +20,19 @@ class RacePacePrediction {
     this.advantageousStyle = "不明",
   });
 }
+
+enum FitnessRating { excellent, good, average, poor, unknown }
+
+class ConditionFitResult {
+  final FitnessRating trackFit;
+  final FitnessRating paceFit;
+  final FitnessRating weightFit;
+  final FitnessRating gateFit;
+
+  ConditionFitResult({
+    this.trackFit = FitnessRating.unknown,
+    this.paceFit = FitnessRating.unknown,
+    this.weightFit = FitnessRating.unknown,
+    this.gateFit = FitnessRating.unknown,
+  });
+}

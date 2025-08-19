@@ -49,6 +49,7 @@ class PredictionHorseDetail {
   HorseMemo? userMemo;
   final bool isScratched;
   HorsePredictionScore? predictionScore;
+  ConditionFitResult? conditionFit;
 
   PredictionHorseDetail({
     required this.horseId,
@@ -66,6 +67,7 @@ class PredictionHorseDetail {
     this.userMemo,
     required this.isScratched,
     this.predictionScore,
+    this.conditionFit,
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
