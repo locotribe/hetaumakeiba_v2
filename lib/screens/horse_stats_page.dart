@@ -263,6 +263,14 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                 _loadingMessage,
                 textAlign: TextAlign.center,
               ),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: _loadingProgress,
+                  minHeight: 12,
+                ),
+              ),
             ],
           ),
         ),
@@ -329,51 +337,259 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
       return const Center(child: Text('直接対決の成績はありません。'));
     }
 
-    // 馬IDと馬名のマップを作成
-    final horseNameMap = {for (var horse in widget.horses) horse.horseId: horse.horseName};
+    const double cellWidth = 50.0;
+    const double cellHeight = 50.0;
+    const double headerHeight = 50.0;
+    const double totalCellWidth = 70.0; // 集計列の幅
+
+    // 各馬の対戦成績を集計
+    final Map<String, Map<String, int>> horseTotals = {};
+    for (final horseA in widget.horses) {
+      int totalOpponentWins = 0;
+      int totalWinLegs = 0;
+      int totalLossLegs = 0;
+
+      for (final horseB in widget.horses) {
+        if (horseA.horseId == horseB.horseId) continue;
+
+        MatchupStats? stats;
+        try {
+          stats = _matchupStats.firstWhere((m) =>
+          (m.horseIdA == horseA.horseId && m.horseIdB == horseB.horseId) ||
+              (m.horseIdA == horseB.horseId && m.horseIdB == horseA.horseId));
+        } catch (e) {
+          stats = null;
+        }
+
+        if (stats != null) {
+          final wins = (stats.horseIdA == horseA.horseId) ? stats.horseAWins : stats.horseBWins;
+          final losses = stats.matchupCount - wins;
+          totalWinLegs += wins;
+          totalLossLegs += losses;
+          if (wins > losses) {
+            totalOpponentWins++;
+          }
+        }
+      }
+      horseTotals[horseA.horseId] = {
+        'Win': totalOpponentWins,
+        'WinLeg': totalWinLegs,
+        'LosLeg': totalLossLegs,
+      };
+    }
 
     return SingleChildScrollView(
-      scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 24.0,
-          columns: [
-            const DataColumn(label: Text('馬名')),
-            ...widget.horses.map((horse) => DataColumn(label: Text(horse.horseName))),
-          ],
-          rows: widget.horses.map((horseA) {
-            return DataRow(
-              cells: [
-                DataCell(Text(horseA.horseName, style: const TextStyle(fontWeight: FontWeight.bold))),
-                ...widget.horses.map((horseB) {
-                  if (horseA.horseId == horseB.horseId) {
-                    return const DataCell(Text('-')); // 自分自身との対戦
-                  }
-
-                  // 対戦成績を検索
-                  MatchupStats? stats;
-                  try {
-                    stats = _matchupStats.firstWhere((m) =>
-                    (m.horseIdA == horseA.horseId && m.horseIdB == horseB.horseId) ||
-                        (m.horseIdA == horseB.horseId && m.horseIdB == horseA.horseId));
-                  } catch (e) {
-                    stats = null;
-                  }
-
-                  if (stats == null) {
-                    return const DataCell(Text('')); // 対戦なし
-                  }
-
-                  int wins = (stats.horseIdA == horseA.horseId) ? stats.horseAWins : stats.horseBWins;
-                  int losses = stats.matchupCount - wins;
-
-                  return DataCell(Text('$wins-$losses'));
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 固定された行ヘッダー
+          IntrinsicWidth(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(height: headerHeight), // 左上の空セル
+                ...widget.horses.map((horse) {
+                  return Container(
+                    height: cellHeight,
+                    padding: const EdgeInsets.only(left: 8.0, right: 8.0),
+                    alignment: Alignment.centerLeft,
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+                      ),
+                    ),
+                    child: Text(
+                      horse.horseName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  );
                 }).toList(),
               ],
-            );
-          }).toList(),
-        ),
+            ),
+          ),
+          // 水平スクロール可能なデータ部分
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // スクロールする列ヘッダー
+                  Row(
+                    children: [
+                      ...widget.horses.map((horse) {
+                        final horseName = horse.horseName;
+                        final displayName = horseName.length > 3 ? horseName.substring(0, 3) : horseName;
+                        return Container(
+                          width: cellWidth,
+                          height: headerHeight,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(color: Colors.grey.shade400, width: 2),
+                            ),
+                          ),
+                          child: Text(
+                            '${horse.horseNumber}\n$displayName',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        );
+                      }).toList(),
+                      // 追加ヘッダー
+                      Container(
+                          width: totalCellWidth,
+                          height: headerHeight,
+                          alignment: Alignment.center,
+                          child: const Text('WIN',
+                              style: TextStyle(fontSize: 20),
+                              textAlign: TextAlign.center
+                          )
+                      ),
+                      Container(
+                          width: totalCellWidth,
+                          height: headerHeight,
+                          alignment: Alignment.center,
+                          child: const Text('W-Leg',
+                              style: TextStyle(fontSize: 20),
+                              textAlign: TextAlign.center
+                          )
+                      ),
+                      Container(
+                          width: totalCellWidth,
+                          height: headerHeight,
+                          alignment: Alignment.center,
+                          child: const Text('L-Leg',
+                              style: TextStyle(fontSize: 20),
+                              textAlign: TextAlign.center
+                          )
+                      ),
+                    ],
+                  ),
+                  // データ行
+                  ...widget.horses.map((horseA) {
+                    final totals = horseTotals[horseA.horseId] ?? {'Win': 0, 'WinLeg': 0, 'LosLeg': 0};
+                    return Row(
+                      children: [
+                        ...widget.horses.map((horseB) {
+                          String cellText = '';
+                          Color? cellColor;
+                          if (horseA.horseId == horseB.horseId) {
+                            cellText = '';
+                            cellColor = Colors.grey.shade500;
+                          } else {
+                            MatchupStats? stats;
+                            try {
+                              stats = _matchupStats.firstWhere((m) =>
+                              (m.horseIdA == horseA.horseId && m.horseIdB == horseB.horseId) ||
+                                  (m.horseIdA == horseB.horseId && m.horseIdB == horseA.horseId));
+                            } catch (e) {
+                              stats = null;
+                            }
+
+                            if (stats != null) {
+                              int wins = (stats.horseIdA == horseA.horseId) ? stats.horseAWins : stats.horseBWins;
+                              int losses = stats.matchupCount - wins;
+                              cellText = '$wins-$losses';
+                            }
+                          }
+                          return Container(
+                            width: cellWidth,
+                            height: cellHeight,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: cellColor,
+                              border: Border(
+                                bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+                              ),
+                            ),
+                            child: Builder( // Builderウィジェットを追加
+                              builder: (context) {
+                                Widget symbolWidget = const SizedBox.shrink();
+                                if (cellText.isNotEmpty && cellText != '-') {
+                                  final parts = cellText.split('-');
+                                  if (parts.length == 2) {
+                                    final wins = int.tryParse(parts[0]);
+                                    final losses = int.tryParse(parts[1]);
+                                    if (wins != null && losses != null) {
+                                      if (wins > losses) {
+                                        symbolWidget = const Text(
+                                          '〇',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.blue,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        );
+                                      } else if (wins < losses) {
+                                        symbolWidget = const Text(
+                                          '✕',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  }
+                                }
+                                return Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    symbolWidget,
+                                    Text(
+                                      cellText,
+                                      style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          );
+                        }).toList(),
+                        // 追加セル
+                        Container(
+                            width: totalCellWidth,
+                            height: cellHeight,
+                            alignment: Alignment.center,
+                            child: Text(totals['Win'].toString(),
+                                style: const TextStyle(fontSize: 20.0,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue
+                                )
+                            )
+                        ),
+                        Container(
+                            width: totalCellWidth,
+                            height: cellHeight,
+                            alignment: Alignment.center,
+                            child: Text(totals['WinLeg'].toString(),
+                                style: const TextStyle(fontSize: 20.0,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue
+                                )
+                            )
+                        ),
+                        Container(
+                            width: totalCellWidth,
+                            height: cellHeight,
+                            alignment: Alignment.center,
+                            child: Text(totals['LosLeg'].toString(),
+                                style: const TextStyle(fontSize: 20.0,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red
+                                )
+                            )
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
