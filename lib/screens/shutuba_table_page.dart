@@ -23,6 +23,7 @@ import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
+import 'package:data_table_2/data_table_2.dart';
 
 // ソート対象の列を識別するためのenum
 enum SortableColumn {
@@ -64,6 +65,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   bool _isAscending = true;
   // タブコントローラー
   late TabController _tabController;
+  // === ▼▼▼ 修正箇所 ▼▼▼ ===
+  // カードの開閉状態を管理する変数
+  bool _isCardExpanded = true;
+  // === ▲▲▲ 修正箇所 ▲▲▲ ===
 
 
   @override
@@ -682,6 +687,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           ),
         ],
       ),
+      // === ▼▼▼ 修正箇所 ▼▼▼ ===
+      // 全体のレイアウトをColumnに変更
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _predictionRaceData == null
@@ -698,20 +705,17 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           ],
         ),
       )
-          : RefreshIndicator(
-        onRefresh: () => _loadShutubaData(refresh: true),
-        // === ▼▼▼ 修正箇所 ▼▼▼ ===
-        // ColumnからNestedScrollViewに変更し、全体をスクロール可能にする
-        child: NestedScrollView(
-          headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-            return <Widget>[
-              // 上部のレース情報カード
-              SliverToBoxAdapter(
-                child: _buildRaceInfoCard(_predictionRaceData!),
-              ),
-              // スクロール時に追従するタブバー
-              SliverPersistentHeader(
-                delegate: _SliverTabBarDelegate(
+          : Column(
+        children: [
+          // 折りたたみ可能なレース情報カード
+          _buildCollapsibleRaceInfoCard(_predictionRaceData!),
+          // タブとテーブルの領域
+          Expanded(
+            child: IgnorePointer(
+              // カードが展開されているときは下のテーブル操作を無効化
+              ignoring: _isCardExpanded,
+              child: Column(
+                children: [
                   TabBar(
                     controller: _tabController,
                     isScrollable: true,
@@ -724,196 +728,245 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                       Tab(text: 'メモ'),
                     ],
                   ),
-                ),
-                pinned: true, // 上部に固定
-              ),
-            ];
-          },
-          // タブの中身
-          body: Builder(
-              builder: (context) {
-                // ソート処理
-                final sortedHorses = List<PredictionHorseDetail>.from(_predictionRaceData!.horses);
-                sortedHorses.sort((a, b) {
-                  int comparison;
-                  int compareNullsLast(Comparable? valA, Comparable? valB) {
-                    if (valA == null && valB == null) return 0;
-                    if (valA == null) return 1;
-                    if (valB == null) return -1;
-                    return valA.compareTo(valB);
-                  }
+                  Expanded(
+                    child: Builder(
+                        builder: (context) {
+                          // ソート処理
+                          final sortedHorses = List<PredictionHorseDetail>.from(_predictionRaceData!.horses);
+                          sortedHorses.sort((a, b) {
+                            int comparison;
+                            int compareNullsLast(Comparable? valA, Comparable? valB) {
+                              if (valA == null && valB == null) return 0;
+                              if (valA == null) return 1;
+                              if (valB == null) return -1;
+                              return valA.compareTo(valB);
+                            }
 
-                  switch (_sortColumn) {
-                    case SortableColumn.mark:
-                      const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '消': 5, '　': 6};
-                      final aMark = markOrder[a.userMark?.mark] ?? 99;
-                      final bMark = markOrder[b.userMark?.mark] ?? 99;
-                      comparison = aMark.compareTo(bMark);
-                      break;
-                    case SortableColumn.gateNumber:
-                      comparison = a.gateNumber.compareTo(b.gateNumber);
-                      break;
-                    case SortableColumn.horseNumber:
-                      comparison = a.horseNumber.compareTo(b.horseNumber);
-                      break;
-                    case SortableColumn.horseName:
-                      comparison = a.horseName.compareTo(b.horseName);
-                      break;
-                    case SortableColumn.popularity:
-                      comparison = compareNullsLast(a.popularity, b.popularity);
-                      break;
-                    case SortableColumn.odds:
-                      comparison = compareNullsLast(a.odds, b.odds);
-                      break;
-                    case SortableColumn.carriedWeight:
-                      comparison = a.carriedWeight.compareTo(b.carriedWeight);
-                      break;
-                    case SortableColumn.horseWeight:
-                      final aWeight = int.tryParse(a.horseWeight?.split('(').first ?? '');
-                      final bWeight = int.tryParse(b.horseWeight?.split('(').first ?? '');
-                      comparison = compareNullsLast(aWeight, bWeight);
-                      break;
-                    case SortableColumn.overallScore:
-                      final aScore = _overallScores[a.horseId];
-                      final bScore = _overallScores[b.horseId];
-                      comparison = compareNullsLast(aScore, bScore);
-                      break;
-                    default:
-                      comparison = a.horseNumber.compareTo(b.horseNumber);
-                      break;
-                  }
-                  return _isAscending ? comparison : -comparison;
-                });
+                            switch (_sortColumn) {
+                              case SortableColumn.mark:
+                                const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '消': 5, '　': 6};
+                                final aMark = markOrder[a.userMark?.mark] ?? 99;
+                                final bMark = markOrder[b.userMark?.mark] ?? 99;
+                                comparison = aMark.compareTo(bMark);
+                                break;
+                              case SortableColumn.gateNumber:
+                                comparison = a.gateNumber.compareTo(b.gateNumber);
+                                break;
+                              case SortableColumn.horseNumber:
+                                comparison = a.horseNumber.compareTo(b.horseNumber);
+                                break;
+                              case SortableColumn.horseName:
+                                comparison = a.horseName.compareTo(b.horseName);
+                                break;
+                              case SortableColumn.popularity:
+                                comparison = compareNullsLast(a.popularity, b.popularity);
+                                break;
+                              case SortableColumn.odds:
+                                comparison = compareNullsLast(a.odds, b.odds);
+                                break;
+                              case SortableColumn.carriedWeight:
+                                comparison = a.carriedWeight.compareTo(b.carriedWeight);
+                                break;
+                              case SortableColumn.horseWeight:
+                                final aWeight = int.tryParse(a.horseWeight?.split('(').first ?? '');
+                                final bWeight = int.tryParse(b.horseWeight?.split('(').first ?? '');
+                                comparison = compareNullsLast(aWeight, bWeight);
+                                break;
+                              case SortableColumn.overallScore:
+                                final aScore = _overallScores[a.horseId];
+                                final bScore = _overallScores[b.horseId];
+                                comparison = compareNullsLast(aScore, bScore);
+                                break;
+                              default:
+                                comparison = a.horseNumber.compareTo(b.horseNumber);
+                                break;
+                            }
+                            return _isAscending ? comparison : -comparison;
+                          });
 
-                return TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildStartersTab(sortedHorses),
-                    _buildInfoTab(sortedHorses),
-                    _buildJockeyTrainerTab(sortedHorses),
-                    _buildAnalysisTab(sortedHorses),
-                    _buildPerformanceTab(sortedHorses),
-                    _buildMemoTab(sortedHorses),
-                  ],
-                );
-              }
-          ),
-        ),
-        // === ▲▲▲ 修正箇所 ▲▲▲ ===
-      ),
-    );
-  }
-
-  Widget _buildRaceInfoCard(PredictionRaceData race) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${race.raceDate} ${race.venue} ${race.raceNumber}R',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              race.raceName,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(race.raceDetails1 ?? ''),
-            const Divider(height: 24),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('展開予想', style: TextStyle(fontWeight: FontWeight.bold)),
-                if (race.racePacePrediction != null)
-                  Text(
-                      '${race.racePacePrediction!.predictedPace} (${race.racePacePrediction!.advantageousStyle})'),
-                const SizedBox(height: 8),
-              ],
-            ),
-
-            const Divider(),
-            ListTile(
-              visualDensity: const VisualDensity(vertical: -4.0), // 変更点: 間隔を詰める
-              leading: Icon(Icons.analytics_outlined, color: Theme.of(context).primaryColor),
-              title: Text(
-                'AI総合予測を見る',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).primaryColor,
-                  fontSize: 14.0, // 変更点: 文字サイズ
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ComprehensivePredictionPage(
-                      raceData: _predictionRaceData!,
-                      overallScores: _overallScores,
-                      expectedValues: _expectedValues,
+                          return TabBarView(
+                            controller: _tabController,
+                            children: [
+                              _buildStartersTab(sortedHorses),
+                              _buildInfoTab(sortedHorses),
+                              _buildJockeyTrainerTab(sortedHorses),
+                              _buildAnalysisTab(sortedHorses),
+                              _buildPerformanceTab(sortedHorses),
+                              _buildMemoTab(sortedHorses),
+                            ],
+                          );
+                        }
                     ),
                   ),
-                );
-              },
-            ),
-            ListTile(
-              dense: true, // 変更点: 間隔を詰める
-              leading: const Icon(Icons.history),
-              title: const Text(
-                '過去データ分析',
-                style: TextStyle(fontSize: 14.0), // 変更点: 文字サイズ
+                ],
               ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _navigateToStatisticsPage,
             ),
-            ListTile(
-              dense: true, // 変更点: 間隔を詰める
-              leading: const Icon(Icons.group),
-              title: const Text(
-                '全出走馬データ分析',
-                style: TextStyle(fontSize: 14.0), // 変更点: 文字サイズ
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                if (_predictionRaceData != null) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => HorseStatsPage(
-                        raceId: widget.raceId,
-                        raceName: _predictionRaceData!.raceName,
-                        horses: _predictionRaceData!.horses,
-                      ),
-                    ),
-                  );
-                }
-              },
+          ),
+        ],
+      ),
+      // === ▲▲▲ 修正箇所 ▲▲▲ ===
+    );
+  }
+
+  // === ▼▼▼ 修正箇所 ▼▼▼ ===
+  /// 折りたたみ可能なレース情報カードを構築する
+  Widget _buildCollapsibleRaceInfoCard(PredictionRaceData race) {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _isCardExpanded = !_isCardExpanded;
+        });
+      },
+      child: Card(
+        margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+          child: AnimatedSize( // AnimatedSizeでラップしてサイズ変更をアニメーション化
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: AnimatedCrossFade(
+              duration: const Duration(milliseconds: 300),
+              crossFadeState: _isCardExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              firstChild: _buildExpandedCardContent(race),
+              secondChild: _buildCollapsedCardContent(race),
+              firstCurve: Curves.easeIn,
+              secondCurve: Curves.easeOut,
+              sizeCurve: Curves.easeInOut,
             ),
-            const Divider(),
-            // ▼▼▼【テスト用コード】▼▼▼
-            ListTile(
-              dense: true, // 変更点: 間隔を詰める
-              leading: const Icon(Icons.delete_sweep_outlined, color: Colors.red),
-              title: const Text('分析キャッシュをクリア', style: TextStyle(color: Colors.red, fontSize: 13)), // 文字サイズを調整
-              onTap: () async {
-                await _dbHelper.clearRaceStatistics();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('分析キャッシュをクリアしました。')),
-                  );
-                }
-              },
-            ),
-            // ▲▲▲【テスト用コード】▲▲▲
-          ],
+          ),
         ),
       ),
     );
   }
+
+  /// 展開時のカード内容
+  Widget _buildExpandedCardContent(PredictionRaceData race) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                '${race.raceDate} ${race.venue} ${race.raceNumber}R',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const Icon(Icons.expand_less),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          race.raceName,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Text(race.raceDetails1 ?? ''),
+        const Divider(height: 24),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('展開予想', style: TextStyle(fontWeight: FontWeight.bold)),
+            if (race.racePacePrediction != null)
+              Text(
+                  '${race.racePacePrediction!.predictedPace} (${race.racePacePrediction!.advantageousStyle})'),
+            const SizedBox(height: 8),
+          ],
+        ),
+        const Divider(),
+        ListTile(
+          visualDensity: const VisualDensity(vertical: -4.0),
+          leading: Icon(Icons.analytics_outlined, color: Theme.of(context).primaryColor),
+          title: Text(
+            'AI総合予測を見る',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).primaryColor,
+              fontSize: 14.0,
+            ),
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ComprehensivePredictionPage(
+                  raceData: _predictionRaceData!,
+                  overallScores: _overallScores,
+                  expectedValues: _expectedValues,
+                ),
+              ),
+            );
+          },
+        ),
+        ListTile(
+          dense: true,
+          leading: const Icon(Icons.history),
+          title: const Text(
+            '過去データ分析',
+            style: TextStyle(fontSize: 14.0),
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: _navigateToStatisticsPage,
+        ),
+        ListTile(
+          dense: true,
+          leading: const Icon(Icons.group),
+          title: const Text(
+            '全出走馬データ分析',
+            style: TextStyle(fontSize: 14.0),
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            if (_predictionRaceData != null) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => HorseStatsPage(
+                    raceId: widget.raceId,
+                    raceName: _predictionRaceData!.raceName,
+                    horses: _predictionRaceData!.horses,
+                  ),
+                ),
+              );
+            }
+          },
+        ),
+        const Divider(),
+        ListTile(
+          dense: true,
+          leading: const Icon(Icons.delete_sweep_outlined, color: Colors.red),
+          title: const Text('分析キャッシュをクリア', style: TextStyle(color: Colors.red, fontSize: 13)),
+          onTap: () async {
+            await _dbHelper.clearRaceStatistics();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('分析キャッシュをクリアしました。')),
+              );
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  /// 折りたたみ時のカード内容
+  Widget _buildCollapsedCardContent(PredictionRaceData race) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible( // ExpandedをFlexibleに変更し、レイアウトエラーを解消
+          child: Text(
+            race.raceName,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const Icon(Icons.expand_more),
+      ],
+    );
+  }
+  // === ▲▲▲ 修正箇所 ▲▲▲ ===
 
   Widget _buildConditionFitCell(ConditionFitResult? fitResult) {
     if (fitResult == null) {
@@ -968,20 +1021,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     required List<PredictionHorseDetail> horses,
     required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
   }) {
-    return SingleChildScrollView(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          sortColumnIndex: columns.indexWhere((c) => (c.onSort != null)), // 現在ソート中の列を見つける
-          sortAscending: _isAscending,
-          columnSpacing: 12.0,
-          headingRowHeight: 40,
-          dataRowMinHeight: 48,
-          dataRowMaxHeight: 56,
-          columns: columns,
-          rows: horses.map((horse) => DataRow(cells: cellBuilder(horse))).toList(),
-        ),
-      ),
+    return DataTable2(
+      fixedTopRows: 1, // ヘッダー行を固定
+      sortColumnIndex: columns.indexWhere((c) => (c.onSort != null)), // 現在ソート中の列を見つける
+      sortAscending: _isAscending,
+      columnSpacing: 12.0,
+      headingRowHeight: 40,
+      dataRowHeight: 48,
+      columns: columns,
+      rows: horses.map((horse) => DataRow(cells: cellBuilder(horse))).toList(),
     );
   }
 
@@ -1393,33 +1441,3 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
   }
 }
-
-// === ▼▼▼ 修正箇所 ▼▼▼ ===
-/// SliverPersistentHeaderのためのカスタムDelegate
-/// スクロール時にTabBarを画面上部に固定する役割を担う
-class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
-  _SliverTabBarDelegate(this.tabBar);
-
-  final TabBar tabBar;
-
-  @override
-  double get minExtent => tabBar.preferredSize.height;
-  @override
-  double get maxExtent => tabBar.preferredSize.height;
-
-  @override
-  Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
-    // スクロール中にタブバーが他のウィジェットの背後に隠れないように背景色を設定
-    return Container(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: tabBar,
-    );
-  }
-
-  @override
-  bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
-    return tabBar != oldDelegate.tabBar;
-  }
-}
-// === ▲▲▲ 修正箇所 ▲▲▲ ===
