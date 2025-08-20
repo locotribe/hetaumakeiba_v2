@@ -65,10 +65,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   bool _isAscending = true;
   // タブコントローラー
   late TabController _tabController;
-  // === ▼▼▼ 修正箇所 ▼▼▼ ===
   // カードの開閉状態を管理する変数
   bool _isCardExpanded = true;
-  // === ▲▲▲ 修正箇所 ▲▲▲ ===
 
 
   @override
@@ -744,7 +742,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
                             switch (_sortColumn) {
                               case SortableColumn.mark:
-                                const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '消': 5, '　': 6};
+                                const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '★': 5, '消': 6};
                                 final aMark = markOrder[a.userMark?.mark] ?? 99;
                                 final bMark = markOrder[b.userMark?.mark] ?? 99;
                                 comparison = aMark.compareTo(bMark);
@@ -808,7 +806,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
-  // === ▼▼▼ 修正箇所 ▼▼▼ ===
   /// 折りたたみ可能なレース情報カードを構築する
   Widget _buildCollapsibleRaceInfoCard(PredictionRaceData race) {
     return InkWell(
@@ -966,7 +963,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       ],
     );
   }
-  // === ▲▲▲ 修正箇所 ▲▲▲ ===
 
   Widget _buildConditionFitCell(ConditionFitResult? fitResult) {
     if (fitResult == null) {
@@ -1017,15 +1013,16 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   /// 各タブのDataTableを生成するための共通ラッパー
   Widget _buildDataTableForTab({
-    required List<DataColumn> columns,
+    required List<DataColumn2> columns,
     required List<PredictionHorseDetail> horses,
     required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
   }) {
     return DataTable2(
+      minWidth: 800,
       fixedTopRows: 1, // ヘッダー行を固定
       sortColumnIndex: columns.indexWhere((c) => (c.onSort != null)), // 現在ソート中の列を見つける
       sortAscending: _isAscending,
-      columnSpacing: 12.0,
+      columnSpacing: 8.0,
       headingRowHeight: 40,
       dataRowHeight: 48,
       columns: columns,
@@ -1037,11 +1034,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Widget _buildStartersTab(List<PredictionHorseDetail> horses) {
     return _buildDataTableForTab(
       columns: [
-        DataColumn(label: const Text('印'), onSort: (i, asc) => _onSort(SortableColumn.mark)),
-        DataColumn(label: const Text('枠'), onSort: (i, asc) => _onSort(SortableColumn.gateNumber)),
-        DataColumn(label: const Text('馬番'), onSort: (i, asc) => _onSort(SortableColumn.horseNumber)),
-        DataColumn(label: const Text('馬名'), onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-        DataColumn(label: const Text('人気'), numeric: true, onSort: (i, asc) => _onSort(SortableColumn.popularity)),
+        DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
+        DataColumn2(label: const Text('枠'), fixedWidth: 45, onSort: (i, asc) => _onSort(SortableColumn.gateNumber)),
+        DataColumn2(label: const Text('番'), fixedWidth: 45, onSort: (i, asc) => _onSort(SortableColumn.horseNumber)),
+        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)), // 馬名の幅を150pxに固定
+        DataColumn2(label: const Text('人気'), fixedWidth: 50, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.popularity)),
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -1069,11 +1066,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Widget _buildInfoTab(List<PredictionHorseDetail> horses) {
     return _buildDataTableForTab(
       columns: [
-        DataColumn(label: const Text('印'), onSort: (i, asc) => _onSort(SortableColumn.mark)),
-        DataColumn(label: const Text('馬名'), onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-        DataColumn(label: const Text('オッズ'), numeric: true, onSort: (i, asc) => _onSort(SortableColumn.odds)),
-        const DataColumn(label: Text('性齢')),
-        DataColumn(label: const Text('斤量'), onSort: (i, asc) => _onSort(SortableColumn.carriedWeight)),
+        DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
+        DataColumn2(label: const Text('馬名'), fixedWidth: 150,  onSort: (i, asc) => _onSort(SortableColumn.horseName)),
+        DataColumn2(label: const Text('オッズ'), fixedWidth: 70, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.odds)),
+        const DataColumn2(label: Text('性齢'), fixedWidth: 40,),
+        DataColumn2(label: const Text('斤量'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.carriedWeight)),
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -1101,11 +1098,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Widget _buildJockeyTrainerTab(List<PredictionHorseDetail> horses) {
     return _buildDataTableForTab(
       columns: [
-        DataColumn(label: const Text('印'), onSort: (i, asc) => _onSort(SortableColumn.mark)),
-        DataColumn(label: const Text('馬名'), onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-        const DataColumn(label: Text('騎手')),
-        const DataColumn(label: Text('調教師')),
-        DataColumn(label: const Text('馬体重'), onSort: (i, asc) => _onSort(SortableColumn.horseWeight)),
+        DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
+        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
+        const DataColumn2(label: Text('騎手'), fixedWidth: 70,),
+        const DataColumn2(label: Text('調教師'), fixedWidth: 70,),
+        DataColumn2(label: const Text('馬体重'), fixedWidth: 70, onSort: (i, asc) => _onSort(SortableColumn.horseWeight)),
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -1133,10 +1130,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Widget _buildAnalysisTab(List<PredictionHorseDetail> horses) {
     return _buildDataTableForTab(
       columns: [
-        DataColumn(label: const Text('印'), onSort: (i, asc) => _onSort(SortableColumn.mark)),
-        DataColumn(label: const Text('馬名'), onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-        DataColumn(label: const Text('総合評価'), onSort: (i, asc) => _onSort(SortableColumn.overallScore)),
-        const DataColumn(label: Text('複合適性')),
+        DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
+        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
+        DataColumn2(label: const Text('総合評価'), fixedWidth: 80, onSort: (i, asc) => _onSort(SortableColumn.overallScore)),
+        const DataColumn2(label: Text('複合適性'), fixedWidth: 80,),
       ],
       horses: horses,
       cellBuilder: (horse) {
@@ -1173,13 +1170,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Widget _buildPerformanceTab(List<PredictionHorseDetail> horses) {
     return _buildDataTableForTab(
       columns: [
-        DataColumn(label: const Text('印'), onSort: (i, asc) => _onSort(SortableColumn.mark)),
-        DataColumn(label: const Text('馬名'), onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-        const DataColumn(label: SizedBox(width: 100, child: Text('前走'))),
-        const DataColumn(label: SizedBox(width: 100, child: Text('前々走'))),
-        const DataColumn(label: SizedBox(width: 100, child: Text('3走前'))),
-        const DataColumn(label: SizedBox(width: 100, child: Text('4走前'))),
-        const DataColumn(label: SizedBox(width: 100, child: Text('5走前'))),
+        DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
+        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
+        const DataColumn2(label: SizedBox(width: 120, child: Text('前走'))),
+        const DataColumn2(label: SizedBox(width: 120, child: Text('前々走'))),
+        const DataColumn2(label: SizedBox(width: 120, child: Text('3走前'))),
+        const DataColumn2(label: SizedBox(width: 120, child: Text('4走前'))),
+        const DataColumn2(label: SizedBox(width: 120, child: Text('5走前'))),
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -1205,9 +1202,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Widget _buildMemoTab(List<PredictionHorseDetail> horses) {
     return _buildDataTableForTab(
       columns: [
-        DataColumn(label: const Text('印'), onSort: (i, asc) => _onSort(SortableColumn.mark)),
-        DataColumn(label: const Text('馬名'), onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-        const DataColumn(label: Text('メモ')),
+        DataColumn2(label: const Text('印'), fixedWidth: 80, onSort: (i, asc) => _onSort(SortableColumn.mark)),
+        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
+        const DataColumn2(label: Text('メモ'), fixedWidth: 50,),
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -1229,36 +1226,58 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
-
-  /// 印のドロップダウンを作成
+  /// 印のポップアップメニューを作成
   Widget _buildMarkDropdown(PredictionHorseDetail horse) {
-    return DropdownButtonHideUnderline(
-      child: DropdownButton<String>(
-        value: horse.userMark?.mark,
-        hint: const Icon(Icons.edit_note, size: 20),
-        items: <String>['◎', '〇', '▲', '△', '✕', '★', '消'].map((String value) {
-          return DropdownMenuItem<String>(
-            value: value,
-            child: Text(value, style: const TextStyle(fontSize: 16.0)),
-          );
-        }).toList(),
-        onChanged: (String? newValue) async {
-          final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
-          if (newValue != null && userId != null) {
-            final userMark = UserMark(
-              userId: userId,
-              raceId: widget.raceId,
-              horseId: horse.horseId,
-              mark: newValue,
-              timestamp: DateTime.now(),
-            );
-            await _dbHelper.insertOrUpdateUserMark(userMark);
-            setState(() {
-              horse.userMark = userMark;
-            });
-          }
-        },
+    return PopupMenuButton<String>(
+      // セル内に表示するウィジェット
+      child: Center(
+        child: Text(
+          horse.userMark?.mark ?? '--', // 選択されていれば印、なければ空白
+          style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+        ),
       ),
+
+      // このconstraintsプロパティを追加
+      constraints: const BoxConstraints(
+        minWidth: 2.0 * 24.0, // 最小幅を指定
+        maxWidth: 2.0 * 24.0,  // 最大幅を指定
+      ),
+
+      // ポップアップメニューの項目
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+        ...['◎', '〇', '▲', '△', '✕', '★'].map((String value) {
+          return PopupMenuItem<String>(
+            value: value,
+            height: 36, // 高さを詰める
+            child: Center(child: Text(value)), // 中央揃えにする
+          );
+        }),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: '消',
+          height: 36, // 高さを詰める
+          child: Center(child: Text('消')), // 中央揃えにする
+        ),
+      ],
+      // 項目が選択されたときの処理
+      onSelected: (String newValue) async {
+        final userId = localUserId;
+        if (userId != null) {
+          final userMark = UserMark(
+            userId: userId,
+            raceId: widget.raceId,
+            horseId: horse.horseId,
+            mark: newValue,
+            timestamp: DateTime.now(),
+          );
+          await _dbHelper.insertOrUpdateUserMark(userMark);
+          setState(() {
+            horse.userMark = userMark;
+          });
+        }
+      },
+      // メニュー全体のパディングを削除
+      padding: EdgeInsets.zero,
     );
   }
 
