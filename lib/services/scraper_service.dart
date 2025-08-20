@@ -57,7 +57,10 @@ class ScraperService {
       final raceInfo = _safeGetText(raceInfoSpan).replaceAll(RegExp(r'\s+'), ' ');
       final smallTxt = _safeGetText(document.querySelector('p.smalltxt'));
       final raceDate = smallTxt.split(' ').first;
-      final raceGrade = smallTxt.split(' ').last;
+      // ▼▼▼【修正箇所】▼▼▼
+      // レースタイトル自体からグレードを抽出するように変更
+      final raceGrade = raceTitle;
+      // ▲▲▲【修正箇所】▲▲▲
       final horseResults = _parseHorseResults(document);
       final refunds = _parseRefunds(document);
       final cornerPassages = _parseCornerPassages(document);
@@ -699,27 +702,12 @@ class ScraperService {
   }
 
   /// レース名から過去10年分のレースIDリストをスクレイピングする
-  static Future<List<String>> fetchPastRaceIdsByName({
+  static Future<List<String>> scrapePastRaceIdsFromSearch({
     required String raceName,
-    required RaceResult baseRaceResult,
   }) async {
     final searchUrl = await generateNetkeibaRaceSearchUrl(raceName: raceName);
     final List<String> pastIds = [];
     final currentYear = DateTime.now().year;
-
-    // 基準となるレースの条件を抽出
-    final baseGradeMatch = RegExp(r'\((J\.?G[1-3])\)', caseSensitive: false).firstMatch(baseRaceResult.raceTitle) ?? RegExp(r'\((G[1-3])\)', caseSensitive: false).firstMatch(baseRaceResult.raceTitle);
-    final baseGrade = baseGradeMatch?.group(1);
-
-    final baseRaceInfoParts = baseRaceResult.raceInfo.split('/');
-    final baseTrackType = baseRaceInfoParts.isNotEmpty && baseRaceInfoParts[0].trim().startsWith('ダ') ? 'ダート' : '芝';
-    final baseDistanceMatch = RegExp(r'(\d+)m').firstMatch(baseRaceInfoParts.isNotEmpty ? baseRaceInfoParts[0] : '');
-    final baseDistance = baseDistanceMatch?.group(1);
-
-    if (baseGrade == null || baseDistance == null) {
-      print('基準レースの条件（グレードまたは距離）が特定できませんでした。前方一致検索を試みます。');
-      // フォールバックとして元のロジックも残す
-    }
 
     try {
       final response = await http.get(Uri.parse(searchUrl), headers: _headers);
@@ -743,42 +731,18 @@ class ScraperService {
         final raceNameCell = cells[4].querySelector('a');
         if (raceNameCell == null) continue;
 
-        // 日付セルから年を抽出してフィルタリング
         final dateText = _safeGetText(cells[0]);
         final yearMatch = RegExp(r'(\d{4})/\d{2}/\d{2}').firstMatch(dateText);
         if (yearMatch != null) {
           final year = int.parse(yearMatch.group(1)!);
-          if (year >= currentYear - 10) {
-            bool isMatch = false;
-
-            if (baseGrade != null && baseDistance != null) {
-              // 条件ベースのフィルタリング
-              final scrapedGradeText = _safeGetText(cells[2]);
-              final scrapedDistanceText = _safeGetText(cells[3]);
-
-              final scrapedTrackType = scrapedDistanceText.contains('ダ') ? 'ダート' : '芝';
-              final scrapedDistance = scrapedDistanceText.replaceAll(RegExp(r'[^0-9]'), '');
-
-              if (scrapedGradeText.contains(baseGrade) &&
-                  scrapedTrackType == baseTrackType &&
-                  scrapedDistance == baseDistance) {
-                isMatch = true;
-              }
-            } else {
-              // フォールバック: 前方一致検索
-              final scrapedRaceName = _safeGetText(raceNameCell);
-              if (scrapedRaceName.startsWith(raceName)) {
-                isMatch = true;
-              }
-            }
-
-            if (isMatch) {
-              final href = raceNameCell.attributes['href'];
-              if (href != null) {
-                final id = getRaceIdFromUrl(href);
-                if (id != null) {
-                  pastIds.add(id);
-                }
+          // ▼▼▼【修正箇所】▼▼▼
+          if (year >= currentYear - 10 && year < currentYear) {
+            // ▲▲▲【修正箇所】▲▲▲
+            final href = raceNameCell.attributes['href'];
+            if (href != null) {
+              final id = getRaceIdFromUrl(href);
+              if (id != null) {
+                pastIds.add(id);
               }
             }
           }

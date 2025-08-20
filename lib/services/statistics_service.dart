@@ -10,35 +10,39 @@ import 'package:hetaumakeiba_v2/logic/parse.dart';
 class StatisticsService {
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  // ▼▼▼【修正箇所】▼▼▼
   /// 分析のために、指定されたレースの過去結果リストを取得する
   Future<List<RaceResult>> fetchPastRacesForAnalysis(String raceName, String raceId) async {
-    final baseRaceResult = await ScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$raceId');
-
-    final pastRaceIds = await ScraperService.fetchPastRaceIdsByName(
+    // scraper_serviceから全ての候補IDを取得
+    final pastRaceIdCandidates = await ScraperService.scrapePastRaceIdsFromSearch(
       raceName: raceName,
-      baseRaceResult: baseRaceResult,
     );
 
-    if (pastRaceIds.isEmpty) {
-      print('警告: $raceName の過去レースIDが見つかりませんでした。');
+    if (pastRaceIdCandidates.isEmpty) {
+      print('警告: $raceName の過去レースID候補が見つかりませんでした。');
       return [];
     }
+    print('【情報】${pastRaceIdCandidates.length}件の過去レースID候補が見つかりました。');
 
     final List<RaceResult> pastResults = [];
-    for (final pastId in pastRaceIds) {
+    for (final pastId in pastRaceIdCandidates) {
       // まずDBから試みる
       RaceResult? result = await _dbHelper.getRaceResult(pastId);
       if (result == null) {
         // DBになければスクレイピング
+        print('DBに無いためWebから取得: $pastId');
         result = await ScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
         await _dbHelper.insertOrUpdateRaceResult(result);
+        await Future.delayed(const Duration(milliseconds: 200)); // サーバー負荷軽減
       }
+
+      // 照合ロジックを撤廃し、取得した結果をそのまま追加する
       pastResults.add(result);
     }
+
+    print('【最終結果】${pastResults.length}件の過去レース結果を取得しました。');
+
     return pastResults;
   }
-  // ▲▲▲【修正箇所】▲▲▲
 
   // 外部から直接呼び出されるメインの処理
   Future<RaceStatistics?> processAndSaveRaceStatistics(String raceId, String raceName) async {
