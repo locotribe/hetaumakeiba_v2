@@ -11,7 +11,8 @@ import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/main.dart'; // この行を追加
+import 'package:hetaumakeiba_v2/main.dart';
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class TicketListItem {
   final String raceId; // 新しいアーキテクチャで必要なraceId

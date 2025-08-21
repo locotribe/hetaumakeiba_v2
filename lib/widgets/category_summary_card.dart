@@ -5,6 +5,7 @@ import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class CategorySummaryCard extends StatelessWidget {
   final String title;

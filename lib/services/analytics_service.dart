@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class AnalyticsService {
   final DatabaseHelper _dbHelper = DatabaseHelper();

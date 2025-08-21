@@ -3,6 +3,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 // itertoolsパッケージの代替となる、組み合わせ計算の関数
 Iterable<List<T>> combinations<T>(List<T> elements, int r) sync* {

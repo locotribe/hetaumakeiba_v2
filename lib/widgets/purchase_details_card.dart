@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class PurchaseDetailsCard extends StatelessWidget {
   final Map<String, dynamic> parsedResult; // 全体の解析結果を渡す

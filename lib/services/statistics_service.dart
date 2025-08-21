@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class StatisticsService {
   final DatabaseHelper _dbHelper = DatabaseHelper();

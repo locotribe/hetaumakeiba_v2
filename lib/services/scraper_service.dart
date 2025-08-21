@@ -14,6 +14,7 @@ import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class ScraperService {
 

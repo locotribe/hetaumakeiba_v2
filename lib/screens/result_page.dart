@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class ResultPage extends StatefulWidget {
   final Map<String, dynamic>? parsedResult;
