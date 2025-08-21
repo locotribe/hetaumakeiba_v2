@@ -113,23 +113,32 @@ void generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMethod
               }
             } else { // マルチではない通常のながし
               if (di['ながし種別'] == '軸2頭ながし') {
-                final nagashiType = di['ながし']; // 例: '1・2着ながし'
-                // 軸馬は1番目のリスト、相手馬は2番目のリストから取得
-                final axisHorses = firstAxis;
-                final otherHorses = secondAxis;
-
-                // 軸馬2頭の全ての着順パターンを生成 (例: [1,2] -> [1,2]と[2,1])
-                for (final p in permutations(axisHorses, 2)) {
-                  // 各相手馬と組み合わせる
-                  for (final o in otherHorses) {
-                    // 軸馬と相手馬が重複していないことを確認
-                    if (p[0] != o && p[1] != o) {
-                      if (nagashiType == '1・2着ながし') {
-                        allCombinations.add([p[0], p[1], o]);
-                      } else if (nagashiType == '1・3着ながし') {
-                        allCombinations.add([p[0], o, p[1]]);
-                      } else if (nagashiType == '2・3着ながし') {
-                        allCombinations.add([o, p[0], p[1]]);
+                // ▼▼▼【修正箇所2】買い目が着順固定 (例: 1着に1頭、2着に1頭) かどうかを判別し、組み合わせ生成方法を分岐 ▼▼▼
+                // 1着・2着の軸がそれぞれ1頭ずつの場合は、着順固定として扱う
+                if (firstAxis.length == 1 && secondAxis.length == 1) {
+                  final axis1 = firstAxis.first;
+                  final axis2 = secondAxis.first;
+                  // 3着の相手馬と順番に組み合わせるだけ (順列は作らない)
+                  for (final o in thirdAxis) {
+                    if (axis1 != o && axis2 != o) {
+                      allCombinations.add([axis1, axis2, o]);
+                    }
+                  }
+                } else {
+                  // それ以外の場合は、元々の「軸2頭の着順を入れ替える」ロジックで組み合わせを生成
+                  final nagashiType = di['ながし'];
+                  final axisHorses = firstAxis;
+                  final otherHorses = secondAxis;
+                  for (final p in permutations(axisHorses, 2)) {
+                    for (final o in otherHorses) {
+                      if (p[0] != o && p[1] != o) {
+                        if (nagashiType == '1・2着ながし') {
+                          allCombinations.add([p[0], p[1], o]);
+                        } else if (nagashiType == '1・3着ながし') {
+                          allCombinations.add([p[0], o, p[1]]);
+                        } else if (nagashiType == '2・3着ながし') {
+                          allCombinations.add([o, p[0], p[1]]);
+                        }
                       }
                     }
                   }
@@ -220,6 +229,10 @@ int calculatePoints({
         case '軸1頭マルチ':
           return s.length * (s.length - 1) * 3;
         case '軸2頭ながし':
+        // ▼▼▼【修正箇所1】軸馬のリスト(first, second)の要素が各1頭の場合、着順固定とみなし「* 2」をしない ▼▼▼
+          if (f.length == 1 && s.length == 1) {
+            return t.length;
+          }
           return t.length * 2;
         case '軸2頭マルチ':
           return t.length * 6;
