@@ -26,66 +26,125 @@ class PasteParser {
   static Map<String, PasteParseResult> parseDataByHorseName(String text, List<PredictionHorseDetail> horses) {
     final Map<String, PasteParseResult> resultMap = {};
 
-    for (int i = 0; i < horses.length; i++) {
-      final currentHorse = horses[i];
-      final horseName = currentHorse.horseName;
+    // PC版にしか含まれない「編集」の有無で、まずPC版かを判定する
+    if (text.contains('編集')) {
+      // --- ここからが最終版のPC版解析ロジック ---
+      final lines = text.split('\n');
 
-      // テキスト全体から現在の馬の名前を探す
-      final nameIndex = text.indexOf(horseName);
-      if (nameIndex == -1) continue;
+      for (int i = 0; i < lines.length; i++) {
+        // ▼▼▼ ここを修正しました ▼▼▼
+        // 「'編集'と完全に一致」から「'編集'で終わる」に条件を緩和
+        if (lines[i].trim().endsWith('編集')) {
+          String? dataLine;
+          String? horseName;
 
-      // 次の馬の名前の位置を探し、検索範囲を限定する
-      int endIndex;
-      if (i < horses.length - 1) {
-        final nextHorseName = horses[i + 1].horseName;
-        endIndex = text.indexOf(nextHorseName, nameIndex);
-        if (endIndex == -1) {
+          // 「編集」行から遡って、空でない行を2つ探す
+          for (int j = i - 1; j >= 0; j--) {
+            final currentLine = lines[j].trim();
+            if (currentLine.isNotEmpty) {
+              if (dataLine == null) {
+                // 最初に見つかる空でない行が「データ行」
+                dataLine = currentLine;
+              } else {
+                // 次に見つかる空でない行が「馬名」
+                horseName = currentLine;
+                break;
+              }
+            }
+          }
+
+          if (horseName != null && dataLine != null) {
+            double? odds;
+            int? popularity;
+
+            // データ行にタブが含まれるかで、2つの解析方法を切り替える
+            if (dataLine.contains('\t')) {
+              // --- パターンA: タブ区切りのデータを解析 ---
+              final parts = dataLine.split('\t').where((p) => p.trim().isNotEmpty).toList();
+              final numbers = parts
+                  .map((p) => double.tryParse(p))
+                  .where((n) => n != null)
+                  .cast<double>()
+                  .toList();
+
+              if (numbers.length >= 2) {
+                final lastValue = numbers.last;
+                final secondLastValue = numbers[numbers.length - 2];
+
+                if (secondLastValue.toString().contains('.')) {
+                  odds = secondLastValue;
+                  popularity = lastValue.toInt();
+                } else {
+                  odds = lastValue;
+                  popularity = secondLastValue.toInt();
+                }
+              }
+            } else {
+              // --- パターンB: 連結されたデータを正規表現で解析 ---
+              final regex = RegExp(r'(\d+\.\d+)(\d+)$');
+              final match = regex.firstMatch(dataLine);
+
+              if (match != null) {
+                odds = double.tryParse(match.group(1)!);
+                popularity = int.tryParse(match.group(2)!);
+              }
+            }
+
+            if (odds != null && popularity != null) {
+              resultMap[horseName] = PasteParseResult(odds: odds, popularity: popularity);
+            }
+          }
+        }
+      }
+    }
+    // モバイル版のデータか判定
+    else if (text.contains('人気')) {
+      // --- ここからが既存のモバイル版の解析ロジック（変更なし） ---
+      for (int i = 0; i < horses.length; i++) {
+        final currentHorse = horses[i];
+        final horseName = currentHorse.horseName;
+
+        final nameIndex = text.indexOf(horseName);
+        if (nameIndex == -1) continue;
+
+        int endIndex;
+        if (i < horses.length - 1) {
+          final nextHorseName = horses[i + 1].horseName;
+          endIndex = text.indexOf(nextHorseName, nameIndex);
+          if (endIndex == -1) {
+            endIndex = text.length;
+          }
+        } else {
           endIndex = text.length;
         }
-      } else {
-        endIndex = text.length;
-      }
 
-      // 現在の馬の情報のブロックを切り出す
-      final targetBlock = text.substring(nameIndex, endIndex);
+        final targetBlock = text.substring(nameIndex, endIndex);
 
-      // ブロック内のすべての数字（整数と小数）を抽出する
-      final numberRegExp = RegExp(r'\d+\.\d+|\d+');
-      final allNumbersInBlock = numberRegExp.allMatches(targetBlock).map((m) => m.group(0)!).toList();
-
-      // --- ここからが新しいロジック ---
-      // アプリが既に知っている静的データ（性齢、斤量）を文字列として準備
-      final sexAgeStr = currentHorse.sexAndAge.replaceAll(RegExp(r'[^0-9]'), ''); // "セ10" -> "10"
-      final weightStr = currentHorse.carriedWeight.toString(); // 60.0 -> "60.0"
-
-      // 抽出した数字リストから、既知の静的データを除外する
-      final List<String> dynamicNumbers = [];
-      for(final numStr in allNumbersInBlock) {
-        if (numStr != sexAgeStr && numStr != weightStr) {
-          dynamicNumbers.add(numStr);
-        }
-      }
-
-      // 除外後に残った数字のリストからオッズと人気を特定する
-      if (dynamicNumbers.isNotEmpty) {
         double? odds;
         int? popularity;
 
-        // 残ったリストの最初の数字をオッズとして試す
-        odds = double.tryParse(dynamicNumbers[0]);
+        if (targetBlock.contains('人気')) {
+          final popRegExp = RegExp(r'(\d+)人気');
+          final popMatch = popRegExp.firstMatch(targetBlock);
 
-        // 2番目の数字を人気として試す
-        if (dynamicNumbers.length > 1) {
-          final popStr = dynamicNumbers[1].replaceAll('人気', '');
-          popularity = int.tryParse(popStr);
+          if (popMatch != null) {
+            popularity = int.tryParse(popMatch.group(1)!);
+            final popIndex = popMatch.start;
+            final searchBlockForOdds = targetBlock.substring(0, popIndex);
+            final oddsRegExp = RegExp(r'(\d+\.\d+)');
+            final allOddsMatches = oddsRegExp.allMatches(searchBlockForOdds);
+            if (allOddsMatches.isNotEmpty) {
+              odds = double.tryParse(allOddsMatches.last.group(1)!);
+            }
+          }
         }
 
-        // オッズと人気の両方が正しく取得できた場合のみ結果を保存
         if (odds != null && popularity != null) {
           resultMap[horseName] = PasteParseResult(odds: odds, popularity: popularity);
         }
       }
     }
+
     return resultMap;
   }
 }
