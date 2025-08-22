@@ -200,166 +200,186 @@ class BettingTicketCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: Colors.grey),
-        borderRadius: BorderRadius.circular(8),
         image: const DecorationImage(
           image: AssetImage('assets/images/baken_bg.png'),
           fit: BoxFit.fitWidth,
         ),
       ),
+// 全体を縦に配置するメインのColumn
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start, // 子要素を左揃えに
         children: [
+          // --- 1. 日付情報 ---
+          // '年', '回', '日' のデータが存在する場合に日付を表示
           if (ticketData.containsKey('年') && ticketData.containsKey('回') && ticketData.containsKey('日'))
             Text(
               '20${ticketData['年']}年${ticketData['回']}回${ticketData['日']}日',
-              style: TextStyle(color: Colors.black, fontSize: 20),
+              style: TextStyle(color: Colors.black, fontSize: 15),
             ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 1), // 日付と開催場の間のスペース
+
+          // --- 2. 開催場とレース番号 ---
+          // '開催場'と'レース'のデータが存在する場合に表示
           if (ticketData.containsKey('開催場') && ticketData.containsKey('レース'))
+          // 開催場名とレース番号表示エリアを縦に並べるColumn
             Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start, // 子要素を左揃えに
               children: [
+                // 開催場名を表示するText
                 Text(
                   '${ticketData['開催場']}',
-                  style: TextStyle(color: Colors.black, fontSize: 30),
+                  style: TextStyle(color: Colors.black, fontSize: 25),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 4), // 開催場名とレース番号の間のスペース
+                // レース番号と「レース」というテキストを横に並べるRow
                 Row(
                   children: [
-                    // Container 2: レース番号を表示する黒い背景のコンテナ
+                    // レース番号を表示する黒い背景のContainer
                     Container(
-                      width: 70,
+                      width: 50,
                       alignment: Alignment.center,
                       decoration: const BoxDecoration(
                         color: Colors.black,
-                        borderRadius: BorderRadius.all(Radius.circular(0)),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2.0),
                         child: Text(
                           '${ticketData['レース']}',
-                          style: const TextStyle(color: Colors.white, fontSize: 32, height: 0.9),
+                          style: const TextStyle(color: Colors.white, fontSize: 25, height: 0.9),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 4), // レース番号と「レース」テキストの間のスペース
+                    // 「レース」という固定テキスト
                     const Text(
                       'レース',
-                      style: TextStyle(color: Colors.black, fontSize: 20),
+                      style: TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.bold,),
                     ),
                   ],
                 ),
               ],
             ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 16), // レース情報とメインコンテンツの間のスペース
 
+          // --- 3. メインコンテンツ (左右分割) ---
+          // 左側に式別情報、右側に購入詳細を配置するRow
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start, // 子要素を上揃えに
             children: [
-              // Container 3: 左側の縦長のコンテナ（式別などを表示）
+              // --- 3-1. 左側: 式別情報コンテナ ---
+              // 式別などを表示する縦長のコンテナ
               Container(
-                width: 50,
-                height: 250,
+                width: 40,
+                height: 190,
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.black, width: 2.0),
                 ),
+                // ヘッダー、式別、フッターを縦に並べるColumn
                 child: Column(
                   mainAxisSize: MainAxisSize.max,
                   children: [
-                    // Container 4: 左側コンテナ内の上部ヘッダー
+                    // 上部のヘッダー部分のContainer
                     Container(
                       width: double.infinity,
-                      color: topContainerColor, // 変数を適用
+                      color: topContainerColor,
                       padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
                       child: Center(
-                        child: topWidget, // 変数を適用
+                        child: topWidget,
                       ),
                     ),
 
-                    // Container 5: 左側コンテナの中央部分（式別の文字を表示）
+                    // 中央の式別表示部分のContainer (Expandedで残りのスペースを全て使用)
                     Expanded(
                       child: Container(
                         width: double.infinity,
                         alignment: Alignment.center,
-                        color: middleContainerColor, // 変数を適用
+                        color: middleContainerColor,
+                        // '方式'データが存在する場合に表示
                         child: (ticketData.containsKey('方式'))
+                        // primaryShikibetsuFromDetailsが'馬連'の場合の特殊レイアウト
                             ? (primaryShikibetsuFromDetails == '馬連')
-                            ? Column( // 「馬連」専用のレイアウト
+                        // 「普通」と縦書きの「馬連」を配置するColumn
+                            ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              '普通', // 上部の水平テキスト
+                              '普通',
                               style: TextStyle(
                                 color: middleTextColor,
-                                fontSize: 14, // 指定されたフォントサイズ
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(height: 12), // 適度なスペース
-                            // 下部の縦書きテキスト
+                            const SizedBox(height: 12),
+                            // "馬連"の文字を1文字ずつ縦に表示
                             ...shikibetsuToDisplay.characters.map((char) {
                               return Text(
                                 char,
                                 style: TextStyle(
                                   color: middleTextColor,
-                                  fontSize: 28,
+                                  fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                 ),
                               );
                             }).toList(),
                           ],
                         )
-                            : Column( // それ以外の券種のレイアウト
+                        // '馬連'以外の券種レイアウト (文字を均等に縦に配置するColumn)
+                            : Column(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: shikibetsuToDisplay.characters.map((char) {
                             return Text(
                               char,
                               style: TextStyle(
-                                color: middleTextColor, // 変数を適用
-                                fontSize: 25,
+                                color: middleTextColor,
+                                fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
                             );
                           }).toList(),
                         )
-                            : const SizedBox.shrink(),
+                            : const SizedBox.shrink(), // '方式'データがない場合は何も表示しない
                       ),
                     ),
 
-                    // Container 6: 左側コンテナ内の下部フッター
+                    // 下部のフッター部分のContainer
                     Container(
                       width: double.infinity,
-                      color: bottomContainerColor, // 変数を適用
+                      color: bottomContainerColor,
                       padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
                       child: Center(
-                        child: bottomWidget, // 変数を適用
+                        child: bottomWidget,
                       ),
                     )
-
                   ],
                 ),
               ),
 
-              const SizedBox(width: 16),
+              const SizedBox(width: 16), // 左右のコンテンツ間のスペース
 
+              // --- 3-2. 右側: 購入方式と詳細情報 ---
+              // 右側のエリア全体を確保するExpanded
               Expanded(
                 flex: 85,
+                // 購入方式と購入詳細カードを縦に並べるColumn
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch, // 子要素を横幅いっぱいに広げる
                   children: [
-                    // 上のコンテナ：方式（ながし、ボックスなど）
+                    // 購入方式（ながし、ボックスなど）が存在する場合に表示
                     if (hoshikiToDisplay.isNotEmpty)
-                      Row( // ← このRowウィジェットを追加
+                    // 将来的な拡張性を考慮したRow（現在はContainerが1つ）
+                      Row(
                         children: [
+                          // 購入方式を表示する枠線付きのContainer
                           Container(
-                            width: 250, // ← ここで幅を指定します（例：180）
-                            height: 40, // 高さを固定
+                            width: 160,
+                            height: 30,
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.black, width: 2.0), // 黒線で囲む
+                              border: Border.all(color: Colors.black, width: 1.5),
                             ),
-                            alignment: Alignment.center, // テキストを中央に配置
+                            alignment: Alignment.center,
                             child: () {
-                              // ... (この中のRichTextなどの部分は変更なし)
+                              // ... (RichTextなどの表示ロジック)
                               const baseStyle = TextStyle(
                                 color: Colors.black,
                                 fontWeight: FontWeight.bold,
@@ -395,7 +415,7 @@ class BettingTicketCard extends StatelessWidget {
                               } else {
                                 return Text(
                                   hoshikiToDisplay,
-                                  style: baseStyle.copyWith(fontSize: 20),
+                                  style: baseStyle.copyWith(fontSize: 18),
                                 );
                               }
                             }(),
@@ -403,10 +423,11 @@ class BettingTicketCard extends StatelessWidget {
                         ],
                       ),
 
+                    // 購入方式と購入詳細の間のスペース
                     if (hoshikiToDisplay.isNotEmpty)
                       const SizedBox(height: 8),
 
-                    // 下の部分：購入詳細カード
+                    // 購入詳細情報を表示するカスタムウィジェット
                     PurchaseDetailsCard(
                       parsedResult: ticketData,
                       betType: overallMethod,
@@ -416,8 +437,10 @@ class BettingTicketCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          // 発売所情報を表示する新しいコンテナ
+          const SizedBox(height: 16), // メインコンテンツと発売所情報の間のスペース
+
+          // --- 4. 発売所情報 ---
+          // 発売所情報が存在する場合に表示するContainer
           if (salesLocation != null && salesLocation.isNotEmpty)
             Container(
               child: Text(
