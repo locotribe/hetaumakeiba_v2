@@ -1,16 +1,16 @@
 // lib/screens/race_result_page.dart
+
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
+import 'package:hetaumakeiba_v2/widgets/betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
@@ -400,7 +400,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   Widget _buildUserTicketCard(Map<String, dynamic> parsedTicket, HitResult? hitResult) {
-    final purchaseDetails = parsedTicket['購入内容'] as List;
     final totalAmount = parsedTicket['合計金額'] as int? ?? 0;
 
     return Card(
@@ -416,30 +415,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            PurchaseDetailsCard(
-              parsedResult: parsedTicket,
-              betType: parsedTicket['方式'] as String? ?? '',
-            ),
-            const Divider(height: 32),
-            const Text(
-              '全組み合わせリスト',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ...purchaseDetails.map((detail) {
-              final ticketTypeId = detail['式別'] as String?;
-              final ticketTypeName = bettingDict[ticketTypeId] ?? '';
-              final combination = (detail['all_combinations'] as List?)
-                  ?.map((c) => (c as List).join('-'))
-                  .join(', ');
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0, left: 8.0),
-                child: Text(
-                  '$ticketTypeName: ${combination ?? "組み合わせなし"}',
-                  style: const TextStyle(fontSize: 14),
-                ),
-              );
-            }).toList(),
+            BettingTicketCard(ticketData: parsedTicket),
             const Divider(height: 20),
             Align(
               alignment: Alignment.centerRight,
