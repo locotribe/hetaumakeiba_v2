@@ -288,7 +288,7 @@ class BettingTicketCard extends StatelessWidget {
                       ),
                     ),
 
-                    // 中央の式別表示部分のContainer (Expandedで残りのスペースを全て使用)
+// 中央の式別表示部分のContainer (Expandedで残りのスペースを全て使用)
                     Expanded(
                       child: Container(
                         width: double.infinity,
@@ -298,42 +298,50 @@ class BettingTicketCard extends StatelessWidget {
                         child: (ticketData.containsKey('方式'))
                         // primaryShikibetsuFromDetailsが'馬連'の場合の特殊レイアウト
                             ? (primaryShikibetsuFromDetails == '馬連')
-                        // 「普通」と縦書きの「馬連」を配置するColumn
-                            ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '普通',
-                              style: TextStyle(
-                                color: middleTextColor,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            // "馬連"の文字を1文字ずつ縦に表示
-                            ...shikibetsuToDisplay.characters.map((char) {
-                              return Text(
-                                char,
+                            ? FittedBox(
+                          fit: BoxFit.contain,
+                          child: Column( // 「馬連」専用のレイアウト
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '普通', // 上部の水平テキスト
                                 style: TextStyle(
                                   color: middleTextColor,
-                                  fontSize: 20,
+                                  fontSize: 12, // 指定されたフォントサイズ
                                   fontWeight: FontWeight.bold,
                                 ),
-                              );
-                            }).toList(),
-                          ],
+                              ),
+                              const SizedBox(height: 12), // 適度なスペース
+                              // 下部の縦書きテキスト
+                              ...shikibetsuToDisplay.characters.map((char) {
+                                return Text(
+                                  char,
+                                  style: TextStyle(
+                                    color: middleTextColor,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                );
+                              }).toList(),
+                            ],
+                          ),
                         )
-                        // '馬連'以外の券種レイアウト (文字を均等に縦に配置するColumn)
-                            : Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            : Column( // それ以外の券種のレイアウト
                           children: shikibetsuToDisplay.characters.map((char) {
-                            return Text(
-                              char,
-                              style: TextStyle(
-                                color: middleTextColor,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
+                            return Expanded(
+                              child: FittedBox(
+                                fit: BoxFit.contain,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0), // 上下左右にパディングを追加
+                                  child: Text(
+                                    char,
+                                    style: TextStyle(
+                                      color: middleTextColor, // 変数を適用
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
                               ),
                             );
                           }).toList(),
