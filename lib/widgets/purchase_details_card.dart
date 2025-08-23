@@ -1,7 +1,6 @@
 // lib/widgets/purchase_details_card.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class PurchaseDetailsCard extends StatelessWidget {
@@ -65,9 +64,9 @@ class PurchaseDetailsCard extends StatelessWidget {
     return '';
   }
 
-  List<Widget> _buildHorseNumberDisplay(dynamic horseNumbers, {String symbol = ''}) {
+  List<Widget> _buildHorseNumberDisplay(dynamic horseNumbers, {String symbol = '', double? fontSize}) {
     List<Widget> widgets = [];
-    const double fixedWidth = 30.0;
+    final double dynamicWidth = (fontSize ?? 16.0) * 1.8;
 
     List<int> numbersToProcess = [];
 
@@ -83,7 +82,7 @@ class PurchaseDetailsCard extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2.0),
           child: Container(
-            width: fixedWidth,
+            width: dynamicWidth,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(vertical: 2.0),
             decoration: BoxDecoration(
@@ -91,7 +90,7 @@ class PurchaseDetailsCard extends StatelessWidget {
             ),
             child: Text(
               numbersToProcess[i].toString(),
-              style: TextStyle(color: Colors.black),
+              style: TextStyle(color: Colors.black, fontSize: fontSize, fontWeight: FontWeight.bold),
             ),
           ),
         ),
@@ -108,6 +107,103 @@ class PurchaseDetailsCard extends StatelessWidget {
   // ### 修正箇所: _combinations ヘルパー関数を削除 ###
   // この関数はパーサー側で処理が完結しているため不要
 
+  double _getFontSizeByHorseCount(int count) {
+    if (count == 1) {
+      return 18.0;
+    } else if (count >= 2 && count <= 6) {
+      return 14.0;
+    } else {
+      return 8.0;
+    }
+  }
+
+  // ▼▼▼ このメソッドが馬番を2列グリッドで表示します ▼▼▼
+  Widget _buildHorseNumberGrid(List<int> horseNumbers, double fontSize) {
+    List<Widget> gridRows = [];
+    for (int i = 0; i < horseNumbers.length; i += 2) {
+      List<Widget> rowChildren = [];
+
+      // 1つ目の馬番ボックス
+      rowChildren.add(
+        _buildHorseNumberDisplay(horseNumbers[i], fontSize: fontSize).first,
+      );
+
+      // 2つ目の馬番ボックス（存在する場合）
+      if (i + 1 < horseNumbers.length) {
+        rowChildren.add(const SizedBox(width: 4.0)); // ボックス間のスペース
+        rowChildren.add(
+          _buildHorseNumberDisplay(horseNumbers[i + 1], fontSize: fontSize).first,
+        );
+      }
+
+      gridRows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: rowChildren,
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start, // ← この行を追加
+      children: gridRows,
+    );
+  }
+
+  Widget _buildGroupLayoutItem(Map<String, dynamic> group, {required bool isFormation}) {
+    final String label = group['label'] as String? ?? '';
+    final List<int> horseNumbers = group['horseNumbers'] as List<int>? ?? [];
+    final double fontSize = _getFontSizeByHorseCount(horseNumbers.length);
+
+    return Column(
+      children: [
+        if (label.isNotEmpty)
+          Text(label, style: TextStyle(color: Colors.black54)),
+        if (label.isNotEmpty)
+          const SizedBox(height: 4),
+        isFormation
+            ? _buildHorseNumberGrid(horseNumbers, fontSize)
+            : Wrap(
+          spacing: 4.0,
+          runSpacing: 4.0,
+          alignment: WrapAlignment.center,
+          children: _buildHorseNumberDisplay(horseNumbers, symbol: '', fontSize: fontSize),
+        ),
+      ],
+    );
+  }
+
+  // ▼▼▼ 修正: isFormationフラグを受け取るように変更 ▼▼▼
+  Widget _buildHorizontalGroupLayout(List<Map<String, dynamic>> groups, {required bool isFormation}) {
+    if (groups.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: groups.map((group) {
+          return Flexible(
+            child: Padding( // 各グループ間のスペースを確保
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: _buildGroupLayoutItem(group, isFormation: isFormation),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ▼▼▼ このメソッドは不要になったため削除 ▼▼▼
+  // Widget _buildWrappingFormationLayout(...) { ... }
+
+
   List<Widget> _buildPurchaseDetailsInternal(dynamic purchaseData, String currentBetType) {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
     const double labelWidth = 80.0;
@@ -115,13 +211,13 @@ class PurchaseDetailsCard extends StatelessWidget {
     final TextStyle starStyle = TextStyle(
       color: Colors.black,
       fontWeight: FontWeight.bold,
-      fontSize: 12,
+      fontSize: 10,
     );
 
     final TextStyle amountStyle = TextStyle(
       color: Colors.black,
       fontWeight: FontWeight.bold,
-      fontSize: 20,
+      fontSize: 14,
     );
 
     if (currentBetType == '応援馬券' && purchaseDetails.length >= 2) {
@@ -215,128 +311,49 @@ class PurchaseDetailsCard extends StatelessWidget {
         List<Widget> detailWidgets = [];
         bool amountHandledInline = false;
 
-        // 馬番表示を先に処理
+        // ▼▼▼ 修正箇所: isFormationフラグを渡すように変更 ▼▼▼
         if (shikibetsu == '3連単' && currentBetType == 'フォーメーション') {
-          final List<List<int>> horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
-          if (horseGroups.length >= 1) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('1着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')])),
-                ],
-              ),
-            ));
-          }
-          if (horseGroups.length >= 2) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('2着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')])),
-                ],
-              ),
-            ));
-          }
-          if (horseGroups.length >= 3) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('3着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[2], symbol: '')])),
-                ],
-              ),
-            ));
-          }
+          final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
+          final List<Map<String, dynamic>> groupsData = [
+            {'label': '1着', 'horseNumbers': horseGroups.length > 0 ? horseGroups[0] : <int>[]},
+            {'label': '2着', 'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
+            {'label': '3着', 'horseNumbers': horseGroups.length > 2 ? horseGroups[2] : <int>[]},
+          ];
+          detailWidgets.add(_buildHorizontalGroupLayout(groupsData, isFormation: true));
         } else if (shikibetsu == '3連複' && currentBetType == 'フォーメーション') {
           final List<List<int>> horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
+          final List<Map<String, dynamic>> groupsData = [];
           for (int i = 0; i < horseGroups.length; i++) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('${i + 1}頭目', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[i], symbol: '')])),
-                ],
-              ),
-            ));
+            groupsData.add({'label': '${i + 1}頭目', 'horseNumbers': horseGroups[i]});
           }
+          detailWidgets.add(_buildHorizontalGroupLayout(groupsData, isFormation: true));
         } else if (shikibetsu == '馬単' && currentBetType == 'フォーメーション') {
-          final List<List<int>> horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
-          if (horseGroups.isNotEmpty) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('1着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[0], symbol: '')])),
-                ],
-              ),
-            ));
-          }
-          if (horseGroups.length >= 2) {
-            detailWidgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: labelWidth, child: Text('2着', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                  Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[1], symbol: '')])),
-                ],
-              ),
-            ));
-          }
+          final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
+          final List<Map<String, dynamic>> groupsData = [
+            {'label': '1着', 'horseNumbers': horseGroups.length > 0 ? horseGroups[0] : <int>[]},
+            {'label': '2着', 'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
+          ];
+          detailWidgets.add(_buildHorizontalGroupLayout(groupsData, isFormation: true));
         } else if (currentBetType == 'ながし') {
           if (shikibetsu == '3連単') {
             final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
+            final List<Map<String, dynamic>> groupsData = [];
             final labels = ['1着', '2着', '3着'];
             for (int i = 0; i < horseGroups.length; i++) {
               if (horseGroups[i].isNotEmpty) {
-                detailWidgets.add(Padding(
-                  padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(width: labelWidth, child: Text(labels[i], style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                      Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(horseGroups[i], symbol: '')])),
-                    ],
-                  ),
-                ));
+                groupsData.add({'label': labels[i], 'horseNumbers': horseGroups[i]});
               }
             }
+            detailWidgets.add(_buildHorizontalGroupLayout(groupsData, isFormation: false));
           } else {
+            final List<Map<String, dynamic>> groupsData = [];
             if (detail.containsKey('軸')) {
-              detailWidgets.add(Padding(
-                padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(width: labelWidth, child: Text('軸', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                    Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(detail['軸'], symbol: '')])),
-                  ],
-                ),
-              ));
+              groupsData.add({'label': '軸', 'horseNumbers': (detail['軸'] as List).cast<int>()});
             }
             if (detail.containsKey('相手')) {
-              detailWidgets.add(Padding(
-                padding: const EdgeInsets.only(left: 16.0, bottom: 4.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(width: labelWidth, child: Text('相手', style: TextStyle(color: Colors.black54), textAlign: TextAlign.end)),
-                    Expanded(child: Wrap(spacing: 4.0, runSpacing: 4.0, children: [..._buildHorseNumberDisplay(detail['相手'], symbol: '')])),
-                  ],
-                ),
-              ));
+              groupsData.add({'label': '相手', 'horseNumbers': (detail['相手'] as List).cast<int>()});
             }
+            detailWidgets.add(_buildHorizontalGroupLayout(groupsData, isFormation: false));
           }
         } else {
           String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
@@ -366,13 +383,13 @@ class PurchaseDetailsCard extends StatelessWidget {
         if (combinationDisplayString.isNotEmpty) {
           detailWidgets.add(
             Padding(
-              padding: const EdgeInsets.only(left: 16.0, right: 0.0, top: 8.0, bottom: 4.0),
+              padding: const EdgeInsets.only(left: 16.0, right: 0.0, top: 0.0, bottom: 0.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Text(
                     '組合せ数 $combinationDisplayString',
-                    style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -446,50 +463,46 @@ class PurchaseDetailsCard extends StatelessWidget {
     final TextStyle totalStarStyle = TextStyle(
       color: Colors.black,
       fontWeight: FontWeight.bold,
-      fontSize: 12,
+      fontSize: 10,
     );
 
     final TextStyle totalAmountTextStyle = TextStyle(
       color: Colors.black,
       fontWeight: FontWeight.bold,
-      fontSize: 20,
+      fontSize: 14,
     );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _buildPurchaseDetailsInternal(parsedResult['購入内容'], betType),
-          ),
+        // Paddingを削除し、中のColumnを直接配置
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _buildPurchaseDetailsInternal(parsedResult['購入内容'], betType),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Align(
+        // Paddingを削除し、中のRowを直接配置
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
                   alignment: Alignment.centerRight,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text('合計　', style: totalAmountTextStyle,),
-                        Text(totalStars, style: totalStarStyle,),
-                        Text('${totalAmountString}円', style: totalAmountTextStyle,),
-                      ],
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text('合計　', style: totalAmountTextStyle,),
+                      Text(totalStars, style: totalStarStyle,),
+                      Text('${totalAmountString}円', style: totalAmountTextStyle,),
+                    ],
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ],
     );

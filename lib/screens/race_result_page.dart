@@ -9,7 +9,6 @@ import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
-import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
@@ -264,13 +263,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
       ),
       body: Stack(
         children: [
-          const Positioned.fill(
-            child: CustomBackground(
-              overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
-              stripeColor: Color.fromRGBO(219, 234, 234, 0.6),
-              fillColor: Color.fromRGBO(172, 234, 231, 1.0),
-            ),
-          ),
           FutureBuilder<PageData>(
             future: _pageDataFuture,
             builder: (context, snapshot) {
