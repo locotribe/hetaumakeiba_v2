@@ -39,10 +39,11 @@ class PurchaseDetailsCard extends StatelessWidget {
     required this.betType,
   }) : super(key: key);
 
-  // 式別と購入方法に応じて、馬番間の記号を返す
+// 式別と購入方法に応じて、馬番間の記号を返す
   String _getHorseNumberSymbol(String shikibetsu, String betType, {String? uraStatus}) {
     if (uraStatus == 'あり') return '◀ ▶';
-    if (betType == '通常') {
+    // 「通常」または「フォーメーション」の場合に記号を返すように条件を変更
+    if (betType == '通常' || betType == 'フォーメーション') {
       if (shikibetsu == '馬単' || shikibetsu == '3連単') return '▶';
       if (shikibetsu == '馬連' || shikibetsu == '3連複' || shikibetsu == '枠連') return '-';
       if (shikibetsu == 'ワイド') return '◆';
@@ -118,36 +119,73 @@ class PurchaseDetailsCard extends StatelessWidget {
     final List<int> horseNumbers = group['horseNumbers'] as List<int>? ?? [];
     final double fontSize = _getFontSizeByHorseCount(horseNumbers.length);
 
-    return Column(
-      children: [
-        if (label.isNotEmpty) Text(label, style: TextStyle(color: Colors.black54)),
-        if (label.isNotEmpty) const SizedBox(height: 4),
-        isFormation
-            ? _buildHorseNumberGrid(horseNumbers, fontSize)
-            : Wrap(
-          spacing: 4.0,
-          runSpacing: 4.0,
-          alignment: WrapAlignment.center,
-          children: _buildHorseNumberDisplay(horseNumbers, symbol: '', fontSize: fontSize),
-        ),
-      ],
+    // 馬番表示部分のウィジェットを先に生成
+    final Widget horseDisplayWidget = isFormation
+        ? _buildHorseNumberGrid(horseNumbers, fontSize)
+        : Wrap(
+      spacing: 4.0,
+      runSpacing: 4.0,
+      alignment: WrapAlignment.center,
+      children: _buildHorseNumberDisplay(horseNumbers, symbol: '', fontSize: fontSize),
     );
+
+    // ラベルが空でない場合のみColumnでラップし、ラベルとSizedBoxを追加
+    if (label.isNotEmpty) {
+      return Column(
+        children: [
+          Text(label, style: TextStyle(color: Colors.black54)),
+          const SizedBox(height: 4),
+          horseDisplayWidget,
+        ],
+      );
+    }
+
+    // ラベルが空の場合は、余計なColumnを介さず直接ウィジェットを返す
+    return horseDisplayWidget;
   }
 
-  // 複数の馬番グループを水平に並べて表示する
-  Widget _buildHorizontalGroupLayout(List<Map<String, dynamic>> groups, {required bool isFormation}) {
+// 複数の馬番グループを水平に並べて表示する
+  Widget _buildHorizontalGroupLayout(
+      List<Map<String, dynamic>> groups, {
+        required bool isFormation,
+        required String shikibetsu,
+        required String betType,
+      }) {
     if (groups.isEmpty) return const SizedBox.shrink();
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: groups.map((group) {
-        return Flexible(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: _buildGroupLayoutItem(group, isFormation: isFormation),
+
+    List<Widget> children = [];
+    final String symbol = isFormation ? _getHorseNumberSymbol(shikibetsu, betType) : '';
+
+    for (int i = 0; i < groups.length; i++) {
+      children.add(
+        Flexible(
+            child: _buildGroupLayoutItem(groups[i], isFormation: isFormation),
+        ),
+      );
+
+      if (isFormation && symbol.isNotEmpty && i < groups.length - 1) {
+        // Transform.scaleを使用して記号の見た目を変更
+        children.add(
+          Transform.scale(
+            scaleX: 0.5, // 横方向に1.5倍（値を大きくするとより潰れて横に広がります）
+            scaleY: 1.5, // 縦方向に0.9倍（値を小さくすると縦に潰れます）
+            child: Text(
+              symbol,
+              style: const TextStyle(
+                fontSize: 16, // スケールの基準となるフォントサイズ
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         );
-      }).toList(),
+      }
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: isFormation ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      children: children,
     );
   }
 
@@ -165,39 +203,52 @@ class PurchaseDetailsCard extends StatelessWidget {
         final List<Map<String, dynamic>> groupsData = [];
         if (shikibetsu == '3連単') {
           final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
-          final labels = ['1着', '2着', '3着'];
+          final labels = ['(軸)', '(軸)', ''];
           for (int i = 0; i < horseGroups.length; i++) {
             if (horseGroups[i].isNotEmpty) {
               groupsData.add({'label': labels[i], 'horseNumbers': horseGroups[i]});
             }
           }
         } else {
-          if (detail.containsKey('軸')) groupsData.add({'label': '軸', 'horseNumbers': (detail['軸'] as List).cast<int>()});
+          if (detail.containsKey('軸')) groupsData.add({'label': '(軸)', 'horseNumbers': (detail['軸'] as List).cast<int>()});
           if (detail.containsKey('相手')) groupsData.add({'label': '相手', 'horseNumbers': (detail['相手'] as List).cast<int>()});
         }
-        content = _buildHorizontalGroupLayout(groupsData, isFormation: false);
+        content = _buildHorizontalGroupLayout(
+          groupsData,
+          isFormation: false,
+          shikibetsu: shikibetsu,
+          betType: currentBetType,
+        );
       }
       // フォーメーション
       else if (currentBetType == 'フォーメーション') {
         final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
         final List<Map<String, dynamic>> groupsData = [];
+
+        // ご指示に基づき、フォーメーションの場合はlabelキー自体をマップに含めない
         if (shikibetsu == '3連単') {
           groupsData.addAll([
-            {'label': '1着', 'horseNumbers': horseGroups.isNotEmpty ? horseGroups[0] : <int>[]},
-            {'label': '2着', 'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
-            {'label': '3着', 'horseNumbers': horseGroups.length > 2 ? horseGroups[2] : <int>[]},
+            {'horseNumbers': horseGroups.isNotEmpty ? horseGroups[0] : <int>[]},
+            {'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
+            {'horseNumbers': horseGroups.length > 2 ? horseGroups[2] : <int>[]},
           ]);
         } else if (shikibetsu == '3連複') {
-          for (int i = 0; i < horseGroups.length; i++) {
-            groupsData.add({'label': '${i + 1}頭目', 'horseNumbers': horseGroups[i]});
+          for (var group in horseGroups) {
+            groupsData.add({'horseNumbers': group});
           }
         } else if (shikibetsu == '馬単') {
           groupsData.addAll([
-            {'label': '1着', 'horseNumbers': horseGroups.isNotEmpty ? horseGroups[0] : <int>[]},
-            {'label': '2着', 'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
+            {'horseNumbers': horseGroups.isNotEmpty ? horseGroups[0] : <int>[]},
+            {'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
           ]);
         }
-        content = _buildHorizontalGroupLayout(groupsData, isFormation: true);
+        // _buildHorizontalGroupLayout の呼び出し箇所を変更
+        content = _buildHorizontalGroupLayout(
+          groupsData,
+          isFormation: true,
+          shikibetsu: shikibetsu, // shikibetsu を渡す
+          betType: currentBetType,     // currentBetType を渡す
+        );
       }
       // 通常、ボックス、応援馬券など
       else {
