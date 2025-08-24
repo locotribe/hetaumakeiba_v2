@@ -183,9 +183,6 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       children: children,
     );
   }
-
-  // ★★★ START: REVISED CONNECTOR LAYOUT METHODS ★★★
-
   /// 罫線付きのながしレイアウトを生成する
   Widget _buildNagashiWithConnector({required List<int> axisHorses, required List<int> opponentHorses}) {
     _axisKeys.clear();
@@ -287,8 +284,6 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     );
   }
 
-  // ★★★ END: REVISED CONNECTOR LAYOUT METHODS ★★★
-
   List<Widget> _buildPurchaseDetailsInternal(dynamic purchaseData, String currentBetType) {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
 
@@ -299,8 +294,12 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
 
       if (currentBetType == 'ながし') {
         if (shikibetsu != '馬単' && shikibetsu != '3連単') {
-          final List<int> axisHorses = detail.containsKey('軸') ? (detail['軸'] as List).cast<int>() : [];
-          final List<int> opponentHorses = detail.containsKey('相手') ? (detail['相手'] as List).cast<int>() : [];
+          // ▼▼▼ 変更点 ▼▼▼
+          final axisData = detail['軸'];
+          final opponentData = detail['相手'];
+          final List<int> axisHorses = axisData is List ? axisData.cast<int>() : (axisData is int ? [axisData] : []);
+          final List<int> opponentHorses = opponentData is List ? opponentData.cast<int>() : (opponentData is int ? [opponentData] : []);
+          // ▲▲▲ 変更点 ▲▲▲
           content = _buildNagashiWithConnector(axisHorses: axisHorses, opponentHorses: opponentHorses);
         } else {
           final List<Map<String, dynamic>> groupsData = [];
