@@ -229,7 +229,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
               width: dynamicWidth,
               height: 30, // 番号の高さと概ね合わせる
               child: Center(
-                child: Text('☆', style: TextStyle(fontSize: opponentFontSize * 1.5, color: Colors.black45)),
+                child: Text('☆', style: TextStyle(fontSize: opponentFontSize * 1.2, color: Colors.black45)),
               ),
             ),
           );
@@ -238,8 +238,8 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       opponentRowWidgets.add(
         Padding(
           key: key,
-          padding: const EdgeInsets.only(bottom: 4.0),
-          child: Wrap(spacing: 4.0, children: rowChildren),
+          padding: const EdgeInsets.only(bottom: 1.0),
+          child: Wrap(spacing: 6.0, children: rowChildren),
         ),
       );
     }
@@ -247,7 +247,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     final Widget axisColumn = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('(軸)', style: TextStyle(color: Colors.black54)),
+        const Text('(軸)', style: TextStyle(color: Colors.black)),
         const SizedBox(height: 4),
         Column(children: axisWidgets),
       ],
@@ -256,7 +256,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Text('(相手)', style: TextStyle(color: Colors.black54)),
+        const Text('(相手)', style: TextStyle(color: Colors.black)),
         const SizedBox(height: 4),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: opponentRowWidgets),
       ],
@@ -390,7 +390,6 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
   }
 }
 
-// ★★★ START: REVISED PAINTER CLASS ★★★
 class _ConnectorPainter extends CustomPainter {
   final GlobalKey canvasKey;
   final List<GlobalKey> axisKeys;
@@ -403,10 +402,8 @@ class _ConnectorPainter extends CustomPainter {
     required this.opponentRowKeys,
   }) : linePaint = Paint()
     ..color = Colors.black
-    ..strokeWidth = 3.5 // 太さを調整
-    ..style = PaintingStyle.stroke
-    ..strokeCap = StrokeCap.round // 線の端を丸くする
-    ..strokeJoin = StrokeJoin.round; // 線の接合部を丸くする
+    ..strokeWidth = 3.0 // 太さを調整
+    ..style = PaintingStyle.stroke;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -452,9 +449,10 @@ class _ConnectorPainter extends CustomPainter {
     path.lineTo(spineX, spineBottomY);
 
     // 各軸馬から背骨への水平線を描画
-    for (final point in axisPoints) {
-      path.moveTo(point.dx, point.dy);
-      path.lineTo(spineX, point.dy);
+    // 最初の軸馬から背骨への水平線のみを描画
+    if (axisPoints.isNotEmpty) {
+      path.moveTo(axisPoints.first.dx, axisPoints.first.dy);
+      path.lineTo(spineX, axisPoints.first.dy);
     }
 
     // 背骨から各相手馬の行への水平線を描画
@@ -469,8 +467,6 @@ class _ConnectorPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _ConnectorPainter oldDelegate) => true;
 }
-
-// ★★★ END: REVISED PAINTER CLASS ★★★
 
 class PurchaseCombinationsCard extends StatelessWidget {
   final Map<String, dynamic> parsedResult;

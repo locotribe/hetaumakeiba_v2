@@ -155,7 +155,7 @@ class BettingTicketCard extends StatelessWidget {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+        padding: const EdgeInsets.fromLTRB(5, 5, 5, 5),
         child: Column(
           children: [
             // --- 上段 ---
@@ -172,7 +172,9 @@ class BettingTicketCard extends StatelessWidget {
                         if (ticketData.containsKey('年') && ticketData.containsKey('回') && ticketData.containsKey('日'))
                           Text(
                             '20${ticketData['年']}年${ticketData['回']}回${ticketData['日']}日',
-                            style: TextStyle(color: Colors.black, fontSize: 15),
+                            style: const TextStyle(color: Colors.black, fontSize: 15,height: 1.0,),
+
+
                           ),
                         if (ticketData.containsKey('開催場') && ticketData.containsKey('レース'))
                           Column(
@@ -192,7 +194,7 @@ class BettingTicketCard extends StatelessWidget {
                                       padding: const EdgeInsets.symmetric(vertical: 2.0),
                                       child: Text(
                                         '${ticketData['レース']}',
-                                        style: const TextStyle(color: Colors.white, fontSize: 25, height: 0.9),
+                                        style: const TextStyle(color: Colors.white, fontSize: 23, height: 0.9),
                                       ),
                                     ),
                                   ),
@@ -280,11 +282,10 @@ class BettingTicketCard extends StatelessWidget {
                           if (hoshikiToDisplay.isNotEmpty)
                             FittedBox(
                               fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
+                              alignment: Alignment.center,
                               child: Row(
                                 children: [
                                   Container(
-                                    width: 160,
                                     height: 30,
                                     decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.5)),
                                     alignment: Alignment.center,
@@ -292,9 +293,33 @@ class BettingTicketCard extends StatelessWidget {
                                       const baseStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold);
                                       const englishStyle = TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.normal);
                                       if (overallMethod == 'ながし') {
-                                        return RichText(textAlign: TextAlign.center, text: TextSpan(style: baseStyle.copyWith(fontSize: 20), children: <TextSpan>[TextSpan(text: hoshikiToDisplay), TextSpan(text: ' WHEEL', style: englishStyle)]));
+                                        return RichText(
+                                            textAlign: TextAlign.center,
+                                            text: TextSpan(
+                                                style: baseStyle.copyWith(fontSize: 20),
+                                                children: <TextSpan>[
+                                                  TextSpan(text: hoshikiToDisplay),
+                                                  TextSpan(
+                                                      text: ' WHEEL',
+                                                      style: englishStyle.copyWith(fontSize: 12),
+                                                  )
+                                                ]
+                                            )
+                                        );
                                       } else if (overallMethod == 'ボックス') {
-                                        return RichText(textAlign: TextAlign.center, text: TextSpan(style: baseStyle.copyWith(fontSize: 20), children: <TextSpan>[TextSpan(text: hoshikiToDisplay), TextSpan(text: ' BOX', style: englishStyle)]));
+                                        return RichText(
+                                            textAlign: TextAlign.center,
+                                            text: TextSpan(
+                                                style: baseStyle.copyWith(fontSize: 20),
+                                                children: <TextSpan>[
+                                                  TextSpan(text: hoshikiToDisplay),
+                                                  TextSpan(
+                                                      text: ' BOX',
+                                                      style: englishStyle.copyWith(fontSize: 12),
+                                                  )
+                                                ]
+                                            )
+                                        );
                                       } else {
                                         return Text(hoshikiToDisplay, style: baseStyle.copyWith(fontSize: 18));
                                       }
@@ -303,7 +328,7 @@ class BettingTicketCard extends StatelessWidget {
                                 ],
                               ),
                             ),
-                          if (hoshikiToDisplay.isNotEmpty) const SizedBox(height: 8),
+                          if (hoshikiToDisplay.isNotEmpty) const SizedBox(height: 0),
 
                           // 購入内容（馬番）が残りのスペースを全て使う
                           Expanded(
@@ -349,7 +374,6 @@ class BettingTicketCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
           ],
         ),
       ),
