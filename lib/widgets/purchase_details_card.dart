@@ -42,10 +42,9 @@ class PurchaseDetailsCard extends StatelessWidget {
 // 式別と購入方法に応じて、馬番間の記号を返す
   String _getHorseNumberSymbol(String shikibetsu, String betType, {String? uraStatus}) {
     if (uraStatus == 'あり') return '◀ ▶';
-    // 「通常」または「フォーメーション」の場合に記号を返すように条件を変更
-    if (betType == '通常' || betType == 'フォーメーション') {
+    if (betType == '通常' || betType == 'フォーメーション' || betType == 'ながし') {
       if (shikibetsu == '馬単' || shikibetsu == '3連単') return '▶';
-      if (shikibetsu == '馬連' || shikibetsu == '3連複' || shikibetsu == '枠連') return '-';
+      if (shikibetsu == '馬連' || shikibetsu == '3連複' || shikibetsu == '枠連') return '━';
       if (shikibetsu == 'ワイド') return '◆';
     }
     return '';
@@ -89,8 +88,8 @@ class PurchaseDetailsCard extends StatelessWidget {
   // 馬番の数に応じてフォントサイズを調整する
   double _getFontSizeByHorseCount(int count) {
     if (count == 1) return 18.0;
-    if (count >= 2 && count <= 6) return 14.0;
-    return 8.0;
+    if (count >= 2 && count <= 6) return 12.0;
+    return 10.0;
   }
 
   // フォーメーション表示用に、馬番を2列のグリッド形式で表示する
@@ -154,25 +153,26 @@ class PurchaseDetailsCard extends StatelessWidget {
     if (groups.isEmpty) return const SizedBox.shrink();
 
     List<Widget> children = [];
-    final String symbol = isFormation ? _getHorseNumberSymbol(shikibetsu, betType) : '';
+
+    final bool shouldShowSymbol = isFormation || (betType == 'ながし' && shikibetsu == '3連単');
+    final String symbol = _getHorseNumberSymbol(shikibetsu, betType);
 
     for (int i = 0; i < groups.length; i++) {
       children.add(
         Flexible(
-            child: _buildGroupLayoutItem(groups[i], isFormation: isFormation),
+          child: _buildGroupLayoutItem(groups[i], isFormation: isFormation),
         ),
       );
 
-      if (isFormation && symbol.isNotEmpty && i < groups.length - 1) {
-        // Transform.scaleを使用して記号の見た目を変更
+      if (shouldShowSymbol && symbol.isNotEmpty && i < groups.length - 1) {
         children.add(
           Transform.scale(
-            scaleX: 0.5, // 横方向に1.5倍（値を大きくするとより潰れて横に広がります）
-            scaleY: 1.5, // 縦方向に0.9倍（値を小さくすると縦に潰れます）
+            scaleX: 0.5,
+            scaleY: 1.5,
             child: Text(
               symbol,
               style: const TextStyle(
-                fontSize: 16, // スケールの基準となるフォントサイズ
+                fontSize: 16,
                 color: Colors.black,
                 fontWeight: FontWeight.bold,
               ),
@@ -182,9 +182,11 @@ class PurchaseDetailsCard extends StatelessWidget {
       }
     }
 
+    final bool isCenterAligned = isFormation || (betType == 'ながし' && shikibetsu == '3連単');
+
     return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: isFormation ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      crossAxisAlignment: isCenterAligned ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: children,
     );
   }
@@ -202,16 +204,31 @@ class PurchaseDetailsCard extends StatelessWidget {
       if (currentBetType == 'ながし') {
         final List<Map<String, dynamic>> groupsData = [];
         if (shikibetsu == '3連単') {
+          // '馬番'から着順ごとの馬番リストを取得
           final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
-          final labels = ['(軸)', '(軸)', ''];
-          for (int i = 0; i < horseGroups.length; i++) {
-            if (horseGroups[i].isNotEmpty) {
-              groupsData.add({'label': labels[i], 'horseNumbers': horseGroups[i]});
+
+          // 3連単の「軸ながし」では、軸となるグループの馬番は1頭のみになる特性を利用します。
+          // まず、軸と見なせるグループ（馬番が1頭のグループ）がいくつあるか数えます。
+          final int axisGroupCount = horseGroups.where((group) => group.length == 1).length;
+
+          // 一般的な3連単の軸ながしは、軸が1つ（軸1頭ながし）か2つ（軸2頭ながし）です。
+          final bool isJikuNagashi = axisGroupCount == 1 || axisGroupCount == 2;
+
+          for (final currentGroup in horseGroups) {
+            if (currentGroup.isNotEmpty) {
+              // isJikuNagashiがtrueで、かつ現在のグループの馬番が1頭の場合のみ「軸」と判断します。
+              final bool isAxisGroup = isJikuNagashi && currentGroup.length == 1;
+
+              groupsData.add({
+                'label': isAxisGroup ? '(軸)' : '', // 軸グループなら'(軸)'、そうでなければラベルなし
+                'horseNumbers': currentGroup,
+              });
             }
           }
         } else {
+          // 3連単以外の式別は、これまで通りのロジック
           if (detail.containsKey('軸')) groupsData.add({'label': '(軸)', 'horseNumbers': (detail['軸'] as List).cast<int>()});
-          if (detail.containsKey('相手')) groupsData.add({'label': '相手', 'horseNumbers': (detail['相手'] as List).cast<int>()});
+          if (detail.containsKey('相手')) groupsData.add({'label': '(相手)', 'horseNumbers': (detail['相手'] as List).cast<int>()});
         }
         content = _buildHorizontalGroupLayout(
           groupsData,
