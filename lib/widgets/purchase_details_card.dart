@@ -380,25 +380,56 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
         final dynamic horseNumbers = detail['馬番'];
         final int horseCount = horseNumbers is List ? horseNumbers.length : 1;
-        content = Wrap(
+        final int? kingaku = detail['購入金額'];
+
+        final Widget horseNumbersDisplay = Wrap(
           spacing: 4.0,
           runSpacing: 4.0,
           alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [..._buildHorseNumberDisplay(horseNumbers, symbol: currentSymbol, horseCountForSizing: horseCount)],
+        );
+
+        Widget amountDisplay = const SizedBox.shrink();
+        if (kingaku != null) {
+          const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
+          const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0,);
+          amountDisplay = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(width: 16.0),
+              Text(_getStars(kingaku), style: starStyle),
+              Text('$kingaku円', style: amountStyle),
+            ],
+          );
+        }
+
+        content = Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            horseNumbersDisplay,
+            amountDisplay,
+          ],
         );
       }
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          content,
-          if (detail['ウラ'] == 'あり')
-            const Padding(
-              padding: EdgeInsets.only(left: 16.0),
-              child: Text('ウラ: あり', style: TextStyle(color: Colors.black54)),
-            ),
-        ],
+      // ▼▼▼▼▼ ここから修正 ▼▼▼▼▼
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 2.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            content,
+            if (detail['ウラ'] == 'あり')
+              const Padding(
+                padding: EdgeInsets.only(left: 16.0),
+                child: Text('ウラ: あり', style: TextStyle(color: Colors.black54)),
+              ),
+          ],
+        ),
       );
+      // ▲▲▲▲▲ ここまで修正 ▲▲▲▲▲
     }).toList();
   }
 
@@ -552,7 +583,7 @@ class PurchaseCombinationsCard extends StatelessWidget {
       );
     }
 
-    if (kingaku != null) {
+    if (kingaku != null && isComplexCombinationForPrefix) {
       widgets.add(
         FittedBox(
           fit: BoxFit.scaleDown,
