@@ -391,7 +391,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         );
 
         Widget amountDisplay = const SizedBox.shrink();
-        if (kingaku != null) {
+        if (kingaku != null && currentBetType == '通常') {
           const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
           const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0,);
           amountDisplay = Row(
