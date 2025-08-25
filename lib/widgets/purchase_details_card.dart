@@ -323,8 +323,16 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
 
       final Widget horseNumberWidget = _buildHorseNumberDisplay(horseNumber, horseCountForSizing: 1).first;
 
-      const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0,);
-      const TextStyle kiminoAibaStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14);
+      const TextStyle amountStyle = TextStyle(
+        color: Colors.black,
+        fontWeight: FontWeight.bold,
+        fontSize: 20,
+        height: 1.0,);
+      const TextStyle kiminoAibaStyle = TextStyle(
+          color: Colors.black,
+          fontWeight:
+          FontWeight.bold,
+          fontSize: 20);
 
       // 1行目: 馬番とテキスト
       final Widget firstLine = Row(
@@ -486,6 +494,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     return Padding(
       padding: const EdgeInsets.only(top: 4.0),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center, // この行を追加
         crossAxisAlignment: CrossAxisAlignment.start,
         children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
       ),
