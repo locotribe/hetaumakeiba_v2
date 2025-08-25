@@ -379,7 +379,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
       color: Colors.orange.shade50,
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: const Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(16.0),
         child: Center(
           child: Text(
             'レース結果のデータはまだありません。\nレース確定後に再度ご確認ください。',
@@ -613,7 +613,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),

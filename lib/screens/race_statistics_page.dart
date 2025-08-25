@@ -6,7 +6,6 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class RaceStatisticsPage extends StatefulWidget {
@@ -125,7 +124,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       padding: const EdgeInsets.all(16.0),
       children: [
         Text(
-          '過去${analyzedYearsCount}年 データ分析サマリー',
+          '過去$analyzedYearsCount年 データ分析サマリー',
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 24),
@@ -160,7 +159,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
         rows.add(DataRow(
           cells: [
-            DataCell(Text('$key')),
+            DataCell(Text(key)),
             DataCell(Text('${(win / total * 100).toStringAsFixed(1)}% ($win/$total)')),
             DataCell(Text('${(place / total * 100).toStringAsFixed(1)}% ($place/$total)')),
             DataCell(Text('${(show / total * 100).toStringAsFixed(1)}% ($show/$total)')),

@@ -38,8 +38,8 @@ class BettingTicketCard extends StatelessWidget {
     String hoshikiToDisplay = '';
     String primaryShikibetsuFromDetails = '';
     String overallMethod = '';
-    Widget topWidget = Text('Top', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white));
-    Widget bottomWidget = Text('Bottom', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white));
+    Widget topWidget = const Text('Top', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white));
+    Widget bottomWidget = const Text('Bottom', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white));
     Color topContainerColor = Colors.black;
     Color bottomContainerColor = Colors.black;
     Color middleContainerColor = Colors.transparent;
@@ -118,7 +118,7 @@ class BettingTicketCard extends StatelessWidget {
             topContainerColor = bottomContainerColor = Colors.black;
             break;
           case '枠連':
-            Widget wakurenText = Text('BRACKET\nQUINELLA', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white));
+            Widget wakurenText = const Text('BRACKET\nQUINELLA', textAlign: TextAlign.center, style: TextStyle(color: Colors.white));
             topWidget = bottomWidget = SizedBox(height: 30.0, child: FittedBox(fit: BoxFit.contain, child: wakurenText));
             topContainerColor = bottomContainerColor = Colors.black;
             middleContainerColor = Colors.black;
@@ -145,9 +145,9 @@ class BettingTicketCard extends StatelessWidget {
           image: AssetImage('assets/images/baken_bg.png'),
           fit: BoxFit.cover,
         ),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: const Color.fromRGBO(0, 0, 0, 0.2),
+            color: Color.fromRGBO(0, 0, 0, 0.2),
             spreadRadius: 1,
             blurRadius: 4,
             offset: Offset(2, 3),
@@ -182,7 +182,7 @@ class BettingTicketCard extends StatelessWidget {
                             children: [
                               Text(
                                 '${ticketData['開催場']}',
-                                style: TextStyle(color: Colors.black, fontSize: 22),
+                                style: const TextStyle(color: Colors.black, fontSize: 22),
                               ),
                               Row(
                                 children: [
@@ -213,7 +213,6 @@ class BettingTicketCard extends StatelessWidget {
                   // --- (上段) 中央領域 ---
                   Container(
                     width: 40,
-                    height: 190,
                     decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.0)),
                     child: Column(
                       children: [
@@ -239,7 +238,7 @@ class BettingTicketCard extends StatelessWidget {
                                   const SizedBox(height: 12),
                                   ...shikibetsuToDisplay.characters.map((char) {
                                     return Text(char, style: TextStyle(color: middleTextColor, fontSize: 20, fontWeight: FontWeight.bold));
-                                  }).toList(),
+                                  }),
                                 ],
                               ),
                             )
@@ -280,53 +279,66 @@ class BettingTicketCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (hoshikiToDisplay.isNotEmpty)
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.center,
-                              child: Row(
-                                children: [
-                                  Container(
-                                    height: 30,
-                                    decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.5)),
+                          // LayoutBuilderで親ウィジェットの幅を取得
+                            LayoutBuilder(
+                              builder: (BuildContext context, BoxConstraints constraints) {
+                                // 利用可能な最大の幅をキャプチャ
+                                final double availableWidth = constraints.maxWidth;
+
+                                return DecoratedBox(
+                                  decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.5)),
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
                                     alignment: Alignment.center,
-                                    child: () {
-                                      const baseStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold);
-                                      const englishStyle = TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.normal);
-                                      if (overallMethod == 'ながし') {
-                                        return RichText(
-                                            textAlign: TextAlign.center,
-                                            text: TextSpan(
-                                                style: baseStyle.copyWith(fontSize: 20),
-                                                children: <TextSpan>[
-                                                  TextSpan(text: hoshikiToDisplay),
-                                                  TextSpan(
-                                                      text: ' WHEEL',
-                                                      style: englishStyle.copyWith(fontSize: 12),
-                                                  )
-                                                ]
-                                            )
-                                        );
-                                      } else if (overallMethod == 'ボックス') {
-                                        return RichText(
-                                            textAlign: TextAlign.center,
-                                            text: TextSpan(
-                                                style: baseStyle.copyWith(fontSize: 20),
-                                                children: <TextSpan>[
-                                                  TextSpan(text: hoshikiToDisplay),
-                                                  TextSpan(
-                                                      text: ' BOX',
-                                                      style: englishStyle.copyWith(fontSize: 12),
-                                                  )
-                                                ]
-                                            )
-                                        );
-                                      } else {
-                                        return Text(hoshikiToDisplay, style: baseStyle.copyWith(fontSize: 18));
-                                      }
-                                    }(),
+                                    // Containerに取得した幅を明示的に設定
+                                    child: Container(
+                                      height: 30,
+                                      width: availableWidth,
+                                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                      child: () {
+                                        const baseStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold);
+                                        const englishStyle = TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.normal);
+                                        if (overallMethod == 'ながし' || overallMethod == 'ボックス') {
+                                          // Containerの幅が確定しているので、Row + Expandedが正しく機能する
+                                          return Row(
+                                            children: [
+                                              Expanded(
+                                                flex: 2,
+                                                child: FittedBox(
+                                                  fit: BoxFit.contain,
+                                                  child: Text(
+                                                    hoshikiToDisplay,
+                                                    style: baseStyle,
+                                                  ),
+                                                ),
+                                              ),
+                                              Expanded(
+                                                flex: 1, // 1/3のスペースを確保
+                                                child: Center(
+                                                  child: Text(
+                                                    overallMethod == 'ながし' ? 'WHEEL' : 'BOX',
+                                                    style: englishStyle,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        } else {
+                                          return Center(
+                                            child: FittedBox(
+                                              fit: BoxFit.contain, // 親ウィジェットに収まるように調整（デフォルト）
+                                              child: Text(
+                                                hoshikiToDisplay,
+                                                style: baseStyle.copyWith(fontSize: 30),
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      }(),
+                                    ),
                                   ),
-                                ],
-                              ),
+                                );
+                              },
                             ),
                           if (hoshikiToDisplay.isNotEmpty) const SizedBox(height: 0),
 
@@ -358,11 +370,11 @@ class BettingTicketCard extends StatelessWidget {
                   child: (salesLocation != null && salesLocation.isNotEmpty)
                       ? Text(
                     salesLocation,
-                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
+                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16, height: 1.0,),
                   )
                       : const SizedBox.shrink(),
                 ),
-                SizedBox(width: 40 + 10),
+                const SizedBox(width: 40 + 10),
                 Expanded(
                   flex: 3,
                   child: Align(

@@ -263,7 +263,7 @@ class FeaturedRaceListItem extends StatelessWidget {
             const SizedBox(width: 10.0),
             // 中央: レース情報
             Expanded(
-              child: Container(
+              child: SizedBox(
                 width: 150, // ← 固定したい横幅（ピクセル単位）
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

@@ -2,7 +2,6 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/result_page.dart';
@@ -114,11 +113,11 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(
+          const Positioned.fill(
             child: CustomBackground(
-              overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-              stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
-              fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+              overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
+              stripeColor: Color.fromRGBO(219, 234, 234, 0.6),
+              fillColor: Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
           Center(

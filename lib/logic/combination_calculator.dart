@@ -66,10 +66,13 @@ void generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMethod
         final isMulti = di['マルチ'] == 'あり';
         switch (ticketType) {
           case '馬連': case 'ワイド': case '枠連':
-          for (final a in axis) for (final o in opponents) if (a != o) allCombinations.add([a, o]);
+          for (final a in axis) for (final o in opponents) {
+            if (a != o) allCombinations.add([a, o]);
+          }
           break;
           case '馬単':
-            for (final a in axis) for (final o in opponents) if (a != o) {
+            for (final a in axis) for (final o in opponents) {
+              if (a != o) {
               if (isMulti) {
                 allCombinations.add([a, o]); allCombinations.add([o, a]);
               } else {
@@ -77,12 +80,17 @@ void generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMethod
                 if (di['ながし'] == '2着ながし') allCombinations.add([o, a]);
               }
             }
+            }
             break;
           case '3連複':
             if (di['ながし種別'] == '軸1頭ながし') {
-              for (final combo in combinations(opponents, 2)) allCombinations.add([axis.first, ...combo]);
+              for (final combo in combinations(opponents, 2)) {
+                allCombinations.add([axis.first, ...combo]);
+              }
             } else if (di['ながし種別'] == '軸2頭ながし') {
-              for (final o in opponents) allCombinations.add([...axis, o]);
+              for (final o in opponents) {
+                allCombinations.add([...axis, o]);
+              }
             }
             break;
           case '3連単':
@@ -154,16 +162,28 @@ void generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMethod
         final p3 = (di['馬番'].length > 2) ? (di['馬番'][2] as List).cast<int>() : <int>[];
         switch (ticketType) {
           case '馬連': case 'ワイド': case '枠連':
-          for (final f in p1) for (final s in p2) if (f != s) allCombinations.add([f, s]);
+          for (final f in p1) for (final s in p2) {
+            if (f != s) allCombinations.add([f, s]);
+          }
           break;
           case '馬単':
-            for (final f in p1) for (final s in p2) if (f != s) allCombinations.add([f, s]);
+            for (final f in p1) for (final s in p2) {
+              if (f != s) allCombinations.add([f, s]);
+            }
             break;
           case '3連複':
-            for (final f in p1) for (final s in p2) for (final t in p3) if (f != s && f != t && s != t) allCombinations.add([f, s, t]);
+            for (final f in p1) for (final s in p2) {
+              for (final t in p3) {
+              if (f != s && f != t && s != t) allCombinations.add([f, s, t]);
+            }
+            }
             break;
           case '3連単':
-            for (final f in p1) for (final s in p2) for (final t in p3) if (f != s && f != t && s != t) allCombinations.add([f, s, t]);
+            for (final f in p1) for (final s in p2) {
+              for (final t in p3) {
+              if (f != s && f != t && s != t) allCombinations.add([f, s, t]);
+            }
+            }
             break;
         }
         break;
@@ -314,6 +334,8 @@ int combinationsCount(int n, int k) {
   if (k == 0 || k == n) return 1;
   if (k > n / 2) k = n - k;
   int res = 1;
-  for (int i = 1; i <= k; ++i) res = res * (n - i + 1) ~/ i;
+  for (int i = 1; i <= k; ++i) {
+    res = res * (n - i + 1) ~/ i;
+  }
   return res;
 }

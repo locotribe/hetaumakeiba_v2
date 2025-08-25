@@ -29,7 +29,9 @@ const Map<String, String> ticketofficeDict = {
 
 Map<String, dynamic> parseHorseracingTicketQr(String s) {
   List<String> underDigits = List.filled(40, "X");
-  for (int i = 0; i < 34; i++) underDigits[i] = "0";
+  for (int i = 0; i < 34; i++) {
+    underDigits[i] = "0";
+  }
 
   Map<String, dynamic> d = {};
   d["QR"] = s;
@@ -41,8 +43,9 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
   itr.move(2);
   String alternativeCode = itr.next();
   if (alternativeCode != "0") {
-    if (alternativeCode == "2") d["開催種別"] = "代替";
-    else if (alternativeCode == "7") d["開催種別"] = "継続";
+    if (alternativeCode == "2") {
+      d["開催種別"] = "代替";
+    } else if (alternativeCode == "7") d["開催種別"] = "継続";
     else d["開催種別"] = "不明";
   }
   d["年"] = int.parse(itr.next() + itr.next());
@@ -52,9 +55,15 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
   String typeCode = itr.next();
   d["方式"] = typeDict[typeCode];
   itr.next();
-  for (int i = 28; i < 34; i++) underDigits[i] = itr.next();
-  for (int i = 20; i < 26; i++) underDigits[i] = itr.next();
-  for (int i = 0; i < 13; i++) underDigits[i] = itr.next();
+  for (int i = 28; i < 34; i++) {
+    underDigits[i] = itr.next();
+  }
+  for (int i = 20; i < 26; i++) {
+    underDigits[i] = itr.next();
+  }
+  for (int i = 0; i < 13; i++) {
+    underDigits[i] = itr.next();
+  }
   underDigits[26] = itr.next();
   String ticketofficeCode = underDigits.sublist(0, 4).join();
   d["発売所"] = ticketofficeDict[ticketofficeCode.substring(2)] ?? ticketofficeDict[ticketofficeCode.substring(0, 2)] ?? "不明";
@@ -88,7 +97,9 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
           if (bettingCode == "6") di["ウラ"] = ura == "01" ? "あり" : "なし";
         }
         String purchaseAmountStr = "";
-        for (int i = 0; i < 5 && itr.position < s.length; i++) purchaseAmountStr += itr.next();
+        for (int i = 0; i < 5 && itr.position < s.length; i++) {
+          purchaseAmountStr += itr.next();
+        }
         di["購入金額"] = (purchaseAmountStr.length == 5) ? int.parse(purchaseAmountStr) * 100 : 0;
 
         (d["購入内容"] as List).add(di);
@@ -101,20 +112,28 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       di["式別"] = bettingCode;
       List<int> nos = [];
       String purchaseAmountStr = "";
-      for (int i = 0; i < 5; i++) nos.add(int.parse(itr.next() + itr.next()));
+      for (int i = 0; i < 5; i++) {
+        nos.add(int.parse(itr.next() + itr.next()));
+      }
       final originalPos = itr.position;
       itr.move(5);
       if (!(itr.peek(0) == "9" && itr.peek(1) == "0")) {
         itr.currentPosition = originalPos;
-        for (int i = 0; i < 5; i++) nos.add(int.parse(itr.next() + itr.next()));
+        for (int i = 0; i < 5; i++) {
+          nos.add(int.parse(itr.next() + itr.next()));
+        }
       } else { itr.currentPosition = originalPos; }
       final originalPos2 = itr.position;
       itr.move(5);
       if (!(itr.peek(0) == "9" && itr.peek(1) == "0")) {
         itr.currentPosition = originalPos2;
-        for (int i = 0; i < 8; i++) nos.add(int.parse(itr.next() + itr.next()));
+        for (int i = 0; i < 8; i++) {
+          nos.add(int.parse(itr.next() + itr.next()));
+        }
       } else { itr.currentPosition = originalPos2; }
-      for (int i = 0; i < 5; i++) purchaseAmountStr += itr.next();
+      for (int i = 0; i < 5; i++) {
+        purchaseAmountStr += itr.next();
+      }
       di["馬番"] = nos.where((x) => x != 0).toList();
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
       di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: 'BOX', first: di["馬番"]);
@@ -132,41 +151,58 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       switch (bettingCode) {
         case "6": di["ながし"] = wheelExactaDict[wheelCode]; method = 'ながし'; break;
         case "8": di["ながし"] = wheelTrioDict[wheelCode]; method = di["ながし"]!; di['ながし種別'] = method; break;
-        case "9": di["ながし"] = wheelTrifectaDict[wheelCode]; method = di["ながし"]!; if (di["ながし"]!.contains('・')) method = '軸2頭ながし'; else method = '軸1頭ながし'; di['ながし種別'] = method; break;
+        case "9": di["ながし"] = wheelTrifectaDict[wheelCode]; method = di["ながし"]!; if (di["ながし"]!.contains('・')) {
+          method = '軸2頭ながし';
+        } else {
+          method = '軸1頭ながし';
+        } di['ながし種別'] = method; break;
         default: di["ながし"] = "ながし"; method = 'ながし';
       }
       int count = 0;
       if (bettingCode == "6" || bettingCode == "8") {
         List<int> horseNumbers = [];
-        for (int j = 0; j < 2; j++) for (int i = 1; i <= 18; i++) if (itr.next() == "1") horseNumbers.add(i);
+        for (int j = 0; j < 2; j++) for (int i = 1; i <= 18; i++) {
+          if (itr.next() == "1") horseNumbers.add(i);
+        }
         di["軸"] = horseNumbers;
         List<int> innerList = [];
-        for (int i = 1; i <= 18; i++) if (itr.next() == "1") innerList.add(i);
+        for (int i = 1; i <= 18; i++) {
+          if (itr.next() == "1") innerList.add(i);
+        }
         di["相手"] = innerList;
         count = innerList.length;
       } else if (bettingCode == "9") {
         List<List<int>> horseNumbers = [];
         for (int j = 0; j < 3; j++) {
           List<int> innerList = [];
-          for (int i = 1; i <= 18; i++) if (itr.next() == "1") innerList.add(i);
+          for (int i = 1; i <= 18; i++) {
+            if (itr.next() == "1") innerList.add(i);
+          }
           horseNumbers.add(innerList);
         }
         di["馬番"] = horseNumbers;
-        if (method == '軸2頭ながし') count = horseNumbers.length > 2 ? horseNumbers[2].length : 0;
-        else if (method == '軸1頭ながし') count = horseNumbers.length > 1 ? horseNumbers[1].length : 0;
+        if (method == '軸2頭ながし') {
+          count = horseNumbers.length > 2 ? horseNumbers[2].length : 0;
+        } else if (method == '軸1頭ながし') count = horseNumbers.length > 1 ? horseNumbers[1].length : 0;
       } else {
         di["軸"] = int.parse(itr.next() + itr.next());
         String purchaseAmountStr = "";
-        for (int i = 0; i < 5; i++) purchaseAmountStr += itr.next();
+        for (int i = 0; i < 5; i++) {
+          purchaseAmountStr += itr.next();
+        }
         currentPurchaseAmount = int.parse("${purchaseAmountStr}00");
         List<int> innerList = [];
-        for (int i = 1; i <= 18; i++) if (itr.next() == "1") innerList.add(i);
+        for (int i = 1; i <= 18; i++) {
+          if (itr.next() == "1") innerList.add(i);
+        }
         di["相手"] = innerList;
         count = innerList.length;
       }
       if (bettingCode == "8" || bettingCode == "9" || bettingCode == "6") {
         String purchaseAmountStr = "";
-        for (int i = 0; i < 5; i++) purchaseAmountStr += itr.next();
+        for (int i = 0; i < 5; i++) {
+          purchaseAmountStr += itr.next();
+        }
         currentPurchaseAmount = int.parse("${purchaseAmountStr}00");
       }
       di["購入金額"] = currentPurchaseAmount ?? 0;
@@ -193,8 +229,9 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       } else { di["マルチ"] = "なし"; }
       if (bettingCode == "9") {
         final hg = (di["馬番"] as List).map((e) => (e as List).cast<int>()).toList();
-        if (method == '軸1頭ながし' || method == '軸1頭マルチ') di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: method, first: hg[0], second: hg.length > 1 ? hg[1] : hg[2]);
-        else if (method == '軸2頭ながし' || method == '軸2頭マルチ') di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: method, first: hg[0], second: hg[1], third: hg[2]);
+        if (method == '軸1頭ながし' || method == '軸1頭マルチ') {
+          di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: method, first: hg[0], second: hg.length > 1 ? hg[1] : hg[2]);
+        } else if (method == '軸2頭ながし' || method == '軸2頭マルチ') di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: method, first: hg[0], second: hg[1], third: hg[2]);
       } else if (bettingCode == "6" || bettingCode == "8") {
         di["組合せ数"] = calculatePoints(ticketType: bettingDict[bettingCode]!, method: method, first: (di["軸"] as List).cast<int>(), second: (di["相手"] as List).cast<int>());
       } else {
@@ -212,12 +249,16 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       List<List<int>> horseNumbers = [];
       for (int j = 0; j < 3; j++) {
         List<int> innerList = [];
-        for (int i = 1; i <= 18; i++) if (itr.next() == "1") innerList.add(i);
+        for (int i = 1; i <= 18; i++) {
+          if (itr.next() == "1") innerList.add(i);
+        }
         if (innerList.isNotEmpty) horseNumbers.add(innerList);
       }
       di["馬番"] = horseNumbers;
       String purchaseAmountStr = "";
-      for (int i = 0; i < 5; i++) if (itr.position < s.length) purchaseAmountStr += itr.next();
+      for (int i = 0; i < 5; i++) {
+        if (itr.position < s.length) purchaseAmountStr += itr.next();
+      }
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
       itr.next();
       List<int> f = [], s_ = [], t = [];
@@ -239,7 +280,9 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       if (bettingCode == "6" || bettingCode == "9") d["着順指定"] = positionSpecify != 0 ? "$positionSpecify着指定" : "なし";
       d["組合せ数"] = int.parse(itr.next() + itr.next());
       String purchaseAmountStr = "";
-      for (int i = 0; i < 5; i++) if (itr.position < s.length) purchaseAmountStr += itr.next();
+      for (int i = 0; i < 5; i++) {
+        if (itr.position < s.length) purchaseAmountStr += itr.next();
+      }
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
       itr.move(2);
       List<List<int>> horseNumbersList = [];

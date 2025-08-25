@@ -46,6 +46,8 @@
         data_table_2: ^2.5.10
 
 
+    path: any
+    crypto: any
     dev_dependencies:
         flutter_test:
             sdk: flutter

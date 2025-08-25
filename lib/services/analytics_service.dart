@@ -39,7 +39,7 @@ class AnalyticsService {
         final int investment = parsedTicket['合計金額'] as int? ?? 0;
         final int payout = hitResult.totalPayout + hitResult.totalRefund;
         final int isHit = hitResult.isHit ? 1 : 0;
-        final int betCount = 1;
+        const int betCount = 1;
 
         // この馬券が影響を与える全ての集計キーを生成
         final keys = _generateAggregateKeys(parsedTicket, raceResult);

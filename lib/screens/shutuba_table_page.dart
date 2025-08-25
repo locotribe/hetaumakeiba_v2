@@ -42,7 +42,7 @@ enum SortableColumn {
 class ShutubaTablePage extends StatefulWidget {
   final String raceId;
 
-  const ShutubaTablePage({Key? key, required this.raceId}) : super(key: key);
+  const ShutubaTablePage({super.key, required this.raceId});
 
   @override
   State<ShutubaTablePage> createState() => _ShutubaTablePageState();
@@ -194,9 +194,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
 
     final raceData = await ScraperService.scrapeFullPredictionData(widget.raceId);
-    if (raceData == null) {
-      return null;
-    }
 
     // 更新前に、キャッシュに保持されているオッズ・人気情報を新しいデータにマージする
     if (_pastedDataCache.isNotEmpty) {
@@ -989,8 +986,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     // 平均スコアをS, A, B, Cランクに変換
     String rank;
-    if (avgScore >= 3.5) rank = 'S';
-    else if (avgScore >= 3.0) rank = 'A';
+    if (avgScore >= 3.5) {
+      rank = 'S';
+    } else if (avgScore >= 3.0) rank = 'A';
     else if (avgScore >= 2.5) rank = 'B';
     else if (avgScore >= 2.0) rank = 'C';
     else rank = 'D';
@@ -1230,14 +1228,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Widget _buildMarkDropdown(PredictionHorseDetail horse) {
     return PopupMenuButton<String>(
       // セル内に表示するウィジェット
-      child: Center(
-        child: Text(
-          horse.userMark?.mark ?? '--', // 選択されていれば印、なければ空白
-          style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
-        ),
-      ),
-
-      // このconstraintsプロパティを追加
       constraints: const BoxConstraints(
         minWidth: 2.0 * 24.0, // 最小幅を指定
         maxWidth: 2.0 * 24.0,  // 最大幅を指定
@@ -1278,6 +1268,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       },
       // メニュー全体のパディングを削除
       padding: EdgeInsets.zero,
+      // セル内に表示するウィジェット
+      child: Center(
+        child: Text(
+          horse.userMark?.mark ?? '--', // 選択されていれば印、なければ空白
+          style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+        ),
+      ),
     );
   }
 
@@ -1412,7 +1409,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                           // レース名を5文字に制限し、オーバーフロー時に省略記号を表示
                           Text(
                             record.raceName.length > 5
-                                ? '${record.raceName.substring(0, 5)}'
+                                ? record.raceName.substring(0, 5)
                                 : record.raceName,
                             style: const TextStyle(color: Colors.black, fontSize: 12),
                             overflow: TextOverflow.ellipsis,
@@ -1424,9 +1421,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   ),
                 );
               }
-              return Container(
+              return const SizedBox(
                 width: 100, // 固定幅の空のコンテナ
-                child: const Text(''),
+                child: Text(''),
               );
             },
           ),

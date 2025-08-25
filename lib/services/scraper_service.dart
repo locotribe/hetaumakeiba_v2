@@ -631,8 +631,9 @@ class ScraperService {
     final gradeElement = raceNameBox?.querySelector('.RaceName [class*="Icon_GradeType"]');
     if (gradeElement != null) {
       final className = gradeElement.className;
-      if (className.contains('Icon_GradeType10')) raceGrade = 'J.G1';
-      else if (className.contains('Icon_GradeType11')) raceGrade = 'J.G2';
+      if (className.contains('Icon_GradeType10')) {
+        raceGrade = 'J.G1';
+      } else if (className.contains('Icon_GradeType11')) raceGrade = 'J.G2';
       else if (className.contains('Icon_GradeType12')) raceGrade = 'J.G3';
       else if (className.contains('Icon_GradeType1')) raceGrade = 'G1';
       else if (className.contains('Icon_GradeType2')) raceGrade = 'G2';

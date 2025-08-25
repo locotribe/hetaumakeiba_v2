@@ -2,7 +2,6 @@
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
-import 'dart:math';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 
@@ -39,8 +38,9 @@ class PredictionAnalyzer {
     String currentCondition = '良'; // デフォルトは良馬場
     if (raceInfoParts.length > 2) {
       final conditionPart = raceInfoParts[2].trim();
-      if (conditionPart.contains('稍重')) currentCondition = '稍重';
-      else if (conditionPart.contains('重')) currentCondition = '重';
+      if (conditionPart.contains('稍重')) {
+        currentCondition = '稍重';
+      } else if (conditionPart.contains('重')) currentCondition = '重';
       else if (conditionPart.contains('不良')) currentCondition = '不良';
     }
     final isHeavyTrack = currentCondition != '良';
@@ -296,8 +296,9 @@ class PredictionAnalyzer {
     String currentCondition = '良'; // デフォルトは良馬場
     if (raceInfoParts.length > 2) {
       final conditionPart = raceInfoParts[2].trim();
-      if (conditionPart.contains('稍重')) currentCondition = '稍重';
-      else if (conditionPart.contains('重')) currentCondition = '重';
+      if (conditionPart.contains('稍重')) {
+        currentCondition = '稍重';
+      } else if (conditionPart.contains('重')) currentCondition = '重';
       else if (conditionPart.contains('不良')) currentCondition = '不良';
     }
 
@@ -498,8 +499,9 @@ class PredictionAnalyzer {
     }
 
     final frontRunners = nigeCount + senkoCount;
-    if (frontRunners == 0) sentences.add('明確な逃げ・先行馬が不在。');
-    else if (frontRunners >= raceData.horses.length / 2) sentences.add('先行馬が揃い、ペースは速くなる可能性がある。');
+    if (frontRunners == 0) {
+      sentences.add('明確な逃げ・先行馬が不在。');
+    } else if (frontRunners >= raceData.horses.length / 2) sentences.add('先行馬が揃い、ペースは速くなる可能性がある。');
     else if (nigeCount > 1) sentences.add('逃げ馬が複数おり、先行争いが激化しそう。');
 
     // 2. 予測ペースと展開の言語化

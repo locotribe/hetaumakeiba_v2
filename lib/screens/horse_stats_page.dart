@@ -434,7 +434,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   );
-                }).toList(),
+                }),
               ],
             ),
           ),
@@ -466,7 +466,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                             style: const TextStyle(fontSize: 12),
                           ),
                         );
-                      }).toList(),
+                      }),
                       // 追加ヘッダー
                       Container(
                           width: totalCellWidth,
@@ -578,7 +578,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                               },
                             ),
                           );
-                        }).toList(),
+                        }),
                         // 追加セル
                         Container(
                             width: totalCellWidth,
@@ -615,7 +615,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                         ),
                       ],
                     );
-                  }).toList(),
+                  }),
                 ],
               ),
             ),

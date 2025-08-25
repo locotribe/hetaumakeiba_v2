@@ -801,9 +801,9 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
         maxY: maxProfit > 0 ? maxProfit * 1.2 : 1000,
         minY: minProfit < 0 ? minProfit * 1.2 : 0,
         titlesData: FlTitlesData(
-          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -815,7 +815,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
           ),
         ),
         borderData: FlBorderData(show: false),
-        gridData: FlGridData(show: true, drawVerticalLine: false),
+        gridData: const FlGridData(show: true, drawVerticalLine: false),
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
             getTooltipColor: (group) => Colors.blueGrey,

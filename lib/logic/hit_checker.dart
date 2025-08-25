@@ -1,7 +1,6 @@
 // lib/logic/hit_checker.dart
 
 import 'package:flutter/foundation.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
@@ -109,7 +108,7 @@ class HitChecker {
             if (payout > 0) {
               final payoutAmount = (payout * amountPerBet) ~/ 100;
               totalPayout += payoutAmount;
-              hitDetails.add('$ticketTypeName 的中！ ${matchingPayout.combination} -> ${payoutAmount}円');
+              hitDetails.add('$ticketTypeName 的中！ ${matchingPayout.combination} -> $payoutAmount円');
               processedHitCombinations.add(comboKey);
             }
           }
@@ -128,7 +127,7 @@ class HitChecker {
 
           if (isRefundable) {
             totalRefund += amountPerBet;
-            refundDetails.add('$ticketTypeName 返還: ${userCombo.join('-')} -> ${amountPerBet}円');
+            refundDetails.add('$ticketTypeName 返還: ${userCombo.join('-')} -> $amountPerBet円');
           }
         }
       }

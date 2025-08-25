@@ -22,7 +22,7 @@ class _HorseNumberDotPainter extends FlDotPainter {
     final paint = Paint()..color = color;
     canvas.drawCircle(center, radius, paint);
 
-    final textStyle = TextStyle(
+    const textStyle = TextStyle(
       color: Colors.white,
       fontSize: 10,
       fontWeight: FontWeight.bold,

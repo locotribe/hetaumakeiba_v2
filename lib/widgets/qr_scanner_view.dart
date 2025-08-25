@@ -43,11 +43,11 @@ class _QrScannerViewState extends State<QrScannerView> {
         return Stack(
           children: [
             // 背景のストライプと特定領域の塗りつぶし
-            Positioned.fill(
+            const Positioned.fill(
               child: CustomBackground(
-                overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-                stripeColor: const Color.fromRGBO(219, 234, 234, 0.3),
-                fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+                overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
+                stripeColor: Color.fromRGBO(219, 234, 234, 0.3),
+                fillColor: Color.fromRGBO(172, 234, 231, 1.0),
               ),
             ),
 

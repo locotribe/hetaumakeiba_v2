@@ -272,7 +272,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           horseNumbersStr = (combinations.first as List).join(separator);
         }
       }
-      String summary = '$horseNumbersStr / ${amount}円';
+      String summary = '$horseNumbersStr / $amount円';
       if (purchases.length > 1 || (firstPurchase.containsKey('all_combinations') && (firstPurchase['all_combinations'] as List).length > 1)) {
         summary += ' ...他';
       }
@@ -442,7 +442,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             ),
             child: Center(
               child: Text(
-                '${month}月',
+                '$month月',
                 style: TextStyle(
                   color: textColor,
                   fontWeight: fontWeight,
@@ -475,7 +475,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${_selectedMonth}月',
+                '$_selectedMonth月',
                 style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, height: 1.1),
               ),
               const SizedBox(height: 2),
@@ -561,7 +561,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('${totalAmount}円', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54, height: 1.2)),
+                  Text('$totalAmount円', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54, height: 1.2)),
                   if (item.raceResult != null) ...[
                     RichText(
                       text: TextSpan(
@@ -569,7 +569,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                         children: <TextSpan>[
                           TextSpan(text: '${payout + refund}円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isHit ? Colors.green.shade700 : Colors.black, height: 1.2)),
                           if (refund > 0)
-                            TextSpan(text: ' (返${refund})', style: const TextStyle(fontSize: 11, color: Colors.black54, height: 1.1)),
+                            TextSpan(text: ' (返$refund)', style: const TextStyle(fontSize: 11, color: Colors.black54, height: 1.1)),
                         ],
                       ),
                     ),

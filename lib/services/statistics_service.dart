@@ -5,7 +5,6 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'dart:convert';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class StatisticsService {
@@ -147,8 +146,9 @@ class StatisticsService {
           final lastCornerPosition = cornerRanks.last;
           final positionRate = lastCornerPosition / horseCount;
           String style;
-          if (positionRate <= 0.15) style = '逃げ';
-          else if (positionRate <= 0.40) style = '先行';
+          if (positionRate <= 0.15) {
+            style = '逃げ';
+          } else if (positionRate <= 0.40) style = '先行';
           else if (positionRate <= 0.80) style = '差し';
           else style = '追込';
           legStyleStats.putIfAbsent(style, () => {'total': 0, 'win': 0, 'place': 0, 'show': 0});
@@ -166,8 +166,9 @@ class StatisticsService {
           if (weight != null && weightChange != null) {
             if(isWin) winningHorseWeights.add(weight);
             String category;
-            if (weightChange <= -10) category = '-10kg以下';
-            else if (weightChange <= -4) category = '-4~-8kg';
+            if (weightChange <= -10) {
+              category = '-10kg以下';
+            } else if (weightChange <= -4) category = '-4~-8kg';
             else if (weightChange <= 2) category = '-2~+2kg';
             else if (weightChange <= 8) category = '+4~+8kg';
             else category = '+10kg以上';

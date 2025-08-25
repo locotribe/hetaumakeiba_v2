@@ -65,9 +65,9 @@ class _ResultPageState extends State<ResultPage> {
         children: [
           const Positioned.fill(
             child: CustomBackground(
-              overallBackgroundColor: const Color.fromRGBO(231, 234, 234, 1.0),
-              stripeColor: const Color.fromRGBO(219, 234, 234, 0.6),
-              fillColor: const Color.fromRGBO(172, 234, 231, 1.0),
+              overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
+              stripeColor: Color.fromRGBO(219, 234, 234, 0.6),
+              fillColor: Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
           Column(

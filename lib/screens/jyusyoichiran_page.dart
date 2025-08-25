@@ -268,7 +268,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
           final dayOfWeek = _getDayOfWeek(race);
           return FeaturedRaceListItem(
             race: race,
-            dayOfWeek: '$dayOfWeek',
+            dayOfWeek: dayOfWeek,
             onTap: () {
               Navigator.push(
                 context,

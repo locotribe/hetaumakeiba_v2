@@ -1,7 +1,7 @@
 // lib/widgets/custom_background.dart
 
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui; // CustomPainterでRect.fromLTWHを正確に使うために必要
+// CustomPainterでRect.fromLTWHを正確に使うために必要
 
 class CustomBackground extends StatelessWidget {
   final Color stripeColor;
