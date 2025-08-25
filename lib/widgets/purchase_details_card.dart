@@ -316,6 +316,51 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
   List<Widget> _buildPurchaseDetailsInternal(dynamic purchaseData, String currentBetType) {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
 
+    if (currentBetType == '応援馬券' && purchaseDetails.isNotEmpty) {
+      final detail = purchaseDetails.first;
+      final horseNumber = (detail['馬番'] is List ? detail['馬番'][0] : detail['馬番']) as int;
+      final int? kingaku = detail['購入金額'];
+
+      final Widget horseNumberWidget = _buildHorseNumberDisplay(horseNumber, horseCountForSizing: 1).first;
+
+      const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0,);
+      const TextStyle kiminoAibaStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14);
+
+      // 1行目: 馬番とテキスト
+      final Widget firstLine = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          horseNumberWidget,
+          const Text(' キミノアイバ', style: kiminoAibaStyle),
+        ],
+      );
+
+      // 2行目: 金額
+      Widget amountLine = const SizedBox.shrink();
+      if (kingaku != null) {
+        const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
+        amountLine = Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            const Text('各', style: amountStyle),
+            Text(_getStars(kingaku), style: starStyle),
+            Text('$kingaku円', style: amountStyle),
+          ],
+        );
+      }
+
+      // IntrinsicWidthを削除し、Columnを直接返す
+      return [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            firstLine,
+            amountLine,
+          ],
+        )
+      ];
+    }
+
     return purchaseDetails.map((detail) {
       final String shikibetsuId = detail['式別'] ?? '';
       final String shikibetsu = bettingDict[shikibetsuId] ?? '';
@@ -414,7 +459,6 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         );
       }
 
-      // ▼▼▼▼▼ ここから修正 ▼▼▼▼▼
       return Padding(
         padding: const EdgeInsets.only(bottom: 2.0),
         child: Column(
@@ -429,7 +473,6 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           ],
         ),
       );
-      // ▲▲▲▲▲ ここまで修正 ▲▲▲▲▲
     }).toList();
   }
 
@@ -439,15 +482,12 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       return const SizedBox.shrink();
     }
 
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.topLeft,
-      child: Padding( // ColumnをPaddingでラップ
-        padding: const EdgeInsets.only(top: 4.0), // 上に4ピクセルのパディングを追加
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
-        ),
+    // FittedBoxを削除し、Paddingウィジェットを直接返す
+    return Padding(
+      padding: const EdgeInsets.only(top: 4.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
       ),
     );
   }
@@ -615,7 +655,6 @@ class PurchaseCombinationsCard extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [const Text('各', style: amountStyle), Text(starsForAmount, style: starStyle), Text('$amountValue円', style: amountStyle)])),
           FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [const Text('単勝 ', style: amountStyle), Text(starsForAmount, style: starStyle), Text('$amountValue円', style: amountStyle)])),
           FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [const Text('複勝 ', style: amountStyle), Text(starsForAmount, style: starStyle), Text('$amountValue円', style: amountStyle)])),
         ],
