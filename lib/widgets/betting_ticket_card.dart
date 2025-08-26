@@ -172,43 +172,94 @@ class BettingTicketCard extends StatelessWidget {
                     flex: 2,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      // ★★★ MainAxisAlignment を spaceBetween に設定 ★★★
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        if (ticketData.containsKey('年') && ticketData.containsKey('回') && ticketData.containsKey('日'))
-                          Text(
-                            '20${ticketData['年']}年${ticketData['回']}回${ticketData['日']}日',
-                            style: const TextStyle(color: Colors.black, fontSize: 15,height: 1.0,),
-
-
-                          ),
-                        if (ticketData.containsKey('開催場') && ticketData.containsKey('レース'))
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                        // --- 上部に配置する要素をColumnでグループ化 ---
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (ticketData.containsKey('年') && ticketData.containsKey('回') && ticketData.containsKey('日'))
                               Text(
-                                '${ticketData['開催場']}',
-                                style: const TextStyle(color: Colors.black, fontSize: 22),
+                                '20${ticketData['年']}年${ticketData['回']}回${ticketData['日']}日',
+                                style: const TextStyle(color: Colors.black, fontSize: 17,height: 1.0,),
                               ),
-                              Row(
+                            if (ticketData.containsKey('開催場') && ticketData.containsKey('レース'))
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    width: 50,
-                                    alignment: Alignment.center,
-                                    decoration: const BoxDecoration(color: Colors.black),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 2.0),
-                                      child: Text(
-                                        '${ticketData['レース']}',
-                                        style: const TextStyle(color: Colors.white, fontSize: 23, height: 0.9),
-                                      ),
-                                    ),
+                                  Text(
+                                    '${ticketData['開催場']}',
+                                    style: const TextStyle(color: Colors.black, fontSize: 24),
                                   ),
-                                  const SizedBox(width: 4),
-                                  const Text(
-                                    'レース',
-                                    style: TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.bold),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 50,
+                                        alignment: Alignment.center,
+                                        decoration: const BoxDecoration(color: Colors.black),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 2.0),
+                                          child: Text(
+                                            '${ticketData['レース']}',
+                                            style: const TextStyle(color: Colors.white, fontSize: 23, height: 0.9),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Text(
+                                        'レース',
+                                        style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
+                          ],
+                        ),
+
+                        // --- 下部に配置する要素 (レースタイトル) ---
+                        if (raceResult != null && raceResult!.raceTitle.isNotEmpty)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start, // 全体を左揃え
+                            children: [
+                              // ★★★ QRコード画像を表示 (レスポンシブ対応) ★★★
+                              Container(
+                                constraints: const BoxConstraints(
+                                  maxHeight: 65, // 高さを最大70に制限
+                                ),
+                                child: Image.asset(
+                                  'assets/images/QR_JRA.png',
+                                  // fitプロパティで比率を維持してコンテナに収める
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              const SizedBox(height: 4.0), // 画像とタイトルの間の余白
+
+                              // ★★★ 既存のレースタイトル表示ロジック ★★★
+                              Builder(builder: (context) {
+                                // 正規表現でタイトルを「①回数」「②レース名」「③グレード」に分解
+                                final RegExp regExp = RegExp(r"^(第.+?回)(.+?)\((.+?)\)$");
+                                final match = regExp.firstMatch(raceResult!.raceTitle);
+
+                                if (match != null && match.groupCount >= 3) {
+                                  // 分解に成功した場合
+                                  final String numberPart = match.group(1)!;
+                                  final String namePart = match.group(2)!;
+                                  final String gradePart = match.group(3)!;
+
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text("$numberPart　($gradePart)"),
+                                      Text(namePart),
+                                    ],
+                                  );
+                                } else {
+                                  // 正規表現に一致しない場合は、元のタイトルをそのまま表示
+                                  return Text(raceResult!.raceTitle);
+                                }
+                              }),
                             ],
                           ),
                       ],
