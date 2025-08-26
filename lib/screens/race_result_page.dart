@@ -442,7 +442,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
     return Card(
       elevation: 10,
       margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
-      color: Colors.green[900], // 濃い背景色
+      color: const Color(0xFF1A4314), // 濃い背景色
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         // ↓ ColumnをDefaultTextStyleでラップ

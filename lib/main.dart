@@ -22,15 +22,17 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'へたうま競馬',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color.fromRGBO(172, 234, 234, 1.0),
-          foregroundColor: Colors.black87,
-          elevation: 0,
+        primarySwatch: Colors.green,
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.green[900],
+          foregroundColor: Colors.white,
+          elevation: 2,
         ),
         // FABがBottomNavigationBarにめり込むデザインのための設定
-        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          selectedItemColor: Colors.blueAccent,
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.green[900],
+          selectedItemColor: Colors.white,
           unselectedItemColor: Colors.grey,
         ),
       ),
