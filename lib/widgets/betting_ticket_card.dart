@@ -253,12 +253,14 @@ class BettingTicketCard extends StatelessWidget {
                                 ],
                               ),
                               const SizedBox(height: 8.0), // QRコードとタイトルの間の余白
-
                               // --- 既存のレースタイトル表示 ---
                               Builder(builder: (context) {
                                 // 正規表現でタイトルを「①回数」「②レース名」「③グレード」に分解
                                 final RegExp regExp = RegExp(r"^(第.+?回)(.+?)\((.+?)\)$");
                                 final match = regExp.firstMatch(raceResult!.raceTitle);
+
+                                // 表示するウィジェットを格納する変数
+                                final Widget titleWidget;
 
                                 if (match != null && match.groupCount >= 3) {
                                   // 分解に成功した場合
@@ -266,17 +268,35 @@ class BettingTicketCard extends StatelessWidget {
                                   final String namePart = match.group(2)!;
                                   final String gradePart = match.group(3)!;
 
-                                  return Column(
+                                  titleWidget = Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text("$numberPart　($gradePart)"),
-                                      Text(namePart),
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text("$numberPart　($gradePart)"),
+                                      ),
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(namePart),
+                                      ),
                                     ],
                                   );
                                 } else {
                                   // 正規表現に一致しない場合は、元のタイトルをそのまま表示
-                                  return Text(raceResult!.raceTitle);
+                                  titleWidget = FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(raceResult!.raceTitle),
+                                  );
                                 }
+
+                                // 共通のPaddingウィジェットでラップして右側に余白を追加
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 4.0),
+                                  child: titleWidget,
+                                );
                               }),
                             ],
                           ),
