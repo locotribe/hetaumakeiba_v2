@@ -173,7 +173,6 @@ class BettingTicketCard extends StatelessWidget {
                     flex: 2,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      // ★★★ MainAxisAlignment を spaceBetween に設定 ★★★
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         // --- 上部に配置する要素をColumnでグループ化 ---
@@ -224,7 +223,6 @@ class BettingTicketCard extends StatelessWidget {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // ★★★ 2つのQRコードを横に並べるRow ★★★
                               Row(
                                 children: [
                                   // --- 左側：静的なQRコード ---
@@ -235,18 +233,26 @@ class BettingTicketCard extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 8.0),
-
                                   // --- 右側：動的なQRコード ---
                                   Flexible( // Flexibleで領域を確保
                                     child: Builder(builder: (context) {
-                                      final url = 'https://db.netkeiba.com/race/${raceResult!.raceId}';
-                                      return QrImageView(
-                                        data: url,
-                                        version: QrVersions.auto,
-                                        backgroundColor: Colors.transparent,
-                                        // ★★★ paddingプロパティで余白を調整 ★★★
-                                        padding: const EdgeInsets.all(4.0), // この数値を調整して左のQRコードと見た目を合わせます
-                                      );
+                                      // raceResult および raceId が有効かチェック
+                                      if (raceResult != null && raceResult!.raceId.isNotEmpty) {
+                                        // 有効な場合は、動的なQRコードを生成
+                                        final url = 'https://db.netkeiba.com/race/${raceResult!.raceId}';
+                                        return QrImageView(
+                                          data: url,
+                                          version: QrVersions.auto,
+                                          backgroundColor: Colors.transparent,
+                                          padding: const EdgeInsets.all(4.0),
+                                        );
+                                      } else {
+                                        // 無効な場合は、静的な画像を表示
+                                        return Image.asset(
+                                          'assets/images/QR_JRA.png',
+                                          fit: BoxFit.contain,
+                                        );
+                                      }
                                     }),
                                   ),
                                   const SizedBox(width: 4.0),
