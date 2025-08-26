@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 // 半角数字を全角数字に変換するヘルパー関数
 String _convertHalfWidthNumbersToFullWidth(String text) {
@@ -221,22 +222,39 @@ class BettingTicketCard extends StatelessWidget {
                         // --- 下部に配置する要素 (レースタイトル) ---
                         if (raceResult != null && raceResult!.raceTitle.isNotEmpty)
                           Column(
-                            crossAxisAlignment: CrossAxisAlignment.start, // 全体を左揃え
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // ★★★ QRコード画像を表示 (レスポンシブ対応) ★★★
-                              Container(
-                                constraints: const BoxConstraints(
-                                  maxHeight: 65, // 高さを最大70に制限
-                                ),
-                                child: Image.asset(
-                                  'assets/images/QR_JRA.png',
-                                  // fitプロパティで比率を維持してコンテナに収める
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                              const SizedBox(height: 4.0), // 画像とタイトルの間の余白
+                              // ★★★ 2つのQRコードを横に並べるRow ★★★
+                              Row(
+                                children: [
+                                  // --- 左側：静的なQRコード ---
+                                  Flexible( // Flexibleで領域を確保
+                                    child: Image.asset(
+                                      'assets/images/QR_JRA.png',
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8.0),
 
-                              // ★★★ 既存のレースタイトル表示ロジック ★★★
+                                  // --- 右側：動的なQRコード ---
+                                  Flexible( // Flexibleで領域を確保
+                                    child: Builder(builder: (context) {
+                                      final url = 'https://db.netkeiba.com/race/${raceResult!.raceId}';
+                                      return QrImageView(
+                                        data: url,
+                                        version: QrVersions.auto,
+                                        backgroundColor: Colors.transparent,
+                                        // ★★★ paddingプロパティで余白を調整 ★★★
+                                        padding: const EdgeInsets.all(4.0), // この数値を調整して左のQRコードと見た目を合わせます
+                                      );
+                                    }),
+                                  ),
+                                  const SizedBox(width: 4.0),
+                                ],
+                              ),
+                              const SizedBox(height: 8.0), // QRコードとタイトルの間の余白
+
+                              // --- 既存のレースタイトル表示 ---
                               Builder(builder: (context) {
                                 // 正規表現でタイトルを「①回数」「②レース名」「③グレード」に分解
                                 final RegExp regExp = RegExp(r"^(第.+?回)(.+?)\((.+?)\)$");

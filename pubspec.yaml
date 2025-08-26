@@ -45,6 +45,8 @@
 
         data_table_2: ^2.5.10
 
+        qr_flutter: ^4.1.0
+
 
     path: any
     crypto: any
