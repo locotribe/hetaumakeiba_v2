@@ -160,7 +160,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     if (label.isNotEmpty) {
       return Column(
         children: [
-          Text(label, style: const TextStyle(color: Colors.black54)),
+          Text(label, style: const TextStyle(color: Colors.black)),
           const SizedBox(height: 4),
           horseDisplayWidget,
         ],
@@ -178,7 +178,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     if (groups.isEmpty) return const SizedBox.shrink();
 
     List<Widget> children = [];
-    final bool shouldShowSymbol = isFormation || (betType == 'ながし' && shikibetsu == '3連単');
+    final bool shouldShowSymbol = isFormation || (shikibetsu == '3連単' && (betType == 'ながし' || betType == '通常'));
     final String symbol = _getHorseNumberSymbol(shikibetsu, betType);
 
     for (int i = 0; i < groups.length; i++) {
@@ -193,7 +193,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         );
       }
     }
-    final bool isCenterAligned = isFormation || (betType == 'ながし' && shikibetsu == '3連単');
+    final bool isCenterAligned = isFormation || (shikibetsu == '3連単' && (betType == 'ながし' || betType == '通常'));
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: isCenterAligned ? CrossAxisAlignment.center : CrossAxisAlignment.start,
@@ -446,6 +446,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           betType: currentBetType,
         );
       } else {
+        // 通常投票・ボックス投票の処理
         String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
         final dynamic horseNumbers = detail['馬番'];
         final int horseCount = horseNumbers is List ? horseNumbers.length : 1;
@@ -453,56 +454,71 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
 
         Widget horseDisplayWidget;
 
-        final Widget horseNumbersDisplay = Wrap(
-          spacing: 4.0,
-          runSpacing: 4.0,
-          alignment: WrapAlignment.center,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [..._buildHorseNumberDisplay(horseNumbers, symbol: currentSymbol, horseCountForSizing: horseCount)],
-        );
+        // ★★★ ここから修正 ★★★
+        if (shikibetsu == '3連単' && currentBetType == '通常' && horseNumbers is List) {
+          // 3連単・通常の場合
+          final List<Map<String, dynamic>> groupsData = (horseNumbers as List).cast<int>().map((horseNum) {
+            return {'horseNumbers': [horseNum]};
+          }).toList();
 
-        if ((shikibetsu == '単勝' || shikibetsu == '複勝') && widget.raceResult != null) {
-          String? horseNameToDisplay;
-          try {
-            // 単勝・複勝の '馬番' は int
-            final horseNumberInt = horseNumbers as int;
-            final horseNumberString = horseNumberInt.toString();
-
-            final horseData = widget.raceResult!.horseResults.firstWhere(
-                  (h) => h.horseNumber.trim() == horseNumberString,
-            );
-            horseNameToDisplay = horseData.horseName;
-          } catch (e) {
-            // 馬が見つからない場合は null のまま
-          }
-
-          if (horseNameToDisplay != null) {
-            horseDisplayWidget = Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                horseNumbersDisplay,
-                const SizedBox(width: 8.0),
-                Flexible(
-                  child: Text(
-                    horseNameToDisplay,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            );
-          } else {
-            horseDisplayWidget = horseNumbersDisplay; // 検索失敗時は馬番のみ
-          }
+          horseDisplayWidget = _buildHorizontalGroupLayout(
+            groupsData,
+            isFormation: false,
+            shikibetsu: shikibetsu,
+            betType: currentBetType,
+          );
         } else {
-          horseDisplayWidget = horseNumbersDisplay; // その他の券種は馬番のみ
+          // 3連単・通常以外の馬番表示処理 (単勝・複勝の馬名表示も含む)
+          final Widget horseNumbersDisplay = Wrap(
+            spacing: 4.0,
+            runSpacing: 4.0,
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [..._buildHorseNumberDisplay(horseNumbers, symbol: currentSymbol, horseCountForSizing: horseCount)],
+          );
+
+          if ((shikibetsu == '単勝' || shikibetsu == '複勝') && widget.raceResult != null) {
+            String? horseNameToDisplay;
+            try {
+              final horseNumberInt = horseNumbers as int;
+              final horseNumberString = horseNumberInt.toString();
+              final horseData = widget.raceResult!.horseResults.firstWhere(
+                    (h) => h.horseNumber.trim() == horseNumberString,
+              );
+              horseNameToDisplay = horseData.horseName;
+            } catch (e) {
+              // Not found
+            }
+
+            if (horseNameToDisplay != null) {
+              horseDisplayWidget = Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  horseNumbersDisplay,
+                  const SizedBox(width: 8.0),
+                  Flexible(
+                    child: Text(
+                      horseNameToDisplay,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              );
+            } else {
+              horseDisplayWidget = horseNumbersDisplay;
+            }
+          } else {
+            horseDisplayWidget = horseNumbersDisplay;
+          }
         }
 
+        // 金額表示ウィジェット (3連単・通常の場合もここで生成される)
         Widget amountDisplay = const SizedBox.shrink();
         if (kingaku != null && currentBetType == '通常') {
           const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
@@ -517,14 +533,16 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           );
         }
 
+        // 最終的に馬番表示と金額表示を結合する
         content = Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            horseDisplayWidget, // ★★★ 馬名表示に対応したウィジェットを使用
+            horseDisplayWidget,
             amountDisplay,
           ],
         );
+        // ★★★ ここまで修正 ★★★
       }
 
       return Padding(
@@ -536,7 +554,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
             if (detail['ウラ'] == 'あり')
               const Padding(
                 padding: EdgeInsets.only(left: 16.0),
-                child: Text('ウラ: あり', style: TextStyle(color: Colors.black54)),
+                child: Text('ウラ: あり', style: TextStyle(color: Colors.black)),
               ),
           ],
         ),
