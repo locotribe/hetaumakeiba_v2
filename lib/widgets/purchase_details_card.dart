@@ -1,6 +1,5 @@
 // lib/widgets/purchase_details_card.dart
 
-
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
@@ -452,6 +451,8 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         final int horseCount = horseNumbers is List ? horseNumbers.length : 1;
         final int? kingaku = detail['購入金額'];
 
+        Widget horseDisplayWidget;
+
         final Widget horseNumbersDisplay = Wrap(
           spacing: 4.0,
           runSpacing: 4.0,
@@ -459,6 +460,48 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [..._buildHorseNumberDisplay(horseNumbers, symbol: currentSymbol, horseCountForSizing: horseCount)],
         );
+
+        if ((shikibetsu == '単勝' || shikibetsu == '複勝') && widget.raceResult != null) {
+          String? horseNameToDisplay;
+          try {
+            // 単勝・複勝の '馬番' は int
+            final horseNumberInt = horseNumbers as int;
+            final horseNumberString = horseNumberInt.toString();
+
+            final horseData = widget.raceResult!.horseResults.firstWhere(
+                  (h) => h.horseNumber.trim() == horseNumberString,
+            );
+            horseNameToDisplay = horseData.horseName;
+          } catch (e) {
+            // 馬が見つからない場合は null のまま
+          }
+
+          if (horseNameToDisplay != null) {
+            horseDisplayWidget = Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                horseNumbersDisplay,
+                const SizedBox(width: 8.0),
+                Flexible(
+                  child: Text(
+                    horseNameToDisplay,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            );
+          } else {
+            horseDisplayWidget = horseNumbersDisplay; // 検索失敗時は馬番のみ
+          }
+        } else {
+          horseDisplayWidget = horseNumbersDisplay; // その他の券種は馬番のみ
+        }
 
         Widget amountDisplay = const SizedBox.shrink();
         if (kingaku != null && currentBetType == '通常') {
@@ -478,7 +521,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            horseNumbersDisplay,
+            horseDisplayWidget, // ★★★ 馬名表示に対応したウィジェットを使用
             amountDisplay,
           ],
         );
