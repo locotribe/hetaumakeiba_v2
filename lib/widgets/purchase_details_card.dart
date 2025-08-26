@@ -2,7 +2,8 @@
 
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/logic/combination_calculator.dart'; // 組合せ計算ロジックなどをインポート
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
 // NOTE: クラス外に移動したヘルパー関数
 String _getStars(int amount) {
@@ -41,11 +42,13 @@ double _getBoxSizeByHorseCount(int count) {
 class PurchaseDetailsCard extends StatefulWidget {
   final Map<String, dynamic> parsedResult;
   final String betType;
+  final RaceResult? raceResult;
 
   const PurchaseDetailsCard({
     super.key,
     required this.parsedResult,
     required this.betType,
+    this.raceResult,
   });
 
   @override
@@ -318,8 +321,22 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
 
     if (currentBetType == '応援馬券' && purchaseDetails.isNotEmpty) {
       final detail = purchaseDetails.first;
-      final horseNumber = (detail['馬番'] is List ? detail['馬番'][0] : detail['馬番']) as int;
+      final horseNumberData = detail['馬番'];
+      final horseNumber = (horseNumberData is List ? horseNumberData[0] : horseNumberData) as int;
       final int? kingaku = detail['購入金額'];
+
+      String horseNameToDisplay = 'キミノアイバ'; // デフォルト値
+      if (widget.raceResult != null) {
+        try {
+          final horseNumberString = horseNumber.toString();
+          final horseData = widget.raceResult!.horseResults.firstWhere(
+                (h) => h.horseNumber.trim() == horseNumberString,
+          );
+          horseNameToDisplay = horseData.horseName;
+        } catch (e) {
+          // レース結果に馬が見つからない場合 (除外など) はデフォルト名のまま
+        }
+      }
 
       final Widget horseNumberWidget = _buildHorseNumberDisplay(horseNumber, horseCountForSizing: 1).first;
 
@@ -339,7 +356,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         mainAxisSize: MainAxisSize.min,
         children: [
           horseNumberWidget,
-          const Text(' キミノアイバ', style: kiminoAibaStyle),
+          Text(' $horseNameToDisplay', style: kiminoAibaStyle),
         ],
       );
 

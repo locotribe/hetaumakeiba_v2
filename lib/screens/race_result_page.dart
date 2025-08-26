@@ -318,14 +318,14 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     padding: const EdgeInsets.all(8.0),
                     children: [
                       if (parsedTicket != null)
-                        _buildUserTicketCard(parsedTicket, hitResult),
+                        _buildUserTicketCard(parsedTicket, raceResult, hitResult),
                       if (raceResult != null) ...[
                         if (raceResult.isIncomplete)
                           _buildIncompleteRaceDataCard()
                         else ...[
                           _buildRaceInfoCard(raceResult, pageData.pacePrediction),
                           _buildFullResultsCard(raceResult),
-                          _buildRefundsCard(raceResult, userCombinationsByType), // 修正したMapを渡す
+                          _buildRefundsCard(raceResult, userCombinationsByType),
                         ]
                       ] else ...[
                         _buildNoRaceDataCard(),
@@ -391,7 +391,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  Widget _buildUserTicketCard(Map<String, dynamic> parsedTicket, HitResult? hitResult) {
+  Widget _buildUserTicketCard(Map<String, dynamic> parsedTicket, RaceResult? raceResult, HitResult? hitResult) {
     final totalAmount = parsedTicket['合計金額'] as int? ?? 0;
 
     return Card(
@@ -407,7 +407,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            BettingTicketCard(ticketData: parsedTicket),
+            BettingTicketCard(ticketData: parsedTicket, raceResult: raceResult), // ★★★ raceResultを渡すように変更
             const Divider(height: 20),
             Align(
               alignment: Alignment.centerRight,

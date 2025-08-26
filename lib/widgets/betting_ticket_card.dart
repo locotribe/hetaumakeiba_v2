@@ -1,7 +1,9 @@
 // lib/widgets/betting_ticket_card.dart
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
 // 半角数字を全角数字に変換するヘルパー関数
 String _convertHalfWidthNumbersToFullWidth(String text) {
@@ -21,10 +23,12 @@ String _convertHalfWidthNumbersToFullWidth(String text) {
 /// JRAの馬券を模したUIを表示するウィジェット
 class BettingTicketCard extends StatelessWidget {
   final Map<String, dynamic> ticketData;
+  final RaceResult? raceResult;
 
   const BettingTicketCard({
     super.key,
     required this.ticketData,
+    this.raceResult,
   });
 
   @override
@@ -347,6 +351,7 @@ class BettingTicketCard extends StatelessWidget {
                             child: PurchaseDetailsCard(
                               parsedResult: ticketData,
                               betType: overallMethod,
+                              raceResult: raceResult,
                             ),
                           ),
 
