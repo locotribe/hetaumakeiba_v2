@@ -550,15 +550,31 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       return const SizedBox.shrink();
     }
 
-    // FittedBoxを削除し、Paddingウィジェットを直接返す
-    return Padding(
-      padding: const EdgeInsets.only(top: 4.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center, // この行を追加
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
-      ),
-    );
+    // ★★★ 購入方式によってレイアウトを分岐 ★★★
+    if (widget.betType == '応援馬券') {
+      // 応援馬券の場合：中央揃え
+      return Padding(
+        padding: const EdgeInsets.only(top: 4.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center, // 垂直方向に中央揃え
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
+        ),
+      );
+    } else {
+      // それ以外の場合：従来のFittedBoxで左上揃えにし、表示崩れを防ぐ
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.topLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
+          ),
+        ),
+      );
+    }
   }
 }
 
