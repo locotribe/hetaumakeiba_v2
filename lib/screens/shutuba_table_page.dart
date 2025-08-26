@@ -24,6 +24,7 @@ import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:data_table_2/data_table_2.dart';
+import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 
 // ソート対象の列を識別するためのenum
 enum SortableColumn {
@@ -129,8 +130,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
     final Map<String, String> legStyles = {};
     final Map<String, ConditionFitResult> conditionFits = {};
-    final RaceStatistics? raceStats = await _dbHelper.getRaceStatistics(widget.raceId);
-
+    RaceStatistics? raceStats;
+    try {
+      // 統計データの取得を試みる
+      raceStats = await _dbHelper.getRaceStatistics(widget.raceId);
+    } catch (e) {
+      // テーブルが存在しない等のエラーが発生しても処理を続行する
+      print('レース統計データの取得に失敗しました (テーブル未作成の可能性があります): $e');
+      raceStats = null; // エラー時はnullとして扱う
+    }
     // まず全馬の過去成績を取得し、総合適性スコアと脚質を計算
     for (var horse in raceData.horses) {
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
@@ -582,7 +590,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<void> _navigateToStatisticsPage() async {
-    final stats = await _dbHelper.getRaceStatistics(widget.raceId);
+    RaceStatistics? stats;
+    try {
+      stats = await _dbHelper.getRaceStatistics(widget.raceId);
+    } catch (e) {
+      print('統計データの読み込みに失敗: $e');
+      stats = null; // エラーが発生しても処理を続行できるようnullをセット
+    }
     if (stats == null) {
       final confirm = await showDialog<bool>(
         context: context,
@@ -711,7 +725,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               ignoring: _isCardExpanded,
               child: Column(
                 children: [
-                  TabBar(
+                  ThemedTabBar(
                     controller: _tabController,
                     isScrollable: true,
                     tabs: const [

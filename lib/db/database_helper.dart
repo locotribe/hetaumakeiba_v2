@@ -55,7 +55,8 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 13,
+      // ▼▼▼ 変更箇所 ▼▼▼
+      version: 14,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。
       onCreate: (db, version) async {
@@ -189,6 +190,14 @@ class DatabaseHelper {
           CREATE TABLE horse_stats_cache(
             raceId TEXT PRIMARY KEY,
             statsJson TEXT NOT NULL,
+            lastUpdatedAt TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE race_statistics(
+            raceId TEXT PRIMARY KEY,
+            raceName TEXT NOT NULL,
+            statisticsJson TEXT NOT NULL,
             lastUpdatedAt TEXT NOT NULL
           )
         ''');
@@ -350,6 +359,19 @@ class DatabaseHelper {
             CREATE TABLE horse_stats_cache(
               raceId TEXT PRIMARY KEY,
               statsJson TEXT NOT NULL,
+              lastUpdatedAt TEXT NOT NULL
+            )
+          ''');
+        }
+        // ▼▼▼ 追記箇所 ▼▼▼
+        if (oldVersion < 14) {
+          // v13でテーブル作成に失敗したケース等を救済するため、
+          // テーブルが存在しない場合のみ作成する
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS race_statistics(
+              raceId TEXT PRIMARY KEY,
+              raceName TEXT NOT NULL,
+              statisticsJson TEXT NOT NULL,
               lastUpdatedAt TEXT NOT NULL
             )
           ''');

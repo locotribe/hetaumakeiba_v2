@@ -27,7 +27,20 @@ class MyApp extends StatelessWidget {
           backgroundColor: Colors.green[900],
           foregroundColor: Colors.white,
           elevation: 2,
+          titleTextStyle: const TextStyle(
+            color: Colors.white,      // 文字色を白に指定
+            fontSize: 20,             // フォントサイズを指定
+            fontWeight: FontWeight.bold, // 文字の太さを指定
+          ),
         ),
+
+        // ★★★ TabBarのテーマ設定を修正 ★★★
+        tabBarTheme: TabBarThemeData( // 'TabBarTheme' -> 'TabBarThemeData' に修正
+          labelColor: Colors.white, // 選択中のタブの文字色
+          unselectedLabelColor: Colors.grey[300], // 未選択のタブの文字色
+          indicatorColor: Colors.white, // 下線の色
+        ),
+
         // FABがBottomNavigationBarにめり込むデザインのための設定
         bottomNavigationBarTheme: BottomNavigationBarThemeData(
           type: BottomNavigationBarType.fixed,
