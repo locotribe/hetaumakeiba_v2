@@ -402,51 +402,31 @@ class _RaceResultPageState extends State<RaceResultPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'あなたの購入内容',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            BettingTicketCard(ticketData: parsedTicket, raceResult: raceResult), // ★★★ raceResultを渡すように変更
-            const Divider(height: 20),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                '合計購入金額: $totalAmount円',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
+            BettingTicketCard(ticketData: parsedTicket, raceResult: raceResult),
             if (hitResult != null) ...[
-              const Divider(height: 32),
-              const Text(
-                '結果',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               _buildResultRow('払戻合計', '${hitResult.totalPayout}円'),
               _buildResultRow('返還合計', '${hitResult.totalRefund}円'),
               _buildResultRow(
-                '最終収支',
+                '収支',
                 '${(hitResult.totalPayout + hitResult.totalRefund - totalAmount) >= 0 ? '+' : ''}${hitResult.totalPayout + hitResult.totalRefund - totalAmount}円',
                 isProfit: true,
                 profit: hitResult.totalPayout + hitResult.totalRefund - totalAmount,
               ),
               if (hitResult.hitDetails.isNotEmpty) ...[
-                const SizedBox(height: 12),
                 ...hitResult.hitDetails.map((detail) => Align(
                   alignment: Alignment.centerLeft,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 4.0, left: 8.0),
+                    padding: const EdgeInsets.only(top: 2.0, left: 8.0),
                     child: Text('🎯 $detail', style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold)),
                   ),
                 )),
               ],
               if (hitResult.refundDetails.isNotEmpty) ...[
-                const SizedBox(height: 12),
                 ...hitResult.refundDetails.map((detail) => Align(
                   alignment: Alignment.centerLeft,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 4.0, left: 8.0),
+                    padding: const EdgeInsets.only(top: 2.0, left: 8.0),
                     child: Text('↩️ $detail', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold)),
                   ),
                 )),
@@ -460,24 +440,35 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
   Widget _buildRaceInfoCard(RaceResult raceResult, RacePacePrediction? pacePrediction) {
     return Card(
-      elevation: 2,
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      elevation: 10,
+      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
+      color: Colors.green[900], // 濃い背景色
       child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              raceResult.raceTitle,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(raceResult.raceDate),
-            Text(raceResult.raceInfo),
-            Text(raceResult.raceGrade),
-            if (pacePrediction != null) ...[
+        // ↓ ColumnをDefaultTextStyleでラップ
+        child: DefaultTextStyle(
+          // ここで中のテキスト全体の基本スタイル（今回は文字色）を指定
+          style: const TextStyle(color: Colors.white),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                raceResult.raceTitle,
+                // このTextは個別のスタイルを持つため、ここでも色を明示的に指定
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white, // 個別に色を指定
+                ),
+              ),
+              const SizedBox(height: 8),
+              // 以下のTextウィジェットはDefaultTextStyleのスタイルが適用される
+              Text(raceResult.raceDate),
+              Text(raceResult.raceInfo),
+              Text(raceResult.raceGrade),
+              if (pacePrediction != null) ...[],
             ],
-          ],
+          ),
         ),
       ),
     );
