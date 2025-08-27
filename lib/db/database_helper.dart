@@ -1,5 +1,6 @@
 // lib/db/database_helper.dart
 
+import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
@@ -55,329 +56,32 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      // ▼▼▼ 変更箇所 ▼▼▼
       version: 14,
       /// データベースが初めて作成されるときに呼び出されます。
-      /// ここで初期テーブルの作成を行います。
       onCreate: (db, version) async {
-        // QRコードデータテーブルの作成
-        await db.execute('''
-          CREATE TABLE qr_data(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            userId TEXT NOT NULL,
-            qr_code TEXT UNIQUE,
-            timestamp TEXT,
-            parsed_data_json TEXT
-          )
-        ''');
-        // レース結果データテーブルの作成
-        await db.execute('''
-          CREATE TABLE race_results(
-            race_id TEXT PRIMARY KEY,
-            race_result_json TEXT
-          )
-        ''');
-        // 競走馬成績データテーブルの作成
-        await db.execute('''
-          CREATE TABLE horse_performance(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            horse_id TEXT NOT NULL,
-            race_id TEXT NOT NULL,
-            date TEXT NOT NULL,
-            venue TEXT,
-            weather TEXT,
-            race_number TEXT,
-            race_name TEXT,
-            number_of_horses TEXT,
-            frame_number TEXT,
-            horse_number TEXT,
-            odds TEXT,
-            popularity TEXT,
-            rank TEXT,
-            jockey TEXT,
-            carried_weight TEXT,
-            distance TEXT,
-            track_condition TEXT,
-            time TEXT,
-            margin TEXT,
-            corner_passage TEXT,
-            pace TEXT,
-            agari TEXT,
-            horse_weight TEXT,
-            winner_or_second_horse TEXT,
-            prize_money TEXT,
-            UNIQUE(horse_id, date) ON CONFLICT REPLACE
-          )
-        ''');
-        // 注目レースデータテーブルの作成
-        await db.execute('''
-          CREATE TABLE featured_races(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            race_id TEXT UNIQUE,
-            race_name TEXT,
-            race_grade TEXT,
-            race_date TEXT,
-            venue TEXT,
-            race_number TEXT,
-            shutuba_table_url TEXT,
-            last_scraped TEXT,
-            distance TEXT,
-            conditions TEXT,
-            weight TEXT,
-            race_details_1 TEXT,
-            race_details_2 TEXT,
-            shutubaHorsesJson TEXT
-          )
-        ''');
-        // ユーザーの印データテーブルの作成
-        await db.execute('''
-          CREATE TABLE user_marks(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            userId TEXT NOT NULL,
-            raceId TEXT NOT NULL,
-            horseId TEXT NOT NULL,
-            mark TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
-          )
-        ''');
-        // ユーザーが設定したフィード（RSSなど）のデータテーブル作成
-        await db.execute('''
-          CREATE TABLE user_feeds(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            userId TEXT NOT NULL,
-            title TEXT NOT NULL,
-            url TEXT NOT NULL,
-            type TEXT NOT NULL,
-            display_order INTEGER NOT NULL
-          )
-        ''');
-        // 分析用の集計データテーブル作成
-        await db.execute('''
-          CREATE TABLE analytics_aggregates(
-            aggregate_key TEXT NOT NULL,
-            userId TEXT NOT NULL,
-            total_investment INTEGER NOT NULL DEFAULT 0,
-            total_payout INTEGER NOT NULL DEFAULT 0,
-            hit_count INTEGER NOT NULL DEFAULT 0,
-            bet_count INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (aggregate_key, userId)
-          )
-        ''');
-        // 競走馬メモデータテーブルの作成
-        await db.execute('''
-          CREATE TABLE horse_memos(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            userId TEXT NOT NULL,
-            raceId TEXT NOT NULL,
-            horseId TEXT NOT NULL,
-            predictionMemo TEXT,
-            reviewMemo TEXT,
-            timestamp TEXT NOT NULL,
-            UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE users(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            uuid TEXT NOT NULL UNIQUE,
-            username TEXT NOT NULL UNIQUE,
-            hashedPassword TEXT NOT NULL,
-            createdAt TEXT NOT NULL
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE horse_stats_cache(
-            raceId TEXT PRIMARY KEY,
-            statsJson TEXT NOT NULL,
-            lastUpdatedAt TEXT NOT NULL
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE race_statistics(
-            raceId TEXT PRIMARY KEY,
-            raceName TEXT NOT NULL,
-            statisticsJson TEXT NOT NULL,
-            lastUpdatedAt TEXT NOT NULL
-          )
-        ''');
+        // 初回作成時は、バージョン1から最新バージョンまでのマイグレーションをすべて実行する
+        await _onUpgrade(db, 0, version);
       },
-      /// データベースのバージョンがアップグレードされたときに呼び出されます。
-      /// スキーマの変更（テーブルの追加やカラムの変更など）をここで行います。
-      // データベースのバージョンが上がった際のデータ移行（マイグレーション）処理。
-      onUpgrade: (db, oldVersion, newVersion) async {
-        // v1からv2へのアップグレード処理。古いバージョンから順番に実行されます。
-        if (oldVersion < 2) {
-          await db.execute('ALTER TABLE featured_races ADD COLUMN shutubaHorsesJson TEXT');
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS user_marks(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              raceId TEXT NOT NULL,
-              horseId TEXT NOT NULL,
-              mark TEXT NOT NULL,
-              timestamp TEXT NOT NULL,
-              UNIQUE(raceId, horseId) ON CONFLICT REPLACE
-            )
-          ''');
-        }
-        // v2からv3へのアップグレード処理
-        if (oldVersion < 3) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS analytics_summaries(
-              period TEXT PRIMARY KEY,
-              totalInvestment INTEGER,
-              totalPayout INTEGER,
-              hitCount INTEGER,
-              betCount INTEGER,
-              lastCalculated TEXT
-            )
-          ''');
-        }
-        // v3からv4へのアップグレード処理
-        if (oldVersion < 4) {
-          // This table is also obsolete.
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS category_summary_cache(
-              cacheKey TEXT PRIMARY KEY,
-              summaryJson TEXT NOT NULL,
-              lastCalculated TEXT NOT NULL
-            )
-          ''');
-        }
-        // v4からv5へのアップグレード処理
-        if (oldVersion < 5) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS user_feeds(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              title TEXT NOT NULL,
-              url TEXT NOT NULL,
-              type TEXT NOT NULL,
-              display_order INTEGER NOT NULL
-            )
-          ''');
-        }
-        // v5からv6へのアップグレード処理
-        if (oldVersion < 6) {
-          // 不要になった旧テーブルを削除
-          await db.execute('DROP TABLE IF EXISTS analytics_summaries');
-          await db.execute('DROP TABLE IF EXISTS category_summary_cache');
-          // 新しい集計テーブルを作成
-          await db.execute('''
-            CREATE TABLE analytics_aggregates(
-              aggregate_key TEXT PRIMARY KEY,
-              total_investment INTEGER NOT NULL DEFAULT 0,
-              total_payout INTEGER NOT NULL DEFAULT 0,
-              hit_count INTEGER NOT NULL DEFAULT 0,
-              bet_count INTEGER NOT NULL DEFAULT 0
-            )
-          ''');
-        }
-        if (oldVersion < 7) {
-          await db.execute("ALTER TABLE qr_data ADD COLUMN userId TEXT NOT NULL DEFAULT ''");
-          await db.execute("ALTER TABLE user_feeds ADD COLUMN userId TEXT NOT NULL DEFAULT ''");
-
-          await db.execute('ALTER TABLE analytics_aggregates RENAME TO analytics_aggregates_old');
-          await db.execute('''
-            CREATE TABLE analytics_aggregates(
-              aggregate_key TEXT NOT NULL,
-              userId TEXT NOT NULL,
-              total_investment INTEGER NOT NULL DEFAULT 0,
-              total_payout INTEGER NOT NULL DEFAULT 0,
-              hit_count INTEGER NOT NULL DEFAULT 0,
-              bet_count INTEGER NOT NULL DEFAULT 0,
-              PRIMARY KEY (aggregate_key, userId)
-            )
-          ''');
-          await db.execute('''
-            INSERT INTO analytics_aggregates (aggregate_key, userId, total_investment, total_payout, hit_count, bet_count)
-            SELECT aggregate_key, '', total_investment, total_payout, hit_count, bet_count FROM analytics_aggregates_old
-          ''');
-          await db.execute('DROP TABLE analytics_aggregates_old');
-
-          await db.execute('ALTER TABLE user_marks RENAME TO user_marks_old');
-          await db.execute('''
-            CREATE TABLE user_marks(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              userId TEXT NOT NULL,
-              raceId TEXT NOT NULL,
-              horseId TEXT NOT NULL,
-              mark TEXT NOT NULL,
-              timestamp TEXT NOT NULL,
-              UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
-            )
-          ''');
-          await db.execute('''
-            INSERT INTO user_marks (id, userId, raceId, horseId, mark, timestamp)
-            SELECT id, '', raceId, horseId, mark, timestamp FROM user_marks_old
-          ''');
-          await db.execute('DROP TABLE user_marks_old');
-        }
-        if (oldVersion < 8) {
-          await db.execute('''
-            CREATE TABLE horse_memos(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              userId TEXT NOT NULL,
-              raceId TEXT NOT NULL,
-              horseId TEXT NOT NULL,
-              predictionMemo TEXT,
-              reviewMemo TEXT,
-              timestamp TEXT NOT NULL,
-              UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
-            )
-          ''');
-        }
-        if (oldVersion < 9) {
-          await db.execute('''
-            CREATE TABLE users(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              uuid TEXT NOT NULL UNIQUE,
-              username TEXT NOT NULL UNIQUE,
-              hashedPassword TEXT NOT NULL,
-              createdAt TEXT NOT NULL
-            )
-          ''');
-        }
-        if (oldVersion < 10) {
-          await db.execute('ALTER TABLE horse_memos ADD COLUMN odds REAL');
-          await db.execute('ALTER TABLE horse_memos ADD COLUMN popularity INTEGER');
-        }
-        if (oldVersion < 11) {
-          await db.execute('''
-            CREATE TABLE race_statistics(
-              raceId TEXT PRIMARY KEY,
-              raceName TEXT NOT NULL,
-              statisticsJson TEXT NOT NULL,
-              lastUpdatedAt TEXT NOT NULL
-            )
-          ''');
-        }
-        if (oldVersion < 12) {
-          await db.execute("ALTER TABLE horse_performance ADD COLUMN race_id TEXT NOT NULL DEFAULT ''");
-        }
-        if (oldVersion < 13) {
-          await db.execute('''
-            CREATE TABLE horse_stats_cache(
-              raceId TEXT PRIMARY KEY,
-              statsJson TEXT NOT NULL,
-              lastUpdatedAt TEXT NOT NULL
-            )
-          ''');
-        }
-        // ▼▼▼ 追記箇所 ▼▼▼
-        if (oldVersion < 14) {
-          // v13でテーブル作成に失敗したケース等を救済するため、
-          // テーブルが存在しない場合のみ作成する
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS race_statistics(
-              raceId TEXT PRIMARY KEY,
-              raceName TEXT NOT NULL,
-              statisticsJson TEXT NOT NULL,
-              lastUpdatedAt TEXT NOT NULL
-            )
-          ''');
-        }
-      },
+      onUpgrade: _onUpgrade,
     );
+  }
+
+  /// データベースのバージョンがアップグレードされたときに呼び出されます。
+  /// SQLファイルベースでマイグレーションを実行します。
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    for (int i = oldVersion + 1; i <= newVersion; i++) {
+      try {
+        final sql = await rootBundle.loadString('assets/migrations/$i.sql');
+        final statements = sql.split(';').where((s) => s.trim().isNotEmpty);
+        for (final statement in statements) {
+          await db.execute(statement);
+        }
+        print('マイグレーション成功: version $i.sql');
+      } catch (e) {
+        print('マイグレーションファイルが見つからないか、エラーが発生しました: version $i.sql, error: $e');
+        // エラーが発生しても、次のバージョンのマイグレーションを試みる
+      }
+    }
   }
 
   /// 指定されたQRコードがデータベースに存在するかを確認します。

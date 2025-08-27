@@ -1,0 +1,9 @@
+ALTER TABLE featured_races ADD COLUMN shutubaHorsesJson TEXT;
+CREATE TABLE IF NOT EXISTS user_marks(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  raceId TEXT NOT NULL,
+  horseId TEXT NOT NULL,
+  mark TEXT NOT NULL,
+  timestamp TEXT NOT NULL,
+  UNIQUE(raceId, horseId) ON CONFLICT REPLACE
+);

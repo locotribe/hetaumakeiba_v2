@@ -1,0 +1,1 @@
+ALTER TABLE horse_performance ADD COLUMN race_id TEXT NOT NULL DEFAULT '';
