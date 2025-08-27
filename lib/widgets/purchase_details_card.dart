@@ -30,12 +30,12 @@ String _getTotalAmountStars(int amount) {
 double _getBoxSizeByHorseCount(int count) {
   // 枠の大きさを指定する場所
   if (count == 1) {
-    return 34.0;
+    return 38.0; // 1つの場合：最も大きい
+  } else if (count == 2) {
+    return 28.0; // 2つの場合：2番目に大きい（この数値は好みに応じて調整してください）
+  } else { // 3つ以上の場合
+    return 20.0; // 3つ以上の場合：小さいサイズ
   }
-  if (count >= 2 && count <= 6) {
-    return 24.0;
-  }
-  return 20.0;
 }
 
 class PurchaseDetailsCard extends StatefulWidget {
@@ -315,6 +315,131 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     );
   }
 
+  // ★★★ ここから新規追加 (1/2) ★★★
+  /// ボックス投票のグリッド内のセル（馬番または☆）を1つ生成する
+  Widget _buildBoxHorseNumberCell(dynamic content, {required double scaleFactor}) {
+    const double boxSize = 38.0;
+    final double containerHeight = boxSize * scaleFactor;
+
+    if (content is int) {
+      // 馬番の場合
+      return Expanded(
+        child: Center(
+          child: Container(
+            width: boxSize,
+            height: containerHeight,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(border: Border.all(color: Colors.black)),
+            child: Transform.scale(
+              scaleY: scaleFactor,
+              alignment: Alignment.center,
+              child: FittedBox(
+                // ★★★ 修正点1: 高さを基準にスケールするよう変更 ★★★
+                fit: BoxFit.fitHeight,
+                child:
+                // ★★★ 修正点2: 二桁の場合のみ横幅を圧縮するTransform.scaleを追加 ★★★
+                Transform.scale(
+                  // content(馬番)が9より大きい(つまり二桁)なら横幅を85%に圧縮
+                  scaleX: content > 9 ? 0.85 : 1.0,
+                  scaleY: content > 9 ? 1.4 : 1.0,
+                  child: Text(
+                    content.toString(),
+                    style: const TextStyle(
+                      fontSize: 43,
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      // (☆を表示する部分は変更ありません)
+      return Expanded(
+        child: Center(
+          child: SizedBox(
+            width: boxSize,
+            height: containerHeight,
+            child: Center(
+              child: Text('☆', style: TextStyle(fontSize: boxSize * 0.6, color: Colors.black)),
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+// ★★★ ここから新規追加 (2/2) ★★★
+  /// ボックス投票用のグリッドレイアウト全体を生成する
+  Widget _buildBoxGridLayout(List<int> horseNumbers) {
+    const int itemsPerRow = 5;
+    final int horseCount = horseNumbers.length;
+
+    // ★★★ 修正点1: 馬の数に応じて3段階のスケール比率を決定 ★★★
+    double scaleFactor;
+    if (horseCount < 6) {
+      scaleFactor = 1.5;   // 5頭以下は最も縦長
+    } else if (horseCount < 12) {
+      scaleFactor = 1.25;  // 6～11頭は少し縦長
+    } else {
+      scaleFactor = 1.0;   // 12頭以上は正方形
+    }
+
+    const double cellWidth = 38.0 + 4.0;
+    const double totalWidth = cellWidth * itemsPerRow;
+
+    List<Widget> rows = [];
+
+    // 1. まず、馬番を表示するための行を生成する
+    if (horseCount > 0) {
+      final int horseRows = (horseCount / itemsPerRow).ceil();
+      for (int i = 0; i < horseRows; i++) {
+        List<Widget> rowChildren = [];
+        for (int j = 0; j < itemsPerRow; j++) {
+          final int index = i * itemsPerRow + j;
+          if (index < horseCount) {
+            // スケール比率を渡してセルを生成
+            rowChildren.add(_buildBoxHorseNumberCell(horseNumbers[index], scaleFactor: scaleFactor));
+          } else {
+            // 行内の☆も、同じ行の馬番と高さを揃えるためにスケール比率を渡す
+            rowChildren.add(_buildBoxHorseNumberCell('☆', scaleFactor: scaleFactor));
+          }
+        }
+        rows.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0),
+              child: Row(children: rowChildren),
+            )
+        );
+      }
+    }
+
+    // ★★★ 修正点2: 新しい☆の表示ルール (5頭以下の場合のみ☆の行を追加) ★★★
+    if (horseCount > 0 && horseCount <= 5) {
+      List<Widget> starRowChildren = [];
+      for (int j = 0; j < itemsPerRow; j++) {
+        // ☆だけの行は常に正方形(スケール1.0)で表示
+        starRowChildren.add(_buildBoxHorseNumberCell('☆', scaleFactor: 1.0));
+      }
+      rows.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.0),
+            child: Row(children: starRowChildren),
+          )
+      );
+    }
+
+    return SizedBox(
+      width: totalWidth,
+      child: Column(children: rows),
+    );
+  }
+
+
   List<Widget> _buildPurchaseDetailsInternal(dynamic purchaseData, String currentBetType) {
     List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
 
@@ -342,13 +467,13 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       const TextStyle amountStyle = TextStyle(
         color: Colors.black,
         fontWeight: FontWeight.bold,
-        fontSize: 20,
+        fontSize: 14,
         height: 1.0,);
       const TextStyle kiminoAibaStyle = TextStyle(
           color: Colors.black,
           fontWeight:
           FontWeight.bold,
-          fontSize: 20);
+          fontSize: 14);
 
       // 1行目: 馬番とテキスト
       final Widget firstLine = Row(
@@ -391,7 +516,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       Widget content;
 
       if (currentBetType == 'ながし') {
-        if (shikibetsu != '馬単' && shikibetsu != '3連単') {
+        if (shikibetsu != '3連単') {
           final axisData = detail['軸'];
           final opponentData = detail['相手'];
           final List<int> axisHorses = axisData is List ? axisData.cast<int>() : (axisData is int ? [axisData] : []);
@@ -415,7 +540,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           }
           content = _buildHorizontalGroupLayout(
             groupsData,
-            isFormation: false,
+            isFormation: true,
             shikibetsu: shikibetsu,
             betType: currentBetType,
           );
@@ -455,8 +580,12 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         Widget horseDisplayWidget;
 
         // ★★★ ここから修正 ★★★
-        if (shikibetsu == '3連単' && currentBetType == '通常' && horseNumbers is List) {
-          // 3連単・通常の場合
+        // 投票種別が「ボックス」の場合、新しく作ったグリッドレイアウト関数を呼び出す
+        if (currentBetType == 'ボックス' && horseNumbers is List) {
+          horseDisplayWidget = _buildBoxGridLayout(horseNumbers.cast<int>());
+
+        } else if (shikibetsu == '3連単' && currentBetType == '通常' && horseNumbers is List) {
+          // (既存の3連単の処理はそのまま)
           final List<Map<String, dynamic>> groupsData = (horseNumbers as List).cast<int>().map((horseNum) {
             return {'horseNumbers': [horseNum]};
           }).toList();
@@ -468,7 +597,8 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
             betType: currentBetType,
           );
         } else {
-          // 3連単・通常以外の馬番表示処理 (単勝・複勝の馬名表示も含む)
+          // ボックスと3連単・通常以外の、これまで通りの処理
+          // (既存のコードをそのままここに残す)
           final Widget horseNumbersDisplay = Wrap(
             spacing: 4.0,
             runSpacing: 4.0,
@@ -568,22 +698,30 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       return const SizedBox.shrink();
     }
 
-    // ★★★ 購入方式によってレイアウトを分岐 ★★★
+    // ★★★ 応援馬券の場合のレイアウトを特別に分離する ★★★
     if (widget.betType == '応援馬券') {
-      // 応援馬券の場合：中央揃え
-      return Padding(
-        padding: const EdgeInsets.only(top: 4.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center, // 垂直方向に中央揃え
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
+      // 応援馬券はFittedBoxを使わず、Centerで中央揃えする
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Column(
+            // mainAxisSizeをminにして、Columnが必要最小限の高さになるようにする
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
+          ),
         ),
       );
     } else {
-      // それ以外の場合：従来のFittedBoxで左上揃えにし、表示崩れを防ぐ
+      // 応援馬券以外の場合は、これまで通りFittedBoxでレイアウトを処理する
+      // 中央揃えにしたい馬券種別かを判断
+      final bool isCenterAligned =
+          widget.betType == 'ながし' || widget.betType == 'フォーメーション';
+
       return FittedBox(
         fit: BoxFit.scaleDown,
-        alignment: Alignment.topLeft,
+        // isCenterAligned が true なら中央、false なら左上に設定
+        alignment: isCenterAligned ? Alignment.center : Alignment.topLeft,
         child: Padding(
           padding: const EdgeInsets.only(top: 4.0),
           child: Column(
