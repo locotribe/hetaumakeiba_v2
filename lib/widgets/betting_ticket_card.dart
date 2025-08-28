@@ -62,7 +62,7 @@ class BettingTicketCard extends StatelessWidget {
       }
 
       if (overallMethod == '応援馬券') {
-        shikibetsuToDisplay = '単勝+複勝';
+        shikibetsuToDisplay = '単勝✙複勝';
         hoshikiToDisplay = 'が　ん　ば　れ！';
         topWidget = const SizedBox(
           height: 15.0,
@@ -182,7 +182,7 @@ class BettingTicketCard extends StatelessWidget {
                             if (ticketData.containsKey('年') && ticketData.containsKey('回') && ticketData.containsKey('日'))
                               Text(
                                 '20${ticketData['年']}年${ticketData['回']}回${ticketData['日']}日',
-                                style: const TextStyle(color: Colors.black, fontSize: 17,height: 1.0,),
+                                style: const TextStyle(color: Colors.black, fontSize: 15,height: 1.0,),
                               ),
                             if (ticketData.containsKey('開催場') && ticketData.containsKey('レース'))
                               Column(
@@ -195,21 +195,21 @@ class BettingTicketCard extends StatelessWidget {
                                   Row(
                                     children: [
                                       Container(
-                                        width: 50,
+                                        width: 45,
                                         alignment: Alignment.center,
                                         decoration: const BoxDecoration(color: Colors.black),
                                         child: Padding(
                                           padding: const EdgeInsets.symmetric(vertical: 2.0),
                                           child: Text(
                                             '${ticketData['レース']}',
-                                            style: const TextStyle(color: Colors.white, fontSize: 23, height: 0.9),
+                                            style: const TextStyle(color: Colors.white, fontSize: 22, height: 0.9),
                                           ),
                                         ),
                                       ),
                                       const SizedBox(width: 4),
                                       const Text(
                                         'レース',
-                                        style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
+                                        style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold),
                                       ),
                                     ],
                                   ),
@@ -240,11 +240,15 @@ class BettingTicketCard extends StatelessWidget {
                                       if (raceResult != null && raceResult!.raceId.isNotEmpty) {
                                         // 有効な場合は、動的なQRコードを生成
                                         final url = 'https://db.netkeiba.com/race/${raceResult!.raceId}';
-                                        return QrImageView(
-                                          data: url,
-                                          version: QrVersions.auto,
-                                          backgroundColor: Colors.transparent,
-                                          padding: const EdgeInsets.all(4.0),
+                                        return Transform.scale(
+                                          scale: 1.16, // 5%拡大
+                                          child: QrImageView(
+                                            data: url,
+                                            version: QrVersions.auto,
+                                            size: 50.0, // ベースサイズ
+                                            backgroundColor: Colors.transparent,
+                                            padding: const EdgeInsets.all(4.0),
+                                          ),
                                         );
                                       } else {
                                         // 無効な場合は、静的な画像を表示
@@ -258,7 +262,7 @@ class BettingTicketCard extends StatelessWidget {
                                   const SizedBox(width: 4.0),
                                 ],
                               ),
-                              const SizedBox(height: 8.0), // QRコードとタイトルの間の余白
+                              const SizedBox(height: 15.0), // QRコードとタイトルの間の余白
                               // --- 既存のレースタイトル表示 ---
                               Builder(builder: (context) {
                                 // 正規表現でタイトルを「①回数」「②レース名」「③グレード」に分解

@@ -440,241 +440,286 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
   }
 
 
-  List<Widget> _buildPurchaseDetailsInternal(dynamic purchaseData, String currentBetType) {
-    List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
+  // ▼▼▼ ここからリファクタリングにより追加されたメソッド群 ▼▼▼
 
-    if (currentBetType == '応援馬券' && purchaseDetails.isNotEmpty) {
-      final detail = purchaseDetails.first;
-      final horseNumberData = detail['馬番'];
-      final horseNumber = (horseNumberData is List ? horseNumberData[0] : horseNumberData) as int;
-      final int? kingaku = detail['購入金額'];
+  /// 【リファクタリング】応援馬券のレイアウトを構築する
+  /// 元の`_buildPurchaseDetailsInternal`から応援馬券のロジックを分離
+  List<Widget> _buildOuenBakenDetails(List<Map<String, dynamic>> purchaseDetails) {
+    if (purchaseDetails.isEmpty) return [];
 
-      String horseNameToDisplay = 'キミノアイバ'; // デフォルト値
-      if (widget.raceResult != null) {
+    final detail = purchaseDetails.first;
+    final horseNumberData = detail['馬番'];
+    final horseNumber = (horseNumberData is List ? horseNumberData[0] : horseNumberData) as int;
+    final int? kingaku = detail['購入金額'];
+
+    String horseNameToDisplay = 'キミノアイバ'; // デフォルト値
+    if (widget.raceResult != null) {
+      try {
+        final horseNumberString = horseNumber.toString();
+        final horseData = widget.raceResult!.horseResults.firstWhere(
+              (h) => h.horseNumber.trim() == horseNumberString,
+        );
+        horseNameToDisplay = horseData.horseName;
+      } catch (e) {
+        // レース結果に馬が見つからない場合 (除外など) はデフォルト名のまま
+      }
+    }
+
+    final Widget horseNumberWidget = _buildHorseNumberDisplay(horseNumber, horseCountForSizing: 1).first;
+
+    const TextStyle amountStyle = TextStyle(
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+      fontSize: 14,
+      height: 1.0,);
+    const TextStyle kiminoAibaStyle = TextStyle(
+        color: Colors.black,
+        fontWeight:
+        FontWeight.bold,
+        fontSize: 13);
+
+    // 1行目: 馬番とテキスト
+    final Widget firstLine = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        horseNumberWidget,
+        Text(' $horseNameToDisplay', style: kiminoAibaStyle),
+      ],
+    );
+
+    // 2行目: 金額
+    Widget amountLine = const SizedBox.shrink();
+    if (kingaku != null) {
+      const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
+      amountLine = Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          const Text('各', style: amountStyle),
+          Text(_getStars(kingaku), style: starStyle),
+          Text('$kingaku円', style: amountStyle),
+        ],
+      );
+    }
+
+    // IntrinsicWidthを削除し、Columnを直接返す
+    return [
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          firstLine,
+          amountLine,
+        ],
+      )
+    ];
+  }
+
+  /// 【リファクタリング】ながし投票のレイアウトを構築する
+  /// 元の`_buildPurchaseDetailsInternal`からながし投票のロジックを分離
+  Widget _buildNagashiDetails(Map<String, dynamic> detail, String currentBetType) {
+    final String shikibetsuId = detail['式別'] ?? '';
+    final String shikibetsu = bettingDict[shikibetsuId] ?? '';
+
+    if (shikibetsu != '3連単') {
+      final axisData = detail['軸'];
+      final opponentData = detail['相手'];
+      final List<int> axisHorses = axisData is List ? axisData.cast<int>() : (axisData is int ? [axisData] : []);
+      final List<int> opponentHorses = opponentData is List ? opponentData.cast<int>() : (opponentData is int ? [opponentData] : []);
+      return _buildNagashiWithConnector(axisHorses: axisHorses, opponentHorses: opponentHorses);
+    } else {
+      final List<Map<String, dynamic>> groupsData = [];
+      if (shikibetsu == '3連単') {
+        final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
+        final int axisGroupCount = horseGroups.where((group) => group.length == 1).length;
+        final bool isJikuNagashi = axisGroupCount == 1 || axisGroupCount == 2;
+        for (final currentGroup in horseGroups) {
+          if (currentGroup.isNotEmpty) {
+            final bool isAxisGroup = isJikuNagashi && currentGroup.length == 1;
+            groupsData.add({'label': isAxisGroup ? '(軸)' : '', 'horseNumbers': currentGroup});
+          }
+        }
+      } else {
+        if (detail.containsKey('軸')) groupsData.add({'label': '(軸)', 'horseNumbers': (detail['軸'] as List).cast<int>()});
+        if (detail.containsKey('相手')) groupsData.add({'label': '(相手)', 'horseNumbers': (detail['相手'] as List).cast<int>()});
+      }
+      return _buildHorizontalGroupLayout(
+        groupsData,
+        isFormation: true,
+        shikibetsu: shikibetsu,
+        betType: currentBetType,
+      );
+    }
+  }
+
+  /// 【リファクタリング】フォーメーション投票のレイアウトを構築する
+  /// 元の`_buildPurchaseDetailsInternal`からフォーメーション投票のロジックを分離
+  Widget _buildFormationDetails(Map<String, dynamic> detail, String currentBetType) {
+    final String shikibetsuId = detail['式別'] ?? '';
+    final String shikibetsu = bettingDict[shikibetsuId] ?? '';
+
+    final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
+    final List<Map<String, dynamic>> groupsData = [];
+    if (shikibetsu == '3連単') {
+      groupsData.addAll([
+        {'horseNumbers': horseGroups.isNotEmpty ? horseGroups[0] : <int>[]},
+        {'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
+        {'horseNumbers': horseGroups.length > 2 ? horseGroups[2] : <int>[]},
+      ]);
+    } else if (shikibetsu == '3連複') {
+      for (var group in horseGroups) {
+        groupsData.add({'horseNumbers': group});
+      }
+    } else if (shikibetsu == '馬単') {
+      groupsData.addAll([
+        {'horseNumbers': horseGroups.isNotEmpty ? horseGroups[0] : <int>[]},
+        {'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
+      ]);
+    }
+    return _buildHorizontalGroupLayout(
+      groupsData,
+      isFormation: true,
+      shikibetsu: shikibetsu,
+      betType: currentBetType,
+    );
+  }
+
+  /// 【リファクタリング】通常・ボックス投票のレイアウトを構築する
+  /// 元の`_buildPurchaseDetailsInternal`から通常・ボックス投票のロジックを分離
+  Widget _buildDefaultAndBoxDetails(Map<String, dynamic> detail, String currentBetType) {
+    final String shikibetsuId = detail['式別'] ?? '';
+    final String shikibetsu = bettingDict[shikibetsuId] ?? '';
+
+    String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
+    final dynamic horseNumbers = detail['馬番'];
+    final int horseCount = horseNumbers is List ? horseNumbers.length : 1;
+    final int? kingaku = detail['購入金額'];
+
+    Widget horseDisplayWidget;
+
+    // 投票種別が「ボックス」の場合、新しく作ったグリッドレイアウト関数を呼び出す
+    if (currentBetType == 'ボックス' && horseNumbers is List) {
+      horseDisplayWidget = _buildBoxGridLayout(horseNumbers.cast<int>());
+
+    } else if (shikibetsu == '3連単' && currentBetType == '通常' && horseNumbers is List) {
+      // (既存の3連単の処理はそのまま)
+      final List<Map<String, dynamic>> groupsData = (horseNumbers as List).cast<int>().map((horseNum) {
+        return {'horseNumbers': [horseNum]};
+      }).toList();
+
+      horseDisplayWidget = _buildHorizontalGroupLayout(
+        groupsData,
+        isFormation: false,
+        shikibetsu: shikibetsu,
+        betType: currentBetType,
+      );
+    } else {
+      // ボックスと3連単・通常以外の、これまで通りの処理
+      final Widget horseNumbersDisplay = Wrap(
+        spacing: 4.0,
+        runSpacing: 4.0,
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [..._buildHorseNumberDisplay(horseNumbers, symbol: currentSymbol, horseCountForSizing: horseCount)],
+      );
+
+      if ((shikibetsu == '単勝' || shikibetsu == '複勝') && widget.raceResult != null) {
+        String? horseNameToDisplay;
         try {
-          final horseNumberString = horseNumber.toString();
+          final horseNumberInt = horseNumbers as int;
+          final horseNumberString = horseNumberInt.toString();
           final horseData = widget.raceResult!.horseResults.firstWhere(
                 (h) => h.horseNumber.trim() == horseNumberString,
           );
           horseNameToDisplay = horseData.horseName;
         } catch (e) {
-          // レース結果に馬が見つからない場合 (除外など) はデフォルト名のまま
+          // Not found
         }
+
+        if (horseNameToDisplay != null) {
+          horseDisplayWidget = Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              horseNumbersDisplay,
+              const SizedBox(width: 8.0),
+              Flexible(
+                child: Text(
+                  horseNameToDisplay,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          );
+        } else {
+          horseDisplayWidget = horseNumbersDisplay;
+        }
+      } else {
+        horseDisplayWidget = horseNumbersDisplay;
       }
+    }
 
-      final Widget horseNumberWidget = _buildHorseNumberDisplay(horseNumber, horseCountForSizing: 1).first;
-
-      const TextStyle amountStyle = TextStyle(
-        color: Colors.black,
-        fontWeight: FontWeight.bold,
-        fontSize: 14,
-        height: 1.0,);
-      const TextStyle kiminoAibaStyle = TextStyle(
-          color: Colors.black,
-          fontWeight:
-          FontWeight.bold,
-          fontSize: 14);
-
-      // 1行目: 馬番とテキスト
-      final Widget firstLine = Row(
+    // 金額表示ウィジェット (3連単・通常の場合もここで生成される)
+    Widget amountDisplay = const SizedBox.shrink();
+    if (kingaku != null && currentBetType == '通常') {
+      const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
+      const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0,);
+      amountDisplay = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          horseNumberWidget,
-          Text(' $horseNameToDisplay', style: kiminoAibaStyle),
+          const SizedBox(width: 16.0),
+          Text(_getStars(kingaku), style: starStyle),
+          Text('$kingaku円', style: amountStyle),
         ],
       );
+    }
 
-      // 2行目: 金額
-      Widget amountLine = const SizedBox.shrink();
-      if (kingaku != null) {
-        const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
-        amountLine = Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            const Text('各', style: amountStyle),
-            Text(_getStars(kingaku), style: starStyle),
-            Text('$kingaku円', style: amountStyle),
-          ],
-        );
-      }
+    // 最終的に馬番表示と金額表示を結合する
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        horseDisplayWidget,
+        amountDisplay,
+      ],
+    );
+  }
 
-      // IntrinsicWidthを削除し、Columnを直接返す
-      return [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            firstLine,
-            amountLine,
-          ],
-        )
-      ];
+  // ▲▲▲ ここまでリファクタリングにより追加されたメソッド群 ▲▲▲
+
+
+  /// 【リファクタリング】メインの分岐処理
+  /// 投票種別に応じて、上記で作成した各レイアウト構築メソッドを呼び出すように変更
+  List<Widget> _buildPurchaseDetailsInternal(dynamic purchaseData, String currentBetType) {
+    List<Map<String, dynamic>> purchaseDetails = (purchaseData as List).cast<Map<String, dynamic>>();
+
+    // 応援馬券は他の券種と構造が異なるため、ここで特別に処理する
+    if (currentBetType == '応援馬券') {
+      return _buildOuenBakenDetails(purchaseDetails);
     }
 
     return purchaseDetails.map((detail) {
-      final String shikibetsuId = detail['式別'] ?? '';
-      final String shikibetsu = bettingDict[shikibetsuId] ?? '';
       Widget content;
 
-      if (currentBetType == 'ながし') {
-        if (shikibetsu != '3連単') {
-          final axisData = detail['軸'];
-          final opponentData = detail['相手'];
-          final List<int> axisHorses = axisData is List ? axisData.cast<int>() : (axisData is int ? [axisData] : []);
-          final List<int> opponentHorses = opponentData is List ? opponentData.cast<int>() : (opponentData is int ? [opponentData] : []);
-          content = _buildNagashiWithConnector(axisHorses: axisHorses, opponentHorses: opponentHorses);
-        } else {
-          final List<Map<String, dynamic>> groupsData = [];
-          if (shikibetsu == '3連単') {
-            final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
-            final int axisGroupCount = horseGroups.where((group) => group.length == 1).length;
-            final bool isJikuNagashi = axisGroupCount == 1 || axisGroupCount == 2;
-            for (final currentGroup in horseGroups) {
-              if (currentGroup.isNotEmpty) {
-                final bool isAxisGroup = isJikuNagashi && currentGroup.length == 1;
-                groupsData.add({'label': isAxisGroup ? '(軸)' : '', 'horseNumbers': currentGroup});
-              }
-            }
-          } else {
-            if (detail.containsKey('軸')) groupsData.add({'label': '(軸)', 'horseNumbers': (detail['軸'] as List).cast<int>()});
-            if (detail.containsKey('相手')) groupsData.add({'label': '(相手)', 'horseNumbers': (detail['相手'] as List).cast<int>()});
-          }
-          content = _buildHorizontalGroupLayout(
-            groupsData,
-            isFormation: true,
-            shikibetsu: shikibetsu,
-            betType: currentBetType,
-          );
-        }
-      } else if (currentBetType == 'フォーメーション') {
-        final horseGroups = (detail['馬番'] as List).map((e) => (e as List).cast<int>()).toList();
-        final List<Map<String, dynamic>> groupsData = [];
-        if (shikibetsu == '3連単') {
-          groupsData.addAll([
-            {'horseNumbers': horseGroups.isNotEmpty ? horseGroups[0] : <int>[]},
-            {'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
-            {'horseNumbers': horseGroups.length > 2 ? horseGroups[2] : <int>[]},
-          ]);
-        } else if (shikibetsu == '3連複') {
-          for (var group in horseGroups) {
-            groupsData.add({'horseNumbers': group});
-          }
-        } else if (shikibetsu == '馬単') {
-          groupsData.addAll([
-            {'horseNumbers': horseGroups.isNotEmpty ? horseGroups[0] : <int>[]},
-            {'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
-          ]);
-        }
-        content = _buildHorizontalGroupLayout(
-          groupsData,
-          isFormation: true,
-          shikibetsu: shikibetsu,
-          betType: currentBetType,
-        );
-      } else {
-        // 通常投票・ボックス投票の処理
-        String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
-        final dynamic horseNumbers = detail['馬番'];
-        final int horseCount = horseNumbers is List ? horseNumbers.length : 1;
-        final int? kingaku = detail['購入金額'];
-
-        Widget horseDisplayWidget;
-
-        // ★★★ ここから修正 ★★★
-        // 投票種別が「ボックス」の場合、新しく作ったグリッドレイアウト関数を呼び出す
-        if (currentBetType == 'ボックス' && horseNumbers is List) {
-          horseDisplayWidget = _buildBoxGridLayout(horseNumbers.cast<int>());
-
-        } else if (shikibetsu == '3連単' && currentBetType == '通常' && horseNumbers is List) {
-          // (既存の3連単の処理はそのまま)
-          final List<Map<String, dynamic>> groupsData = (horseNumbers as List).cast<int>().map((horseNum) {
-            return {'horseNumbers': [horseNum]};
-          }).toList();
-
-          horseDisplayWidget = _buildHorizontalGroupLayout(
-            groupsData,
-            isFormation: false,
-            shikibetsu: shikibetsu,
-            betType: currentBetType,
-          );
-        } else {
-          // ボックスと3連単・通常以外の、これまで通りの処理
-          // (既存のコードをそのままここに残す)
-          final Widget horseNumbersDisplay = Wrap(
-            spacing: 4.0,
-            runSpacing: 4.0,
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [..._buildHorseNumberDisplay(horseNumbers, symbol: currentSymbol, horseCountForSizing: horseCount)],
-          );
-
-          if ((shikibetsu == '単勝' || shikibetsu == '複勝') && widget.raceResult != null) {
-            String? horseNameToDisplay;
-            try {
-              final horseNumberInt = horseNumbers as int;
-              final horseNumberString = horseNumberInt.toString();
-              final horseData = widget.raceResult!.horseResults.firstWhere(
-                    (h) => h.horseNumber.trim() == horseNumberString,
-              );
-              horseNameToDisplay = horseData.horseName;
-            } catch (e) {
-              // Not found
-            }
-
-            if (horseNameToDisplay != null) {
-              horseDisplayWidget = Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  horseNumbersDisplay,
-                  const SizedBox(width: 8.0),
-                  Flexible(
-                    child: Text(
-                      horseNameToDisplay,
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              );
-            } else {
-              horseDisplayWidget = horseNumbersDisplay;
-            }
-          } else {
-            horseDisplayWidget = horseNumbersDisplay;
-          }
-        }
-
-        // 金額表示ウィジェット (3連単・通常の場合もここで生成される)
-        Widget amountDisplay = const SizedBox.shrink();
-        if (kingaku != null && currentBetType == '通常') {
-          const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
-          const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0,);
-          amountDisplay = Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(width: 16.0),
-              Text(_getStars(kingaku), style: starStyle),
-              Text('$kingaku円', style: amountStyle),
-            ],
-          );
-        }
-
-        // 最終的に馬番表示と金額表示を結合する
-        content = Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            horseDisplayWidget,
-            amountDisplay,
-          ],
-        );
-        // ★★★ ここまで修正 ★★★
+      // 投票種別に応じて適切なレイアウト構築メソッドを呼び出す
+      switch (currentBetType) {
+        case 'ながし':
+          content = _buildNagashiDetails(detail, currentBetType);
+          break;
+        case 'フォーメーション':
+          content = _buildFormationDetails(detail, currentBetType);
+          break;
+        case '通常':
+        case 'ボックス':
+        default: // フォールバックとして通常・ボックスの処理を使用
+          content = _buildDefaultAndBoxDetails(detail, currentBetType);
+          break;
       }
 
+      // 以下の部分は、どの投票種別にも共通するラッパー（囲い）の役割を果たす
       return Padding(
         padding: const EdgeInsets.only(bottom: 2.0),
         child: Column(
