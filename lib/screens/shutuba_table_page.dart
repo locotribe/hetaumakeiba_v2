@@ -356,7 +356,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           popularity: result.popularity,
           timestamp: DateTime.now(),
         );
+        print('Attempting to insert/update HorseMemo: horseId=${newMemo.horseId}, odds=${newMemo.odds}, popularity=${newMemo.popularity}');
         await _dbHelper.insertOrUpdateHorseMemo(newMemo);
+        print('Successfully inserted/updated HorseMemo for horseId=${newMemo.horseId}');
         updatedCount++;
       }
     }

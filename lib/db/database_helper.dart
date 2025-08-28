@@ -24,23 +24,19 @@ class DatabaseHelper {
 
 
   /// `DatabaseHelper`のシングルトンインスタンスを返します。
-  // このファクトリコンストラクタにより、常に同じインスタンスが返されます。
   factory DatabaseHelper() {
     return _instance;
   }
 
   /// 内部からのみ呼び出されるプライベートコンストラクタ。
-  // 外部からのインスタンス化を防ぐためのプライベートコンストラクタ。
   DatabaseHelper._internal();
 
   /// データベースへの接続を取得します。
   /// 既に接続が存在する場合はそれを返し、ない場合は新しく初期化します。
   Future<Database> get database async {
-    // 既にインスタンスが生成されていれば、それを返すことで無駄な初期化を防ぐ。
     if (_database != null) {
       return _database!;
     }
-    // インスタンスがなければ、データベースを初期化する。
     _database = await _initDatabase();
     return _database!;
   }
@@ -55,12 +51,12 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      // ▼▼▼ 変更箇所 ▼▼▼
-      version: 14,
+      // 全ての古いアップグレードロジックを削除し、onCreateに統合するため、バージョンを1にリセットします。
+      version: 1, // バージョンを1にリセット
       /// データベースが初めて作成されるときに呼び出されます。
-      /// ここで初期テーブルの作成を行います。
+      /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
-        // QRコードデータテーブルの作成
+        // QRコードデータテーブルの作成 (v7のuserIdを含む)
         await db.execute('''
           CREATE TABLE qr_data(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +73,7 @@ class DatabaseHelper {
             race_result_json TEXT
           )
         ''');
-        // 競走馬成績データテーブルの作成
+        // 競走馬成績データテーブルの作成 (v12のrace_idを含む)
         await db.execute('''
           CREATE TABLE horse_performance(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,7 +105,7 @@ class DatabaseHelper {
             UNIQUE(horse_id, date) ON CONFLICT REPLACE
           )
         ''');
-        // 注目レースデータテーブルの作成
+        // 注目レースデータテーブルの作成 (v2のshutubaHorsesJsonを含む)
         await db.execute('''
           CREATE TABLE featured_races(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,7 +125,7 @@ class DatabaseHelper {
             shutubaHorsesJson TEXT
           )
         ''');
-        // ユーザーの印データテーブルの作成
+        // ユーザーの印データテーブルの作成 (v7のuserIdを含む)
         await db.execute('''
           CREATE TABLE user_marks(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -141,7 +137,7 @@ class DatabaseHelper {
             UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
           )
         ''');
-        // ユーザーが設定したフィード（RSSなど）のデータテーブル作成
+        // ユーザーが設定したフィード（RSSなど）のデータテーブル作成 (v7のuserIdを含む)
         await db.execute('''
           CREATE TABLE user_feeds(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,7 +148,7 @@ class DatabaseHelper {
             display_order INTEGER NOT NULL
           )
         ''');
-        // 分析用の集計データテーブル作成
+        // 分析用の集計データテーブル作成 (v7のuserIdを含む)
         await db.execute('''
           CREATE TABLE analytics_aggregates(
             aggregate_key TEXT NOT NULL,
@@ -164,7 +160,7 @@ class DatabaseHelper {
             PRIMARY KEY (aggregate_key, userId)
           )
         ''');
-        // 競走馬メモデータテーブルの作成
+        // 競走馬メモデータテーブルの作成 (v10で追加されたoddsとpopularityを含む)
         await db.execute('''
           CREATE TABLE horse_memos(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -173,10 +169,13 @@ class DatabaseHelper {
             horseId TEXT NOT NULL,
             predictionMemo TEXT,
             reviewMemo TEXT,
+            odds REAL,
+            popularity INTEGER,
             timestamp TEXT NOT NULL,
             UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
           )
         ''');
+        // ユーザーデータテーブルの作成 (v9で追加)
         await db.execute('''
           CREATE TABLE users(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,13 +185,7 @@ class DatabaseHelper {
             createdAt TEXT NOT NULL
           )
         ''');
-        await db.execute('''
-          CREATE TABLE horse_stats_cache(
-            raceId TEXT PRIMARY KEY,
-            statsJson TEXT NOT NULL,
-            lastUpdatedAt TEXT NOT NULL
-          )
-        ''');
+        // レース統計データテーブルの作成 (v11/v14で追加)
         await db.execute('''
           CREATE TABLE race_statistics(
             raceId TEXT PRIMARY KEY,
@@ -201,181 +194,23 @@ class DatabaseHelper {
             lastUpdatedAt TEXT NOT NULL
           )
         ''');
+        // 馬統計キャッシュデータテーブルの作成 (v13で追加)
+        await db.execute('''
+          CREATE TABLE horse_stats_cache(
+            raceId TEXT PRIMARY KEY,
+            statsJson TEXT NOT NULL,
+            lastUpdatedAt TEXT NOT NULL
+          )
+        ''');
       },
       /// データベースのバージョンがアップグレードされたときに呼び出されます。
-      /// スキーマの変更（テーブルの追加やカラムの変更など）をここで行います。
-      // データベースのバージョンが上がった際のデータ移行（マイグレーション）処理。
+      /// バージョンを1にリセットしたため、過去のアップグレードロジックは全て削除しました。
+      /// 今後、新しいバージョンのスキーマ変更が必要になった場合に、ここに新しいアップグレードロジックを記述します。
       onUpgrade: (db, oldVersion, newVersion) async {
-        // v1からv2へのアップグレード処理。古いバージョンから順番に実行されます。
-        if (oldVersion < 2) {
-          await db.execute('ALTER TABLE featured_races ADD COLUMN shutubaHorsesJson TEXT');
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS user_marks(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              raceId TEXT NOT NULL,
-              horseId TEXT NOT NULL,
-              mark TEXT NOT NULL,
-              timestamp TEXT NOT NULL,
-              UNIQUE(raceId, horseId) ON CONFLICT REPLACE
-            )
-          ''');
-        }
-        // v2からv3へのアップグレード処理
-        if (oldVersion < 3) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS analytics_summaries(
-              period TEXT PRIMARY KEY,
-              totalInvestment INTEGER,
-              totalPayout INTEGER,
-              hitCount INTEGER,
-              betCount INTEGER,
-              lastCalculated TEXT
-            )
-          ''');
-        }
-        // v3からv4へのアップグレード処理
-        if (oldVersion < 4) {
-          // This table is also obsolete.
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS category_summary_cache(
-              cacheKey TEXT PRIMARY KEY,
-              summaryJson TEXT NOT NULL,
-              lastCalculated TEXT NOT NULL
-            )
-          ''');
-        }
-        // v4からv5へのアップグレード処理
-        if (oldVersion < 5) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS user_feeds(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              title TEXT NOT NULL,
-              url TEXT NOT NULL,
-              type TEXT NOT NULL,
-              display_order INTEGER NOT NULL
-            )
-          ''');
-        }
-        // v5からv6へのアップグレード処理
-        if (oldVersion < 6) {
-          // 不要になった旧テーブルを削除
-          await db.execute('DROP TABLE IF EXISTS analytics_summaries');
-          await db.execute('DROP TABLE IF EXISTS category_summary_cache');
-          // 新しい集計テーブルを作成
-          await db.execute('''
-            CREATE TABLE analytics_aggregates(
-              aggregate_key TEXT PRIMARY KEY,
-              total_investment INTEGER NOT NULL DEFAULT 0,
-              total_payout INTEGER NOT NULL DEFAULT 0,
-              hit_count INTEGER NOT NULL DEFAULT 0,
-              bet_count INTEGER NOT NULL DEFAULT 0
-            )
-          ''');
-        }
-        if (oldVersion < 7) {
-          await db.execute("ALTER TABLE qr_data ADD COLUMN userId TEXT NOT NULL DEFAULT ''");
-          await db.execute("ALTER TABLE user_feeds ADD COLUMN userId TEXT NOT NULL DEFAULT ''");
-
-          await db.execute('ALTER TABLE analytics_aggregates RENAME TO analytics_aggregates_old');
-          await db.execute('''
-            CREATE TABLE analytics_aggregates(
-              aggregate_key TEXT NOT NULL,
-              userId TEXT NOT NULL,
-              total_investment INTEGER NOT NULL DEFAULT 0,
-              total_payout INTEGER NOT NULL DEFAULT 0,
-              hit_count INTEGER NOT NULL DEFAULT 0,
-              bet_count INTEGER NOT NULL DEFAULT 0,
-              PRIMARY KEY (aggregate_key, userId)
-            )
-          ''');
-          await db.execute('''
-            INSERT INTO analytics_aggregates (aggregate_key, userId, total_investment, total_payout, hit_count, bet_count)
-            SELECT aggregate_key, '', total_investment, total_payout, hit_count, bet_count FROM analytics_aggregates_old
-          ''');
-          await db.execute('DROP TABLE analytics_aggregates_old');
-
-          await db.execute('ALTER TABLE user_marks RENAME TO user_marks_old');
-          await db.execute('''
-            CREATE TABLE user_marks(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              userId TEXT NOT NULL,
-              raceId TEXT NOT NULL,
-              horseId TEXT NOT NULL,
-              mark TEXT NOT NULL,
-              timestamp TEXT NOT NULL,
-              UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
-            )
-          ''');
-          await db.execute('''
-            INSERT INTO user_marks (id, userId, raceId, horseId, mark, timestamp)
-            SELECT id, '', raceId, horseId, mark, timestamp FROM user_marks_old
-          ''');
-          await db.execute('DROP TABLE user_marks_old');
-        }
-        if (oldVersion < 8) {
-          await db.execute('''
-            CREATE TABLE horse_memos(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              userId TEXT NOT NULL,
-              raceId TEXT NOT NULL,
-              horseId TEXT NOT NULL,
-              predictionMemo TEXT,
-              reviewMemo TEXT,
-              timestamp TEXT NOT NULL,
-              UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
-            )
-          ''');
-        }
-        if (oldVersion < 9) {
-          await db.execute('''
-            CREATE TABLE users(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              uuid TEXT NOT NULL UNIQUE,
-              username TEXT NOT NULL UNIQUE,
-              hashedPassword TEXT NOT NULL,
-              createdAt TEXT NOT NULL
-            )
-          ''');
-        }
-        if (oldVersion < 10) {
-          await db.execute('ALTER TABLE horse_memos ADD COLUMN odds REAL');
-          await db.execute('ALTER TABLE horse_memos ADD COLUMN popularity INTEGER');
-        }
-        if (oldVersion < 11) {
-          await db.execute('''
-            CREATE TABLE race_statistics(
-              raceId TEXT PRIMARY KEY,
-              raceName TEXT NOT NULL,
-              statisticsJson TEXT NOT NULL,
-              lastUpdatedAt TEXT NOT NULL
-            )
-          ''');
-        }
-        if (oldVersion < 12) {
-          await db.execute("ALTER TABLE horse_performance ADD COLUMN race_id TEXT NOT NULL DEFAULT ''");
-        }
-        if (oldVersion < 13) {
-          await db.execute('''
-            CREATE TABLE horse_stats_cache(
-              raceId TEXT PRIMARY KEY,
-              statsJson TEXT NOT NULL,
-              lastUpdatedAt TEXT NOT NULL
-            )
-          ''');
-        }
-        // ▼▼▼ 追記箇所 ▼▼▼
-        if (oldVersion < 14) {
-          // v13でテーブル作成に失敗したケース等を救済するため、
-          // テーブルが存在しない場合のみ作成する
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS race_statistics(
-              raceId TEXT PRIMARY KEY,
-              raceName TEXT NOT NULL,
-              statisticsJson TEXT NOT NULL,
-              lastUpdatedAt TEXT NOT NULL
-            )
-          ''');
-        }
+        // 例: もし将来的にバージョン2にアップグレードする場合
+        // if (oldVersion < 2) {
+        //   await db.execute('ALTER TABLE some_table ADD COLUMN new_column TEXT');
+        // }
       },
     );
   }
@@ -383,7 +218,6 @@ class DatabaseHelper {
   /// 指定されたQRコードがデータベースに存在するかを確認します。
   Future<bool> qrCodeExists(String qrCode) async {
     final db = await database;
-    // クエリ結果の最初の行の最初の列を整数として効率的に取得します。
     final count = Sqflite.firstIntValue(await db.query(
       'qr_data',
       columns: ['COUNT(*)'],
@@ -416,7 +250,6 @@ class DatabaseHelper {
         whereArgs: [userId],
         orderBy: 'timestamp DESC'
     );
-    // クエリ結果のMapリストをQrDataオブジェクトのリストに変換します。
     return List.generate(maps.length, (i) {
       return QrData.fromMap(maps[i]);
     });
@@ -429,7 +262,6 @@ class DatabaseHelper {
     return await db.insert(
       'qr_data',
       qrData.toMap(),
-      // UNIQUE制約で競合が発生した場合、新しいデータで既存の行を置き換えます（UPSERT動作）。
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -438,8 +270,6 @@ class DatabaseHelper {
   Future<int> deleteQrData(int id, String userId) async {
     final db = await database;
 
-
-    // ローカルDBから削除
     return await db.delete(
       'qr_data',
       where: 'id = ? AND userId = ?',
@@ -456,7 +286,6 @@ class DatabaseHelper {
       whereArgs: [raceId],
     );
     if (maps.isNotEmpty) {
-      // JSON文字列をRaceResultオブジェクトに変換して返す。
       return raceResultFromJson(maps.first['race_result_json'] as String);
     }
     return null;
@@ -467,7 +296,6 @@ class DatabaseHelper {
       return {};
     }
     final db = await database;
-    // `IN`句のプレースホルダ (?) を動的に生成
     final placeholders = List.filled(raceIds.length, '?').join(',');
     final maps = await db.query(
       'race_results',
@@ -492,7 +320,6 @@ class DatabaseHelper {
         'race_id': raceResult.raceId,
         'race_result_json': raceResultToJson(raceResult),
       },
-      // 主キー(race_id)で競合が発生した場合、新しいデータで置き換えます。
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -500,13 +327,9 @@ class DatabaseHelper {
   /// 競走馬の成績を1件挿入または更新します。
   Future<int> insertOrUpdateHorsePerformance(HorseRaceRecord record) async {
     final db = await database;
-    // デバッグ用のログ出力
-    print('--- [DB Save] Horse Performance ---');
-    print('Horse ID: ${record.horseId}, Date: ${record.date}, Race: ${record.raceName}, Rank: ${record.rank}');
     return await db.insert(
       'horse_performance',
       record.toMap(),
-      // UNIQUE制約(horse_id, date)で競合が発生した場合、新しいデータで置き換えます。
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -533,7 +356,6 @@ class DatabaseHelper {
       where: 'horse_id = ?',
       whereArgs: [horseId],
       orderBy: 'date DESC',
-      // データが1件見つかった時点で検索を終了するため、パフォーマンスが向上します。
       limit: 1,
     );
     if (maps.isNotEmpty) {
@@ -689,7 +511,6 @@ class DatabaseHelper {
   /// フィードの表示順を一括で更新します。
   Future<void> updateFeedOrder(List<Feed> feeds) async {
     final db = await database;
-    // 複数の更新処理を1つのバッチにまとめることで、パフォーマンスを向上させます。
     final batch = db.batch();
     for (int i = 0; i < feeds.length; i++) {
       final feed = feeds[i];
@@ -700,7 +521,6 @@ class DatabaseHelper {
         whereArgs: [feed.id],
       );
     }
-    // バッチ処理を実行
     await batch.commit(noResult: true);
   }
 
@@ -709,22 +529,18 @@ class DatabaseHelper {
   Future<void> deleteAllDataForUser(String userId) async {
 
     final db = await database;
-    // ユーザーに紐づくデータのみを削除
     await db.delete('qr_data', where: 'userId = ?', whereArgs: [userId]);
     await db.delete('user_marks', where: 'userId = ?', whereArgs: [userId]);
     await db.delete('user_feeds', where: 'userId = ?', whereArgs: [userId]);
     await db.delete('analytics_aggregates', where: 'userId = ?', whereArgs: [userId]);
-    // グローバルなデータ（race_resultsなど）は削除しない
   }
 
   /// 分析用の集計データを更新します。
   /// 投資額、払戻額、的中数、ベット数などの差分を受け取り、データベースの値を更新します。
   Future<void> updateAggregates(String userId, Map<String, Map<String, int>> updates) async {
     final db = await database;
-    // トランザクション内で処理を行い、一連の更新が全て成功するか、全て失敗するかのどちらかになることを保証します（原子性）。
     await db.transaction((txn) async {
       for (final key in updates.keys) {
-        // 現在の集計値を取得
         final current = await txn.query(
           'analytics_aggregates',
           where: 'aggregate_key = ? AND userId = ?',
@@ -733,7 +549,6 @@ class DatabaseHelper {
 
         final Map<String, dynamic> updateValues = updates[key]!;
         if (current.isEmpty) {
-          // データが存在しない場合は、新しい行として挿入
           await txn.insert('analytics_aggregates', {
             'aggregate_key': key,
             'userId': userId,
@@ -743,7 +558,6 @@ class DatabaseHelper {
             'bet_count': updateValues['bet_delta'] ?? 0,
           });
         } else {
-          // データが存在する場合は、現在の値に差分を加算して更新
           await txn.update(
             'analytics_aggregates',
             {
@@ -763,7 +577,6 @@ class DatabaseHelper {
   /// 年単位の集計サマリーを取得します。
   Future<List<Map<String, dynamic>>> getYearlySummaries(String userId) async {
     final db = await database;
-    // 'total_YYYY' 形式のキーを持つデータを検索
     return await db.query(
       'analytics_aggregates',
       where: "aggregate_key LIKE 'total_%' AND aggregate_key NOT LIKE 'total_%-%' AND userId = ?",
@@ -775,7 +588,6 @@ class DatabaseHelper {
   /// 指定された年の月別データを取得します。
   Future<List<Map<String, dynamic>>> getMonthlyDataForYear(String userId, int year) async {
     final db = await database;
-    // 'total_YYYY-MM' 形式のキーを持つデータを検索
     return await db.query(
       'analytics_aggregates',
       where: "aggregate_key LIKE ? AND userId = ?",
@@ -787,7 +599,6 @@ class DatabaseHelper {
   /// カテゴリ（競馬場、騎手など）ごとの集計サマリーを取得します。
   Future<List<Map<String, dynamic>>> getCategorySummaries(String userId, String prefix, {int? year}) async {
     final db = await database;
-    // SQLインジェクションを防ぐため、引数はwhereArgsで渡す
     final whereClause = year != null ? "aggregate_key LIKE ? AND userId = ?" : "aggregate_key LIKE ? AND userId = ?";
     final whereArgs = year != null ? ['${prefix}_%_$year', userId] : ['${prefix}_%', userId];
     return await db.query(
@@ -828,7 +639,6 @@ class DatabaseHelper {
 
   Future<List<PredictionStat>> getPredictionStats(String userId) async {
     final db = await database;
-    // キーが 'prediction_'で始まり、'_stats'で終わるデータを検索
     final maps = await db.query(
       'analytics_aggregates',
       where: "aggregate_key LIKE 'prediction_%_stats' AND userId = ?",
@@ -869,10 +679,8 @@ class DatabaseHelper {
 
   /// データベース接続を閉じます。
   Future<void> closeDb() async {
-    // データベースがnullでなく、かつ開いている場合のみ閉じる
     if (_database != null && _database!.isOpen) {
       await _database!.close();
-      // シングルトンのインスタンスもnullにして、次回アクセス時に再初期化されるようにする
       _database = null;
     }
   }
@@ -925,7 +733,7 @@ class DatabaseHelper {
         'hashedPassword': user.hashedPassword,
         'createdAt': user.createdAt.toIso8601String(),
       },
-      conflictAlgorithm: ConflictAlgorithm.fail, // ユーザー名はユニークであるべき
+      conflictAlgorithm: ConflictAlgorithm.fail,
     );
   }
 
