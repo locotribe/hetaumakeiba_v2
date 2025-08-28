@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
-// NOTE: クラス外に移動したヘルパー関数
 String _getStars(int amount) {
   String amountStr = amount.toString();
   int numDigits = amountStr.length;
@@ -107,10 +106,10 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
               child: Text(
                 numbersToProcess[i].toString(),
                 style: const TextStyle(
-                  fontSize: 100,      // ① 非常に大きなフォントサイズを指定
+                  fontSize: 100,      // 大きなフォントサイズを指定
                   color: Colors.black,
                   fontWeight: FontWeight.bold,
-                  height: 1.0,         // ② (推奨)行の高さを詰めて上下の余白を最小化
+                  height: 1.0,         // 行の高さを詰めて上下の余白を最小化
                 ),
               ),
             ),
@@ -215,7 +214,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       );
     }).toList();
 
-    // ★修正点: 相手馬を常に4x5のグリッドで生成し、足りない分は '☆' で埋める
+    // 相手馬を常に4x5のグリッドで生成し、足りない分は '☆' で埋める
     const int numOpponentRows = 4;
     const int numOpponentCols = 5;
     const int totalCells = numOpponentRows * numOpponentCols;
@@ -242,9 +241,9 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           rowChildren.add(
             SizedBox(
               width: boxSizeForOpponent + 4.0,
-              height: boxSizeForOpponent,
+              height: boxSizeForOpponent + 4.0,
               child: Center(
-                // この場所が何の場合の数字なのか: ながし投票の相手馬が20頭に満たない場合のプレースホルダー('☆')のフォントサイズ
+                // ながし投票の相手馬が20頭に満たない場合のプレースホルダー('☆')のフォントサイズ
                 child: Text('☆', style: TextStyle(fontSize: boxSizeForOpponent * 0.5, color: Colors.black)),
               ),
             ),
@@ -267,7 +266,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           '(軸)',
           style: TextStyle(
             color: Colors.black,
-            fontSize: 11, // この行を追加します
+            fontSize: 11,
           ),
         ),
         const SizedBox(height: 4),
@@ -282,7 +281,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           '(相手)',
           style: TextStyle(
             color: Colors.black,
-            fontSize: 10, // この行を追加します
+            fontSize: 10,
           ),
         ),
         const SizedBox(height: 2),
@@ -315,7 +314,6 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     );
   }
 
-  // ★★★ ここから新規追加 (1/2) ★★★
   /// ボックス投票のグリッド内のセル（馬番または☆）を1つ生成する
   Widget _buildBoxHorseNumberCell(dynamic content, {required double scaleFactor}) {
     const double boxSize = 38.0;
@@ -334,10 +332,10 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
               scaleY: scaleFactor,
               alignment: Alignment.center,
               child: FittedBox(
-                // ★★★ 修正点1: 高さを基準にスケールするよう変更 ★★★
+                // 高さを基準にスケールする
                 fit: BoxFit.fitHeight,
                 child:
-                // ★★★ 修正点2: 二桁の場合のみ横幅を圧縮するTransform.scaleを追加 ★★★
+                // 二桁の場合のみ横幅を圧縮する
                 Transform.scale(
                   // content(馬番)が9より大きい(つまり二桁)なら横幅を85%に圧縮
                   scaleX: content > 9 ? 0.85 : 1.0,
@@ -358,7 +356,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         ),
       );
     } else {
-      // (☆を表示する部分は変更ありません)
+      // ☆を表示する部分
       return Expanded(
         child: Center(
           child: SizedBox(
@@ -373,13 +371,12 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     }
   }
 
-// ★★★ ここから新規追加 (2/2) ★★★
   /// ボックス投票用のグリッドレイアウト全体を生成する
   Widget _buildBoxGridLayout(List<int> horseNumbers) {
     const int itemsPerRow = 5;
     final int horseCount = horseNumbers.length;
 
-    // ★★★ 修正点1: 馬の数に応じて3段階のスケール比率を決定 ★★★
+    // 馬の数に応じて3段階のスケール比率を決定 ★★★
     double scaleFactor;
     if (horseCount < 6) {
       scaleFactor = 1.5;   // 5頭以下は最も縦長
@@ -394,7 +391,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
 
     List<Widget> rows = [];
 
-    // 1. まず、馬番を表示するための行を生成する
+    // 1. 馬番を表示するための行を生成する
     if (horseCount > 0) {
       final int horseRows = (horseCount / itemsPerRow).ceil();
       for (int i = 0; i < horseRows; i++) {
@@ -418,7 +415,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       }
     }
 
-    // ★★★ 修正点2: 新しい☆の表示ルール (5頭以下の場合のみ☆の行を追加) ★★★
+    // 新しい☆の表示ルール (5頭以下の場合のみ☆の行を追加)
     if (horseCount > 0 && horseCount <= 5) {
       List<Widget> starRowChildren = [];
       for (int j = 0; j < itemsPerRow; j++) {
@@ -439,11 +436,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     );
   }
 
-
-  // ▼▼▼ ここからリファクタリングにより追加されたメソッド群 ▼▼▼
-
-  /// 【リファクタリング】応援馬券のレイアウトを構築する
-  /// 元の`_buildPurchaseDetailsInternal`から応援馬券のロジックを分離
+  /// 応援馬券のレイアウト
   List<Widget> _buildOuenBakenDetails(List<Map<String, dynamic>> purchaseDetails) {
     if (purchaseDetails.isEmpty) return [];
 
@@ -513,8 +506,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     ];
   }
 
-  /// 【リファクタリング】ながし投票のレイアウトを構築する
-  /// 元の`_buildPurchaseDetailsInternal`からながし投票のロジックを分離
+  /// ながし投票のレイアウト
   Widget _buildNagashiDetails(Map<String, dynamic> detail, String currentBetType) {
     final String shikibetsuId = detail['式別'] ?? '';
     final String shikibetsu = bettingDict[shikibetsuId] ?? '';
@@ -550,8 +542,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     }
   }
 
-  /// 【リファクタリング】フォーメーション投票のレイアウトを構築する
-  /// 元の`_buildPurchaseDetailsInternal`からフォーメーション投票のロジックを分離
+  /// フォーメーション投票のレイアウト
   Widget _buildFormationDetails(Map<String, dynamic> detail, String currentBetType) {
     final String shikibetsuId = detail['式別'] ?? '';
     final String shikibetsu = bettingDict[shikibetsuId] ?? '';
@@ -582,8 +573,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     );
   }
 
-  /// 【リファクタリング】通常・ボックス投票のレイアウトを構築する
-  /// 元の`_buildPurchaseDetailsInternal`から通常・ボックス投票のロジックを分離
+  /// 通常・ボックス投票のレイアウト
   Widget _buildDefaultAndBoxDetails(Map<String, dynamic> detail, String currentBetType) {
     final String shikibetsuId = detail['式別'] ?? '';
     final String shikibetsu = bettingDict[shikibetsuId] ?? '';
@@ -688,8 +678,6 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     );
   }
 
-  // ▲▲▲ ここまでリファクタリングにより追加されたメソッド群 ▲▲▲
-
 
   /// 【リファクタリング】メインの分岐処理
   /// 投票種別に応じて、上記で作成した各レイアウト構築メソッドを呼び出すように変更
@@ -743,7 +731,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       return const SizedBox.shrink();
     }
 
-    // ★★★ 応援馬券の場合のレイアウトを特別に分離する ★★★
+    // 応援馬券の場合のレイアウトを特別に分離
     if (widget.betType == '応援馬券') {
       // 応援馬券はFittedBoxを使わず、Centerで中央揃えする
       return Center(
@@ -758,7 +746,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         ),
       );
     } else {
-      // 応援馬券以外の場合は、これまで通りFittedBoxでレイアウトを処理する
+      // 応援馬券以外の場合
       // 中央揃えにしたい馬券種別かを判断
       final bool isCenterAligned =
           widget.betType == 'ながし' || widget.betType == 'フォーメーション';
@@ -900,7 +888,7 @@ class PurchaseCombinationsCard extends StatelessWidget {
           '組合せ数 $combinationDisplayString',
           style: const TextStyle(
             color: Colors.black,
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: FontWeight.bold,
             height: 1.0, // または 0.9 など、適宜調整してください
             leadingDistribution: TextLeadingDistribution.even, // 上下の余白を均等に分配
@@ -923,7 +911,10 @@ class PurchaseCombinationsCard extends StatelessWidget {
                   margin: const EdgeInsets.only(right: 8.0),
                   padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                   decoration: const BoxDecoration(color: Colors.black, borderRadius: BorderRadius.all(Radius.circular(0))),
-                  child: const Text('マルチ', style: TextStyle(color: Colors.white, fontSize: 20, height: 1)),
+                  child: const Text('マルチ', style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      height: 1)),
                 ),
               Text(isComplexCombinationForPrefix ? '各組' : '', style: amountStyle),
               Text(_getStars(kingaku), style: starStyle),
@@ -966,6 +957,7 @@ class PurchaseTotalAmountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final int totalAmount = parsedResult['合計金額'] as int? ?? 0;
+
     if (totalAmount == 0) {
       return const SizedBox.shrink();
     }
@@ -973,8 +965,25 @@ class PurchaseTotalAmountCard extends StatelessWidget {
     String totalStars = _getTotalAmountStars(totalAmount);
     String totalAmountString = totalAmount.toString();
 
-    const TextStyle totalStarStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
-    const TextStyle totalAmountTextStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14);
+    // 枚数を計算（10分の1にする）
+    int totalSheets = totalAmount ~/ 10;
+
+    // フォントスタイル
+    const TextStyle labelTextStyle = TextStyle(
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+      fontSize: 10, // 「合計」「枚」「円」
+    );
+    const TextStyle starTextStyle = TextStyle(
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+      fontSize: 8, // 「★」
+    );
+    const TextStyle numberTextStyle = TextStyle(
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+      fontSize: 16, // 「□」「〇」
+    );
 
     return FittedBox(
       fit: BoxFit.scaleDown,
@@ -983,11 +992,21 @@ class PurchaseTotalAmountCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Text('合計　', style: totalAmountTextStyle),
-          Text(totalStars, style: totalStarStyle),
-          Text('$totalAmountString円', style: totalAmountTextStyle),
+          // 「合計」
+          const Text('合計　', style: labelTextStyle),
+
+          // 「★□枚」
+          Text(totalStars, style: starTextStyle),
+          Text('$totalSheets', style: numberTextStyle),
+          const Text('枚　', style: labelTextStyle),
+
+          // 「★〇円」
+          Text(totalStars, style: starTextStyle),
+          Text(totalAmountString, style: numberTextStyle),
+          const Text('円', style: labelTextStyle),
         ],
       ),
     );
   }
+
 }

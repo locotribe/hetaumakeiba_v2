@@ -470,17 +470,21 @@ class BettingTicketCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  flex: 2,
+                  flex: 1,
                   child: (salesLocation != null && salesLocation.isNotEmpty)
                       ? Text(
                     salesLocation,
-                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16, height: 1.0,),
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      height: 1.0,),
                   )
                       : const SizedBox.shrink(),
                 ),
                 const SizedBox(width: 40 + 10),
                 Expanded(
-                  flex: 3,
+                  flex: 4,
                   child: Align(
                     alignment: Alignment.centerRight,
                     child: PurchaseTotalAmountCard(
