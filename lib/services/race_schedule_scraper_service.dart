@@ -211,16 +211,24 @@ class RaceScheduleScraperService {
       if (match == null) continue;
       final raceId = match.group(1)!;
 
-      final textParts = text.split(RegExp(r'\\s+'));
-      final raceNumber = textParts.isNotEmpty ? textParts.first : '';
-      final raceName = textParts.length > 1 ? textParts.sublist(1).join(' ') : '';
+      // ▼▼▼▼▼【ここから修正】▼▼▼▼▼
+      // 取得した文字列(text)を改行コードで分割し、前後の空白を削除します。
+      final lines = text.split('\n').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+
+      // 1行目をレース番号として取得します。
+      final raceNumber = lines.isNotEmpty ? lines[0] : '';
+      // 2行目をレース名として取得します。
+      final raceName = lines.length > 1 ? lines[1] : '';
+      // 3行目を詳細情報として取得します。元のitem['details']は使いません。
+      final details = lines.length > 2 ? lines[2] : '';
+      // ▲▲▲▲▲【ここまで修正】▲▲▲▲▲
 
       final raceInfo = SimpleRaceInfo(
           raceId: raceId,
           raceNumber: raceNumber,
           raceName: raceName,
           grade: _getGradeTypeText(item['gradeTypeClass']),
-          details: item['details']
+          details: details // 正しく分割された詳細情報
       );
 
       venuesMap.putIfAbsent(venueTitle, () => []).add(raceInfo);
@@ -240,6 +248,8 @@ class RaceScheduleScraperService {
       venues: venues,
     );
   }
+
+
 
   String _getGradeTypeText(String className) {
     if (className.contains('Icon_GradeType18')) return '1勝';

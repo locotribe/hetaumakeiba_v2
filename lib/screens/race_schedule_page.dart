@@ -279,19 +279,50 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         if (_loadingTabs.contains(dateStr)) {
           return const Center(child: CircularProgressIndicator());
         }
+
         final schedule = _raceSchedules[dateStr];
+
+        // --- 条件判定ロジック ---
+        final scheduleDate = DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final bool isPastPageWithData = scheduleDate.isBefore(today) && schedule != null;
+
+        // --- 表示するコンテンツを生成 ---
+        Widget content;
         if (schedule != null) {
+          // データがある場合はスケジュールを表示
+          content = _buildRaceScheduleView(schedule);
+        } else {
+          // データがない場合は「データがありません」という表示を生成
+          // このウィジェットも更新可能にするため、スクロールできる構造にする
+          content = LayoutBuilder(builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: const Center(
+                  child: Text(
+                    'データがありません。\n（画面を下に引っ張って更新）',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            );
+          });
+        }
+
+        // --- 条件に応じてRefreshIndicatorでラップするか決定 ---
+        if (isPastPageWithData) {
+          // データ取得済みの過去ページは、更新機能をつけずにそのまま表示
+          return content;
+        } else {
+          // 未来のページ、またはデータ取得に失敗した過去ページは更新機能をつける
           return RefreshIndicator(
             onRefresh: () => _fetchDataForDate(dateStr),
-            child: _buildRaceScheduleView(schedule),
+            child: content,
           );
         }
-        return Center(
-            child: Text(
-              'データがありません。\n（画面を下に引っ張って更新）',
-              textAlign: TextAlign.center,
-            )
-        );
       }).toList(),
     );
   }
@@ -353,105 +384,147 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     final today = DateTime(now.year, now.month, now.day);
     final bool isFutureOrToday = !scheduleDate.isBefore(today);
 
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Column( // Columnで全体をラップ
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: schedule.venues.map((venue) {
-                  return Container(
-                    width: 180,
-                    margin: const EdgeInsets.only(right: 8.0),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8.0),
-                          color: Colors.grey[200],
-                          child: Center(
-                            child: Text(
-                              venue.venueTitle,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                        ...venue.races.map((race) {
-                          bool isRaceSet = race.raceId.isNotEmpty;
-                          return InkWell(
-                            onTap: isRaceSet
-                                ? () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      ShutubaTablePage(raceId: race.raceId),
+    // 【修正】LayoutBuilderを使って、RefreshIndicatorが常に機能する安定した構造にする
+    return LayoutBuilder(builder: (context, constraints) {
+      return SingleChildScrollView( // 垂直スクロールを管理
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              children: [
+                // 水平スクロールは会場リスト(Row)のみに限定する
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: schedule.venues.map((venue) {
+                      // Container ... venue.races.map ... の部分は変更なし
+                      return Container(
+                        width: 200,
+                        margin: const EdgeInsets.only(right: 8.0),
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8.0),
+                              color: Colors.grey[200],
+                              child: Center(
+                                child: Text(
+                                  venue.venueTitle,
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
                                 ),
-                              );
-                            }
-                                : null,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 8.0, horizontal: 4.0),
-                              decoration: BoxDecoration(
-                                  border: Border(
-                                      bottom: BorderSide(color: Colors.grey.shade300))),
-                              child: Row(
-                                children: [
-                                  Text(race.raceNumber,
-                                      style:
-                                      const TextStyle(fontWeight: FontWeight.bold)),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          race.raceName,
-                                          style: TextStyle(
-                                              color: isRaceSet
-                                                  ? Colors.black
-                                                  : Colors.grey),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        if (isRaceSet && (race.grade.isNotEmpty || race.details.isNotEmpty))
-                                          Text(
-                                            '${race.grade} ${race.details}'.trim(),
-                                            style: const TextStyle(
-                                                fontSize: 10, color: Colors.grey),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
                               ),
                             ),
-                          );
-                        }).toList(),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-              // 更新メッセージを条件付きで表示
-              if (isFutureOrToday)
-                const Padding(
-                  padding: EdgeInsets.only(top: 16.0),
-                  child: Text(
-                    '画面を下に引いて最新情報に更新',
-                    style: TextStyle(color: Colors.grey),
+                            ...venue.races.map((race) {
+                              bool isRaceSet = race.raceId.isNotEmpty;
+                              return InkWell(
+                                onTap: isRaceSet
+                                    ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          ShutubaTablePage(raceId: race.raceId),
+                                    ),
+                                  );
+                                }
+                                    : null,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
+                                  decoration: BoxDecoration(
+                                      border: Border(
+                                          bottom: BorderSide(color: Colors.grey.shade300))),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        width: 50,
+                                        padding: const EdgeInsets.symmetric(vertical: 10.0),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blueAccent,
+                                          borderRadius: BorderRadius.circular(4.0),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            race.raceNumber,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    race.raceName,
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: isRaceSet ? Colors.black : Colors.grey,
+                                                    ),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                if (isRaceSet && race.grade.isNotEmpty)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: race.grade.contains('G') ? Colors.red.shade600 : Colors.grey.shade500,
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: Text(
+                                                      race.grade,
+                                                      style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            if (isRaceSet && race.details.isNotEmpty)
+                                              Text(
+                                                race.details,
+                                                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            })
+                          ],
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ),
-            ],
+                // 更新メッセージは水平スクロールの外に配置
+                if (isFutureOrToday)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16.0),
+                    child: Text(
+                      '画面を下に引いて最新情報に更新',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 }

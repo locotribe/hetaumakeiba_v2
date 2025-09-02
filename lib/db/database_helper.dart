@@ -53,7 +53,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 2,
+      version: 1,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
@@ -211,20 +211,21 @@ class DatabaseHelper {
             scheduleJson TEXT NOT NULL
           )
         ''');
-      },
-      /// データベースのバージョンがアップグレードされたときに呼び出されます。
-      /// バージョンを1にリセットしたため、過去のアップグレードロジックは全て削除しました。
-      /// 今後、新しいバージョンのスキーマ変更が必要になった場合に、ここに新しいアップグレードロジックを記述します。
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
         await db.execute('''
           CREATE TABLE week_schedules_cache(
             week_key TEXT PRIMARY KEY,
             available_dates_json TEXT NOT NULL
           )
         ''');
-        }
       },
+      /// データベースのバージョンがアップグレードされたときに呼び出されます。
+      /// バージョンを1にリセットしたため、過去のアップグレードロジックは全て削除しました。
+      /// 今後、新しいバージョンのスキーマ変更が必要になった場合に、ここに新しいアップグレードロジックを記述します。
+   //   onUpgrade: (db, oldVersion, newVersion) async {
+   //     if (oldVersion < 2) {
+
+   //     }
+   //   },
     );
   }
 
