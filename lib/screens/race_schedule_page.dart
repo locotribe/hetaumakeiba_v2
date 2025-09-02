@@ -170,7 +170,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
   }
 
-  Future<void> _fetchDataForDate(String dateString) async {
+  Future<void> _fetchDataForDate(String dateString, {bool forceRefresh = false}) async {
     if (!mounted) return;
     setState(() {
       _loadingTabs.add(dateString);
@@ -180,22 +180,27 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       final date = DateFormat('yyyy-MM-dd', 'en_US').parse(dateString);
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
-
       RaceSchedule? schedule;
 
-      // 過去の日付の場合
-      if (date.isBefore(today)) {
-        // 過去データはDBからのみ取得を試みる（ネットワークにはいかない）
-        schedule = await _dbHelper.getRaceSchedule(dateString);
-      }
-      // 未来または今日の日付の場合
-      else {
-        // ネットワークから最新データを取得
+      // [修正点] forceRefreshがtrueの場合は、日付に関わらずネットワークから取得する
+      if (forceRefresh) {
         schedule = await _scraperService.scrapeRaceSchedule(date);
-        if (schedule != null) {
-          // 取得した最新データをDBに保存
-          await _dbHelper.insertOrUpdateRaceSchedule(schedule);
+      } else {
+        // 通常の読み込みロジック
+        if (date.isBefore(today)) {
+          // 過去データはまずDBから試みる
+          schedule = await _dbHelper.getRaceSchedule(dateString);
+          // DBになければネットワークから取得する
+          schedule ??= await _scraperService.scrapeRaceSchedule(date);
+        } else {
+          // 未来または今日の日付はネットワークから取得
+          schedule = await _scraperService.scrapeRaceSchedule(date);
         }
+      }
+
+      // 取得に成功したデータはDBに保存・更新する
+      if (schedule != null) {
+        await _dbHelper.insertOrUpdateRaceSchedule(schedule);
       }
 
       if (mounted) {
@@ -319,7 +324,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         } else {
           // 未来のページ、またはデータ取得に失敗した過去ページは更新機能をつける
           return RefreshIndicator(
-            onRefresh: () => _fetchDataForDate(dateStr),
+            onRefresh: () => _fetchDataForDate(dateStr, forceRefresh: true),
             child: content,
           );
         }
