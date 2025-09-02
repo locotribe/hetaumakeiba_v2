@@ -68,29 +68,48 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   Future<void> _loadDataForWeek() async {
     if (!mounted) return;
 
-    // Step 1: DBから週の全データを取得試行
+    // Step 1: 週を特定するキー(その週の日曜日の日付)を生成
+    final representativeDate = _weekDates.last;
+    final weekKey = DateFormat('yyyy-MM-dd').format(representativeDate);
+
+    // Step 2: まずDBから週のレース日程詳細と、開催日リスト(キャッシュ)を取得試行
     final weekDateStrings = _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
     final schedulesFromDb = await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
+    final cachedDateStrings = await _dbHelper.getWeekCache(weekKey);
+
     if (mounted) {
       setState(() {
         _raceSchedules.addAll(schedulesFromDb);
       });
     }
 
-    // Step 2: ネットワークから開催日リストを取得
+    // Step 3: 開催日リストのキャッシュがあった場合の処理 (過去の週など)
+    if (cachedDateStrings != null) {
+      if (mounted) {
+        _isDataLoaded = true;
+        _setupTabs(cachedDateStrings); // キャッシュされたリストでタブを設定
+        setState(() => _isLoading = false);
+      }
+      // キャッシュがあったので、ネットワーク通信は行わずにここで処理を終了
+      return;
+    }
+
+    // Step 4: キャッシュがなかった場合のみネットワーク通信を行う (初めて表示する週など)
     try {
-      final representativeDate = _weekDates.last;
-      final (dateStrings, initialSchedule) = await _scraperService.fetchInitialData(representativeDate);
+      final (liveDateStrings, initialSchedule) = await _scraperService.fetchInitialData(representativeDate);
+
+      // ★重要★: 取得した開催日リストをDBにキャッシュする
+      if (liveDateStrings.isNotEmpty) {
+        await _dbHelper.insertOrUpdateWeekCache(weekKey, liveDateStrings);
+      }
 
       if (mounted) {
         _isDataLoaded = true;
-
-        if (dateStrings.isEmpty && initialSchedule == null) {
+        if (liveDateStrings.isEmpty && initialSchedule == null) {
           setState(() => _isLoading = false);
           return;
         }
 
-        // 取得したスケジュールがあればDBに保存し、メモリにも反映
         if (initialSchedule != null) {
           await _dbHelper.insertOrUpdateRaceSchedule(initialSchedule);
           setState(() {
@@ -98,8 +117,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           });
         }
 
-        // タブを設定
-        _setupTabs(dateStrings);
+        _setupTabs(liveDateStrings); // ネットワークから取得したリストでタブを設定
       }
     } catch (e) {
       print("Error fetching initial data: $e");

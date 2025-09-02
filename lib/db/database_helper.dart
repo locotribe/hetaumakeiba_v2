@@ -1,5 +1,6 @@
 // lib/db/database_helper.dart
 
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
@@ -52,7 +53,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 1,
+      version: 2,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
@@ -215,10 +216,14 @@ class DatabaseHelper {
       /// バージョンを1にリセットしたため、過去のアップグレードロジックは全て削除しました。
       /// 今後、新しいバージョンのスキーマ変更が必要になった場合に、ここに新しいアップグレードロジックを記述します。
       onUpgrade: (db, oldVersion, newVersion) async {
-        // 例: もし将来的にバージョン2にアップグレードする場合
-      //  if (oldVersion < 2) {
-
-      //  }
+        if (oldVersion < 2) {
+        await db.execute('''
+          CREATE TABLE week_schedules_cache(
+            week_key TEXT PRIMARY KEY,
+            available_dates_json TEXT NOT NULL
+          )
+        ''');
+        }
       },
     );
   }
@@ -884,6 +889,34 @@ class DatabaseHelper {
     );
     if (maps.isNotEmpty) {
       return raceScheduleFromJson(maps.first['scheduleJson'] as String);
+    }
+    return null;
+  }
+  /// 週ごとの開催日リストをDBにキャッシュとして保存または更新します。
+  Future<void> insertOrUpdateWeekCache(String weekKey, List<String> availableDates) async {
+    final db = await database;
+    await db.insert(
+      'week_schedules_cache',
+      {
+        'week_key': weekKey,
+        'available_dates_json': json.encode(availableDates),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// DBからキャッシュされた週ごとの開催日リストを取得します。
+  Future<List<String>?> getWeekCache(String weekKey) async {
+    final db = await database;
+    final maps = await db.query(
+      'week_schedules_cache',
+      where: 'week_key = ?',
+      whereArgs: [weekKey],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      final jsonString = maps.first['available_dates_json'] as String;
+      return (json.decode(jsonString) as List<dynamic>).cast<String>();
     }
     return null;
   }
