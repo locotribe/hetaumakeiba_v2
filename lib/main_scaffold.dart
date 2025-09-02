@@ -371,10 +371,7 @@ class _MainScaffoldState extends State<MainScaffold> {
 
 
   void _onItemTapped(int index) {
-    if (index == 1) { // 開催一覧タブのインデックスは1
-      // RaceSchedulePageの公開メソッドを呼び出してデータ取得をトリガー
-      _raceScheduleKey.currentState?.fetchInitialDataIfNeeded();
-    }
+
     if (index == 3) {
       _savedListKey.currentState?.reloadData();
     }

@@ -53,7 +53,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       _weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
 
       _isDataLoaded = false;
-      _isLoading = false;
+      _isLoading = true;
+      _loadingMessage = '開催日をチェック中...';
       _availableDates.clear();
       _raceSchedules.clear();
       _tabController?.removeListener(_handleTabSelection);
@@ -61,39 +62,45 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       _tabController = null;
     });
 
-    fetchInitialDataIfNeeded();
+    _loadDataForWeek();
   }
 
-  Future<void> fetchInitialDataIfNeeded() async {
-    if (_isDataLoaded || _isLoading) return;
-    await _fetchInitialWeekData();
-  }
-
-  Future<void> _fetchInitialWeekData() async {
+  Future<void> _loadDataForWeek() async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _loadingMessage = '開催日をチェック中...';
-    });
 
+    // Step 1: DBから週の全データを取得試行
+    final weekDateStrings = _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
+    final schedulesFromDb = await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
+    if (mounted) {
+      setState(() {
+        _raceSchedules.addAll(schedulesFromDb);
+      });
+    }
+
+    // Step 2: ネットワークから開催日リストを取得
     try {
       final representativeDate = _weekDates.last;
       final (dateStrings, initialSchedule) = await _scraperService.fetchInitialData(representativeDate);
 
-      _isDataLoaded = true;
+      if (mounted) {
+        _isDataLoaded = true;
 
-      if (dateStrings.isEmpty && initialSchedule == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
+        if (dateStrings.isEmpty && initialSchedule == null) {
+          setState(() => _isLoading = false);
+          return;
+        }
+
+        // 取得したスケジュールがあればDBに保存し、メモリにも反映
+        if (initialSchedule != null) {
+          await _dbHelper.insertOrUpdateRaceSchedule(initialSchedule);
+          setState(() {
+            _raceSchedules[initialSchedule.date] = initialSchedule;
+          });
+        }
+
+        // タブを設定
+        _setupTabs(dateStrings);
       }
-
-      if (initialSchedule != null) {
-        await _dbHelper.insertOrUpdateRaceSchedule(initialSchedule);
-        _raceSchedules[initialSchedule.date] = initialSchedule;
-      }
-
-      _setupTabs(dateStrings);
-
     } catch (e) {
       print("Error fetching initial data: $e");
       if (mounted) {
@@ -153,10 +160,26 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     try {
       final date = DateFormat('yyyy-MM-dd', 'en_US').parse(dateString);
-      final schedule = await _scraperService.scrapeRaceSchedule(date);
-      if (schedule != null) {
-        await _dbHelper.insertOrUpdateRaceSchedule(schedule);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      RaceSchedule? schedule;
+
+      // 過去の日付の場合
+      if (date.isBefore(today)) {
+        // 過去データはDBからのみ取得を試みる（ネットワークにはいかない）
+        schedule = await _dbHelper.getRaceSchedule(dateString);
       }
+      // 未来または今日の日付の場合
+      else {
+        // ネットワークから最新データを取得
+        schedule = await _scraperService.scrapeRaceSchedule(date);
+        if (schedule != null) {
+          // 取得した最新データをDBに保存
+          await _dbHelper.insertOrUpdateRaceSchedule(schedule);
+        }
+      }
+
       if (mounted) {
         setState(() {
           _raceSchedules[dateString] = schedule;
@@ -164,6 +187,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       }
     } catch (e) {
       print("Error fetching data for $dateString: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('データ取得エラー: $e')));
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -176,12 +202,12 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   @override
   Widget build(BuildContext context) {
     return Column(
-        children: [
-          _buildWeekNavigator(),
-          Expanded(
-            child: _buildBodyContent(),
-          ),
-        ],
+      children: [
+        _buildWeekNavigator(),
+        Expanded(
+          child: _buildBodyContent(),
+        ),
+      ],
     );
   }
 
@@ -210,7 +236,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     if (_availableDates.isEmpty) {
       return RefreshIndicator(
-        onRefresh: _fetchInitialWeekData,
+        onRefresh: _loadDataForWeek,
         child: LayoutBuilder(builder: (context, constraints) {
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -303,6 +329,12 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   }
 
   Widget _buildRaceScheduleView(RaceSchedule schedule) {
+    // 日付判定用のコード
+    final scheduleDate = DateFormat('yyyy-MM-dd', 'en_US').parse(schedule.date);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final bool isFutureOrToday = !scheduleDate.isBefore(today);
+
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       scrollDirection: Axis.vertical,
@@ -310,82 +342,95 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         scrollDirection: Axis.horizontal,
         child: Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: schedule.venues.map((venue) {
-              return Container(
-                width: 180,
-                margin: const EdgeInsets.only(right: 8.0),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8.0),
-                      color: Colors.grey[200],
-                      child: Center(
-                        child: Text(
-                          venue.venueTitle,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                    ...venue.races.map((race) {
-                      bool isRaceSet = race.raceId.isNotEmpty;
-                      return InkWell(
-                        onTap: isRaceSet
-                            ? () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  ShutubaTablePage(raceId: race.raceId),
+          child: Column( // Columnで全体をラップ
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: schedule.venues.map((venue) {
+                  return Container(
+                    width: 180,
+                    margin: const EdgeInsets.only(right: 8.0),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8.0),
+                          color: Colors.grey[200],
+                          child: Center(
+                            child: Text(
+                              venue.venueTitle,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
                             ),
-                          );
-                        }
-                            : null,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 8.0, horizontal: 4.0),
-                          decoration: BoxDecoration(
-                              border: Border(
-                                  bottom: BorderSide(color: Colors.grey.shade300))),
-                          child: Row(
-                            children: [
-                              Text(race.raceNumber,
-                                  style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      race.raceName,
-                                      style: TextStyle(
-                                          color: isRaceSet
-                                              ? Colors.black
-                                              : Colors.grey),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    if (isRaceSet && (race.grade.isNotEmpty || race.details.isNotEmpty))
-                                      Text(
-                                        '${race.grade} ${race.details}'.trim(),
-                                        style: const TextStyle(
-                                            fontSize: 10, color: Colors.grey),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ],
                           ),
                         ),
-                      );
-                    }).toList(),
-                  ],
+                        ...venue.races.map((race) {
+                          bool isRaceSet = race.raceId.isNotEmpty;
+                          return InkWell(
+                            onTap: isRaceSet
+                                ? () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      ShutubaTablePage(raceId: race.raceId),
+                                ),
+                              );
+                            }
+                                : null,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 8.0, horizontal: 4.0),
+                              decoration: BoxDecoration(
+                                  border: Border(
+                                      bottom: BorderSide(color: Colors.grey.shade300))),
+                              child: Row(
+                                children: [
+                                  Text(race.raceNumber,
+                                      style:
+                                      const TextStyle(fontWeight: FontWeight.bold)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          race.raceName,
+                                          style: TextStyle(
+                                              color: isRaceSet
+                                                  ? Colors.black
+                                                  : Colors.grey),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (isRaceSet && (race.grade.isNotEmpty || race.details.isNotEmpty))
+                                          Text(
+                                            '${race.grade} ${race.details}'.trim(),
+                                            style: const TextStyle(
+                                                fontSize: 10, color: Colors.grey),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+              // 更新メッセージを条件付きで表示
+              if (isFutureOrToday)
+                const Padding(
+                  padding: EdgeInsets.only(top: 16.0),
+                  child: Text(
+                    '画面を下に引いて最新情報に更新',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
-              );
-            }).toList(),
+            ],
           ),
         ),
       ),

@@ -854,6 +854,26 @@ class DatabaseHelper {
     );
   }
 
+  Future<Map<String, RaceSchedule>> getMultipleRaceSchedules(List<String> dates) async {
+    if (dates.isEmpty) {
+      return {};
+    }
+    final db = await database;
+    final placeholders = List.filled(dates.length, '?').join(',');
+    final maps = await db.query(
+      'race_schedules',
+      where: 'date IN ($placeholders)',
+      whereArgs: dates,
+    );
+
+    final Map<String, RaceSchedule> results = {};
+    for (final map in maps) {
+      final schedule = raceScheduleFromJson(map['scheduleJson'] as String);
+      results[schedule.date] = schedule;
+    }
+    return results;
+  }
+
   Future<RaceSchedule?> getRaceSchedule(String date) async {
     final db = await database;
     final maps = await db.query(
