@@ -561,7 +561,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                   enabled: true,
                   touchTooltipData: ScatterTouchTooltipData(
                     getTooltipColor: (spot) => Colors.black.withOpacity(0.8),
-                    tooltipBorderRadius: BorderRadius.circular(4),
+                    tooltipRoundedRadius: 4,
                     tooltipPadding: const EdgeInsets.all(8),
                     fitInsideHorizontally: true,
                     fitInsideVertically: true,

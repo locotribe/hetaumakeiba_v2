@@ -18,7 +18,7 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
-
+import 'package:hetaumakeiba_v2/screens/race_schedule_page.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/screens/prediction_settings_page.dart';
 
@@ -36,6 +36,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   final GlobalKey<SavedTicketsListPageState> _savedListKey =
   GlobalKey<SavedTicketsListPageState>();
   final GlobalKey<AnalyticsPageState> _analyticsPageKey = GlobalKey<AnalyticsPageState>();
+  final GlobalKey<RaceSchedulePageState> _raceScheduleKey = GlobalKey<RaceSchedulePageState>();
 
   final DatabaseHelper _dbHelper = DatabaseHelper();
   bool _isBusy = false;
@@ -346,7 +347,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   }
 
   late final List<Widget> _pages;
-  static const List<String> _pageTitles = ['ホーム', '重賞', '購入履歴', '集計'];
+  static const List<String> _pageTitles = ['ホーム', '今週の開催一覧', '重賞一覧', '購入履歴', '集計'];
 
   @override
   void initState() {
@@ -354,6 +355,7 @@ class _MainScaffoldState extends State<MainScaffold> {
 
     _pages = <Widget>[
       const HomePage(),
+      RaceSchedulePage(key: _raceScheduleKey),
       const JyusyoIchiranPage(),
       SavedTicketsListPage(key: _savedListKey),
       AnalyticsPage(key: _analyticsPageKey),
@@ -369,7 +371,11 @@ class _MainScaffoldState extends State<MainScaffold> {
 
 
   void _onItemTapped(int index) {
-    if (index == 2) {
+    if (index == 1) { // 開催一覧タブのインデックスは1
+      // RaceSchedulePageの公開メソッドを呼び出してデータ取得をトリガー
+      _raceScheduleKey.currentState?.fetchInitialDataIfNeeded();
+    }
+    if (index == 3) {
       _savedListKey.currentState?.reloadData();
     }
 
@@ -506,6 +512,7 @@ class _MainScaffoldState extends State<MainScaffold> {
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ホーム'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: '開催一覧'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '履歴'),
           BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'),

@@ -34,3 +34,11 @@ Future<String> generateNetkeibaRaceSearchUrl({
   final encodedWord = eucJpBytes.map((byte) => '%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}').join('');
   return 'https://db.netkeiba.com/?pid=race_list&word=$encodedWord';
 }
+
+String generateRaceListUrl(DateTime date) {
+  final year = date.year.toString();
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  final yyyymmdd = '$year$month$day';
+  return 'https://race.netkeiba.com/top/race_list.html?kaisai_date=$yyyymmdd';
+}

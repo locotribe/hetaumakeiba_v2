@@ -13,6 +13,7 @@ import 'package:hetaumakeiba_v2/models/user_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
+import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -51,12 +52,11 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      // 全ての古いアップグレードロジックを削除し、onCreateに統合するため、バージョンを1にリセットします。
-      version: 1, // バージョンを1にリセット
+      version: 1,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
-        // QRコードデータテーブルの作成 (v7のuserIdを含む)
+        // QRコードデータテーブルの作成
         await db.execute('''
           CREATE TABLE qr_data(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,7 +73,7 @@ class DatabaseHelper {
             race_result_json TEXT
           )
         ''');
-        // 競走馬成績データテーブルの作成 (v12のrace_idを含む)
+        // 競走馬成績データテーブルの作成
         await db.execute('''
           CREATE TABLE horse_performance(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,7 +105,7 @@ class DatabaseHelper {
             UNIQUE(horse_id, date) ON CONFLICT REPLACE
           )
         ''');
-        // 注目レースデータテーブルの作成 (v2のshutubaHorsesJsonを含む)
+        // 注目レースデータテーブルの作成
         await db.execute('''
           CREATE TABLE featured_races(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,7 +125,7 @@ class DatabaseHelper {
             shutubaHorsesJson TEXT
           )
         ''');
-        // ユーザーの印データテーブルの作成 (v7のuserIdを含む)
+        // ユーザーの印データテーブルの作成
         await db.execute('''
           CREATE TABLE user_marks(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,7 +137,7 @@ class DatabaseHelper {
             UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
           )
         ''');
-        // ユーザーが設定したフィード（RSSなど）のデータテーブル作成 (v7のuserIdを含む)
+        // ユーザーが設定したフィード（RSSなど）のデータテーブル作成
         await db.execute('''
           CREATE TABLE user_feeds(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -148,7 +148,7 @@ class DatabaseHelper {
             display_order INTEGER NOT NULL
           )
         ''');
-        // 分析用の集計データテーブル作成 (v7のuserIdを含む)
+        // 分析用の集計データテーブル作成
         await db.execute('''
           CREATE TABLE analytics_aggregates(
             aggregate_key TEXT NOT NULL,
@@ -160,7 +160,7 @@ class DatabaseHelper {
             PRIMARY KEY (aggregate_key, userId)
           )
         ''');
-        // 競走馬メモデータテーブルの作成 (v10で追加されたoddsとpopularityを含む)
+        // 競走馬メモデータテーブルの作成
         await db.execute('''
           CREATE TABLE horse_memos(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,7 +175,7 @@ class DatabaseHelper {
             UNIQUE(userId, raceId, horseId) ON CONFLICT REPLACE
           )
         ''');
-        // ユーザーデータテーブルの作成 (v9で追加)
+        // ユーザーデータテーブルの作成
         await db.execute('''
           CREATE TABLE users(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,7 +185,7 @@ class DatabaseHelper {
             createdAt TEXT NOT NULL
           )
         ''');
-        // レース統計データテーブルの作成 (v11/v14で追加)
+        // レース統計データテーブルの作成
         await db.execute('''
           CREATE TABLE race_statistics(
             raceId TEXT PRIMARY KEY,
@@ -194,12 +194,20 @@ class DatabaseHelper {
             lastUpdatedAt TEXT NOT NULL
           )
         ''');
-        // 馬統計キャッシュデータテーブルの作成 (v13で追加)
+        // 馬統計キャッシュデータテーブルの作成
         await db.execute('''
           CREATE TABLE horse_stats_cache(
             raceId TEXT PRIMARY KEY,
             statsJson TEXT NOT NULL,
             lastUpdatedAt TEXT NOT NULL
+          )
+        ''');
+        // 開催日程テーブルの作成
+        await db.execute('''
+          CREATE TABLE race_schedules(
+            date TEXT PRIMARY KEY,
+            dayOfWeek TEXT NOT NULL,
+            scheduleJson TEXT NOT NULL
           )
         ''');
       },
@@ -208,9 +216,9 @@ class DatabaseHelper {
       /// 今後、新しいバージョンのスキーマ変更が必要になった場合に、ここに新しいアップグレードロジックを記述します。
       onUpgrade: (db, oldVersion, newVersion) async {
         // 例: もし将来的にバージョン2にアップグレードする場合
-        // if (oldVersion < 2) {
-        //   await db.execute('ALTER TABLE some_table ADD COLUMN new_column TEXT');
-        // }
+      //  if (oldVersion < 2) {
+
+      //  }
       },
     );
   }
@@ -829,6 +837,33 @@ class DatabaseHelper {
     );
     if (maps.isNotEmpty) {
       return HorseStatsCache.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<int> insertOrUpdateRaceSchedule(RaceSchedule schedule) async {
+    final db = await database;
+    return await db.insert(
+      'race_schedules',
+      {
+        'date': schedule.date,
+        'dayOfWeek': schedule.dayOfWeek,
+        'scheduleJson': raceScheduleToJson(schedule),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<RaceSchedule?> getRaceSchedule(String date) async {
+    final db = await database;
+    final maps = await db.query(
+      'race_schedules',
+      where: 'date = ?',
+      whereArgs: [date],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return raceScheduleFromJson(maps.first['scheduleJson'] as String);
     }
     return null;
   }
