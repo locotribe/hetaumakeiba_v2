@@ -4,17 +4,15 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
 import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
-import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 
 class ScraperService {
 
@@ -22,67 +20,7 @@ class ScraperService {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
     'x-requested-with': 'XMLHttpRequest',
   };
-  /// URLからレースIDを抽出するヘルパー関数
-  static String? getRaceIdFromUrl(String url) {
-    final uri = Uri.parse(url);
-    final pathSegments = uri.pathSegments;
-    // For URLs like /race/result.html?race_id=... or /race/...
-    if (uri.path.contains('/race/')) {
-      final raceId = uri.queryParameters['race_id'];
-      if (raceId != null) return raceId;
-      if(pathSegments.length > 1 && pathSegments[0] == 'race') {
-        return pathSegments[1];
-      }
-    }
-    // Fallback for just race_id parameter
-    return uri.queryParameters['race_id'];
-  }
-  /// netkeiba.comのレース結果ページをスクレイピングし、RaceResultオブジェクトを返す
-  static Future<RaceResult> scrapeRaceDetails(String url) async {
-    try {
-      final raceId = getRaceIdFromUrl(url);
-      if (raceId == null) {
-        throw Exception('無効なURLです: レースIDが取得できませんでした。');
-      }
 
-      final response = await http.get(Uri.parse(url), headers: _headers);
-      if (response.statusCode != 200) {
-        throw Exception('HTTPリクエストに失敗しました: Status code ${response.statusCode}');
-      }
-
-      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
-      final document = html.parse(decodedBody);
-
-      final raceTitle = _safeGetText(document.querySelector('div.race_head h1'));
-      final raceInfoSpan = document.querySelector('div.data_intro p diary_snap_cut span');
-      final raceInfo = _safeGetText(raceInfoSpan).replaceAll(RegExp(r'\s+'), ' ');
-      final smallTxt = _safeGetText(document.querySelector('p.smalltxt'));
-      final raceDate = smallTxt.split(' ').first;
-      // ▼▼▼【修正箇所】▼▼▼
-      // レースタイトル自体からグレードを抽出するように変更
-      final raceGrade = raceTitle;
-      // ▲▲▲【修正箇所】▲▲▲
-      final horseResults = _parseHorseResults(document);
-      final refunds = _parseRefunds(document);
-      final cornerPassages = _parseCornerPassages(document);
-      final lapTimes = _parseLapTimes(document);
-
-      return RaceResult(
-        raceId: raceId,
-        raceTitle: raceTitle,
-        raceInfo: raceInfo,
-        raceDate: raceDate,
-        raceGrade: raceGrade,
-        horseResults: horseResults,
-        refunds: refunds,
-        cornerPassages: cornerPassages,
-        lapTimes: lapTimes,
-      );
-    } catch (e) {
-      print('[ERROR]スクレイピングエラー: $e');
-      rethrow;
-    }
-  }
   /// netkeiba.comの競走馬データベースページをスクレイピングし、競走成績のリストを返します。
   static Future<List<HorseRaceRecord>> scrapeHorsePerformance(String horseId) async {
     try {
@@ -114,7 +52,7 @@ class ScraperService {
 
         final raceNameLink = cells[4].querySelector('a');
         final raceHref = raceNameLink?.attributes['href'];
-        final raceId = raceHref != null ? getRaceIdFromUrl(raceHref) ?? '' : '';
+        final raceId = raceHref != null ? RaceResultScraperService.getRaceIdFromUrl(raceHref) ?? '' : '';
 
         records.add(HorseRaceRecord(
           horseId: horseId,
@@ -328,126 +266,6 @@ class ScraperService {
     print('[Horse Data Sync End] 競走馬データの同期が完了しました。');
   }
 
-  static List<HorseResult> _parseHorseResults(dom.Document document) {
-    final List<HorseResult> results = [];
-    final rows = document.querySelectorAll('table.race_table_01 tr');
-
-    for (var i = 1; i < rows.length; i++) {
-      final cells = rows[i].querySelectorAll('td');
-      if (cells.length < 21) continue;
-
-      final horseLink = cells[3].querySelector('a');
-      final horseId = horseLink?.attributes['href']?.split('/').lastWhere((part) => part.isNotEmpty, orElse: () => '') ?? '';
-
-      results.add(HorseResult(
-        rank: _safeGetText(cells[0]),
-        frameNumber: _safeGetText(cells[1]),
-        horseNumber: _safeGetText(cells[2]),
-        horseName: _safeGetText(horseLink),
-        horseId: horseId,
-        sexAndAge: _safeGetText(cells[4]),
-        weightCarried: _safeGetText(cells[5]),
-        jockeyName: _safeGetText(cells[6].querySelector('a')),
-        time: _safeGetText(cells[7]),
-        margin: _safeGetText(cells[8]),
-        cornerRanking: _safeGetText(cells[10]),
-        agari: _safeGetText(cells[11].querySelector('span')),
-        odds: _safeGetText(cells[12]),
-        popularity: _safeGetText(cells[13]),
-        horseWeight: _safeGetText(cells[14]),
-        trainerName: _safeGetText(cells[18].querySelector('a')),
-        ownerName: _safeGetText(cells[19].querySelector('a')),
-        prizeMoney: _safeGetText(cells[20]),
-      ));
-    }
-    return results;
-  }
-
-  static List<Refund> _parseRefunds(dom.Document document) {
-    final List<Refund> refundList = [];
-    final payTables = document.querySelectorAll('dl.pay_block table.pay_table_01');
-
-    for (final table in payTables) {
-      final rows = table.querySelectorAll('tr');
-      for (final row in rows) {
-        final th = row.querySelector('th');
-        final tds = row.querySelectorAll('td');
-        if (th == null || tds.isEmpty) continue;
-
-        String ticketTypeName = _safeGetText(th);
-        if (ticketTypeName == '三連複') {
-          ticketTypeName = '3連複';
-        }
-        if (ticketTypeName == '三連単') {
-          ticketTypeName = '3連単';
-        }
-
-        String ticketTypeId = bettingDict.entries
-            .firstWhere((entry) => entry.value == ticketTypeName, orElse: () => const MapEntry('', ''))
-            .key;
-
-        final payouts = <Payout>[];
-
-        final combinations = tds[0].innerHtml.split('<br>').map((e) => e.trim()).toList();
-        final amounts = tds.length > 1 ? tds[1].innerHtml.split('<br>').map((e) => e.trim()).toList() : [];
-        final popularities = tds.length > 2 ? tds[2].innerHtml.split('<br>').map((e) => e.trim()).toList() : [];
-
-        for (int i = 0; i < combinations.length; i++) {
-          final combinationStr = combinations[i].replaceAll(RegExp(r'\s*→\s*'), '→');
-          final combinationNumbers = RegExp(r'\d+')
-              .allMatches(combinationStr)
-              .map((m) => int.parse(m.group(0)!))
-              .toList();
-
-          if (['馬連', 'ワイド', '3連複', '枠連'].contains(ticketTypeName)) {
-            combinationNumbers.sort();
-          }
-
-          payouts.add(Payout(
-            combination: combinationStr,
-            amount: i < amounts.length ? amounts[i] : '',
-            popularity: i < popularities.length ? popularities[i] : '',
-            combinationNumbers: combinationNumbers,
-          ));
-        }
-        refundList.add(Refund(ticketTypeId: ticketTypeId, payouts: payouts));
-      }
-    }
-    return refundList;
-  }
-
-  static List<String> _parseCornerPassages(dom.Document document) {
-    final List<String> passages = [];
-    final table = document.querySelector('table[summary="コーナー通過順位"]');
-    if (table == null) return passages;
-
-    final rows = table.querySelectorAll('tr');
-    for (final row in rows) {
-      final th = _safeGetText(row.querySelector('th'));
-      final td = _safeGetText(row.querySelector('td'));
-      if (th.isNotEmpty && td.isNotEmpty) {
-        passages.add('$th: $td');
-      }
-    }
-    return passages;
-  }
-
-  static List<String> _parseLapTimes(dom.Document document) {
-    final List<String> laps = [];
-    final table = document.querySelector('table[summary="ラップタイム"]');
-    if (table == null) return laps;
-
-    final rows = table.querySelectorAll('tr');
-    for (final row in rows) {
-      final th = _safeGetText(row.querySelector('th'));
-      final td = _safeGetText(row.querySelector('td'));
-      if (th.isNotEmpty && td.isNotEmpty) {
-        laps.add('$th: $td');
-      }
-    }
-    return laps;
-  }
-
   static Future<List<FeaturedRace>> _scrapeGradedRacesFromSchedulePage() async {
     const url = 'https://race.netkeiba.com/top/schedule.html';
     final List<FeaturedRace> gradedRaces = [];
@@ -499,55 +317,6 @@ class ScraperService {
     return gradedRaces;
   }
 
-  static Future<void> syncPastMonthlyRaceResults(List<FeaturedRace> races, DatabaseHelper dbHelper) async {
-    print('[Past Race Sync Start] 過去の重賞レース結果の同期を開始します...');
-    for (final race in races) {
-      if (race.shutubaTableUrl.isNotEmpty) {
-        try {
-          final officialRaceId = await getOfficialRaceId(race.shutubaTableUrl);
-          if (officialRaceId == null) {
-            continue;
-          }
-
-          final existingResult = await dbHelper.getRaceResult(officialRaceId);
-
-          if (existingResult == null) {
-            print('DBに存在しないため、結果を取得します: ${race.raceName} (ID: $officialRaceId)');
-            final resultUrl = 'https://db.netkeiba.com/race/$officialRaceId';
-            final raceResult = await scrapeRaceDetails(resultUrl);
-            await dbHelper.insertOrUpdateRaceResult(raceResult);
-
-            final db = await dbHelper.database;
-            final allQrDataMaps = await db.query('qr_data');
-
-            final Set<String> userIdsToUpdate = {};
-            for (final map in allQrDataMaps) {
-              try {
-                final parsedData = json.decode(map['parsed_data_json'] as String) as Map<String, dynamic>;
-                final qrRaceId = _getRaceIdFromParsedTicket(parsedData);
-                if (qrRaceId == officialRaceId) {
-                  userIdsToUpdate.add(map['userId'] as String);
-                }
-              } catch (e) {
-                // JSON parse error, skip
-              }
-            }
-
-            for (final userId in userIdsToUpdate) {
-              await AnalyticsService().updateAggregatesOnResultConfirmed(raceResult.raceId, userId);
-            }
-
-            print('結果をDBに保存しました: ${race.raceName}');
-            await Future.delayed(const Duration(milliseconds: 500));
-          }
-        } catch (e) {
-          print('[ERROR]過去レース (${race.raceName}) の同期中にエラーが発生しました: $e');
-        }
-      }
-    }
-    print('[Past Race Sync End] 過去の重賞レース結果の同期が完了しました。');
-  }
-
   static Future<String?> getOfficialRaceId(String relativeUrl) async {
     try {
       final baseUrl = Uri.parse('https://race.netkeiba.com');
@@ -567,7 +336,7 @@ class ScraperService {
       if (resultLink != null) {
         final href = resultLink.attributes['href'];
         if (href != null) {
-          return getRaceIdFromUrl(href);
+          return RaceResultScraperService.getRaceIdFromUrl(href);
         }
       }
       return null;
@@ -737,12 +506,10 @@ class ScraperService {
         final yearMatch = RegExp(r'(\d{4})/\d{2}/\d{2}').firstMatch(dateText);
         if (yearMatch != null) {
           final year = int.parse(yearMatch.group(1)!);
-          // ▼▼▼【修正箇所】▼▼▼
           if (year >= currentYear - 10 && year < currentYear) {
-            // ▲▲▲【修正箇所】▲▲▲
             final href = raceNameCell.attributes['href'];
             if (href != null) {
-              final id = getRaceIdFromUrl(href);
+              final id = RaceResultScraperService.getRaceIdFromUrl(href);
               if (id != null) {
                 pastIds.add(id);
               }

@@ -7,10 +7,10 @@ import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/matchup_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -60,7 +60,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
 
     final cache = await _dbHelper.getHorseStatsCache(widget.raceId);
     if (cache != null) {
-      // Note: Matchup stats are not cached in this version, so they are recalculated.
       await _recalculateExtraStats(cache.statsMap);
       setState(() {
         _statsMap = cache.statsMap;
@@ -108,7 +107,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
 
 
   Future<void> _showConfirmationDialog({bool isRefresh = false}) async {
-    // WidgetsBinding is not needed here if called from a user action like a button press
     final bool? confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -133,7 +131,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     if (confirmed == true) {
       _fetchAndCalculateStats();
     } else if (!isRefresh) {
-      // Initial load was cancelled
       Navigator.of(context).pop();
     }
   }
@@ -187,7 +184,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             // --- DEBUG PRINT START ---
             print('【デバッグ情報】ダウンロード中: $raceId (${i + 1}/${raceIdsToFetch.length})');
             // --- DEBUG PRINT END ---
-            final result = await ScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$raceId');
+            final result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$raceId');
             await _dbHelper.insertOrUpdateRaceResult(result);
             fetchedResults[raceId] = result;
             await Future.delayed(const Duration(milliseconds: 200)); // サーバー負荷軽減

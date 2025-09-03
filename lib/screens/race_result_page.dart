@@ -8,7 +8,6 @@ import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/analytics_service.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/widgets/betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
@@ -17,6 +16,7 @@ import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 
 class PageData {
   final Map<String, dynamic>? parsedTicket;
@@ -146,7 +146,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
       final raceId = widget.raceId;
       print('DEBUG: Refreshing race data for raceId: $raceId');
-      final newRaceResult = await ScraperService.scrapeRaceDetails(
+      final newRaceResult = await RaceResultScraperService.scrapeRaceDetails(
           'https://db.netkeiba.com/race/$raceId'
       );
       await _dbHelper.insertOrUpdateRaceResult(newRaceResult);

@@ -10,6 +10,7 @@ import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 
 class TicketProcessingService {
   final DatabaseHelper _dbHelper;
@@ -61,12 +62,12 @@ class TicketProcessingService {
           round: round,
           day: day,
           race: race);
-      final String? raceId = ScraperService.getRaceIdFromUrl(raceUrl);
+      final String? raceId = RaceResultScraperService.getRaceIdFromUrl(raceUrl);
 
       if (raceId != null) {
         final existingRaceResult = await dbHelper.getRaceResult(raceId);
         if (existingRaceResult == null) {
-          final raceResult = await ScraperService.scrapeRaceDetails(raceUrl);
+          final raceResult = await RaceResultScraperService.scrapeRaceDetails(raceUrl);
           await dbHelper.insertOrUpdateRaceResult(raceResult);
 
           for (final horse in raceResult.horseResults) {

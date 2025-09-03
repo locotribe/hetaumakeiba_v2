@@ -14,13 +14,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/services/analytics_service.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:hetaumakeiba_v2/screens/race_schedule_page.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/screens/prediction_settings_page.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 
 
 class MainScaffold extends StatefulWidget {
@@ -42,7 +42,6 @@ class _MainScaffoldState extends State<MainScaffold> {
   bool _isBusy = false;
 
 
-  /// ★★★ 新しく追加したメソッド ★★★
   /// 分析データを再構築する
   Future<void> _rebuildAnalyticsData() async {
     final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
@@ -109,7 +108,7 @@ class _MainScaffoldState extends State<MainScaffold> {
             day: parsedTicket['日'].toString(),
             race: parsedTicket['レース'].toString(),
           );
-          final raceId = ScraperService.getRaceIdFromUrl(url);
+          final raceId = RaceResultScraperService.getRaceIdFromUrl(url);
           if (raceId != null) {
             raceIds.add(raceId);
           }

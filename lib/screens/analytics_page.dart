@@ -7,7 +7,7 @@ import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/yearly_summary_card.dart';
@@ -15,7 +15,7 @@ import 'package:hetaumakeiba_v2/widgets/category_summary_card.dart';
 import 'package:hetaumakeiba_v2/widgets/dashboard_settings_sheet.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hetaumakeiba_v2/main.dart'; // この行を追加
+import 'package:hetaumakeiba_v2/main.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -28,7 +28,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
   bool _isLoading = true;
   AnalyticsData _analysisData = AnalyticsData.empty();
   List<int> _availableYears = [];
-  String _selectedPeriod = '総合'; // '総合' or 'YYYY'
+  String _selectedPeriod = '総合';
 
   List<String> _visibleCards = [];
   TabController? _tabController;
@@ -53,8 +53,6 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     _tabController!.addListener(() {
       if (!_tabController!.indexIsChanging) {
         setState(() {
-          // This setState call will trigger a rebuild,
-          // allowing the build method to check the new index.
         });
       }
     });
@@ -89,7 +87,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       _isLoading = true;
     });
 
-    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+    final userId = localUserId;
     if (userId == null) {
       setState(() {
         _isLoading = false;
@@ -182,7 +180,6 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
 
   CategorySummary _mapToCategorySummary(Map<String, dynamic> map, String prefixToRemove) {
     String name = map['aggregate_key'].replaceFirst(prefixToRemove, '');
-    // key might be "G1_2024" or "3連単_2024", so we remove the last underscore and year.
     if (name.contains('_')) {
       name = name.substring(0, name.lastIndexOf('_'));
     }
@@ -213,9 +210,9 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
           day: parsedTicket['日'].toString(),
           race: parsedTicket['レース'].toString(),
         );
-        return ScraperService.getRaceIdFromUrl(url);
+        return RaceResultScraperService.getRaceIdFromUrl(url);
       } catch (e) {
-        return null; // パース失敗などは無視
+        return null;
       }
     }).where((id) => id != null).toSet().toList();
 
@@ -234,7 +231,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       try {
         parsedTicket = json.decode(qrData.parsedDataJson) as Map<String, dynamic>;
       } catch (e) {
-        continue; // JSONパース失敗
+        continue;
       }
 
       final url = generateNetkeibaUrl(
@@ -244,7 +241,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
         day: parsedTicket['日'].toString(),
         race: parsedTicket['レース'].toString(),
       );
-      final raceId = ScraperService.getRaceIdFromUrl(url);
+      final raceId = RaceResultScraperService.getRaceIdFromUrl(url);
       if (raceId == null) continue;
 
       // メモリ上のMapからレース結果を取得 (DBアクセスなし)
@@ -655,7 +652,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
           radius: 50,
         ),
       ];
-    } else { // 損失が出ている場合
+    } else {
       sections = [
         PieChartSectionData(
           color: Colors.green.shade600,

@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 
 class StatisticsService {
   final DatabaseHelper _dbHelper = DatabaseHelper();
@@ -30,7 +31,7 @@ class StatisticsService {
       if (result == null) {
         // DBになければスクレイピング
         print('DBに無いためWebから取得: $pastId');
-        result = await ScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
+        result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
         await _dbHelper.insertOrUpdateRaceResult(result);
         await Future.delayed(const Duration(milliseconds: 200)); // サーバー負荷軽減
       }

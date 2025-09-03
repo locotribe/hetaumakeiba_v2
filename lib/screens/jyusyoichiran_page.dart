@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/widgets/featured_race_list_item.dart';
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 
 class JyusyoIchiranPage extends StatefulWidget {
   const JyusyoIchiranPage({super.key});
@@ -17,9 +18,7 @@ class JyusyoIchiranPage extends StatefulWidget {
 }
 
 class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
-  // ▼▼▼ ここからが修正箇所 ▼▼▼
   late Future<void> _loadDataFuture;
-  // ▲▲▲ ここまでが修正箇所 ▲▲▲
   List<FeaturedRace> _weeklyGradedRaces = [];
   List<FeaturedRace> _yearlyGradedRaces = [];
   bool _isLoading = true;
@@ -30,14 +29,11 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   late int _currentMonth;
   List<int> _availableMonths = [];
 
-
   @override
   void initState() {
     super.initState();
     _currentMonth = DateTime.now().month;
-    // ▼▼▼ ここからが修正箇所 ▼▼▼
     _loadDataFuture = _loadJyusyoIchiranPageData();
-    // ▲▲▲ ここまでが修正箇所 ▲▲▲
   }
 
   @override
@@ -47,10 +43,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   }
 
   Future<void> _loadJyusyoIchiranPageData() async {
-    // ▼▼▼ ここからが修正箇所 ▼▼▼
-    // setStateを削除し、FutureBuilderが状態を管理するように変更
-    // ▲▲▲ ここまでが修正箇所 ▲▲▲
-
     try {
       final results = await Future.wait([
         ScraperService.scrapeFeaturedRaces(_dbHelper),
@@ -60,10 +52,17 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       final weeklyRaces = results[0];
       final yearlyRaces = results[1];
 
-      weeklyRaces.sort((a, b) => _parseDateStringAsDateTime(a.raceDate).compareTo(_parseDateStringAsDateTime(b.raceDate)));
-      yearlyRaces.sort((a, b) => _parseDateStringAsDateTime(a.raceDate).compareTo(_parseDateStringAsDateTime(b.raceDate)));
+      weeklyRaces.sort((a, b) =>
+          _parseDateStringAsDateTime(a.raceDate)
+              .compareTo(_parseDateStringAsDateTime(b.raceDate)));
+      yearlyRaces.sort((a, b) =>
+          _parseDateStringAsDateTime(a.raceDate)
+              .compareTo(_parseDateStringAsDateTime(b.raceDate)));
 
-      final availableMonths = yearlyRaces.map((race) => _parseDateStringAsDateTime(race.raceDate).month).toSet().toList();
+      final availableMonths = yearlyRaces
+          .map((race) => _parseDateStringAsDateTime(race.raceDate).month)
+          .toSet()
+          .toList();
       availableMonths.sort();
 
       int initialPage = availableMonths.indexOf(_currentMonth);
@@ -71,17 +70,13 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         initialPage = 0;
       }
 
-      // ▼▼▼ ここからが修正箇所 ▼▼▼
-      // Stateの更新はFutureBuilderの完了後に行うため、ここではローカル変数に保持
       final newWeeklyRaces = weeklyRaces;
       final newYearlyRaces = yearlyRaces;
       final newAvailableMonths = availableMonths;
-      // ▲▲▲ ここまでが修正箇所 ▲▲▲
 
       _pageController = PageController(initialPage: initialPage);
 
       if (!mounted) return;
-      // ▼▼▼ ここからが修正箇所 ▼▼▼
       setState(() {
         _weeklyGradedRaces = newWeeklyRaces;
         _yearlyGradedRaces = newYearlyRaces;
@@ -91,22 +86,12 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         }
         _isLoading = false;
       });
-      // ▲▲▲ ここまでが修正箇所 ▲▲▲
 
       if (!_isHorseDataSynced && _weeklyGradedRaces.isNotEmpty) {
         _isHorseDataSynced = true;
         // fire-and-forget
         ScraperService.syncNewHorseData(_weeklyGradedRaces, _dbHelper);
       }
-
-      final today = DateTime.now();
-      final pastRaces = _yearlyGradedRaces.where((race) {
-        final raceDate = _parseDateStringAsDateTime(race.raceDate);
-        return raceDate.isBefore(DateTime(today.year, today.month, today.day));
-      }).toList();
-
-      // fire-and-forget
-      ScraperService.syncPastMonthlyRaceResults(pastRaces, _dbHelper);
 
     } catch (e) {
       print('ERROR: 重賞一覧ページのデータロード中にエラーが発生しました: $e');
@@ -122,7 +107,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
 
   DateTime _parseDateStringAsDateTime(String dateText) {
     try {
-      final yearMonthDayMatch = RegExp(r'(\d+)年(\d+)月(\d+)日').firstMatch(dateText);
+      final yearMonthDayMatch =
+      RegExp(r'(\d+)年(\d+)月(\d+)日').firstMatch(dateText);
       if (yearMonthDayMatch != null) {
         final year = int.parse(yearMonthDayMatch.group(1)!);
         final month = int.parse(yearMonthDayMatch.group(2)!);
@@ -170,7 +156,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
             fillColor: Color.fromRGBO(172, 234, 231, 1.0),
           ),
         ),
-        // ▼▼▼ ここからが修正箇所 ▼▼▼
         FutureBuilder<void>(
           future: _loadDataFuture,
           builder: (context, snapshot) {
@@ -196,7 +181,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
               },
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -210,7 +196,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
             );
           },
         ),
-        // ▲▲▲ ここまでが修正箇所 ▲▲▲
       ],
     );
   }
@@ -281,7 +266,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         }).toList(),
       ),
     );
-
   }
 
   Widget _buildMonthlyRacesPageView() {
@@ -377,14 +361,13 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       itemCount: racesForMonth.length,
       itemBuilder: (context, index) {
         final race = racesForMonth[index];
-        final dayOfWeek = _getDayOfWeek(race); // 曜日を取得する処理を追加
+        final dayOfWeek = _getDayOfWeek(race);
         return FeaturedRaceListItem(
           race: race,
-          dayOfWeek: dayOfWeek, // 取得した曜日をパラメータとして渡す
+          dayOfWeek: dayOfWeek,
           onTap: () async {
             final today = DateTime.now();
             final raceDate = _parseDateStringAsDateTime(race.raceDate);
-            // 未来のレース（今日以降）はタップしても何もしない
             if (!raceDate.isBefore(DateTime(today.year, today.month, today.day))) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('このレースはまだ確定していません。')),
@@ -398,28 +381,49 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
               return;
             }
 
-            // 処理中であることをユーザーに示す（任意）
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('レース結果を取得中...')),
+              const SnackBar(content: Text('レース情報を確認中...')),
             );
 
-            // 正式なレースIDを取得
-            final officialRaceId = await ScraperService.getOfficialRaceId(race.shutubaTableUrl);
+            try {
+              final officialRaceId = await ScraperService.getOfficialRaceId(race.shutubaTableUrl);
+              if (officialRaceId == null) {
+                throw Exception('公式レースIDの取得に失敗しました。');
+              }
 
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              // 1. DBにレース結果が存在するか確認
+              var raceResult = await _dbHelper.getRaceResult(officialRaceId);
 
-            if (mounted && officialRaceId != null) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  // 馬券データ(qrData)は渡さずにページを開く
-                  builder: (context) => RaceResultPage(raceId: officialRaceId),
-                ),
-              );
-            } else if(mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('レース結果の取得に失敗しました。')),
-              );
+              // 2. DBになければWebから取得して保存
+              if (raceResult == null) {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('レース結果を取得中...')),
+                );
+                final resultUrl = 'https://db.netkeiba.com/race/$officialRaceId';
+                // 新しいサービスを使ってデータを取得
+                raceResult = await RaceResultScraperService.scrapeRaceDetails(resultUrl);
+                await _dbHelper.insertOrUpdateRaceResult(raceResult);
+              }
+
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+              if (mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => RaceResultPage(raceId: officialRaceId),
+                  ),
+                );
+              }
+            } catch (e) {
+              print('レース結果取得・表示処理でエラー: $e');
+              if(mounted) {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('レース結果の取得に失敗しました。')),
+                );
+              }
             }
           },
         );

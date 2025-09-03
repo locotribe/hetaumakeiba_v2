@@ -8,7 +8,7 @@ import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/main.dart';
@@ -111,7 +111,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           day: parsedTicket['日'].toString(),
           race: parsedTicket['レース'].toString(),
         );
-        final raceId = ScraperService.getRaceIdFromUrl(url)!;
+        final raceId = RaceResultScraperService.getRaceIdFromUrl(url)!;
         final raceResult = await _dbHelper.getRaceResult(raceId);
 
         HitResult? hitResult;
@@ -292,7 +292,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         day: parsedTicket['日'].toString(),
         race: parsedTicket['レース'].toString(),
       );
-      final raceId = ScraperService.getRaceIdFromUrl(url)!;
+      final raceId = RaceResultScraperService.getRaceIdFromUrl(url)!;
       final purchaseMethod = parsedTicket['方式'] ?? '';
       final purchaseDetails = (parsedTicket['購入内容'] as List);
       final detailsString = purchaseDetails.map((p) {
