@@ -30,6 +30,36 @@ class PredictionRaceData {
     required this.horses,
     this.racePacePrediction,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'raceId': raceId,
+      'raceName': raceName,
+      'raceDate': raceDate,
+      'venue': venue,
+      'raceNumber': raceNumber,
+      'shutubaTableUrl': shutubaTableUrl,
+      'raceGrade': raceGrade,
+      'raceDetails1': raceDetails1,
+      'horses': horses.map((h) => h.toJson()).toList(),
+    };
+  }
+
+  factory PredictionRaceData.fromJson(Map<String, dynamic> json) {
+    return PredictionRaceData(
+      raceId: json['raceId'] as String,
+      raceName: json['raceName'] as String,
+      raceDate: json['raceDate'] as String,
+      venue: json['venue'] as String,
+      raceNumber: json['raceNumber'] as String,
+      shutubaTableUrl: json['shutubaTableUrl'] as String,
+      raceGrade: json['raceGrade'] as String,
+      raceDetails1: json['raceDetails1'] as String?,
+      horses: (json['horses'] as List<dynamic>)
+          .map((e) => PredictionHorseDetail.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 }
 
 /// 各出走馬の予想に必要な詳細情報（特に動的な情報）を保持します。
@@ -84,6 +114,40 @@ class PredictionHorseDetail {
       odds: detail.odds,
       popularity: detail.popularity,
       isScratched: detail.isScratched,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'horseId': horseId,
+      'horseNumber': horseNumber,
+      'gateNumber': gateNumber,
+      'horseName': horseName,
+      'sexAndAge': sexAndAge,
+      'jockey': jockey,
+      'carriedWeight': carriedWeight,
+      'trainer': trainer,
+      'odds': odds,
+      'popularity': popularity,
+      'horseWeight': horseWeight,
+      'isScratched': isScratched,
+    };
+  }
+
+  factory PredictionHorseDetail.fromJson(Map<String, dynamic> json) {
+    return PredictionHorseDetail(
+      horseId: json['horseId'] as String,
+      horseNumber: json['horseNumber'] as int,
+      gateNumber: json['gateNumber'] as int,
+      horseName: json['horseName'] as String,
+      sexAndAge: json['sexAndAge'] as String,
+      jockey: json['jockey'] as String,
+      carriedWeight: (json['carriedWeight'] as num).toDouble(),
+      trainer: json['trainer'] as String,
+      odds: (json['odds'] as num?)?.toDouble(),
+      popularity: json['popularity'] as int?,
+      horseWeight: json['horseWeight'] as String?,
+      isScratched: json['isScratched'] as bool,
     );
   }
 }

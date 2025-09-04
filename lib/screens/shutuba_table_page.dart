@@ -26,6 +26,7 @@ import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 
 // ソート対象の列を識別するためのenum
 enum SortableColumn {
@@ -96,12 +97,27 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     try {
       PredictionRaceData? data;
+      // 1. 過去レース結果が渡されている場合は、それを元に出馬表を構築
       if (widget.raceResult != null) {
-        // 結果確定後はRaceResultからデータを構築
         data = _createPredictionDataFromRaceResult(widget.raceResult!);
       } else {
-        // 開催前はスクレイピング
-        data = await _fetchDataWithUserMarks();
+        // 2. 未来のレースの場合、まずキャッシュを確認
+        final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
+        if (cache != null && !refresh) {
+          data = cache.predictionRaceData;
+        } else {
+          // 3. キャッシュがない、またはリフレッシュ要求の場合はスクレイピング
+          data = await _fetchDataWithUserMarks();
+          if (data != null) {
+            // 取得したデータをキャッシュに保存
+            final newCache = ShutubaTableCache(
+              raceId: widget.raceId,
+              predictionRaceData: data,
+              lastUpdatedAt: DateTime.now(),
+            );
+            await _dbHelper.insertOrUpdateShutubaTableCache(newCache);
+          }
+        }
       }
 
       if (data != null) {
@@ -165,15 +181,23 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     try {
       final updatedHorses = await _scraperService.scrapeDynamicData(widget.raceId);
       if (_predictionRaceData != null) {
-        setState(() {
-          for (var horse in _predictionRaceData!.horses) {
-            final updatedHorse = updatedHorses.firstWhere((h) => h.horseId == horse.horseId);
-            horse.odds = updatedHorse.odds;
-            horse.popularity = updatedHorse.popularity;
-            horse.horseWeight = updatedHorse.horseWeight;
-            // isScratched も更新
-          }
-        });
+        for (var horse in _predictionRaceData!.horses) {
+          final updatedHorse = updatedHorses.firstWhere((h) => h.horseId == horse.horseId);
+          horse.odds = updatedHorse.odds;
+          horse.popularity = updatedHorse.popularity;
+          horse.horseWeight = updatedHorse.horseWeight;
+          // isScratched も更新
+        }
+        // データを更新した後、キャッシュも更新する
+        final newCache = ShutubaTableCache(
+          raceId: widget.raceId,
+          predictionRaceData: _predictionRaceData!,
+          lastUpdatedAt: DateTime.now(),
+        );
+        await _dbHelper.insertOrUpdateShutubaTableCache(newCache);
+
+        setState(() {}); // setStateを呼び出してUIを更新
+
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('情報を更新しました。')));
       }
     } catch (e) {

@@ -15,6 +15,8 @@ import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
+import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -53,7 +55,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 1,
+      version: 2,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
@@ -217,15 +219,28 @@ class DatabaseHelper {
             available_dates_json TEXT NOT NULL
           )
         ''');
+        await db.execute('''
+          CREATE TABLE shutuba_table_cache(
+            race_id TEXT PRIMARY KEY,
+            shutuba_data_json TEXT,
+            last_updated TEXT
+          )
+        ''');
       },
       /// データベースのバージョンがアップグレードされたときに呼び出されます。
-      /// バージョンを1にリセットしたため、過去のアップグレードロジックは全て削除しました。
-      /// 今後、新しいバージョンのスキーマ変更が必要になった場合に、ここに新しいアップグレードロジックを記述します。
-   //   onUpgrade: (db, oldVersion, newVersion) async {
-   //     if (oldVersion < 2) {
-
-   //     }
-   //   },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        // oldVersion が 2 より小さい場合 (つまりバージョン1からのアップグレード時)
+        // に、新しいテーブルを追加する
+        if (oldVersion < 2) {
+          await db.execute('''
+            CREATE TABLE shutuba_table_cache(
+              race_id TEXT PRIMARY KEY,
+              shutuba_data_json TEXT,
+              last_updated TEXT
+            )
+          ''');
+        }
+      },
     );
   }
 
@@ -918,6 +933,29 @@ class DatabaseHelper {
     if (maps.isNotEmpty) {
       final jsonString = maps.first['available_dates_json'] as String;
       return (json.decode(jsonString) as List<dynamic>).cast<String>();
+    }
+    return null;
+  }
+
+  Future<void> insertOrUpdateShutubaTableCache(ShutubaTableCache cache) async {
+    final db = await database;
+    await db.insert(
+      'shutuba_table_cache',
+      cache.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<ShutubaTableCache?> getShutubaTableCache(String raceId) async {
+    final db = await database;
+    final maps = await db.query(
+      'shutuba_table_cache',
+      where: 'race_id = ?',
+      whereArgs: [raceId],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return ShutubaTableCache.fromMap(maps.first);
     }
     return null;
   }
