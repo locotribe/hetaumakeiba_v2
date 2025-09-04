@@ -1,5 +1,4 @@
 // lib/services/race_result_scraper_service.dart
-
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
@@ -27,6 +26,26 @@ class RaceResultScraperService {
       }
     }
     return uri.queryParameters['race_id'];
+  }
+
+  static Future<bool> isRaceResultConfirmed(String raceId) async {
+    try {
+      final url = 'https://race.netkeiba.com/race/result.html?race_id=$raceId';
+      final response = await http.get(Uri.parse(url), headers: _headers);
+
+      if (response.statusCode != 200) {
+        return false;
+      }
+
+      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
+      final document = html.parse(decodedBody);
+
+      final resultTable = document.querySelector('#All_Result_Table');
+      return resultTable != null;
+    } catch (e) {
+      print('[ERROR] レース結果確定チェック中にエラー: $e');
+      return false;
+    }
   }
 
   /// netkeiba.comのレース結果ページをスクレイピングし、RaceResultオブジェクトを返す

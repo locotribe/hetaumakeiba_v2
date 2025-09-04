@@ -74,6 +74,7 @@ class SimpleRaceInfo {
   final String raceName;
   final String grade; // G1, G2, OP, 1勝など
   final String details; // "芝右1200m / 15:45発走" など
+  bool isConfirmed;
 
   SimpleRaceInfo({
     required this.raceId,
@@ -81,6 +82,7 @@ class SimpleRaceInfo {
     required this.raceName,
     required this.grade,
     required this.details,
+    this.isConfirmed = false,
   });
 
   factory SimpleRaceInfo.fromMap(Map<String, dynamic> map) {

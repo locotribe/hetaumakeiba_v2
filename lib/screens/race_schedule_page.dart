@@ -3,10 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
-import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
+import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 import 'package:hetaumakeiba_v2/services/race_schedule_scraper_service.dart';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 
 class RaceSchedulePage extends StatefulWidget {
   const RaceSchedulePage({super.key});
@@ -29,6 +30,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   final Map<String, RaceSchedule?> _raceSchedules = {};
   List<String> _availableDates = [];
   final Set<String> _loadingTabs = {};
+  final Map<String, bool> _raceStatusMap = {};
 
   TabController? _tabController;
 
@@ -69,14 +71,16 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   Future<void> _loadDataForWeek() async {
     if (!mounted) return;
 
-    // Step 1: 週を特定するキー(その週の日曜日の日付)を生成
     final representativeDate = _weekDates.last;
     final weekKey = DateFormat('yyyy-MM-dd').format(representativeDate);
 
-    // Step 2: まずDBから週のレース日程詳細と、開催日リスト(キャッシュ)を取得試行
     final weekDateStrings = _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
     final schedulesFromDb = await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
     final cachedDateStrings = await _dbHelper.getWeekCache(weekKey);
+
+    if (schedulesFromDb.isNotEmpty) {
+      schedulesFromDb.values.forEach(_checkRaceStatusesForSchedule);
+    }
 
     if (mounted) {
       setState(() {
@@ -84,22 +88,18 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       });
     }
 
-    // Step 3: 開催日リストのキャッシュがあった場合の処理 (過去の週など)
     if (cachedDateStrings != null) {
       if (mounted) {
         _isDataLoaded = true;
-        _setupTabs(cachedDateStrings); // キャッシュされたリストでタブを設定
+        _setupTabs(cachedDateStrings);
         setState(() => _isLoading = false);
       }
-      // キャッシュがあったので、ネットワーク通信は行わずにここで処理を終了
       return;
     }
 
-    // Step 4: キャッシュがなかった場合のみネットワーク通信を行う (初めて表示する週など)
     try {
       final (liveDateStrings, initialSchedule) = await _scraperService.fetchInitialData(representativeDate);
 
-      // ★重要★: 取得した開催日リストをDBにキャッシュする
       if (liveDateStrings.isNotEmpty) {
         await _dbHelper.insertOrUpdateWeekCache(weekKey, liveDateStrings);
       }
@@ -116,9 +116,10 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           setState(() {
             _raceSchedules[initialSchedule.date] = initialSchedule;
           });
+          _checkRaceStatusesForSchedule(initialSchedule);
         }
 
-        _setupTabs(liveDateStrings); // ネットワークから取得したリストでタブを設定
+        _setupTabs(liveDateStrings);
       }
     } catch (e) {
       print("Error fetching initial data: $e");
@@ -183,7 +184,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       final today = DateTime(now.year, now.month, now.day);
       RaceSchedule? schedule;
 
-      // [修正点] forceRefreshがtrueの場合は、日付に関わらずネットワークから取得する
       if (forceRefresh) {
         schedule = await _scraperService.scrapeRaceSchedule(date);
       } else {
@@ -202,6 +202,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       // 取得に成功したデータはDBに保存・更新する
       if (schedule != null) {
         await _dbHelper.insertOrUpdateRaceSchedule(schedule);
+        _checkRaceStatusesForSchedule(schedule);
       }
 
       if (mounted) {
@@ -218,6 +219,31 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       if (mounted) {
         setState(() {
           _loadingTabs.remove(dateString);
+        });
+      }
+    }
+  }
+
+  void _checkRaceStatusesForSchedule(RaceSchedule schedule) {
+    final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+    final scheduleDate = DateFormat('yyyy-MM-dd', 'en_US').parse(schedule.date);
+
+    if (scheduleDate.isAfter(startOfToday)) {
+      return;
+    }
+
+    for (final venue in schedule.venues) {
+      for (final race in venue.races) {
+        if (_raceStatusMap.containsKey(race.raceId)) continue;
+
+        RaceResultScraperService.isRaceResultConfirmed(race.raceId)
+            .then((isConfirmed) {
+          if (mounted) {
+            setState(() {
+              _raceStatusMap[race.raceId] = isConfirmed;
+            });
+          }
         });
       }
     }
@@ -288,20 +314,15 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
         final schedule = _raceSchedules[dateStr];
 
-        // --- 条件判定ロジック ---
         final scheduleDate = DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
         final bool isPastPageWithData = scheduleDate.isBefore(today) && schedule != null;
 
-        // --- 表示するコンテンツを生成 ---
         Widget content;
         if (schedule != null) {
-          // データがある場合はスケジュールを表示
           content = _buildRaceScheduleView(schedule);
         } else {
-          // データがない場合は「データがありません」という表示を生成
-          // このウィジェットも更新可能にするため、スクロールできる構造にする
           content = LayoutBuilder(builder: (context, constraints) {
             return SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -318,12 +339,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           });
         }
 
-        // --- 条件に応じてRefreshIndicatorでラップするか決定 ---
         if (isPastPageWithData) {
-          // データ取得済みの過去ページは、更新機能をつけずにそのまま表示
           return content;
         } else {
-          // 未来のページ、またはデータ取得に失敗した過去ページは更新機能をつける
           return RefreshIndicator(
             onRefresh: () => _fetchDataForDate(dateStr, forceRefresh: true),
             child: content,
@@ -351,21 +369,21 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                 ? null
                 : () => _calculateWeek(_currentDate.subtract(const Duration(days: 7))),
           ),
-          Expanded( // 中央の要素が利用可能なスペースを全て使うように設定
+          Expanded(
             child: canShowTabs
                 ? TabBar(
               controller: _tabController,
               isScrollable: true,
               indicatorColor: Colors.blue.shade100,
-              labelColor: Colors.blue, // Color for the selected tab's text
-              unselectedLabelColor: Colors.black, // Color for unselected tabs' text
+              labelColor: Colors.blue,
+              unselectedLabelColor: Colors.black,
               tabs: _availableDates.map((dateStr) {
                 final date = DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
                 final dayOfWeek = _raceSchedules[dateStr]?.dayOfWeek ?? DateFormat.E('ja').format(date);
                 return Tab(text: '${DateFormat('M/d').format(date)}($dayOfWeek)');
               }).toList(),
             )
-                : Center( // データがない場合は週の範囲を表示
+                : Center(
               child: Text(
                 '${formatter.format(weekStart)} 〜 ${formatter.format(weekEnd)}',
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -384,13 +402,10 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   }
 
   Widget _buildRaceScheduleView(RaceSchedule schedule) {
-    // 日付判定用のコード
     final scheduleDate = DateFormat('yyyy-MM-dd', 'en_US').parse(schedule.date);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final bool isFutureOrToday = !scheduleDate.isBefore(today);
-
-    // 【修正】LayoutBuilderを使って、RefreshIndicatorが常に機能する安定した構造にする
     return LayoutBuilder(builder: (context, constraints) {
       return SingleChildScrollView( // 垂直スクロールを管理
         physics: const AlwaysScrollableScrollPhysics(),
@@ -400,13 +415,11 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
             padding: const EdgeInsets.all(8.0),
             child: Column(
               children: [
-                // 水平スクロールは会場リスト(Row)のみに限定する
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: schedule.venues.map((venue) {
-                      // Container ... venue.races.map ... の部分は変更なし
                       return Container(
                         width: 200,
                         margin: const EdgeInsets.only(right: 8.0),
@@ -425,6 +438,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                             ),
                             ...venue.races.map((race) {
                               bool isRaceSet = race.raceId.isNotEmpty;
+                              final isConfirmed = _raceStatusMap[race.raceId] ?? false;
                               return InkWell(
                                 onTap: isRaceSet
                                     ? () {
@@ -452,7 +466,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                         width: 50,
                                         padding: const EdgeInsets.symmetric(vertical: 10.0),
                                         decoration: BoxDecoration(
-                                          color: Colors.blueAccent,
+                                          color: isConfirmed ? Colors.redAccent : Colors.blueAccent,
                                           borderRadius: BorderRadius.circular(4.0),
                                         ),
                                         child: Center(
@@ -489,7 +503,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                                   Container(
                                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                     decoration: BoxDecoration(
-                                                      color: race.grade.contains('G') ? Colors.red.shade600 : Colors.grey.shade500,
+                                                      color: getGradeColor(race.grade),
                                                       borderRadius: BorderRadius.circular(8),
                                                     ),
                                                     child: Text(
@@ -520,7 +534,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                     }).toList(),
                   ),
                 ),
-                // 更新メッセージは水平スクロールの外に配置
                 if (isFutureOrToday)
                   const Padding(
                     padding: EdgeInsets.only(top: 16.0),
