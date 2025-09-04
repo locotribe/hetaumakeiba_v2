@@ -25,6 +25,7 @@ import 'package:data_table_2/data_table_2.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
 
 // ソート対象の列を識別するためのenum
 enum SortableColumn {
@@ -1092,6 +1093,31 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              OutlinedButton.icon(
+                icon: const Icon(Icons.edit_note, size: 16),
+                label: const Text('一括編集'),
+                onPressed: () async {
+                  if (_predictionRaceData == null) return;
+                  final result = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => BulkMemoEditPage(
+                        horses: _predictionRaceData!.horses,
+                        raceId: widget.raceId,
+                      ),
+                    ),
+                  );
+                  // もし保存されたら（trueが返ってきたら）データを再読み込み
+                  if (result == true) {
+                    _loadShutubaData();
+                  }
+                },
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(width: 8),
               OutlinedButton.icon(
                 icon: const Icon(Icons.file_download, size: 16),
                 label: const Text('インポート'),

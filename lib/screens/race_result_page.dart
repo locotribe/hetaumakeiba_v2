@@ -257,88 +257,83 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('レース結果'),
-      ),
-      body: Stack(
-        children: [
-          FutureBuilder<PageData>(
-            future: _pageDataFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      'エラー: ${snapshot.error}',
-                      style: const TextStyle(color: Colors.red),
-                      textAlign: TextAlign.center,
-                    ),
+    return Stack(
+      children: [
+        FutureBuilder<PageData>(
+          future: _pageDataFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    'エラー: ${snapshot.error}',
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
                   ),
-                );
-              }
-              if (snapshot.hasData) {
-                final pageData = snapshot.data!;
-                final parsedTicket = pageData.parsedTicket;
-                final raceResult = pageData.raceResult;
+                ),
+              );
+            }
+            if (snapshot.hasData) {
+              final pageData = snapshot.data!;
+              final parsedTicket = pageData.parsedTicket;
+              final raceResult = pageData.raceResult;
 
-                final hitResult = (parsedTicket != null &&
-                    raceResult != null &&
-                    !raceResult.isIncomplete)
-                    ? HitChecker.check(
-                    parsedTicket: parsedTicket, raceResult: raceResult)
-                    : null;
+              final hitResult = (parsedTicket != null &&
+                  raceResult != null &&
+                  !raceResult.isIncomplete)
+                  ? HitChecker.check(
+                  parsedTicket: parsedTicket, raceResult: raceResult)
+                  : null;
 
-                final Map<String, List<List<int>>> userCombinationsByType = {};
-                if (parsedTicket != null && parsedTicket['購入内容'] != null) {
-                  final purchaseDetails = parsedTicket['購入内容'] as List;
-                  for (var detail in purchaseDetails) {
-                    final ticketTypeId = detail['式別'] as String?;
-                    if (ticketTypeId != null && detail['all_combinations'] != null) {
-                      // この式別のセットがまだMapになければ初期化
-                      userCombinationsByType.putIfAbsent(ticketTypeId, () => []);
+              final Map<String, List<List<int>>> userCombinationsByType = {};
+              if (parsedTicket != null && parsedTicket['購入内容'] != null) {
+                final purchaseDetails = parsedTicket['購入内容'] as List;
+                for (var detail in purchaseDetails) {
+                  final ticketTypeId = detail['式別'] as String?;
+                  if (ticketTypeId != null && detail['all_combinations'] != null) {
+                    // この式別のセットがまだMapになければ初期化
+                    userCombinationsByType.putIfAbsent(ticketTypeId, () => []);
 
-                      final combinations = detail['all_combinations'] as List;
-                      for (var c in combinations) {
-                        if (c is List) {
-                          userCombinationsByType[ticketTypeId]!.add(c.cast<int>());
-                        }
+                    final combinations = detail['all_combinations'] as List;
+                    for (var c in combinations) {
+                      if (c is List) {
+                        userCombinationsByType[ticketTypeId]!.add(c.cast<int>());
                       }
                     }
                   }
                 }
-
-                return RefreshIndicator(
-                  onRefresh: _handleRefresh,
-                  child: ListView(
-                    padding: const EdgeInsets.all(8.0),
-                    children: [
-                      if (parsedTicket != null)
-                        _buildUserTicketCard(parsedTicket, raceResult, hitResult),
-                      if (raceResult != null) ...[
-                        if (raceResult.isIncomplete)
-                          _buildIncompleteRaceDataCard()
-                        else ...[
-                          _buildRaceInfoCard(raceResult, pageData.pacePrediction),
-                          _buildFullResultsCard(raceResult),
-                          _buildRefundsCard(raceResult, userCombinationsByType),
-                        ]
-                      ] else ...[
-                        _buildNoRaceDataCard(),
-                      ]
-                    ],
-                  ),
-                );
               }
-              return const Center(child: Text('データがありません。'));
-            },
-          ),
-        ],
-      ),
+
+              return RefreshIndicator(
+                onRefresh: _handleRefresh,
+                child: ListView(
+                  padding: const EdgeInsets.all(8.0),
+                  children: [
+                    if (parsedTicket != null)
+                      _buildUserTicketCard(parsedTicket, raceResult, hitResult),
+                    if (raceResult != null) ...[
+                      if (raceResult.isIncomplete)
+                        _buildIncompleteRaceDataCard()
+                      else ...[
+                        _buildRaceInfoCard(raceResult, pageData.pacePrediction),
+                        _buildFullResultsCard(raceResult),
+                        _buildRefundsCard(raceResult, userCombinationsByType),
+                      ]
+                    ] else ...[
+                      _buildNoRaceDataCard(),
+                    ]
+                  ],
+                ),
+              );
+            }
+            return const Center(child: Text('データがありません。'));
+          },
+        ),
+      ],
     );
   }
 
