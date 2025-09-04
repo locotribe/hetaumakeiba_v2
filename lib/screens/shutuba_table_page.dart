@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
@@ -14,8 +14,6 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:hetaumakeiba_v2/logic/paste_parser.dart';
 import 'package:hetaumakeiba_v2/screens/comprehensive_prediction_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
@@ -54,8 +52,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   PredictionRaceData? _predictionRaceData;
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  // 貼り付けられた動的データを一時的に保持するためのキャッシュ
-  final Map<String, PasteParseResult> _pastedDataCache = {};
+  // 新しいスクレイピングサービス
+  final ShutubaTableScraperService _scraperService = ShutubaTableScraperService();
   Map<String, double> _overallScores = {};
   Map<String, double> _expectedValues = {};
   Map<String, String> _legStyles = {};
@@ -112,6 +110,28 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
     }
   }
+
+  Future<void> _updateDynamicData() async {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('最新情報を取得中...')));
+    try {
+      final updatedHorses = await _scraperService.scrapeDynamicData(widget.raceId);
+      if (_predictionRaceData != null) {
+        setState(() {
+          for (var horse in _predictionRaceData!.horses) {
+            final updatedHorse = updatedHorses.firstWhere((h) => h.horseId == horse.horseId);
+            horse.odds = updatedHorse.odds;
+            horse.popularity = updatedHorse.popularity;
+            horse.horseWeight = updatedHorse.horseWeight;
+            // isScratched も更新
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('情報を更新しました。')));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('情報の更新に失敗しました: $e')));
+    }
+  }
+
 
   Future<void> _calculatePredictionScores(PredictionRaceData raceData) async {
     final prefs = await SharedPreferences.getInstance();
@@ -198,21 +218,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Future<PredictionRaceData?> _fetchDataWithUserMarks() async {
     final userId = localUserId;
     if (userId == null) {
-      return await ScraperService.scrapeFullPredictionData(widget.raceId);
+      return await _scraperService.scrapeAllData(widget.raceId);
     }
 
-    final raceData = await ScraperService.scrapeFullPredictionData(widget.raceId);
-
-    // 更新前に、キャッシュに保持されているオッズ・人気情報を新しいデータにマージする
-    if (_pastedDataCache.isNotEmpty) {
-      for (var horse in raceData.horses) {
-        if (_pastedDataCache.containsKey(horse.horseName)) {
-          final cachedData = _pastedDataCache[horse.horseName]!;
-          horse.odds = cachedData.odds;
-          horse.popularity = cachedData.popularity;
-        }
-      }
-    }
+    final raceData = await _scraperService.scrapeAllData(widget.raceId);
 
     final results = await Future.wait([
       _dbHelper.getAllUserMarksForRace(userId, widget.raceId),
@@ -249,129 +258,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     return raceData;
   }
-
-  Future<void> _launchNetkeibaUrl() async {
-    if (_predictionRaceData == null) return;
-    final url = Uri.parse(_predictionRaceData!.shutubaTableUrl);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('URLを開けませんでした: ${url.toString()}')),
-        );
-      }
-    }
-  }
-
-  Future<void> _showPasteAndUpdateDialog() async {
-    final clipboardText = await PasteParser.getTextFromClipboard();
-    final textController = TextEditingController(text: clipboardText);
-
-    if (!mounted) return;
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('出馬表を貼り付け'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('netkeiba.comの出馬表ページでコピーした内容を貼り付けてください。'),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: textController,
-                  maxLines: 10,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: 'ここに貼り付け',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('キャンセル'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                _updateOddsFromPastedText(textController.text);
-                Navigator.of(context).pop();
-              },
-              child: const Text('オッズを更新'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _updateOddsFromPastedText(String text) async {
-    if (_predictionRaceData == null) return;
-    final userId = localUserId;
-    if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ログインが必要です。')),
-      );
-      return;
-    }
-
-    final parsedResults = PasteParser.parseDataByHorseName(text, _predictionRaceData!.horses);
-
-    if (parsedResults.isEmpty) {
-      if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('有効なデータを抽出できませんでした。コピーする範囲を確認してください。')),
-        );
-      }
-      return;
-    }
-
-    int updatedCount = 0;
-    for (var horse in _predictionRaceData!.horses) {
-      if (parsedResults.containsKey(horse.horseName)) {
-        final result = parsedResults[horse.horseName]!;
-
-        // 既存のメモを取得（なければ新規作成）
-        final existingMemo = horse.userMemo ?? HorseMemo(
-          userId: userId,
-          raceId: widget.raceId,
-          horseId: horse.horseId,
-          timestamp: DateTime.now(),
-        );
-
-        // 新しいオッズと人気で上書きしてDBに保存
-        final newMemo = HorseMemo(
-          id: existingMemo.id,
-          userId: userId,
-          raceId: widget.raceId,
-          horseId: horse.horseId,
-          predictionMemo: existingMemo.predictionMemo,
-          reviewMemo: existingMemo.reviewMemo,
-          odds: result.odds,
-          popularity: result.popularity,
-          timestamp: DateTime.now(),
-        );
-        print('Attempting to insert/update HorseMemo: horseId=${newMemo.horseId}, odds=${newMemo.odds}, popularity=${newMemo.popularity}');
-        await _dbHelper.insertOrUpdateHorseMemo(newMemo);
-        print('Successfully inserted/updated HorseMemo for horseId=${newMemo.horseId}');
-        updatedCount++;
-      }
-    }
-
-    if(mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$updatedCount頭の情報を更新しました。')),
-      );
-      // データを再読み込みしてUIを更新
-      _loadShutubaData();
-    }
-  }
-
 
   /// 過去レースの詳細情報をポップアップで表示するメソッド
   void _showPastRaceDetailsPopup(BuildContext context, HorseRaceRecord record) {
@@ -637,18 +523,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       appBar: AppBar(
         title: const Text('出馬表'),
         actions: [
-          // 既存のIconButtonをPopupMenuButtonに集約
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert), // 3点リーダーアイコン
+            icon: const Icon(Icons.more_vert),
             onSelected: (value) {
-              // メニュー項目が選択されたときに、既存の各機能を呼び出します
               switch (value) {
-                case 'netkeiba':
-                  _launchNetkeibaUrl();
-                  break;
-                case 'paste':
-                  _showPasteAndUpdateDialog();
-                  break;
                 case 'import':
                   _importMemosFromCsv();
                   break;
@@ -660,24 +538,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              // 1. netkeibaで最新情報を確認
-              const PopupMenuItem<String>(
-                value: 'netkeiba',
-                child: ListTile(
-                  leading: Icon(Icons.open_in_browser),
-                  title: Text('netkeibaで最新情報を確認'),
-                ),
-              ),
-              // 2. コピーした情報を貼り付け
-              const PopupMenuItem<String>(
-                value: 'paste',
-                child: ListTile(
-                  leading: Icon(Icons.paste),
-                  title: Text('コピーした情報を貼り付け'),
-                ),
-              ),
-              const PopupMenuDivider(), // 区切り線
-              // 3. メモをインポート
               const PopupMenuItem<String>(
                 value: 'import',
                 child: ListTile(
@@ -685,10 +545,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   title: Text('メモをインポート'),
                 ),
               ),
-              // 4. メモをエクスポート (データがある場合のみ有効化)
               PopupMenuItem<String>(
                 value: 'export',
-                enabled: _predictionRaceData != null, // データがなければ非活性
+                enabled: _predictionRaceData != null,
                 child: const ListTile(
                   leading: Icon(Icons.ios_share),
                   title: Text('メモをエクスポート'),
@@ -698,8 +557,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           ),
         ],
       ),
-      // === ▼▼▼ 修正箇所 ▼▼▼ ===
-      // 全体のレイアウトをColumnに変更
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _predictionRaceData == null
@@ -815,7 +672,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           ),
         ],
       ),
-      // === ▲▲▲ 修正箇所 ▲▲▲ ===
     );
   }
 
@@ -883,6 +739,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   '${race.racePacePrediction!.predictedPace} (${race.racePacePrediction!.advantageousStyle})'),
             const SizedBox(height: 8),
           ],
+        ),
+        ElevatedButton.icon(
+          onPressed: _updateDynamicData,
+          icon: const Icon(Icons.refresh),
+          label: const Text('オッズ更新'),
         ),
         const Divider(),
         ListTile(

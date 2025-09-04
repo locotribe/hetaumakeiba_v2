@@ -42,3 +42,7 @@ String generateRaceListUrl(DateTime date) {
   final yyyymmdd = '$year$month$day';
   return 'https://race.netkeiba.com/top/race_list.html?kaisai_date=$yyyymmdd';
 }
+
+String generateShutubaUrl({required String raceId, String type = 'shutuba'}) {
+  return 'https://race.netkeiba.com/race/$type.html?race_id=$raceId';
+}
