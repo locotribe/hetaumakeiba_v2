@@ -346,7 +346,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   }
 
   late final List<Widget> _pages;
-  static const List<String> _pageTitles = ['ホーム', '今週の開催一覧', '重賞一覧', '購入履歴', '集計'];
+  static const List<String> _pageTitles = ['ホーム', '開催一覧', '重賞一覧', '購入履歴', '集計'];
 
   @override
   void initState() {
@@ -509,8 +509,8 @@ class _MainScaffoldState extends State<MainScaffold> {
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ホーム'),
           BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: '開催一覧'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '履歴'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞一覧'),
+          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '馬券履歴'),
           BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'),
         ],
         currentIndex: _selectedIndex,
