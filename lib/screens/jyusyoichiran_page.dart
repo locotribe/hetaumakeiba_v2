@@ -9,6 +9,7 @@ import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/widgets/featured_race_list_item.dart';
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
+import 'package:hetaumakeiba_v2/screens/race_page.dart';
 
 class JyusyoIchiranPage extends StatefulWidget {
   const JyusyoIchiranPage({super.key});
@@ -258,7 +259,10 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ShutubaTablePage(raceId: race.raceId),
+                  builder: (context) => RacePage(
+                    raceId: race.raceId,
+                    raceDate: race.raceDate,
+                  ),
                 ),
               );
             },
@@ -368,12 +372,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
           onTap: () async {
             final today = DateTime.now();
             final raceDate = _parseDateStringAsDateTime(race.raceDate);
-            if (!raceDate.isBefore(DateTime(today.year, today.month, today.day))) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('このレースはまだ確定していません。')),
-              );
-              return;
-            }
+            // レース結果ページへ遷移するための公式raceIdを取得するロジックは維持
             if (race.shutubaTableUrl.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('このレースの詳細情報はありません。')),
@@ -381,47 +380,28 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
               return;
             }
 
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('レース情報を確認中...')),
-            );
-
             try {
               final officialRaceId = await ScraperService.getOfficialRaceId(race.shutubaTableUrl);
               if (officialRaceId == null) {
                 throw Exception('公式レースIDの取得に失敗しました。');
               }
 
-              // 1. DBにレース結果が存在するか確認
-              var raceResult = await _dbHelper.getRaceResult(officialRaceId);
-
-              // 2. DBになければWebから取得して保存
-              if (raceResult == null) {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('レース結果を取得中...')),
-                );
-                final resultUrl = 'https://db.netkeiba.com/race/$officialRaceId';
-                // 新しいサービスを使ってデータを取得
-                raceResult = await RaceResultScraperService.scrapeRaceDetails(resultUrl);
-                await _dbHelper.insertOrUpdateRaceResult(raceResult);
-              }
-
-              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
               if (mounted) {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => RaceResultPage(raceId: officialRaceId),
+                    builder: (context) => RacePage(
+                      raceId: officialRaceId,
+                      raceDate: race.raceDate,
+                    ),
                   ),
                 );
               }
             } catch (e) {
-              print('レース結果取得・表示処理でエラー: $e');
+              print('レース情報遷移処理でエラー: $e');
               if(mounted) {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('レース結果の取得に失敗しました。')),
+                  const SnackBar(content: Text('レース情報の取得に失敗しました。')),
                 );
               }
             }

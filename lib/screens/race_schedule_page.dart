@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/services/race_schedule_scraper_service.dart';
 import 'package:intl/intl.dart';
+import 'package:hetaumakeiba_v2/screens/race_page.dart';
 
 class RaceSchedulePage extends StatefulWidget {
   const RaceSchedulePage({super.key});
@@ -431,7 +432,10 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) =>
-                                          ShutubaTablePage(raceId: race.raceId),
+                                          RacePage(
+                                            raceId: race.raceId,
+                                            raceDate: schedule.date, // VenueScheduleから日付を渡す
+                                          ),
                                     ),
                                   );
                                 }

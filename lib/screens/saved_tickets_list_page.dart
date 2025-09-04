@@ -13,6 +13,7 @@ import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+import 'package:hetaumakeiba_v2/screens/race_page.dart';
 
 class TicketListItem {
   final String raceId; // 新しいアーキテクチャで必要なraceId
@@ -579,11 +580,17 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 ],
               ),
               onTap: () async {
+                if (item.raceResult?.raceDate == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('レースの日付情報がありません。')),
+                  );
+                  return;
+                }
                 await Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => RaceResultPage(
+                    builder: (_) => RacePage(
                       raceId: item.raceId,
-                      qrData: item.qrData,
+                      raceDate: item.raceResult!.raceDate,
                     ),
                   ),
                 );
