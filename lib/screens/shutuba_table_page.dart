@@ -27,6 +27,7 @@ import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
+import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 
 // ソート対象の列を識別するためのenum
 enum SortableColumn {
@@ -159,12 +160,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       );
     }).toList();
 
+    // raceIdの末尾2桁からレース番号を抽出
+    final raceNumber = raceResult.raceId.length >= 2
+        ? int.tryParse(raceResult.raceId.substring(raceResult.raceId.length - 2))?.toString() ?? ''
+        : '';
+
+
     return PredictionRaceData(
       raceId: raceResult.raceId,
       raceName: raceResult.raceTitle,
       raceDate: raceResult.raceDate,
       venue: racecourseDict.entries.firstWhere((e) => raceResult.raceInfo.contains(e.value), orElse: () => const MapEntry("", "")).value,
-      raceNumber: RegExp(r'(\d+)R').firstMatch(raceResult.raceTitle)?.group(1) ?? '',
+      raceNumber: raceNumber,
       shutubaTableUrl: 'https://db.netkeiba.com/race/${raceResult.raceId}',
       raceGrade: raceResult.raceGrade,
       raceDetails1: raceResult.raceInfo,
@@ -696,28 +703,22 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   /// 折りたたみ可能なレース情報カードを構築する
   Widget _buildCollapsibleRaceInfoCard(PredictionRaceData race) {
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _isCardExpanded = !_isCardExpanded;
-        });
-      },
-      child: Card(
-        margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _isCardExpanded = !_isCardExpanded;
+          });
+        },
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-          child: AnimatedSize( // AnimatedSizeでラップしてサイズ変更をアニメーション化
+          child: AnimatedSize(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
-            child: AnimatedCrossFade(
-              duration: const Duration(milliseconds: 300),
-              crossFadeState: _isCardExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-              firstChild: _buildExpandedCardContent(race),
-              secondChild: _buildCollapsedCardContent(race),
-              firstCurve: Curves.easeIn,
-              secondCurve: Curves.easeOut,
-              sizeCurve: Curves.easeInOut,
-            ),
+            child: _isCardExpanded
+                ? _buildExpandedCardContent(race)
+                : _buildCollapsedCardContent(race),
           ),
         ),
       ),
@@ -726,39 +727,31 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   /// 展開時のカード内容
   Widget _buildExpandedCardContent(PredictionRaceData race) {
+    // 過去のレース結果から生成されたデータの場合、raceGradeに条件が入っているため分離する
+    String title = race.raceName;
+    String details = race.raceGrade ?? '';
+    if (widget.raceResult != null) {
+      title = widget.raceResult!.raceTitle;
+      details = widget.raceResult!.raceGrade;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        // 右上に折りたたみアイコンを表示するためのRowを追加
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Expanded(
-              child: Text(
-                '${race.raceDate} ${race.venue} ${race.raceNumber}R',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const Icon(Icons.expand_less),
+            Icon(Icons.expand_less),
           ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          race.raceName,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        // 共通ヘッダーウィジェット
+        RaceHeaderCard(
+          title: title,
+          detailsLine1: '${race.raceDate} ${race.venue}',
+          detailsLine2: race.raceDetails1 ?? details,
         ),
-        const SizedBox(height: 8),
-        Text(race.raceDetails1 ?? ''),
-        const Divider(height: 24),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('展開予想', style: TextStyle(fontWeight: FontWeight.bold)),
-            if (race.racePacePrediction != null)
-              Text(
-                  '${race.racePacePrediction!.predictedPace} (${race.racePacePrediction!.advantageousStyle})'),
-            const SizedBox(height: 8),
-          ],
-        ),
+        // 以前表示されていたボタンやリストをここに追加
         if (widget.raceResult == null)
           ElevatedButton.icon(
             onPressed: _updateDynamicData,

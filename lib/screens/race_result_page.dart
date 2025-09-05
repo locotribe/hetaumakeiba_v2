@@ -17,6 +17,7 @@ import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
+import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 
 class PageData {
   final Map<String, dynamic>? parsedTicket;
@@ -434,38 +435,10 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   Widget _buildRaceInfoCard(RaceResult raceResult, RacePacePrediction? pacePrediction) {
-    return Card(
-      elevation: 10,
-      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
-      color: const Color(0xFF1A4314), // 濃い背景色
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        // ↓ ColumnをDefaultTextStyleでラップ
-        child: DefaultTextStyle(
-          // ここで中のテキスト全体の基本スタイル（今回は文字色）を指定
-          style: const TextStyle(color: Colors.white),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                raceResult.raceTitle,
-                // このTextは個別のスタイルを持つため、ここでも色を明示的に指定
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white, // 個別に色を指定
-                ),
-              ),
-              const SizedBox(height: 8),
-              // 以下のTextウィジェットはDefaultTextStyleのスタイルが適用される
-              Text(raceResult.raceDate),
-              Text(raceResult.raceInfo),
-              Text(raceResult.raceGrade),
-              if (pacePrediction != null) ...[],
-            ],
-          ),
-        ),
-      ),
+    return RaceHeaderCard(
+      title: raceResult.raceTitle,
+      detailsLine1: raceResult.raceDate,
+      detailsLine2: '${raceResult.raceInfo}\n${raceResult.raceGrade}',
     );
   }
 

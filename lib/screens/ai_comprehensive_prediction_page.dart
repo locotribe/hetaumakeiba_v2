@@ -7,7 +7,6 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
-import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 
 class _HorseNumberDotPainter extends FlDotPainter {
@@ -48,18 +47,21 @@ class _HorseNumberDotPainter extends FlDotPainter {
     return Size(radius * 2, radius * 2);
   }
 
+
   @override
   List<Object?> get props => [color, horseNumber, radius];
 
+
   @override
   Color get mainColor => color;
+
 
   @override
   FlDotPainter lerp(FlDotPainter a, FlDotPainter b, double t) {
     return this;
   }
 
-  @override
+
   FlDotPainter copyWith({
     Color? color,
     String? horseNumber,
@@ -101,14 +103,12 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   Map<String, String> _legStyles = {};
   Map<String, String> _raceDevelopment = {};
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  // ▼▼▼【テスト用コード】▼▼▼
   String _predictionSummary = '';
   Map<String, double> _earlySpeedScores = {};
   Map<String, double> _finishingKickScores = {};
   Map<String, double> _staminaScores = {};
   Map<String, List<HorseRaceRecord>> _allPastRecords = {};
-  // ▲▲▲【テスト用コード】▲▲▲
-  RaceStatistics? _raceStats;
+  int? _touchedSpotIndex; // タップされた点のインデックスを保持する状態変数
 
   @override
   void initState() {
@@ -118,12 +118,9 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     _sortHorses();
     _tabController = TabController(length: 4, vsync: this);
     _calculateLegStylesAndDevelopment();
-    // ▼▼▼【テスト用コード】▼▼▼
     _calculateDetailedScores();
-    // ▲▲▲【テスト用コード】▲▲▲
   }
 
-  // ▼▼▼【テスト用コード】▼▼▼
   void _generateSummary() {
     setState(() {
       _predictionSummary = AiPredictionAnalyzer.generatePredictionSummary(widget.raceData, widget.overallScores, _allPastRecords);
@@ -150,13 +147,9 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       });
     }
   }
-  // ▲▲▲【テスト用コード】▲▲▲
 
   void _calculateLegStylesAndDevelopment() async {
     final raceStats = await _dbHelper.getRaceStatistics(widget.raceData.raceId);
-    setState(() {
-      _raceStats = raceStats;
-    });
 
     final Map<String, String> legStyles = {};
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
@@ -373,12 +366,10 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               ),
             ),
             const SizedBox(height: 16),
-            // ▼▼▼【テスト用コード】▼▼▼
             Text(
               '解説: $_predictionSummary',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
-            // ▲▲▲【テスト用コード】▲▲▲
           ],
         ),
       ),
@@ -557,25 +548,48 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 ),
                 gridData: const FlGridData(show: true),
                 borderData: FlBorderData(show: true),
+                showingTooltipIndicators: _touchedSpotIndex != null ? [_touchedSpotIndex!] : [],
                 scatterTouchData: ScatterTouchData(
                   enabled: true,
+                  handleBuiltInTouches: false, // デフォルトの長押しツールチップを無効化
+                  touchCallback: (event, response) {
+                    if (response == null || response.touchedSpot == null) {
+                      // グラフの外側をタップした場合はツールチップを消す
+                      if (_touchedSpotIndex != null) {
+                        setState(() {
+                          _touchedSpotIndex = null;
+                        });
+                      }
+                      return;
+                    }
+                    if (event is FlTapUpEvent) {
+                      final spotIndex = response.touchedSpot!.spotIndex;
+                      // 同じ点を再度タップした場合は選択解除、違う点をタップしたら選択
+                      setState(() {
+                        if (_touchedSpotIndex == spotIndex) {
+                          _touchedSpotIndex = null;
+                        } else {
+                          _touchedSpotIndex = spotIndex;
+                        }
+                      });
+                    }
+                  },
                   touchTooltipData: ScatterTouchTooltipData(
-                    getTooltipColor: (spot) => Colors.black.withOpacity(0.8),
+                    getTooltipColor: (spot) => Colors.black.withAlpha(204),
                     tooltipRoundedRadius: 4,
                     tooltipPadding: const EdgeInsets.all(8),
                     fitInsideHorizontally: true,
                     fitInsideVertically: true,
                     getTooltipItems: (touchedSpot) {
-                      final horse = widget.raceData.horses.firstWhere(
-                            (h) => h.popularity?.toDouble() == touchedSpot.x && (widget.overallScores[h.horseId] ?? 0.0) == touchedSpot.y,
-                        orElse: () => widget.raceData.horses.first, // Fallback, should ideally not happen
-                      );
+                      // touchedSpot の spotIndex を使って馬を特定する
+                      final horse = widget.raceData.horses[spots.indexOf(touchedSpot)];
                       return ScatterTooltipItem(
-                        '${horse.horseName}\nスコア: ${touchedSpot.y.toStringAsFixed(1)}',
+                        '${horse.horseNumber} ${horse.horseName}\nスコア: ${touchedSpot.y.toStringAsFixed(1)}\n人気: ${touchedSpot.x.toInt()}番',
                         textStyle: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
                         ),
+                        bottomMargin: 10,
                       );
                     },
                   ),
@@ -896,7 +910,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       case FitnessRating.average: return '△ 普通';
       case FitnessRating.poor: return '✕ 割引';
       case FitnessRating.unknown:
-      default:
         return '－ データなし';
     }
   }
@@ -908,7 +921,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       case FitnessRating.average: return Colors.black87;
       case FitnessRating.poor: return Colors.blue;
       case FitnessRating.unknown:
-      default:
         return Colors.grey;
     }
   }
