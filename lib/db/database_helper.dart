@@ -55,7 +55,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 3,
+      version: 1,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
@@ -240,32 +240,15 @@ class DatabaseHelper {
         ''');
       },
       /// データベースのバージョンがアップグレードされたときに呼び出されます。
-      onUpgrade: (db, oldVersion, newVersion) async {
-        // oldVersion が 2 より小さい場合 (つまりバージョン1からのアップグレード時)
-        // に、新しいテーブルを追加する
-        if (oldVersion < 2) {
-          await db.execute('''
-            CREATE TABLE shutuba_table_cache(
-              race_id TEXT PRIMARY KEY,
-              shutuba_data_json TEXT,
-              last_updated TEXT
-            )
-          ''');
-        }
-        if (oldVersion < 3) {
-          await db.execute('''
-            CREATE TABLE ai_predictions(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              race_id TEXT NOT NULL,
-              horse_id TEXT NOT NULL,
-              overall_score REAL NOT NULL,
-              expected_value REAL NOT NULL,
-              prediction_timestamp TEXT NOT NULL,
-              UNIQUE(race_id, horse_id) ON CONFLICT REPLACE
-            )
-          ''');
-        }
-      },
+      //onUpgrade: (db, oldVersion, newVersion) async {
+
+      //  if (oldVersion < 2) {
+
+      //  }
+      //  if (oldVersion < 3) {
+
+      //  }
+      //},
     );
   }
 

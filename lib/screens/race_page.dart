@@ -44,49 +44,37 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
     super.dispose();
   }
 
-  DateTime? _parseDate(String dateStr) {
-    try {
-      final parts = dateStr.replaceAll(RegExp(r'[年月日]'), '-').split('-');
-      if (parts.length >= 3) {
-        return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
-      }
-    } catch (e) {
-      print('Date parsing error in RacePage: $e');
-    }
-    return null;
-  }
-
   Future<void> _determineRaceStatus() async {
-    final raceDateTime = _parseDate(widget.raceDate);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    // 1. 開催日時チェック
-    if (raceDateTime != null && raceDateTime.isAfter(today)) {
-      setState(() {
-        _status = RaceStatus.beforeHolding;
-        _tabController.animateTo(0); // 出馬表タブを初期表示
-      });
-      return;
-    }
-
-    // 2. DBキャッシュチェック
+    // 1. DBキャッシュチェックを先に行う
     final dbResult = await _dbHelper.getRaceResult(widget.raceId);
     if (dbResult != null) {
       setState(() {
         _raceResult = dbResult;
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(1); // レース結果タブを初期表示
+        _tabController.animateTo(1); // DBに結果があれば、結果タブを初期表示
       });
-    } else {
+      return;
+    }
+
+    // 2. レース結果がWebで確定しているかチェック
+    final isConfirmed = await RaceResultScraperService.isRaceResultConfirmed(widget.raceId);
+
+    if (isConfirmed) {
       // 3. 結果確定後（キャッシュなし）
       setState(() {
         _status = RaceStatus.resultUnconfirmed;
-        _tabController.animateTo(0); // まずは出馬表タブを表示
+        _tabController.animateTo(0); // まずは出馬表タブを表示しつつ裏で結果取得
       });
       _fetchAndSaveRaceResult();
+    } else {
+      // 4. 結果未確定（開催前または当日未実施）
+      setState(() {
+        _status = RaceStatus.beforeHolding;
+        _tabController.animateTo(0); // 出馬表タブを初期表示
+      });
     }
   }
+
 
   Future<void> _fetchAndSaveRaceResult() async {
     try {
