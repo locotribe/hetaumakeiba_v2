@@ -16,7 +16,7 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
-import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -55,7 +55,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 2,
+      version: 3,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
@@ -226,6 +226,18 @@ class DatabaseHelper {
             last_updated TEXT
           )
         ''');
+        // AI予測結果を保存するテーブルを追加
+        await db.execute('''
+          CREATE TABLE ai_predictions(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_id TEXT NOT NULL,
+            horse_id TEXT NOT NULL,
+            overall_score REAL NOT NULL,
+            expected_value REAL NOT NULL,
+            prediction_timestamp TEXT NOT NULL,
+            UNIQUE(race_id, horse_id) ON CONFLICT REPLACE
+          )
+        ''');
       },
       /// データベースのバージョンがアップグレードされたときに呼び出されます。
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -237,6 +249,19 @@ class DatabaseHelper {
               race_id TEXT PRIMARY KEY,
               shutuba_data_json TEXT,
               last_updated TEXT
+            )
+          ''');
+        }
+        if (oldVersion < 3) {
+          await db.execute('''
+            CREATE TABLE ai_predictions(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              race_id TEXT NOT NULL,
+              horse_id TEXT NOT NULL,
+              overall_score REAL NOT NULL,
+              expected_value REAL NOT NULL,
+              prediction_timestamp TEXT NOT NULL,
+              UNIQUE(race_id, horse_id) ON CONFLICT REPLACE
             )
           ''');
         }
@@ -958,5 +983,32 @@ class DatabaseHelper {
       return ShutubaTableCache.fromMap(maps.first);
     }
     return null;
+  }
+
+  /// AI予測結果を複数件、一括で挿入または更新します。
+  Future<void> insertOrUpdateAiPredictions(List<AiPrediction> predictions) async {
+    final db = await database;
+    final batch = db.batch();
+    for (final prediction in predictions) {
+      batch.insert(
+        'ai_predictions',
+        prediction.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// 指定されたレースIDのAI予測結果をすべて取得します。
+  Future<List<AiPrediction>> getAiPredictionsForRace(String raceId) async {
+    final db = await database;
+    final maps = await db.query(
+      'ai_predictions',
+      where: 'race_id = ?',
+      whereArgs: [raceId],
+    );
+    return List.generate(maps.length, (i) {
+      return AiPrediction.fromMap(maps[i]);
+    });
   }
 }

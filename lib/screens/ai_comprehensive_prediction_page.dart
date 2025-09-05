@@ -1,14 +1,14 @@
 // lib/screens/comprehensive_prediction_page.dart
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
-import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/logic/ai_prediction_analyzer.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
-import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 
 class _HorseNumberDotPainter extends FlDotPainter {
   final Color color;
@@ -126,7 +126,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   // ▼▼▼【テスト用コード】▼▼▼
   void _generateSummary() {
     setState(() {
-      _predictionSummary = PredictionAnalyzer.generatePredictionSummary(widget.raceData, widget.overallScores, _allPastRecords);
+      _predictionSummary = AiPredictionAnalyzer.generatePredictionSummary(widget.raceData, widget.overallScores, _allPastRecords);
     });
   }
 
@@ -137,9 +137,9 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
     for (var horse in widget.raceData.horses) {
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
-      earlySpeedScores[horse.horseId] = PredictionAnalyzer.evaluateEarlySpeedFit(horse, widget.raceData, pastRecords);
-      finishingKickScores[horse.horseId] = PredictionAnalyzer.evaluateFinishingKickFit(horse, widget.raceData, pastRecords);
-      staminaScores[horse.horseId] = PredictionAnalyzer.evaluateStaminaFit(horse, widget.raceData, pastRecords);
+      earlySpeedScores[horse.horseId] = AiPredictionAnalyzer.evaluateEarlySpeedFit(horse, widget.raceData, pastRecords);
+      finishingKickScores[horse.horseId] = AiPredictionAnalyzer.evaluateFinishingKickFit(horse, widget.raceData, pastRecords);
+      staminaScores[horse.horseId] = AiPredictionAnalyzer.evaluateStaminaFit(horse, widget.raceData, pastRecords);
     }
 
     if (mounted) {
@@ -163,9 +163,9 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     for (var horse in widget.raceData.horses) {
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
-      legStyles[horse.horseId] = PredictionAnalyzer.getRunningStyle(pastRecords);
+      legStyles[horse.horseId] = AiPredictionAnalyzer.getRunningStyle(pastRecords);
 
-      horse.conditionFit = PredictionAnalyzer.analyzeConditionFit(
+      horse.conditionFit = AiPredictionAnalyzer.analyzeConditionFit(
         horse: horse,
         raceData: widget.raceData,
         pastRecords: pastRecords,
@@ -191,7 +191,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     }
     final sortedCorners = cornersToPredict.toList()..sort();
 
-    final development = PredictionAnalyzer.simulateRaceDevelopment(widget.raceData.horses, legStyles, sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']);
+    final development = AiPredictionAnalyzer.simulateRaceDevelopment(widget.raceData.horses, legStyles, sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']);
 
     if (mounted) {
       setState(() {

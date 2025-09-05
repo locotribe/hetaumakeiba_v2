@@ -11,9 +11,9 @@ import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/widgets/betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
-import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
-import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
-import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
+import 'package:hetaumakeiba_v2/logic/ai_prediction_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
@@ -113,7 +113,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
           );
         }
 
-        final pacePrediction = PredictionAnalyzer.predictRacePace(horseDetailsForPacePrediction, allPastRecords);
+        final pacePrediction = AiPredictionAnalyzer.predictRacePace(horseDetailsForPacePrediction, allPastRecords);
 
         return PageData(
           parsedTicket: parsedTicket,

@@ -3,7 +3,7 @@
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
-import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 
 /// レース全体の予想データを保持するコンテナです。
 class PredictionRaceData {

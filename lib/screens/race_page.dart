@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
+import 'package:hetaumakeiba_v2/screens/ai_prediction_result_page.dart';
 
 // レースの状態を管理するためのenum
 enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
@@ -33,7 +34,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _determineRaceStatus();
   }
 
@@ -119,6 +120,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           tabs: const [
             Tab(text: '出馬表'),
             Tab(text: 'レース結果'),
+            Tab(text: 'AI予測結果'),
           ],
         ),
       ),
@@ -139,6 +141,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                 // データ取得中も出馬表は表示
                 ShutubaTablePage(raceId: widget.raceId),
                 const Center(child: Text('レース結果を取得中です...')),
+                const Center(child: Text('レース結果を取得中です...')),
               ],
             ),
             // ローディングインジケータをオーバーレイ表示
@@ -155,6 +158,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               raceResult: _raceResult, // 確定済みの場合はRaceResultを渡す
             ),
             RaceResultPage(raceId: widget.raceId, qrData: null), // qrDataはnullで渡す
+            AiPredictionResultPage(raceId: widget.raceId),
           ],
         );
     }

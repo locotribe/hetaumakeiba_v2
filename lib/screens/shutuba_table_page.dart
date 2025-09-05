@@ -5,7 +5,7 @@ import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
-import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:csv/csv.dart';
@@ -13,13 +13,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:hetaumakeiba_v2/logic/prediction_analyzer.dart';
-import 'package:hetaumakeiba_v2/screens/comprehensive_prediction_page.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hetaumakeiba_v2/logic/ai_prediction_analyzer.dart';
+import 'package:hetaumakeiba_v2/screens/ai_comprehensive_prediction_page.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
-import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
@@ -27,6 +26,7 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
+import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
 
 // ソート対象の列を識別するためのenum
 enum SortableColumn {
@@ -59,6 +59,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   final DatabaseHelper _dbHelper = DatabaseHelper();
   // 新しいスクレイピングサービス
   final ShutubaTableScraperService _scraperService = ShutubaTableScraperService();
+  final AiPredictionService _predictionService = AiPredictionService();
   Map<String, double> _overallScores = {};
   Map<String, double> _expectedValues = {};
   Map<String, String> _legStyles = {};
@@ -207,71 +208,17 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
 
   Future<void> _calculatePredictionScores(PredictionRaceData raceData) async {
-    final prefs = await SharedPreferences.getInstance();
-    final customWeights = {
-      'legType': prefs.getDouble('legTypeWeight') ?? 20.0,
-      'courseFit': prefs.getDouble('courseFitWeight') ?? 20.0,
-      'trackCondition': prefs.getDouble('trackConditionWeight') ?? 15.0,
-      'humanFactor': prefs.getDouble('humanFactorWeight') ?? 15.0,
-      'condition': prefs.getDouble('conditionWeight') ?? 10.0,
-      'earlySpeed': prefs.getDouble('earlySpeedWeight') ?? 5.0,
-      'finishingKick': prefs.getDouble('finishingKickWeight') ?? 10.0,
-      'stamina': prefs.getDouble('staminaWeight') ?? 5.0,
-    };
-
-    final Map<String, double> scores = {};
-    final Map<String, List<HorseRaceRecord>> allPastRecords = {};
-    final Map<String, String> legStyles = {};
-    final Map<String, ConditionFitResult> conditionFits = {};
-    RaceStatistics? raceStats;
-    try {
-      // 統計データの取得を試みる
-      raceStats = await _dbHelper.getRaceStatistics(widget.raceId);
-    } catch (e) {
-      // テーブルが存在しない等のエラーが発生しても処理を続行する
-      print('レース統計データの取得に失敗しました (テーブル未作成の可能性があります): $e');
-      raceStats = null; // エラー時はnullとして扱う
-    }
-    // まず全馬の過去成績を取得し、総合適性スコアと脚質を計算
-    for (var horse in raceData.horses) {
-      final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
-      allPastRecords[horse.horseId] = pastRecords;
-      scores[horse.horseId] = PredictionAnalyzer.calculateOverallAptitudeScore(
-        horse,
-        raceData,
-        pastRecords,
-        customWeights: customWeights,
-      );
-      legStyles[horse.horseId] = PredictionAnalyzer.getRunningStyle(pastRecords);
-      conditionFits[horse.horseId] = PredictionAnalyzer.analyzeConditionFit(
-        horse: horse,
-        raceData: raceData,
-        pastRecords: pastRecords,
-        raceStats: raceStats,
-      );
-    }
-
-    // 全馬のスコア合計を算出
-    final double totalScore = scores.values.fold(0.0, (sum, score) => sum + score);
-
-    final Map<String, double> expectedValues = {};
-    // 各馬の期待値を計算
-    for (var horse in raceData.horses) {
-      final score = scores[horse.horseId] ?? 0.0;
-      final odds = horse.odds ?? 0.0;
-      expectedValues[horse.horseId] = PredictionAnalyzer.calculateExpectedValue(
-        score,
-        odds,
-        totalScore,
-      );
-    }
+    final scores = await _predictionService.calculatePredictionScores(
+      raceData,
+      widget.raceId,
+    );
 
     if (mounted) {
       setState(() {
-        _overallScores = scores;
-        _expectedValues = expectedValues;
-        _legStyles = legStyles;
-        _conditionFits = conditionFits;
+        _overallScores = scores.overallScores;
+        _expectedValues = scores.expectedValues;
+        _legStyles = scores.legStyles;
+        _conditionFits = scores.conditionFits;
       });
     }
   }
@@ -327,7 +274,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       allPastRecords[horse.horseId] = pastRecords;
     }
 
-    raceData.racePacePrediction = PredictionAnalyzer.predictRacePace(raceData.horses, allPastRecords);
+    raceData.racePacePrediction = AiPredictionAnalyzer.predictRacePace(raceData.horses, allPastRecords);
 
     return raceData;
   }

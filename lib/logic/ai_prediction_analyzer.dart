@@ -1,15 +1,15 @@
 // lib/logic/prediction_analyzer.dart
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/prediction_analysis_model.dart';
-import 'package:hetaumakeiba_v2/models/prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 
-class PredictionAnalyzer {
+class AiPredictionAnalyzer {
 
-  static const Map<String, double> _defaultWeights = {
-    'legType': 20.0, 'courseFit': 20.0, 'trackCondition': 15.0, 'humanFactor': 15.0, 'condition': 10.0,
-    'earlySpeed': 5.0, 'finishingKick': 10.0, 'stamina': 5.0,
+  static const Map<String, int> _defaultWeights = {
+    'legType': 20, 'courseFit': 20, 'trackCondition': 15, 'humanFactor': 15, 'condition': 10,
+    'earlySpeed': 5, 'finishingKick': 10, 'stamina': 5,
   };
 
   static ConditionFitResult analyzeConditionFit({
@@ -148,7 +148,7 @@ class PredictionAnalyzer {
       PredictionHorseDetail horse,
       PredictionRaceData raceData,
       List<HorseRaceRecord> pastRecords, {
-        Map<String, double>? customWeights,
+        Map<String, int>? customWeights,
       }) {
     // 各ファクターのスコアを0-100点で算出
     final legTypeScore = _evaluateLegTypeAndPaceFit(horse, raceData, pastRecords); // 1. 脚質・展開適性
