@@ -184,8 +184,12 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     }
     final sortedCorners = cornersToPredict.toList()..sort();
 
-    final development = AiPredictionAnalyzer.simulateRaceDevelopment(widget.raceData.horses, legStyles, sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']);
-
+    final development = AiPredictionAnalyzer.simulateRaceDevelopment(
+        widget.raceData,
+        legStyles,
+        allPastRecords, // allPastRecords を渡す
+        sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']
+    );
     if (mounted) {
       setState(() {
         _legStyles = legStyles;
