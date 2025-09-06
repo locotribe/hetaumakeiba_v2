@@ -2,9 +2,11 @@
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
+import 'dart:convert';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+import 'package:hetaumakeiba_v2/services/race_result_first_scraper_service.dart';
 
 /// netkeiba.comからレース結果の詳細をスクレイピングすることに特化したサービスクラスです。
 class RaceResultScraperService {
@@ -24,6 +26,9 @@ class RaceResultScraperService {
       if (pathSegments.length > 1 && pathSegments[0] == 'race') {
         return pathSegments[1];
       }
+    }
+    if (uri.host == 'db.netkeiba.com' && pathSegments.contains('race') && pathSegments.last.isNotEmpty) {
+      return pathSegments.last;
     }
     return uri.queryParameters['race_id'];
   }
@@ -51,12 +56,14 @@ class RaceResultScraperService {
   /// netkeiba.comのレース結果ページをスクレイピングし、RaceResultオブジェクトを返す
   static Future<RaceResult> scrapeRaceDetails(String url) async {
     try {
-      final raceId = getRaceIdFromUrl(url);
+      // まずはデータベースページ（db.netkeiba.com）から試行
+      final dbUrl = url.replaceFirst('race.netkeiba.com/race/result.html?race_id=', 'db.netkeiba.com/race/');
+      final raceId = getRaceIdFromUrl(dbUrl);
       if (raceId == null) {
         throw Exception('無効なURLです: レースIDが取得できませんでした。');
       }
 
-      final response = await http.get(Uri.parse(url), headers: _headers);
+      final response = await http.get(Uri.parse(dbUrl), headers: _headers);
       if (response.statusCode != 200) {
         throw Exception('HTTPリクエストに失敗しました: Status code ${response.statusCode}');
       }
@@ -65,33 +72,52 @@ class RaceResultScraperService {
       await CharsetConverter.decode('EUC-JP', response.bodyBytes);
       final document = html.parse(decodedBody);
 
-      final raceTitle = _safeGetText(document.querySelector('div.race_head h1'));
-      final raceInfoSpan =
-      document.querySelector('div.data_intro p diary_snap_cut span');
-      final raceInfo = _safeGetText(raceInfoSpan).replaceAll(RegExp(r'\s+'), ' ');
-      final smallTxt = _safeGetText(document.querySelector('p.smalltxt'));
-      final raceDate = smallTxt.split(' ').first;
-      // レースタイトル自体からグレードを抽出するように変更
-      final raceGrade = raceTitle;
-      final horseResults = _parseHorseResults(document);
-      final refunds = _parseRefunds(document);
-      final cornerPassages = _parseCornerPassages(document);
-      final lapTimes = _parseLapTimes(document);
+      // データベースページに結果テーブルがあるかチェック
+      final resultTable = document.querySelector('table.race_table_01');
+      if (resultTable != null && resultTable.querySelectorAll('tr').length > 1) {
+        // データがあれば、従来通りのパース処理を実行
+        print('INFO: レース結果をデータベースページから取得しました: $raceId');
+        final raceTitle = _safeGetText(document.querySelector('div.race_head h1'));
+        final raceInfoSpan =
+        document.querySelector('div.data_intro p diary_snap_cut span');
+        final raceInfo = _safeGetText(raceInfoSpan).replaceAll(RegExp(r'\s+'), ' ');
+        final smallTxt = _safeGetText(document.querySelector('p.smalltxt'));
+        final raceDate = smallTxt.split(' ').first;
+        final raceGrade = raceTitle;
+        final horseResults = _parseHorseResults(document);
+        final refunds = _parseRefunds(document);
+        final cornerPassages = _parseCornerPassages(document);
+        final lapTimes = _parseLapTimes(document);
 
-      return RaceResult(
-        raceId: raceId,
-        raceTitle: raceTitle,
-        raceInfo: raceInfo,
-        raceDate: raceDate,
-        raceGrade: raceGrade,
-        horseResults: horseResults,
-        refunds: refunds,
-        cornerPassages: cornerPassages,
-        lapTimes: lapTimes,
-      );
+        return RaceResult(
+          raceId: raceId,
+          raceTitle: raceTitle,
+          raceInfo: raceInfo,
+          raceDate: raceDate,
+          raceGrade: raceGrade,
+          horseResults: horseResults,
+          refunds: refunds,
+          cornerPassages: cornerPassages,
+          lapTimes: lapTimes,
+        );
+      } else {
+        // データがなければ、当日の結果ページにフォールバック
+        print('INFO: データベースページに結果がありません。当日の結果ページから取得を試みます: $raceId');
+        final firstUrl = 'https://race.netkeiba.com/race/result.html?race_id=$raceId';
+        return await RaceResultFirstScraperService.scrapeRaceDetails(firstUrl);
+      }
     } catch (e) {
       print('[ERROR]スクレイピングエラー: $e');
-      rethrow;
+      // DBページでエラーが発生した場合も、当日の結果ページにフォールバックを試みる
+      try {
+        final raceId = getRaceIdFromUrl(url);
+        print('INFO: エラー発生のため、当日の結果ページから取得を試みます: $raceId');
+        final firstUrl = 'https://race.netkeiba.com/race/result.html?race_id=$raceId';
+        return await RaceResultFirstScraperService.scrapeRaceDetails(firstUrl);
+      } catch (fallbackError) {
+        print('[ERROR]フォールバック処理も失敗しました: $fallbackError');
+        rethrow; // 両方失敗した場合はエラーを投げる
+      }
     }
   }
 
@@ -196,6 +222,11 @@ class RaceResultScraperService {
         refundList.add(Refund(ticketTypeId: ticketTypeId, payouts: payouts));
       }
     }
+    // ▼▼▼【ここから追加】▼▼▼
+    print('--- START: race_result_scraper_service REFUND DATA ---');
+    print(json.encode(refundList.map((r) => r.toJson()).toList()));
+    print('--- END: race_result_scraper_service REFUND DATA ---');
+    // ▲▲▲【ここまで追加】▲▲▲
     return refundList;
   }
 
