@@ -10,6 +10,8 @@ import 'package:hetaumakeiba_v2/screens/jyusyoichiran_page.dart';
 import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'package:hetaumakeiba_v2/screens/user_settings_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
@@ -42,6 +44,8 @@ class _MainScaffoldState extends State<MainScaffold> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
   bool _isBusy = false;
 
+  String _displayName = '';
+  File? _profileImageFile;
 
   /// 分析データを再構築する
   Future<void> _rebuildAnalyticsData() async {
@@ -114,7 +118,7 @@ class _MainScaffoldState extends State<MainScaffold> {
             raceIds.add(raceId);
           }
         } catch (e) {
-          print('Skipping a ticket due to parsing error during migration: $e');
+          print('データ移行処理中に解析エラーが発生したため、このチケットはスキップしました: $e');
         }
       }
 
@@ -346,12 +350,34 @@ class _MainScaffoldState extends State<MainScaffold> {
     }
   }
 
+  // Drawerの情報を読み込むための新しいメソッド
+  Future<void> _loadUserInfoForDrawer() async {
+    if (localUserId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final db = DatabaseHelper();
+    final user = await db.getUserByUuid(localUserId!);
+    final profileImagePath = prefs.getString('profile_picture_path_${localUserId!}');
+
+    if (mounted) {
+      setState(() {
+        _displayName =
+            prefs.getString('display_name_${localUserId!}') ?? user?.username ?? '';
+        if (profileImagePath != null) {
+          _profileImageFile = File(profileImagePath);
+        } else {
+          _profileImageFile = null;
+        }
+      });
+    }
+  }
+
   late final List<Widget> _pages;
   static const List<String> _pageTitles = ['ホーム', '開催一覧', '重賞一覧', '購入履歴', '集計'];
 
   @override
   void initState() {
     super.initState();
+    _loadUserInfoForDrawer();
 
     _pages = <Widget>[
       const HomePage(),
@@ -411,20 +437,76 @@ class _MainScaffoldState extends State<MainScaffold> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            DrawerHeader(
+            Container(
+              height: 140,
               decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-              ),
-              child: const Text(
-                '設定メニュー',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: <Color>[
+                    Theme.of(context).primaryColor,
+                    Colors.green.shade400,
+                  ],
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3), // 影の色（透過度調整可）
+                    offset: const Offset(0, 4),           // 影の位置（X, Y）
+                    blurRadius: 8,                        // 影のぼかし具合
+                    spreadRadius: 2,                      // 影の広がり
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 40, 16, 8), // 上部の余白(ステータスバー分)を追加
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: Colors.white,
+                    backgroundImage: _profileImageFile != null ? FileImage(_profileImageFile!) : null,
+                    child: _profileImageFile == null
+                        ? Text(
+                      _displayName.isNotEmpty ? _displayName[0] : '',
+                      style: const TextStyle(fontSize: 30.0),
+                    )
+                        : null,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      _displayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
 
-            const Divider(),
+            // 👇 新しい「ユーザー設定」項目をここに追加
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('ユーザー設定'),
+              onTap: () async {
+                Navigator.of(context).pop(); // Drawerを閉じる
+                final result = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (context) => const UserSettingsPage(),
+                  ),
+                );
+                // 設定画面から更新通知(true)が返ってきたら、Drawerの情報を再読み込み
+                if (result == true) {
+                  _loadUserInfoForDrawer();
+                }
+              },
+            ),
+            const Divider(), // 他のメニュー項目との区切り線
+
             ListTile(
               leading: const Icon(Icons.home_work_outlined),
               title: const Text('ニュースフィード設定'),

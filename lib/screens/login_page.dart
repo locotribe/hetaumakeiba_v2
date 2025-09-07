@@ -36,7 +36,7 @@ class _LoginPageState extends State<LoginPage> {
           widget.onLoginSuccess(user);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ユーザー名またはパスワードが違います。')),
+            const SnackBar(content: Text('ログインIDまたはパスワードが違います。')),
           );
           setState(() {
             _isLoading = false;
@@ -74,45 +74,49 @@ class _LoginPageState extends State<LoginPage> {
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                TextFormField(
-                  controller: _usernameController,
-                  decoration: const InputDecoration(labelText: 'ユーザー名'),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'ユーザー名を入力してください';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  decoration: const InputDecoration(labelText: 'パスワード'),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'パスワードを入力してください';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 32),
-                _isLoading
-                    ? const CircularProgressIndicator()
-                    : ElevatedButton(
-                  onPressed: _handleLogin,
-                  child: const Text('ログイン'),
-                ),
-                TextButton(
-                  onPressed: _navigateToRegister,
-                  child: const Text('新しいユーザーを登録'),
-                ),
-              ],
+          child: AutofillGroup(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextFormField(
+                    controller: _usernameController,
+                    decoration: const InputDecoration(labelText: 'ログインID'),
+                    autofillHints: const [AutofillHints.username],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'ログインIDを入力してください';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: const InputDecoration(labelText: 'パスワード'),
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.password],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'パスワードを入力してください';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  _isLoading
+                      ? const CircularProgressIndicator()
+                      : ElevatedButton(
+                          onPressed: _handleLogin,
+                          child: const Text('ログイン'),
+                        ),
+                  TextButton(
+                    onPressed: _navigateToRegister,
+                    child: const Text('新しいユーザーを登録'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

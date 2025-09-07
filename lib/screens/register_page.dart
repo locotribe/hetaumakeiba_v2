@@ -37,7 +37,7 @@ class _RegisterPageState extends State<RegisterPage> {
           widget.onRegisterSuccess();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('このユーザー名は既に使用されています。')),
+            const SnackBar(content: Text('このログインIDは既に使用されています。')),
           );
           setState(() {
             _isLoading = false;
@@ -63,41 +63,45 @@ class _RegisterPageState extends State<RegisterPage> {
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                TextFormField(
-                  controller: _usernameController,
-                  decoration: const InputDecoration(labelText: 'ユーザー名'),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'ユーザー名を入力してください';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  decoration: const InputDecoration(labelText: 'パスワード'),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.length < 6) {
-                      return '6文字以上のパスワードを入力してください';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 32),
-                _isLoading
-                    ? const CircularProgressIndicator()
-                    : ElevatedButton(
-                  onPressed: _handleRegister,
-                  child: const Text('登録'),
-                ),
-              ],
+          child: AutofillGroup(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextFormField(
+                    controller: _usernameController,
+                    decoration: const InputDecoration(labelText: 'ログインID'),
+                    autofillHints: const [AutofillHints.newUsername],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'ログインIDを入力してください';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: const InputDecoration(labelText: 'パスワード'),
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.newPassword],
+                    validator: (value) {
+                      if (value == null || value.length < 6) {
+                        return '6文字以上のパスワードを入力してください';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  _isLoading
+                      ? const CircularProgressIndicator()
+                      : ElevatedButton(
+                          onPressed: _handleRegister,
+                          child: const Text('登録'),
+                        ),
+                ],
+              ),
             ),
           ),
         ),

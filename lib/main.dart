@@ -22,6 +22,10 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'へたうま競馬',
       theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.green[900]!,
+          primary: Colors.green[900]!,
+        ),
         primarySwatch: Colors.green,
         appBarTheme: AppBarTheme(
           backgroundColor: Colors.green[900],
@@ -34,14 +38,12 @@ class MyApp extends StatelessWidget {
           ),
         ),
 
-        // ★★★ TabBarのテーマ設定を修正 ★★★
         tabBarTheme: TabBarThemeData( // 'TabBarTheme' -> 'TabBarThemeData' に修正
           labelColor: Colors.white, // 選択中のタブの文字色
           unselectedLabelColor: Colors.grey[300], // 未選択のタブの文字色
           indicatorColor: Colors.white, // 下線の色
         ),
 
-        // FABがBottomNavigationBarにめり込むデザインのための設定
         bottomNavigationBarTheme: BottomNavigationBarThemeData(
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.green[900],
