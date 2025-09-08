@@ -3,6 +3,8 @@
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/logic/ai_prediction_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 
 // AI予測全体の分析結果サマリーを保持するクラス
 class AiOverallAnalysis {
@@ -57,6 +59,11 @@ class AiPredictionAnalysisService {
     // 1. 必要なデータをDBから全て取得
     final allRaceResults = await _getAllRaceResults();
     final allPredictions = await _getAllAiPredictions();
+    final allHorseIds = allPredictions.map((p) => p.horseId).toSet();
+    final Map<String, List<HorseRaceRecord>> allPastRecords = {};
+    for (final horseId in allHorseIds) {
+      allPastRecords[horseId] = await _dbHelper.getHorsePerformanceRecords(horseId);
+    }
 
     // 2. レースIDをキーにしてデータを整理
     final Map<String, List<AiPrediction>> predictionsByRace = {};
@@ -137,9 +144,56 @@ class AiPredictionAnalysisService {
 
     // TODO: ここに競馬場別、距離別などのファクター分析ロジックを追加する
 
+    // ファクター分析用の集計マップ
+    final Map<String, AiOverallAnalysis> venueAnalysis = {};
+    final Map<String, AiOverallAnalysis> distanceAnalysis = {};
+    final Map<String, AiOverallAnalysis> trackConditionAnalysis = {};
+    final Map<String, AiOverallAnalysis> popularityAnalysis = {};
+    final Map<String, AiOverallAnalysis> legStyleAnalysis = {};
+
+    // レース情報を解析してファクターごとに集計
+    for (final raceId in predictionsByRace.keys) {
+      final raceResult = allRaceResults[raceId];
+      final predictions = predictionsByRace[raceId]!;
+      if (raceResult == null || raceResult.isIncomplete) continue;
+
+      predictions.sort((a, b) => b.overallScore.compareTo(a.overallScore));
+      final honmeiPrediction = predictions.first;
+
+      HorseResult? honmeiResult;
+      try {
+        honmeiResult = raceResult.horseResults.firstWhere((hr) => hr.horseId == honmeiPrediction.horseId);
+      } catch (e) {
+        continue;
+      }
+
+      final rank = int.tryParse(honmeiResult.rank);
+      if (rank == null) continue;
+
+      // ファクターを抽出
+      final venue = _extractVenue(raceId);
+      final distance = _extractDistance(raceResult.raceInfo);
+      final trackCondition = _extractTrackCondition(raceResult.raceInfo);
+      final popularity = _extractPopularity(honmeiResult);
+      final legStyle = AiPredictionAnalyzer.getRunningStyle(allPastRecords[honmeiPrediction.horseId] ?? []);
+
+      // ファクターごとに成績を更新
+      _updateFactorAnalysis(venueAnalysis, venue, honmeiResult, raceResult);
+      _updateFactorAnalysis(distanceAnalysis, distance, honmeiResult, raceResult);
+      _updateFactorAnalysis(trackConditionAnalysis, trackCondition, honmeiResult, raceResult);
+      _updateFactorAnalysis(popularityAnalysis, popularity, honmeiResult, raceResult);
+      _updateFactorAnalysis(legStyleAnalysis, legStyle, honmeiResult, raceResult);
+    }
+
+
     return {
       'overall': overallAnalysis,
       // 'byVenue': (競馬場ごとの分析結果リスト),
+      'byVenue': venueAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(),
+      'byDistance': distanceAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(),
+      'byTrackCondition': trackConditionAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(),
+      'byPopularity': popularityAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(),
+      'byLegStyle': legStyleAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(), // ← この行を追加
     };
   }
 
@@ -160,5 +214,99 @@ class AiPredictionAnalysisService {
     final db = await _dbHelper.database;
     final maps = await db.query('ai_predictions');
     return maps.map((map) => AiPrediction.fromMap(map)).toList();
+  }
+
+  // ファクター分析の集計を更新するヘルパーメソッド
+  void _updateFactorAnalysis(Map<String, AiOverallAnalysis> analysisMap, String factor, HorseResult honmeiResult, RaceResult raceResult) {
+    if (factor.isEmpty) return;
+
+    final rank = int.tryParse(honmeiResult.rank);
+    if (rank == null) return;
+
+    final analysis = analysisMap.putIfAbsent(factor, () => AiOverallAnalysis());
+
+    final newTotalCount = analysis.totalHonmeiCount + 1;
+    final newWinCount = analysis.honmeiWinCount + (rank == 1 ? 1 : 0);
+    final newPlaceCount = analysis.honmeiPlaceCount + (rank <= 2 ? 1 : 0);
+    final newShowCount = analysis.honmeiShowCount + (rank <= 3 ? 1 : 0);
+
+    double winInvestmentDelta = 0;
+    double winPayoutDelta = 0;
+    double showInvestmentDelta = 0;
+    double showPayoutDelta = 0;
+
+    final odds = double.tryParse(honmeiResult.odds);
+    if (odds != null) {
+      winInvestmentDelta = 100;
+      if (rank == 1) {
+        winPayoutDelta = 100 * odds;
+      }
+    }
+
+    final fukushoRefund = raceResult.refunds.firstWhere((r) => r.ticketTypeId == '2', orElse: () => Refund(ticketTypeId: '', payouts: []));
+    if (fukushoRefund.payouts.isNotEmpty) {
+      showInvestmentDelta = 100;
+      if (rank <= 3) {
+        final honmeiHorseNumber = int.tryParse(honmeiResult.horseNumber);
+        for (final payout in fukushoRefund.payouts) {
+          if (payout.combinationNumbers.contains(honmeiHorseNumber)) {
+            showPayoutDelta = (double.tryParse(payout.amount.replaceAll(',', '')) ?? 0);
+            break;
+          }
+        }
+      }
+    }
+
+    analysisMap[factor] = AiOverallAnalysis(
+      totalHonmeiCount: newTotalCount,
+      honmeiWinCount: newWinCount,
+      honmeiPlaceCount: newPlaceCount,
+      honmeiShowCount: newShowCount,
+      totalWinInvestment: analysis.totalWinInvestment + winInvestmentDelta,
+      totalWinPayout: analysis.totalWinPayout + winPayoutDelta,
+      totalShowInvestment: analysis.totalShowInvestment + showInvestmentDelta,
+      totalShowPayout: analysis.totalShowPayout + showPayoutDelta,
+    );
+  }
+
+
+  // レースIDから競馬場名を抽出するヘルパー
+  String _extractVenue(String raceId) {
+    if (raceId.length >= 6) {
+      const racecourseDict = {
+        "01": "札幌", "02": "函館", "03": "福島", "04": "新潟", "05": "東京",
+        "06": "中山", "07": "中京", "08": "京都", "09": "阪神", "10": "小倉",
+      };
+      final code = raceId.substring(4, 6);
+      return racecourseDict[code] ?? '';
+    }
+    return '';
+  }
+
+  // レース情報から距離を抽出するヘルパー
+  String _extractDistance(String raceInfo) {
+    final distanceMatch = RegExp(r'(芝|ダ|障)(?:右|左|直線)?(\d+)m').firstMatch(raceInfo);
+    if (distanceMatch != null) {
+      return '${distanceMatch.group(1)}${distanceMatch.group(2)}';
+    }
+    return '';
+  }
+
+  // レース情報から馬場状態を抽出するヘルパー
+  String _extractTrackCondition(String raceInfo) {
+    if (raceInfo.contains('稍重')) return '稍重';
+    if (raceInfo.contains('重')) return '重';
+    if (raceInfo.contains('不良')) return '不良';
+    if (raceInfo.contains('良')) return '良';
+    return '';
+  }
+
+  // レース結果から人気を抽出するヘルパー
+  String _extractPopularity(HorseResult horseResult) {
+    final popularity = int.tryParse(horseResult.popularity);
+    if (popularity != null) {
+      return '$popularity番人気';
+    }
+    return '';
   }
 }

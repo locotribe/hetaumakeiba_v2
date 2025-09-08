@@ -60,12 +60,26 @@ class _AiPredictionAnalysisPageState extends State<AiPredictionAnalysisPage> {
               }
 
               final overallAnalysis = snapshot.data!['overall'] as AiOverallAnalysis;
+              final venueAnalysis = (snapshot.data!['byVenue'] as List<dynamic>?)?.cast<AiFactorAnalysis>() ?? [];
+              final distanceAnalysis = (snapshot.data!['byDistance'] as List<dynamic>?)?.cast<AiFactorAnalysis>() ?? [];
+              final trackConditionAnalysis = (snapshot.data!['byTrackCondition'] as List<dynamic>?)?.cast<AiFactorAnalysis>() ?? [];
+              final popularityAnalysis = (snapshot.data!['byPopularity'] as List<dynamic>?)?.cast<AiFactorAnalysis>() ?? [];
+              final legStyleAnalysis = (snapshot.data!['byLegStyle'] as List<dynamic>?)?.cast<AiFactorAnalysis>() ?? []; // ← この行を追加
 
               return ListView(
                 padding: const EdgeInsets.all(16.0),
                 children: [
                   _buildOverallAnalysisCard(overallAnalysis),
-                  // TODO: ここに競馬場別、距離別の分析結果カードを追加していく
+                  const SizedBox(height: 16),
+                  _buildFactorAnalysisCard('競馬場別 分析', venueAnalysis),
+                  const SizedBox(height: 16),
+                  _buildFactorAnalysisCard('距離別 分析', distanceAnalysis),
+                  const SizedBox(height: 16),
+                  _buildFactorAnalysisCard('馬場状態別 分析', trackConditionAnalysis),
+                  const SizedBox(height: 16),
+                  _buildFactorAnalysisCard('人気度別 分析', popularityAnalysis),
+                  const SizedBox(height: 16),
+                  _buildFactorAnalysisCard('脚質別 分析', legStyleAnalysis),
                 ],
               );
             },
@@ -128,6 +142,69 @@ class _AiPredictionAnalysisPageState extends State<AiPredictionAnalysisPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFactorAnalysisCard(String title, List<AiFactorAnalysis> analysisList) {
+    if (analysisList.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // 回収率でソート
+    analysisList.sort((a, b) => b.analysis.winRecoveryRate.compareTo(a.analysis.winRecoveryRate));
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 16,
+                columns: const [
+                  DataColumn(label: Text('条件')),
+                  DataColumn(label: Text('単回率'), numeric: true),
+                  DataColumn(label: Text('複回率'), numeric: true),
+                  DataColumn(label: Text('複勝率'), numeric: true),
+                  DataColumn(label: Text('N数'), numeric: true),
+                ],
+                rows: analysisList.map((analysis) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(analysis.factorName)),
+                      DataCell(_buildRecoveryRateCell(analysis.analysis.winRecoveryRate)),
+                      DataCell(_buildRecoveryRateCell(analysis.analysis.showRecoveryRate)),
+                      DataCell(Text('${analysis.analysis.showRate.toStringAsFixed(1)}%')),
+                      DataCell(Text(analysis.analysis.totalHonmeiCount.toString())),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecoveryRateCell(double rate) {
+    Color color = Colors.black87;
+    if (rate > 100) {
+      color = Colors.blue.shade700;
+    } else if (rate < 80) {
+      color = Colors.red.shade700;
+    }
+    return Text(
+      '${rate.toStringAsFixed(1)}%',
+      style: TextStyle(color: color, fontWeight: FontWeight.bold),
     );
   }
 }

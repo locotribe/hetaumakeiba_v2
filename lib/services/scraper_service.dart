@@ -3,7 +3,6 @@
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
-import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
@@ -457,19 +456,6 @@ class ScraperService {
       ));
     }
     return horses;
-  }
-
-  static String _getRaceIdFromParsedTicket(Map<String, dynamic> parsedTicket) {
-    try {
-      final year = parsedTicket['年'].toString().padLeft(2, '0');
-      final racecourseCode = racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key;
-      final round = parsedTicket['回'].toString().padLeft(2, '0');
-      final day = parsedTicket['日'].toString().padLeft(2, '0');
-      final race = parsedTicket['レース'].toString().padLeft(2, '0');
-      return '20$year$racecourseCode$round$day$race';
-    } catch (e) {
-      return '';
-    }
   }
 
   /// レース名から過去10年分のレースIDリストをスクレイピングする

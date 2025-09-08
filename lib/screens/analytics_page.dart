@@ -40,6 +40,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
   @override
   void initState() {
     super.initState();
+    _tabController = null;
     _loadInitialSettingsAndData();
   }
 
@@ -50,14 +51,21 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
   }
 
   void _setupTabController() {
+    // 既存のリスナーを削除してからdisposeする
+    _tabController?.removeListener(_handleTabSelection);
     _tabController?.dispose();
+
     _tabController = TabController(length: _visibleCards.length, vsync: this);
-    _tabController!.addListener(() {
-      if (!_tabController!.indexIsChanging) {
-        setState(() {
-        });
-      }
-    });
+    _tabController!.addListener(_handleTabSelection);
+  }
+
+  // TabControllerのリスナー処理を独立したメソッドに分離
+  void _handleTabSelection() {
+    if (!_tabController!.indexIsChanging) {
+      setState(() {
+        // isFilterVisible の状態を更新するためにsetStateを呼ぶ
+      });
+    }
   }
 
   Future<void> _loadInitialSettingsAndData() async {
@@ -275,7 +283,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
   }
 
   void showDashboardSettings() {
-    showModalBottomSheet(
+    showModalBottomSheet<List<String>>(
       context: context,
       isScrollControlled: true,
       builder: (context) {
@@ -284,15 +292,21 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
           child: DashboardSettingsSheet(
             visibleCards: _visibleCards,
             onSettingsChanged: (newSettings) {
-              setState(() {
-                _visibleCards = newSettings;
-                _setupTabController();
-              });
+              // ここではsetStateを呼ばずに、モーダルを閉じる際に新しい設定を返す
+              Navigator.of(context).pop(newSettings);
             },
           ),
         );
       },
-    );
+    ).then((newSettings) {
+      // モーダルが閉じた後に新しい設定でUIを更新
+      if (newSettings != null && mounted) {
+        setState(() {
+          _visibleCards = newSettings;
+          _setupTabController();
+        });
+      }
+    });
   }
   /// 分析データを再構築する
   Future<void> _rebuildAnalyticsData() async {
@@ -397,67 +411,76 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
 
   @override
   Widget build(BuildContext context) {
+    if (_tabController == null || _isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     bool isFilterVisible = true;
-    if (_tabController != null && _visibleCards.isNotEmpty && _tabController!.index < _visibleCards.length) {
+    if (_visibleCards.isNotEmpty && _tabController!.index < _visibleCards.length) {
       final currentKey = _visibleCards[_tabController!.index];
       if (currentKey == 'grand_total_summary' || currentKey == 'prediction_summary') {
         isFilterVisible = false;
       }
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1A4314), // 背景色をテーマに合わせる
-        title: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          indicatorColor: Colors.blue.shade100,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          tabs: _visibleCards.map((key) {
-            final title = availableCards[key] ?? '不明';
-            return Tab(text: title);
-          }).toList(),
+    // ScaffoldとAppBarを削除し、ColumnからUIを構築する
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: CustomBackground(
+            overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
+            stripeColor: Color.fromRGBO(219, 234, 234, 0.6),
+            fillColor: Color.fromRGBO(172, 234, 231, 1.0),
+          ),
         ),
-        actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'settings') {
-                showDashboardSettings();
-              } else if (value == 'rebuild') {
-                _rebuildAnalyticsData();
-              }
-            },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
-                value: 'settings',
-                child: Text('表示項目の設定'),
+        Column(
+          children: [
+            // AppBarと同じ色の背景を持つコンテナでTabBarをラップ
+            Container(
+              color: const Color(0xFF1A4314),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TabBar(
+                      controller: _tabController,
+                      isScrollable: true,
+                      indicatorColor: Colors.blue.shade100,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.white60,
+                      tabs: _visibleCards.map((key) {
+                        final title = availableCards[key] ?? '不明';
+                        return Tab(text: title);
+                      }).toList(),
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, color: Colors.white), // アイコンの色を白に
+                    onSelected: (value) {
+                      if (value == 'settings') {
+                        showDashboardSettings();
+                      } else if (value == 'rebuild') {
+                        _rebuildAnalyticsData();
+                      }
+                    },
+                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'settings',
+                        child: Text('表示項目の設定'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'rebuild',
+                        child: Text('収支データを再計算'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              const PopupMenuItem<String>(
-                value: 'rebuild',
-                child: Text('収支データを再計算'),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          const Positioned.fill(
-            child: CustomBackground(
-              overallBackgroundColor: Color.fromRGBO(231, 234, 234, 1.0),
-              stripeColor: Color.fromRGBO(219, 234, 234, 0.6),
-              fillColor: Color.fromRGBO(172, 234, 231, 1.0),
             ),
-          ),
-          Column(
-            children: [
-              if (isFilterVisible) _buildPeriodFilter(),
-              Expanded(child: _buildBody()),
-            ],
-          ),
-        ],
-      ),
+            if (isFilterVisible) _buildPeriodFilter(),
+            Expanded(child: _buildBody()),
+          ],
+        ),
+      ],
     );
   }
 
