@@ -8,21 +8,16 @@ import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/jyusyoichiran_page.dart';
 import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
-import 'dart:convert';
 import 'dart:io';
 import 'package:hetaumakeiba_v2/screens/user_settings_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/services/analytics_service.dart';
-import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:hetaumakeiba_v2/screens/race_schedule_page.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
-import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_analysis_page.dart';
 
 
@@ -47,164 +42,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   String _displayName = '';
   File? _profileImageFile;
 
-  /// 分析データを再構築する
-  Future<void> _rebuildAnalyticsData() async {
-    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
-    if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ユーザー情報が取得できませんでした。')),
-      );
-      return;
-    }
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('分析データを再構築'),
-        content: const Text('全ての購入履歴を元に、集計データを最初から作り直します。データ量によっては時間がかかる場合があります。よろしいですか？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('キャンセル'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('実行', style: TextStyle(color: Colors.blueAccent)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true || !mounted) return;
-
-    setState(() {
-      _isBusy = true;
-    });
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 24),
-            Text("データを再構築中..."),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      // 1. 既存の集計データをクリア
-      final db = await _dbHelper.database;
-      await db.delete('analytics_aggregates', where: 'userId = ?', whereArgs: [userId]);
-
-      // 2. 全ての購入履歴からユニークなレースIDを抽出
-      final allQrData = await _dbHelper.getAllQrData(userId);
-      final Set<String> raceIds = {};
-      for (final qrData in allQrData) {
-        try {
-          final parsedTicket = json.decode(qrData.parsedDataJson) as Map<String, dynamic>;
-          final url = generateNetkeibaUrl(
-            year: parsedTicket['年'].toString(),
-            racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
-            round: parsedTicket['回'].toString(),
-            day: parsedTicket['日'].toString(),
-            race: parsedTicket['レース'].toString(),
-          );
-          final raceId = RaceResultScraperService.getRaceIdFromUrl(url);
-          if (raceId != null) {
-            raceIds.add(raceId);
-          }
-        } catch (e) {
-          print('データ移行処理中に解析エラーが発生したため、このチケットはスキップしました: $e');
-        }
-      }
-
-      // 3. 各レースIDに対して集計処理を再実行
-      for (final raceId in raceIds) {
-        await AnalyticsService().updateAggregatesOnResultConfirmed(raceId, userId);
-      }
-
-      if (mounted) {
-        Navigator.of(context).pop(); // ローディングダイアログを閉じる
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('分析データの再構築が完了しました。')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.of(context).pop(); // ローディングダイアログを閉じる
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラーが発生しました: $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isBusy = false;
-        });
-      }
-    }
-  }
-
-  /// 全データを削除する
-  Future<void> _deleteAllData() async {
-    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
-    if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ユーザー情報が取得できませんでした。')),
-      );
-      return;
-    }
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('全データ削除'),
-        content: const Text('本当にすべての保存データを削除しますか？この操作は取り消せません。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('キャンセル'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true || !mounted) return;
-
-    setState(() {
-      _isBusy = true;
-    });
-
-    try {
-      await _dbHelper.deleteAllDataForUser(userId);
-      _savedListKey.currentState?.reloadData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('すべてのデータが削除されました。')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('削除中にエラーが発生しました: $e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isBusy = false;
-        });
-      }
-    }
-  }
-
-  /// データベースをバックアップファイルとして共有する
+    /// データベースをバックアップファイルとして共有する
   Future<void> _backupDatabase() async {
     if (!mounted) return;
 
@@ -390,18 +228,13 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   @override
   void dispose() {
-
     super.dispose();
   }
 
-
-
   void _onItemTapped(int index) {
-
     if (index == 3) {
       _savedListKey.currentState?.reloadData();
     }
-
     setState(() {
       _selectedIndex = index;
     });
@@ -409,7 +242,6 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       appBar: AppBar(
         title: Text(_pageTitles[_selectedIndex]),
@@ -421,17 +253,6 @@ class _MainScaffoldState extends State<MainScaffold> {
             },
           ),
         ),
-        actions: _selectedIndex == 3
-            ? [
-          IconButton(
-            icon: const Icon(Icons.tune),
-            tooltip: '表示設定',
-            onPressed: () {
-              _analyticsPageKey.currentState?.showDashboardSettings();
-            },
-          ),
-        ]
-            : [],
       ),
       drawer: Drawer(
         child: ListView(
@@ -488,7 +309,6 @@ class _MainScaffoldState extends State<MainScaffold> {
               ),
             ),
 
-            // 👇 新しい「ユーザー設定」項目をここに追加
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text('ユーザー設定'),
@@ -496,7 +316,7 @@ class _MainScaffoldState extends State<MainScaffold> {
                 Navigator.of(context).pop(); // Drawerを閉じる
                 final result = await Navigator.of(context).push<bool>(
                   MaterialPageRoute(
-                    builder: (context) => const UserSettingsPage(),
+                    builder: (context) => UserSettingsPage(onLogout: widget.onLogout),
                   ),
                 );
                 // 設定画面から更新通知(true)が返ってきたら、Drawerの情報を再読み込み
@@ -547,28 +367,6 @@ class _MainScaffoldState extends State<MainScaffold> {
             const Divider(),
             ListTile(
               enabled: !_isBusy,
-              leading: const Icon(Icons.build, color: Colors.blueAccent),
-              title: const Text('分析データを再構築'),
-              subtitle: const Text('既存の全購入履歴から分析データを再計算します。'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _rebuildAnalyticsData();
-              },
-            ),
-            const Divider(),
-            ListTile(
-              enabled: !_isBusy,
-              leading: const Icon(Icons.delete_forever, color: Colors.red),
-              title: const Text('全データ削除'),
-              subtitle: const Text('保存されている全ての購入履歴とレース結果を削除します。'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _deleteAllData();
-              },
-            ),
-            const Divider(),
-            ListTile(
-              enabled: !_isBusy,
               leading: const Icon(Icons.backup_outlined, color: Colors.green),
               title: const Text('データのバックアップ'),
               subtitle: const Text('現在のデータをファイルに書き出します。'),
@@ -588,11 +386,6 @@ class _MainScaffoldState extends State<MainScaffold> {
               },
             ),
             const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.grey),
-              title: const Text('ログアウト'),
-              onTap: widget.onLogout,
-            ),
           ],
         ),
       ),

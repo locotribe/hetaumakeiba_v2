@@ -18,7 +18,8 @@ class RaceSchedulePage extends StatefulWidget {
 
 class RaceSchedulePageState extends State<RaceSchedulePage>
     with TickerProviderStateMixin {
-  final RaceScheduleScraperService _scraperService = RaceScheduleScraperService();
+  final RaceScheduleScraperService _scraperService =
+      RaceScheduleScraperService();
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   bool _isLoading = false;
@@ -78,19 +79,25 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     // Week Cacheが存在する場合の処理
     if (cachedDateStrings != null) {
       // cachedDateStrings（yyyyMMdd形式）をyyyy-MM-dd形式に変換
-      final scheduleDateKeys = cachedDateStrings.map((ds) {
-        try {
-          final year = int.parse(ds.substring(0, 4));
-          final month = int.parse(ds.substring(4, 6));
-          final day = int.parse(ds.substring(6, 8));
-          return DateFormat('yyyy-MM-dd').format(DateTime(year, month, day));
-        } catch (e) {
-          return null;
-        }
-      }).where((d) => d != null).cast<String>().toList();
+      final scheduleDateKeys = cachedDateStrings
+          .map((ds) {
+            try {
+              final year = int.parse(ds.substring(0, 4));
+              final month = int.parse(ds.substring(4, 6));
+              final day = int.parse(ds.substring(6, 8));
+              return DateFormat('yyyy-MM-dd')
+                  .format(DateTime(year, month, day));
+            } catch (e) {
+              return null;
+            }
+          })
+          .where((d) => d != null)
+          .cast<String>()
+          .toList();
 
       // Week Cacheの日付リストを使ってDBからスケジュールを取得
-      final schedulesFromDb = await _dbHelper.getMultipleRaceSchedules(scheduleDateKeys);
+      final schedulesFromDb =
+          await _dbHelper.getMultipleRaceSchedules(scheduleDateKeys);
 
       if (schedulesFromDb.isNotEmpty) {
         schedulesFromDb.values.forEach(_checkRaceStatusesForSchedule);
@@ -108,11 +115,13 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
 
     // Week Cacheが存在しない場合の処理 (これ以降は既存のロジックとほぼ同じ)
-    final weekDateStrings = _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
-    final schedulesFromDb = await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
+    final weekDateStrings =
+        _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
+    final schedulesFromDb =
+        await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
     if (schedulesFromDb.isNotEmpty) {
       schedulesFromDb.values.forEach(_checkRaceStatusesForSchedule);
-      if(mounted) {
+      if (mounted) {
         setState(() {
           _raceSchedules.addAll(schedulesFromDb);
         });
@@ -120,7 +129,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
 
     try {
-      final (liveDateStrings, initialSchedule) = await _scraperService.fetchInitialData(representativeDate);
+      final (liveDateStrings, initialSchedule) =
+          await _scraperService.fetchInitialData(representativeDate);
 
       if (liveDateStrings.isNotEmpty) {
         await _dbHelper.insertOrUpdateWeekCache(weekKey, liveDateStrings);
@@ -146,7 +156,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     } catch (e) {
       print("Error fetching initial data: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('データ取得エラー: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('データ取得エラー: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -156,26 +167,33 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   void _setupTabs(List<String> yyyymmddStrings) {
     // 週の範囲でのフィルタリングを削除し、取得した日付をそのまま使用する
     if (yyyymmddStrings.isEmpty) {
-      if(mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       return;
     }
 
-    _availableDates = yyyymmddStrings.map((ds) {
-      try {
-        final year = int.parse(ds.substring(0, 4));
-        final month = int.parse(ds.substring(4, 6));
-        final day = int.parse(ds.substring(6, 8));
-        return DateFormat('yyyy-MM-dd').format(DateTime(year, month, day));
-      } catch (e) {
-        return null;
-      }
-    }).where((d) => d != null).cast<String>().toList();
+    _availableDates = yyyymmddStrings
+        .map((ds) {
+          try {
+            final year = int.parse(ds.substring(0, 4));
+            final month = int.parse(ds.substring(4, 6));
+            final day = int.parse(ds.substring(6, 8));
+            return DateFormat('yyyy-MM-dd').format(DateTime(year, month, day));
+          } catch (e) {
+            return null;
+          }
+        })
+        .where((d) => d != null)
+        .cast<String>()
+        .toList();
 
     // 日付順にソートする
     _availableDates.sort();
 
-    int initialIndex = _availableDates.indexOf(DateFormat('yyyy-MM-dd').format(_weekDates.last));
-    if (initialIndex == -1) initialIndex = _availableDates.isNotEmpty ? _availableDates.length - 1 : 0;
+    int initialIndex = _availableDates
+        .indexOf(DateFormat('yyyy-MM-dd').format(_weekDates.last));
+    if (initialIndex == -1)
+      initialIndex =
+          _availableDates.isNotEmpty ? _availableDates.length - 1 : 0;
 
     _tabController = TabController(
       initialIndex: initialIndex,
@@ -187,15 +205,18 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   }
 
   void _handleTabSelection() {
-    if (!mounted || _tabController == null || _tabController!.indexIsChanging) return;
+    if (!mounted || _tabController == null || _tabController!.indexIsChanging)
+      return;
 
     final selectedDate = _availableDates[_tabController!.index];
-    if (!_raceSchedules.containsKey(selectedDate) && !_loadingTabs.contains(selectedDate)) {
+    if (!_raceSchedules.containsKey(selectedDate) &&
+        !_loadingTabs.contains(selectedDate)) {
       _fetchDataForDate(selectedDate);
     }
   }
 
-  Future<void> _fetchDataForDate(String dateString, {bool forceRefresh = false}) async {
+  Future<void> _fetchDataForDate(String dateString,
+      {bool forceRefresh = false}) async {
     if (!mounted) return;
     setState(() {
       _loadingTabs.add(dateString);
@@ -236,7 +257,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     } catch (e) {
       print("Error fetching data for $dateString: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('データ取得エラー: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('データ取得エラー: $e')));
       }
     } finally {
       if (mounted) {
@@ -340,7 +362,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         final scheduleDate = DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
-        final bool isPastPageWithData = scheduleDate.isBefore(today) && schedule != null;
+        final bool isPastPageWithData =
+            scheduleDate.isBefore(today) && schedule != null;
 
         Widget content;
         if (schedule != null) {
@@ -380,7 +403,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     final formatter = DateFormat('M/d');
 
     // タブが利用可能かどうかを判定
-    final bool canShowTabs = _isDataLoaded && _availableDates.isNotEmpty && _tabController != null;
+    final bool canShowTabs =
+        _isDataLoaded && _availableDates.isNotEmpty && _tabController != null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
@@ -390,34 +414,41 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
             icon: const Icon(Icons.arrow_back_ios),
             onPressed: _isLoading || _loadingTabs.isNotEmpty
                 ? null
-                : () => _calculateWeek(_currentDate.subtract(const Duration(days: 7))),
+                : () => _calculateWeek(
+                    _currentDate.subtract(const Duration(days: 7))),
           ),
           Expanded(
             child: canShowTabs
                 ? TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              indicatorColor: Colors.blue.shade100,
-              labelColor: Colors.blue,
-              unselectedLabelColor: Colors.black,
-              tabs: _availableDates.map((dateStr) {
-                final date = DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
-                final dayOfWeek = _raceSchedules[dateStr]?.dayOfWeek ?? DateFormat.E('ja').format(date);
-                return Tab(text: '${DateFormat('M/d').format(date)}($dayOfWeek)');
-              }).toList(),
-            )
+                    controller: _tabController,
+                    isScrollable: true,
+                    indicatorColor: Colors.blue.shade100,
+                    labelColor: Colors.blue,
+                    unselectedLabelColor: Colors.black,
+                    tabs: _availableDates.map((dateStr) {
+                      final date =
+                          DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
+                      final dayOfWeek = _raceSchedules[dateStr]?.dayOfWeek ??
+                          DateFormat.E('ja').format(date);
+                      return Tab(
+                          text:
+                              '${DateFormat('M/d').format(date)}($dayOfWeek)');
+                    }).toList(),
+                  )
                 : Center(
-              child: Text(
-                '${formatter.format(weekStart)} 〜 ${formatter.format(weekEnd)}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
+                    child: Text(
+                      '${formatter.format(weekStart)} 〜 ${formatter.format(weekEnd)}',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
           ),
           IconButton(
             icon: const Icon(Icons.arrow_forward_ios),
             onPressed: _isLoading || _loadingTabs.isNotEmpty
                 ? null
-                : () => _calculateWeek(_currentDate.add(const Duration(days: 7))),
+                : () =>
+                    _calculateWeek(_currentDate.add(const Duration(days: 7))),
           ),
         ],
       ),
@@ -430,7 +461,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     final today = DateTime(now.year, now.month, now.day);
     final bool isFutureOrToday = !scheduleDate.isBefore(today);
     return LayoutBuilder(builder: (context, constraints) {
-      return SingleChildScrollView( // 垂直スクロールを管理
+      return SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: constraints.maxHeight),
@@ -454,43 +485,51 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                               child: Center(
                                 child: Text(
                                   venue.venueTitle,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
                                   textAlign: TextAlign.center,
                                 ),
                               ),
                             ),
                             ...venue.races.map((race) {
                               bool isRaceSet = race.raceId.isNotEmpty;
-                              final isConfirmed = _raceStatusMap[race.raceId] ?? false;
+                              final isConfirmed =
+                                  _raceStatusMap[race.raceId] ?? false;
                               return InkWell(
                                 onTap: isRaceSet
                                     ? () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          RacePage(
-                                            raceId: race.raceId,
-                                            raceDate: schedule.date, // VenueScheduleから日付を渡す
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => RacePage(
+                                              raceId: race.raceId,
+                                              raceDate: schedule.date,
+                                            ),
                                           ),
-                                    ),
-                                  );
-                                }
+                                        );
+                                      }
                                     : null,
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 12.0, horizontal: 8.0),
                                   decoration: BoxDecoration(
                                       border: Border(
-                                          bottom: BorderSide(color: Colors.grey.shade300))),
+                                          bottom: BorderSide(
+                                              color: Colors.grey.shade300))),
                                   child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
                                     children: [
                                       Container(
                                         width: 50,
-                                        padding: const EdgeInsets.symmetric(vertical: 10.0),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 10.0),
                                         decoration: BoxDecoration(
-                                          color: isConfirmed ? Colors.redAccent : Colors.blueAccent,
-                                          borderRadius: BorderRadius.circular(4.0),
+                                          color: isConfirmed
+                                              ? Colors.redAccent
+                                              : Colors.blueAccent,
+                                          borderRadius:
+                                              BorderRadius.circular(4.0),
                                         ),
                                         child: Center(
                                           child: Text(
@@ -506,7 +545,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Row(
                                               children: [
@@ -515,32 +555,50 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                                     race.raceName,
                                                     style: TextStyle(
                                                       fontSize: 16,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: isRaceSet ? Colors.black : Colors.grey,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: isRaceSet
+                                                          ? Colors.black
+                                                          : Colors.grey,
                                                     ),
-                                                    overflow: TextOverflow.ellipsis,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                   ),
                                                 ),
                                                 const SizedBox(width: 8),
-                                                if (isRaceSet && race.grade.isNotEmpty)
+                                                if (isRaceSet &&
+                                                    race.grade.isNotEmpty)
                                                   Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2),
                                                     decoration: BoxDecoration(
-                                                      color: getGradeColor(race.grade),
-                                                      borderRadius: BorderRadius.circular(8),
+                                                      color: getGradeColor(
+                                                          race.grade),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
                                                     ),
                                                     child: Text(
                                                       race.grade,
-                                                      style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                                                      style: const TextStyle(
+                                                          fontSize: 10,
+                                                          color: Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.bold),
                                                     ),
                                                   ),
                                               ],
                                             ),
                                             const SizedBox(height: 4),
-                                            if (isRaceSet && race.details.isNotEmpty)
+                                            if (isRaceSet &&
+                                                race.details.isNotEmpty)
                                               Text(
                                                 race.details,
-                                                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.black87),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                           ],

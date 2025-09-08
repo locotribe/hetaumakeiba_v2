@@ -16,6 +16,7 @@ import 'package:hetaumakeiba_v2/widgets/dashboard_settings_sheet.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/main.dart';
+import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -26,6 +27,7 @@ class AnalyticsPage extends StatefulWidget {
 
 class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMixin {
   bool _isLoading = true;
+  bool _isBusy = false;
   AnalyticsData _analysisData = AnalyticsData.empty();
   List<int> _availableYears = [];
   String _selectedPeriod = '総合';
@@ -102,8 +104,6 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
 
     final int? filterYear = (_selectedPeriod == '総合') ? null : int.tryParse(_selectedPeriod);
 
-    // --- データ取得ロジックをDBからの直接クエリに変更 ---
-
     // 1. 利用可能な年のリストと、総合表示用の年別サマリーを取得
     final yearlySummariesMaps = await _dbHelper.getYearlySummaries(userId);
     final availableYears = yearlySummariesMaps
@@ -118,7 +118,6 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     final ticketTypeSummaries = await _dbHelper.getCategorySummaries(userId, 'ticket_type', year: filterYear);
     final purchaseMethodSummaries = await _dbHelper.getCategorySummaries(userId, 'purchase_method', year: filterYear);
 
-    // 予想成績データを取得
     final predictionStats = await _dbHelper.getPredictionStats(userId);
 
     // 3. 過去最高払戻は都度計算が必要なため、別途ロジックを呼び出す
@@ -142,7 +141,6 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       final monthlyDataMaps = await _dbHelper.getMonthlyDataForYear(userId, filterYear);
       final yearSummary = yearlySummaries.putIfAbsent(filterYear, () => YearlySummary(year: filterYear));
 
-      // monthlyPurchaseDetailsは新しい集計方法では直接取得しないため空リストとする
       yearSummary.monthlyPurchaseDetails.clear();
 
       for (var map in monthlyDataMaps) {
@@ -244,11 +242,9 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       final raceId = RaceResultScraperService.getRaceIdFromUrl(url);
       if (raceId == null) continue;
 
-      // メモリ上のMapからレース結果を取得 (DBアクセスなし)
       final raceResult = raceResultsMap[raceId];
       if (raceResult == null || raceResult.isIncomplete) continue;
 
-      // 年フィルタのチェック
       if (filterYear != null) {
         try {
           final raceDateYear = int.parse(raceResult.raceDate.split(RegExp(r'[年月日]')).first);
@@ -298,18 +294,153 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
       },
     );
   }
+  /// 分析データを再構築する
+  Future<void> _rebuildAnalyticsData() async {
+    final userId = localUserId;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ユーザー情報が取得できませんでした。')),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('全収支データを再計算'),
+        content: const Text('アプリのアップデートで新しい集計項目が追加された際や、データのズレが気になるときに実行してください。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('実行', style: TextStyle(color: Colors.blueAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isBusy = true;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 24),
+            Text("データを再構築中..."),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final db = await _dbHelper.database;
+      await db.delete('analytics_aggregates', where: 'userId = ?', whereArgs: [userId]);
+
+      final allQrData = await _dbHelper.getAllQrData(userId);
+      final Set<String> raceIds = {};
+      for (final qrData in allQrData) {
+        try {
+          final parsedTicket = json.decode(qrData.parsedDataJson) as Map<String, dynamic>;
+          final url = generateNetkeibaUrl(
+            year: parsedTicket['年'].toString(),
+            racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
+            round: parsedTicket['回'].toString(),
+            day: parsedTicket['日'].toString(),
+            race: parsedTicket['レース'].toString(),
+          );
+          final raceId = RaceResultScraperService.getRaceIdFromUrl(url);
+          if (raceId != null) {
+            raceIds.add(raceId);
+          }
+        } catch (e) {
+          print('Skipping a ticket due to parsing error during migration: $e');
+        }
+      }
+
+      for (final raceId in raceIds) {
+        await AnalyticsService().updateAggregatesOnResultConfirmed(raceId, userId);
+      }
+
+      await _loadAnalyticsData();
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('分析データの再構築が完了しました。')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラーが発生しました: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     bool isFilterVisible = true;
     if (_tabController != null && _visibleCards.isNotEmpty && _tabController!.index < _visibleCards.length) {
       final currentKey = _visibleCards[_tabController!.index];
-      if (currentKey == 'grand_total_summary' || currentKey == 'prediction_summary') { // ★★★ 修正箇所 ★★★
+      if (currentKey == 'grand_total_summary' || currentKey == 'prediction_summary') {
         isFilterVisible = false;
       }
     }
 
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1A4314), // 背景色をテーマに合わせる
+        title: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          indicatorColor: Colors.blue.shade100,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white60,
+          tabs: _visibleCards.map((key) {
+            final title = availableCards[key] ?? '不明';
+            return Tab(text: title);
+          }).toList(),
+        ),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'settings') {
+                showDashboardSettings();
+              } else if (value == 'rebuild') {
+                _rebuildAnalyticsData();
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'settings',
+                child: Text('表示項目の設定'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'rebuild',
+                child: Text('収支データを再計算'),
+              ),
+            ],
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           const Positioned.fill(
@@ -321,21 +452,6 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
           ),
           Column(
             children: [
-              if (_tabController != null)
-                Container(
-                  color: const Color(0xFF1A4314),
-                  child: TabBar(
-                    controller: _tabController,
-                    isScrollable: true,
-                    indicatorColor: Colors.blue.shade100,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.white60,
-                    tabs: _visibleCards.map((key) {
-                      final title = availableCards[key] ?? '不明';
-                      return Tab(text: title);
-                    }).toList(),
-                  ),
-                ),
               if (isFilterVisible) _buildPeriodFilter(),
               Expanded(child: _buildBody()),
             ],
@@ -515,7 +631,10 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
             const SizedBox(height: 16),
             const Text(
               '※勝率: 1着 / 連対率: 2着以内 / 複勝率: 3着以内',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+              style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12
+              ),
             )
           ],
         ),
@@ -533,30 +652,21 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
             Icon(Icons.assignment_turned_in_outlined, size: 80, color: Colors.grey.shade400),
             const SizedBox(height: 24),
             Text(
-              'まだ予想印がありません',
+              'まだ予想が登録されていません',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.grey.shade700),
             ),
             const SizedBox(height: 16),
-            Text(
-              '重賞レースで予想印を登録して\nあなただけの傾向を分析しましょう！',
+            const Text(
+              '画面下の「開催一覧」や「重賞一覧」から\nレースを選び、あなたの予想印を登録してみましょう！\n分析結果がここに表示されます。',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600, height: 1.5),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.search),
-              label: const Text('重賞レースを探す'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                textStyle: const TextStyle(fontSize: 16),
+              style: TextStyle(
+                  color: Colors.grey,
+                  height: 1.5,
+                fontSize: 12.0,
+                fontWeight: FontWeight.bold,
               ),
-              onPressed: () {
-                // TODO: 実際の重賞レース一覧ページに遷移する
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('（未実装）重賞レース一覧ページへ遷移します。')),
-                );
-              },
             ),
+
           ],
         ),
       ),

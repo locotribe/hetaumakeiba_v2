@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/main.dart';
-import 'package:hetaumakeiba_v2/models/user_model.dart'; // 追加
-import 'package:hetaumakeiba_v2/services/local_auth_service.dart'; // 追加
+import 'package:hetaumakeiba_v2/models/user_model.dart';
+import 'package:hetaumakeiba_v2/services/local_auth_service.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -13,7 +13,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 
 class UserSettingsPage extends StatefulWidget {
-  const UserSettingsPage({super.key});
+  final VoidCallback onLogout;
+  const UserSettingsPage({super.key, required this.onLogout});
 
   @override
   State<UserSettingsPage> createState() => _UserSettingsPageState();
@@ -86,7 +87,7 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
   Future<void> _cropImage(String filePath) async {
     final croppedFile = await ImageCropper().cropImage(
       sourcePath: filePath,
-      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // 正方形を指定
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
       uiSettings: [
         AndroidUiSettings(
             toolbarTitle: '画像の切り抜き',
@@ -97,7 +98,7 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
         IOSUiSettings(
           title: '画像の切り抜き',
           aspectRatioLockEnabled: true,
-          resetAspectRatioEnabled: false, // リセットボタンを非表示にする
+          resetAspectRatioEnabled: false,
         ),
       ],
     );
@@ -119,11 +120,9 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
     });
 
     final prefs = await SharedPreferences.getInstance();
-    // 表示名を保存
     await prefs.setString(
         'display_name_${localUserId!}', _displayNameController.text);
 
-    // プロフィール画像を保存
     if (_profileImageFile != null) {
       final appDir = await getApplicationDocumentsDirectory();
       final fileName = 'profile_picture_${localUserId!}.jpg';
@@ -143,21 +142,19 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
           const SnackBar(content: Text('現在のパスワードが正しくありません。')),
         );
         setState(() => _isLoading = false);
-        return; // パスワード更新に失敗した場合はここで処理を中断
+        return;
       }
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('設定を保存しました。')),
       );
-      Navigator.of(context).pop(true); // trueを返して更新を通知
+      Navigator.of(context).pop(true);
     }
   }
-  // --- ここからパスワード削除処理を追加 ---
   Future<void> _removePassword() async {
     if (_currentUser == null) return;
 
-    // パスワード削除の確認ダイアログを表示
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -176,8 +173,8 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
 
     final success = await _localAuthService.updatePassword(
       username: _currentUser!.username,
-      currentPassword: _currentPasswordController.text, // 現在のパスワードで本人確認
-      newPassword: '', // 新しいパスワードを空にすることで削除とする
+      currentPassword: _currentPasswordController.text,
+      newPassword: '',
     );
 
     if (mounted) {
@@ -185,7 +182,7 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('パスワードを削除しました。')),
         );
-        Navigator.of(context).pop(true); // 更新を通知
+        Navigator.of(context).pop(true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('現在のパスワードが正しくありません。')),
@@ -296,7 +293,6 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
                   ),
                   obscureText: true,
                   validator: (value) {
-                    // パスワードを変更または削除する場合、現在のパスワードは必須
                     if (_newPasswordController.text.isNotEmpty && (value == null || value.isEmpty)) {
                       return 'パスワードの変更・削除には現在のパスワードが必要です';
                     }
@@ -344,7 +340,20 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
                 ),
                 child: const Text('保存'),
               ),
-              // --- パスワード削除ボタンを追加 ---
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: widget.onLogout,
+                icon: const Icon(Icons.logout, color: Colors.grey),
+                label: const Text(
+                  'ログアウト',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.grey.shade700,
+                ),
+              ),
               if (_hasPassword)
                 TextButton(
                   onPressed: _removePassword,

@@ -29,7 +29,6 @@ import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 
-// ソート対象の列を識別するためのenum
 enum SortableColumn {
   mark,
   gateNumber,
@@ -53,12 +52,10 @@ class ShutubaTablePage extends StatefulWidget {
   State<ShutubaTablePage> createState() => _ShutubaTablePageState();
 }
 
-// SingleTickerProviderStateMixin を追加
 class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerProviderStateMixin {
   PredictionRaceData? _predictionRaceData;
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  // 新しいスクレイピングサービス
   final ShutubaTableScraperService _scraperService = ShutubaTableScraperService();
   final AiPredictionService _predictionService = AiPredictionService();
   Map<String, double> _overallScores = {};
@@ -66,26 +63,22 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Map<String, String> _legStyles = {};
   Map<String, ConditionFitResult> _conditionFits = {};
 
-  // テーブルのソート状態を管理する変数
-  SortableColumn _sortColumn = SortableColumn.horseNumber; // デフォルトは馬番
+  SortableColumn _sortColumn = SortableColumn.horseNumber;
   bool _isAscending = true;
-  // タブコントローラー
   late TabController _tabController;
-  // カードの開閉状態を管理する変数
   bool _isCardExpanded = true;
 
 
   @override
   void initState() {
     super.initState();
-    // タブコントローラーの初期化
     _tabController = TabController(length: 6, vsync: this);
     _loadShutubaData();
   }
 
   @override
   void dispose() {
-    _tabController.dispose(); // 不要になったコントローラーを破棄
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -99,19 +92,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     try {
       PredictionRaceData? data;
-      // 1. 過去レース結果が渡されている場合は、それを元に出馬表を構築
       if (widget.raceResult != null) {
         data = _createPredictionDataFromRaceResult(widget.raceResult!);
       } else {
-        // 2. 未来のレースの場合、まずキャッシュを確認
         final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
         if (cache != null && !refresh) {
           data = cache.predictionRaceData;
         } else {
-          // 3. キャッシュがない、またはリフレッシュ要求の場合はスクレイピング
           data = await _fetchDataWithUserMarks();
           if (data != null) {
-            // 取得したデータをキャッシュに保存
             final newCache = ShutubaTableCache(
               raceId: widget.raceId,
               predictionRaceData: data,
@@ -160,7 +149,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       );
     }).toList();
 
-    // raceIdの末尾2桁からレース番号を抽出
     final raceNumber = raceResult.raceId.length >= 2
         ? int.tryParse(raceResult.raceId.substring(raceResult.raceId.length - 2))?.toString() ?? ''
         : '';
@@ -180,18 +168,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<void> _updateDynamicData() async {
-    // レース結果が確定している場合はオッズ更新を行わない
     if (widget.raceResult != null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('レース結果確定後はオッズを更新できません。')));
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('最新情報を取得中...')));
     try {
-      // 最新の動的データを取得
       final updatedHorsesData = await _scraperService.scrapeDynamicData(widget.raceId);
 
       if (_predictionRaceData != null) {
-        // 古い馬データから静的情報（印やメモ）をマップとして保持
         final staticDataMap = {for (var h in _predictionRaceData!.horses) h.horseId: h};
 
         // 1. 最新の出走馬リストを基準に、新しい馬リストを再構築
@@ -208,12 +193,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             jockey: updatedHorse.jockey,
             carriedWeight: updatedHorse.carriedWeight,
             trainer: updatedHorse.trainer,
-            isScratched: updatedHorse.isScratched, // 最新
-            odds: updatedHorse.odds,                 // 最新
-            popularity: updatedHorse.popularity,         // 最新
-            horseWeight: updatedHorse.horseWeight,       // 最新
-            userMark: oldHorseData?.userMark,       // 既存データを引き継ぐ
-            userMemo: oldHorseData?.userMemo,       // 既存データを引き継ぐ
+            isScratched: updatedHorse.isScratched,
+            odds: updatedHorse.odds,
+            popularity: updatedHorse.popularity,
+            horseWeight: updatedHorse.horseWeight,
+            userMark: oldHorseData?.userMark,
+            userMemo: oldHorseData?.userMemo,
           );
         }).toList();
 
@@ -307,7 +292,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
       if (memosMap.containsKey(horse.horseId)) {
         horse.userMemo = memosMap[horse.horseId];
-        // DBから読み込んだメモにオッズ・人気情報があれば、表示データに反映
         if (memosMap[horse.horseId]!.odds != null) {
           horse.odds = memosMap[horse.horseId]!.odds;
         }
@@ -387,7 +371,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<void> _showMemoDialog(PredictionHorseDetail horse) async {
-    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+    final userId = localUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),
@@ -408,7 +392,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             child: TextFormField(
               controller: memoController,
               autofocus: true,
-              maxLines: null, // 複数行の入力を許可
+              maxLines: null,
               decoration: const InputDecoration(
                 hintText: 'ここにメモを入力...',
                 border: OutlineInputBorder(),
@@ -424,20 +408,19 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
                   final newMemo = HorseMemo(
-                    // 既存のメモがあればそのIDと総評メモを引き継ぐ
                     id: horse.userMemo?.id,
                     userId: userId,
                     raceId: widget.raceId,
                     horseId: horse.horseId,
                     predictionMemo: memoController.text,
-                    reviewMemo: horse.userMemo?.reviewMemo, // 既存の総評メモを保持
+                    reviewMemo: horse.userMemo?.reviewMemo,
                     odds: horse.userMemo?.odds,
                     popularity: horse.userMemo?.popularity,
                     timestamp: DateTime.now(),
                   );
                   await _dbHelper.insertOrUpdateHorseMemo(newMemo);
                   Navigator.of(context).pop();
-                  _loadShutubaData(); // データを再読み込みしてUIを更新
+                  _loadShutubaData();
                 }
               },
               child: const Text('保存'),
@@ -476,7 +459,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<void> _importMemosFromCsv() async {
-    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+    final userId = localUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),
@@ -491,7 +474,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       );
 
       if (result == null || result.files.single.path == null) {
-        return; // ユーザーがファイル選択をキャンセル
+        return;
       }
 
       final filePath = result.files.single.path!;
@@ -533,7 +516,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${memosToUpdate.length}件のメモをインポートしました。')),
       );
-      _loadShutubaData(); // データを再読み込み
+      _loadShutubaData();
 
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -548,7 +531,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       stats = await _dbHelper.getRaceStatistics(widget.raceId);
     } catch (e) {
       print('統計データの読み込みに失敗: $e');
-      stats = null; // エラーが発生しても処理を続行できるようnullをセット
+      stats = null;
     }
     if (stats == null) {
       final confirm = await showDialog<bool>(
@@ -602,12 +585,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     )
         : Column(
       children: [
-        // 折りたたみ可能なレース情報カード
         _buildCollapsibleRaceInfoCard(_predictionRaceData!),
-        // タブとテーブルの領域
         Expanded(
           child: IgnorePointer(
-            // カードが展開されているときは下のテーブル操作を無効化
             ignoring: _isCardExpanded,
             child: Column(
               children: [
@@ -727,7 +707,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   /// 展開時のカード内容
   Widget _buildExpandedCardContent(PredictionRaceData race) {
-    // 過去のレース結果から生成されたデータの場合、raceGradeに条件が入っているため分離する
     String title = race.raceName;
     String details = race.raceGrade ?? '';
     if (widget.raceResult != null) {
@@ -738,7 +717,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 右上に折りたたみアイコンを表示するためのRowを追加
         const Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -751,12 +729,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           detailsLine1: '${race.raceDate} ${race.venue}',
           detailsLine2: race.raceDetails1 ?? details,
         ),
-        // 以前表示されていたボタンやリストをここに追加
         if (widget.raceResult == null)
           ElevatedButton.icon(
             onPressed: _updateDynamicData,
             icon: const Icon(Icons.refresh),
-            label: const Text('オッズ更新'),
+            label: const Text('出馬表更新'),
           ),
         const Divider(),
         ListTile(
@@ -817,19 +794,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           },
         ),
         const Divider(),
-        ListTile(
-          dense: true,
-          leading: const Icon(Icons.delete_sweep_outlined, color: Colors.red),
-          title: const Text('分析キャッシュをクリア', style: TextStyle(color: Colors.red, fontSize: 13)),
-          onTap: () async {
-            await _dbHelper.clearRaceStatistics();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('分析キャッシュをクリアしました。')),
-              );
-            }
-          },
-        ),
       ],
     );
   }
@@ -839,7 +803,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Flexible( // ExpandedをFlexibleに変更し、レイアウトエラーを解消
+        Flexible(
           child: Text(
             race.raceName,
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -856,7 +820,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       return const Text('-');
     }
 
-    // 各適性を数値化 (excellent:4, good:3, average:2, poor:1, unknown:0)
     final ratings = [fitResult.trackFit, fitResult.paceFit, fitResult.weightFit, fitResult.gateFit];
     int totalScore = 0;
     int validRatings = 0;
@@ -871,10 +834,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       return const Text('-');
     }
 
-    // 平均スコアを算出
     final avgScore = totalScore / validRatings;
 
-    // 平均スコアをS, A, B, Cランクに変換
     String rank;
     if (avgScore >= 3.5) {
       rank = 'S';
@@ -887,7 +848,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
 
-  // ソート用のコールバック関数
   void _onSort(SortableColumn column) {
     setState(() {
       if (_sortColumn == column) {
@@ -906,10 +866,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
   }) {
     return DataTable2(
-      key: ValueKey(_predictionRaceData.hashCode), // データが新しくなるたびにKeyも変わる
+      key: ValueKey(_predictionRaceData.hashCode),
       minWidth: 800,
-      fixedTopRows: 1, // ヘッダー行を固定
-      sortColumnIndex: columns.indexWhere((c) => (c.onSort != null)), // 現在ソート中の列を見つける
+      fixedTopRows: 1,
+      sortColumnIndex: columns.indexWhere((c) => (c.onSort != null)),
       sortAscending: _isAscending,
       columnSpacing: 8.0,
       headingRowHeight: 40,
@@ -1110,7 +1070,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                       ),
                     ),
                   );
-                  // もし保存されたら（trueが返ってきたら）データを再読み込み
                   if (result == true) {
                     _loadShutubaData();
                   }
@@ -1202,7 +1161,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           child: Center(child: Text('消')), // 中央揃えにする
         ),
       ],
-      // 項目が選択されたときの処理
       onSelected: (String newValue) async {
         final userId = localUserId;
         if (userId != null) {
@@ -1219,9 +1177,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           });
         }
       },
-      // メニュー全体のパディングを削除
       padding: EdgeInsets.zero,
-      // セル内に表示するウィジェット
       child: Center(
         child: Text(
           horse.userMark?.mark ?? '--', // 選択されていれば印、なければ空白
@@ -1298,18 +1254,14 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               if (snapshot.hasData && snapshot.data!.length > i) {
                 final record = snapshot.data![i];
 
-                // レース名からグレードを抽出
                 String extractedGrade = '';
-                // 半角括弧と、J.GおよびGの後に続くローマ数字 (I, II, III) に対応する正規表現
-                // 例: (GII), (J.GI), (GIII)
                 final gradePattern = RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false);
                 final match = gradePattern.firstMatch(record.raceName);
                 if (match != null) {
-                  extractedGrade = match.group(1)!; // 例: "GII", "J.GI"
+                  extractedGrade = match.group(1)!;
                 }
 
-                // グレードに応じた色を取得
-                final gradeColor = getGradeColor(extractedGrade); // grade_utils.dart からの関数を使用
+                final gradeColor = getGradeColor(extractedGrade);
 
                 Color backgroundColor = Colors.transparent;
                 bool isTopThree = false;
@@ -1337,7 +1289,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4.0),
                     decoration: BoxDecoration(
-                      color: backgroundColor, // 既存の着順による背景色
+                      color: backgroundColor,
                       border: Border(
                         left: BorderSide(
                           color: gradeColor, // グレードに応じた色を左ボーダーに適用
