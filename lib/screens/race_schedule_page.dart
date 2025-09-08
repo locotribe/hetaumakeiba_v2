@@ -73,28 +73,50 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     final representativeDate = _weekDates.last;
     final weekKey = DateFormat('yyyy-MM-dd').format(representativeDate);
-
-    final weekDateStrings = _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
-    final schedulesFromDb = await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
     final cachedDateStrings = await _dbHelper.getWeekCache(weekKey);
 
-    if (schedulesFromDb.isNotEmpty) {
-      schedulesFromDb.values.forEach(_checkRaceStatusesForSchedule);
-    }
-
-    if (mounted) {
-      setState(() {
-        _raceSchedules.addAll(schedulesFromDb);
-      });
-    }
-
+    // Week Cacheが存在する場合の処理
     if (cachedDateStrings != null) {
+      // cachedDateStrings（yyyyMMdd形式）をyyyy-MM-dd形式に変換
+      final scheduleDateKeys = cachedDateStrings.map((ds) {
+        try {
+          final year = int.parse(ds.substring(0, 4));
+          final month = int.parse(ds.substring(4, 6));
+          final day = int.parse(ds.substring(6, 8));
+          return DateFormat('yyyy-MM-dd').format(DateTime(year, month, day));
+        } catch (e) {
+          return null;
+        }
+      }).where((d) => d != null).cast<String>().toList();
+
+      // Week Cacheの日付リストを使ってDBからスケジュールを取得
+      final schedulesFromDb = await _dbHelper.getMultipleRaceSchedules(scheduleDateKeys);
+
+      if (schedulesFromDb.isNotEmpty) {
+        schedulesFromDb.values.forEach(_checkRaceStatusesForSchedule);
+      }
+
       if (mounted) {
-        _isDataLoaded = true;
+        setState(() {
+          _raceSchedules.addAll(schedulesFromDb);
+          _isDataLoaded = true;
+          _isLoading = false;
+        });
         _setupTabs(cachedDateStrings);
-        setState(() => _isLoading = false);
       }
       return;
+    }
+
+    // Week Cacheが存在しない場合の処理 (これ以降は既存のロジックとほぼ同じ)
+    final weekDateStrings = _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
+    final schedulesFromDb = await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
+    if (schedulesFromDb.isNotEmpty) {
+      schedulesFromDb.values.forEach(_checkRaceStatusesForSchedule);
+      if(mounted) {
+        setState(() {
+          _raceSchedules.addAll(schedulesFromDb);
+        });
+      }
     }
 
     try {
@@ -132,15 +154,13 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   }
 
   void _setupTabs(List<String> yyyymmddStrings) {
-    final weekDateSet = _weekDates.map((d) => DateFormat('yyyyMMdd').format(d)).toSet();
-    final filteredDates = yyyymmddStrings.where((ds) => weekDateSet.contains(ds)).toList();
-
-    if (filteredDates.isEmpty) {
+    // 週の範囲でのフィルタリングを削除し、取得した日付をそのまま使用する
+    if (yyyymmddStrings.isEmpty) {
       if(mounted) setState(() => _isLoading = false);
       return;
     }
 
-    _availableDates = filteredDates.map((ds) {
+    _availableDates = yyyymmddStrings.map((ds) {
       try {
         final year = int.parse(ds.substring(0, 4));
         final month = int.parse(ds.substring(4, 6));
@@ -150,6 +170,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         return null;
       }
     }).where((d) => d != null).cast<String>().toList();
+
+    // 日付順にソートする
+    _availableDates.sort();
 
     int initialIndex = _availableDates.indexOf(DateFormat('yyyy-MM-dd').format(_weekDates.last));
     if (initialIndex == -1) initialIndex = _availableDates.isNotEmpty ? _availableDates.length - 1 : 0;
