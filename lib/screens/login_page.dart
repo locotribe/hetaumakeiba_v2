@@ -97,12 +97,13 @@ class _LoginPageState extends State<LoginPage> {
                     decoration: const InputDecoration(labelText: 'パスワード'),
                     obscureText: true,
                     autofillHints: const [AutofillHints.password],
-                    validator: (value) {
+                    // validatorを削除またはコメントアウトします
+                    /* validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'パスワードを入力してください';
                       }
                       return null;
-                    },
+                    }, */
                   ),
                   const SizedBox(height: 32),
                   _isLoading

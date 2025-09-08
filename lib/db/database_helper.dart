@@ -773,7 +773,18 @@ class DatabaseHelper {
       conflictAlgorithm: ConflictAlgorithm.fail,
     );
   }
-
+  /// ユーザー情報を更新する
+  Future<int> updateUser(User user) async {
+    final db = await database;
+    return await db.update(
+      'users',
+      {
+        'hashedPassword': user.hashedPassword,
+      },
+      where: 'id = ?',
+      whereArgs: [user.id],
+    );
+  }
   /// ユーザー名でユーザー情報を取得します。
   Future<User?> getUserByUsername(String username) async {
     final db = await database;

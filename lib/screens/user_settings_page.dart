@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/main.dart';
+import 'package:hetaumakeiba_v2/models/user_model.dart'; // 追加
+import 'package:hetaumakeiba_v2/services/local_auth_service.dart'; // 追加
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -20,6 +22,12 @@ class UserSettingsPage extends StatefulWidget {
 class _UserSettingsPageState extends State<UserSettingsPage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _displayNameController;
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _localAuthService = LocalAuthService();
+  User? _currentUser;
+  bool _hasPassword = false;
   String _loginUsername = '';
   File? _profileImageFile;
   bool _isLoading = true;
@@ -34,6 +42,9 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
   @override
   void dispose() {
     _displayNameController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -51,6 +62,8 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
     final profileImagePath = prefs.getString('profile_picture_path_${localUserId!}');
 
     setState(() {
+      _currentUser = user;
+      _hasPassword = user?.hashedPassword.isNotEmpty ?? false;
       _loginUsername = user?.username ?? '取得エラー';
       _displayNameController.text =
           prefs.getString('display_name_${localUserId!}') ?? user?.username ?? '';
@@ -119,7 +132,20 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
       await prefs.setString(
           'profile_picture_path_${localUserId!}', savedImage.path);
     }
-
+    if (_newPasswordController.text.isNotEmpty) {
+      final success = await _localAuthService.updatePassword(
+        username: _currentUser!.username,
+        currentPassword: _currentPasswordController.text,
+        newPassword: _newPasswordController.text,
+      );
+      if (!success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('現在のパスワードが正しくありません。')),
+        );
+        setState(() => _isLoading = false);
+        return; // パスワード更新に失敗した場合はここで処理を中断
+      }
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('設定を保存しました。')),
@@ -127,7 +153,47 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
       Navigator.of(context).pop(true); // trueを返して更新を通知
     }
   }
+  // --- ここからパスワード削除処理を追加 ---
+  Future<void> _removePassword() async {
+    if (_currentUser == null) return;
 
+    // パスワード削除の確認ダイアログを表示
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('パスワードの削除'),
+        content: const Text('パスワードを削除すると、ログインIDのみで認証されるようになります。本当に削除しますか？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('キャンセル')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('削除', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isLoading = true);
+
+    final success = await _localAuthService.updatePassword(
+      username: _currentUser!.username,
+      currentPassword: _currentPasswordController.text, // 現在のパスワードで本人確認
+      newPassword: '', // 新しいパスワードを空にすることで削除とする
+    );
+
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('パスワードを削除しました。')),
+        );
+        Navigator.of(context).pop(true); // 更新を通知
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('現在のパスワードが正しくありません。')),
+        );
+        setState(() => _isLoading = false);
+      }
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -214,6 +280,62 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
                 ),
                 readOnly: true,
               ),
+              const Divider(height: 48),
+              Text(
+                'パスワード設定',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+
+              if (_hasPassword)
+                TextFormField(
+                  controller: _currentPasswordController,
+                  decoration: const InputDecoration(
+                    labelText: '現在のパスワード',
+                    border: OutlineInputBorder(),
+                  ),
+                  obscureText: true,
+                  validator: (value) {
+                    // パスワードを変更または削除する場合、現在のパスワードは必須
+                    if (_newPasswordController.text.isNotEmpty && (value == null || value.isEmpty)) {
+                      return 'パスワードの変更・削除には現在のパスワードが必要です';
+                    }
+                    return null;
+                  },
+                ),
+
+              if (_hasPassword) const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _newPasswordController,
+                decoration: InputDecoration(
+                  labelText: _hasPassword ? '新しいパスワード' : 'パスワードを設定',
+                  border: const OutlineInputBorder(),
+                ),
+                obscureText: true,
+                validator: (value) {
+                  if (value != null && value.isNotEmpty && value.length < 6) {
+                    return '6文字以上のパスワードを入力してください';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _confirmPasswordController,
+                decoration: InputDecoration(
+                  labelText: _hasPassword ? '新しいパスワード（確認用）' : 'パスワード（確認用）',
+                  border: const OutlineInputBorder(),
+                ),
+                obscureText: true,
+                validator: (value) {
+                  if (value != _newPasswordController.text) {
+                    return 'パスワードが一致しません';
+                  }
+                  return null;
+                },
+              ),
               const SizedBox(height: 40),
               ElevatedButton(
                 onPressed: _saveSettings,
@@ -222,6 +344,15 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
                 ),
                 child: const Text('保存'),
               ),
+              // --- パスワード削除ボタンを追加 ---
+              if (_hasPassword)
+                TextButton(
+                  onPressed: _removePassword,
+                  child: const Text(
+                    'パスワードを削除',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
             ],
           ),
         ),

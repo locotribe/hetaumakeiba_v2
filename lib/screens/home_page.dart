@@ -89,7 +89,7 @@ class _HomePageState extends State<HomePage> {
           const Icon(Icons.add_link, size: 60, color: Colors.black38),
           const SizedBox(height: 16),
           const Text(
-            'ホームページに表示する\nフィードが登録されていません。',
+            'ニュースフィードが登録されていません。',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, color: Colors.black54),
           ),

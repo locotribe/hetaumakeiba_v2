@@ -2,7 +2,7 @@
 
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 
-/// ホームページに表示する全てのデータを保持するためのコンテナクラス
+/// ニュースフィードに表示する全てのデータを保持するためのコンテナクラス
 class JyusyoIchiranPageData {
   // 上部に表示する重賞レースのリスト
   final List<FeaturedRace> gradedRaces;

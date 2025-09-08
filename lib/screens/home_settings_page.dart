@@ -180,7 +180,7 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ホームページ設定'),
+        title: const Text('ニュースフィード設定'),
       ),
       body: Stack(
         children: [

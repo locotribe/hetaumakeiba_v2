@@ -200,7 +200,7 @@ class ScraperService {
     try {
       return await _scrapeGradedRacesFromSchedulePage();
     } catch (e) {
-      print('[ERROR]ホームページのデータ取得中にエラーが発生しました: $e');
+      print('[ERROR]ニュースフィードのデータ取得中にエラーが発生しました: $e');
       return [];
     }
   }

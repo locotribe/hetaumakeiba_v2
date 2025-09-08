@@ -83,11 +83,12 @@ class _RegisterPageState extends State<RegisterPage> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _passwordController,
-                    decoration: const InputDecoration(labelText: 'パスワード'),
+                    decoration: const InputDecoration(labelText: 'パスワード（任意）'), // ラベルを変更
                     obscureText: true,
                     autofillHints: const [AutofillHints.newPassword],
                     validator: (value) {
-                      if (value == null || value.length < 6) {
+                      // パスワードが入力されている場合のみ長さをチェック
+                      if (value != null && value.isNotEmpty && value.length < 6) {
                         return '6文字以上のパスワードを入力してください';
                       }
                       return null;
