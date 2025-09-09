@@ -7,6 +7,7 @@ class ShutubaHorseDetail {
   final String horseName; // 馬名
   final String sexAndAge; // 性齢
   final String jockey; // 騎手
+  final String jockeyId; // 騎手ID
   final double carriedWeight; // 斤量
   final String trainerName; // 調教師
   final String trainerAffiliation; // 所属
@@ -22,6 +23,7 @@ class ShutubaHorseDetail {
     required this.horseName,
     required this.sexAndAge,
     required this.jockey,
+    required this.jockeyId,
     required this.carriedWeight,
     required this.trainerName,
     required this.trainerAffiliation,
@@ -39,6 +41,7 @@ class ShutubaHorseDetail {
       'horseName': horseName,
       'sexAndAge': sexAndAge,
       'jockey': jockey,
+      'jockeyId': jockeyId,
       'carriedWeight': carriedWeight,
       'trainerName': trainerName,
       'trainerAffiliation': trainerAffiliation,
@@ -57,6 +60,7 @@ class ShutubaHorseDetail {
       horseName: map['horseName'] as String,
       sexAndAge: map['sexAndAge'] as String,
       jockey: map['jockey'] as String,
+      jockeyId: map['jockeyId'] as String? ?? '', // 旧バージョンとの互換性のため
       carriedWeight: (map['carriedWeight'] as num).toDouble(),
       trainerName: map['trainerName'] as String,
       trainerAffiliation: map['trainerAffiliation'] as String,

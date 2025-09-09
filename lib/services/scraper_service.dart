@@ -52,7 +52,11 @@ class ScraperService {
         final raceNameLink = cells[4].querySelector('a');
         final raceHref = raceNameLink?.attributes['href'];
         final raceId = raceHref != null ? RaceResultScraperService.getRaceIdFromUrl(raceHref) ?? '' : '';
-
+        final jockeyLink = cells[12].querySelector('a');
+        final jockeyHref = jockeyLink?.attributes['href'];
+        final jockeyId = jockeyHref != null
+            ? jockeyHref.split('/').firstWhere((s) => RegExp(r'^\d{5}$').hasMatch(s), orElse: () => '')
+            : '';
         records.add(HorseRaceRecord(
           horseId: horseId,
           raceId: raceId,
@@ -67,7 +71,8 @@ class ScraperService {
           odds: _safeGetText(cells[9]),
           popularity: _safeGetText(cells[10]),
           rank: _safeGetText(cells[11]),
-          jockey: _safeGetText(cells[12].querySelector('a')),
+          jockey: _safeGetText(jockeyLink),
+          jockeyId: jockeyId,
           carriedWeight: _safeGetText(cells[13]),
           distance: _safeGetText(cells[14]),
           trackCondition: _safeGetText(cells[16]),
@@ -441,16 +446,20 @@ class ScraperService {
       final horseId = horseLink?.attributes['href']?.split('/').lastWhere((p) => p.isNotEmpty, orElse: () => '') ?? '';
 
       if (horseId.isEmpty) continue;
+      final jockeyLink = row.querySelector('td.Jockey a');
+      final jockeyHref = jockeyLink?.attributes['href'];
+      final jockeyIdMatch = jockeyHref != null ? RegExp(r'/jockey/result/recent/(\d{5})').firstMatch(jockeyHref) : null;
+      final jockeyId = jockeyIdMatch?.group(1) ?? '';
       final trainerText = _safeGetText(row.querySelector('td.Trainer a'));
       String trainerAffiliation = '';
       String trainerName = trainerText;
 
-      if (trainerText.startsWith('美浦')) {
-        trainerAffiliation = '美浦';
-        trainerName = trainerText.substring(2);
-      } else if (trainerText.startsWith('栗東')) {
-        trainerAffiliation = '栗東';
-        trainerName = trainerText.substring(2);
+      if (trainerText.startsWith('美') || trainerText.startsWith('栗')) {
+        final parts = trainerText.split(' ');
+        if (parts.length > 1) {
+          trainerAffiliation = parts[0];
+          trainerName = parts.sublist(1).join(' ');
+        }
       }
       horses.add(ShutubaHorseDetail(
         horseId: horseId,
@@ -459,7 +468,8 @@ class ScraperService {
         horseName: _safeGetText(horseLink),
         sexAndAge: _safeGetText(row.querySelector('td.Barei')),
         carriedWeight: isScratched ? 0.0 : double.tryParse(_safeGetText(cells[5])) ?? 0.0,
-        jockey: _safeGetText(row.querySelector('td.Jockey a')),
+        jockey: _safeGetText(jockeyLink),
+        jockeyId: jockeyId,
         trainerName: trainerName,
         trainerAffiliation: trainerAffiliation,
         horseWeight: _safeGetText(row.querySelector('td.Weight')),

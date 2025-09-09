@@ -93,7 +93,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     final jockeyCombos = <String, JockeyComboStats>{};
     for (final horse in widget.horses) {
       jockeyCombos[horse.horseId] = HorseStatsAnalyzer.analyzeJockeyCombo(
-        currentJockey: horse.jockey,
+        currentJockeyId: horse.jockeyId,
         performanceRecords: allPerformanceRecords[horse.horseId] ?? [],
         raceResults: allRaceResults,
       );
@@ -181,9 +181,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             _loadingProgress = (i + 1) / raceIdsToFetch.length;
           });
           try {
-            // --- DEBUG PRINT START ---
-            print('【デバッグ情報】ダウンロード中: $raceId (${i + 1}/${raceIdsToFetch.length})');
-            // --- DEBUG PRINT END ---
             final result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$raceId');
             await _dbHelper.insertOrUpdateRaceResult(result);
             fetchedResults[raceId] = result;
@@ -207,7 +204,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
           raceResults: allRaceResults,
         );
         newJockeyComboStats[horse.horseId] = HorseStatsAnalyzer.analyzeJockeyCombo(
-          currentJockey: horse.jockey,
+          currentJockeyId: horse.jockeyId,
           performanceRecords: records,
           raceResults: allRaceResults,
         );

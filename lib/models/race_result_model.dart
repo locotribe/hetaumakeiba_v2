@@ -78,6 +78,7 @@ class HorseResult {
   final String sexAndAge; // 性齢
   final String weightCarried; // 斤量
   final String jockeyName; // 騎手
+  final String jockeyId; // 騎手ID
   final String time; // タイム
   final String margin; // 着差
   final String cornerRanking; // 通過
@@ -100,6 +101,7 @@ class HorseResult {
     required this.sexAndAge,
     required this.weightCarried,
     required this.jockeyName,
+    required this.jockeyId,
     required this.time,
     required this.margin,
     required this.cornerRanking,
@@ -123,6 +125,7 @@ class HorseResult {
     sexAndAge: json["sexAndAge"],
     weightCarried: json["weightCarried"],
     jockeyName: json["jockeyName"],
+    jockeyId: json["jockeyId"] ?? '',
     time: json["time"],
     margin: json["margin"],
     cornerRanking: json["cornerRanking"],
@@ -145,6 +148,7 @@ class HorseResult {
     "sexAndAge": sexAndAge,
     "weightCarried": weightCarried,
     "jockeyName": jockeyName,
+    "jockeyId": jockeyId,
     "time": time,
     "margin": margin,
     "cornerRanking": cornerRanking,

@@ -134,12 +134,12 @@ class HorseStatsAnalyzer {
   }
 
   static JockeyComboStats analyzeJockeyCombo({
-    required String currentJockey,
+    required String currentJockeyId,
     required List<HorseRaceRecord> performanceRecords,
     required Map<String, RaceResult> raceResults,
   }) {
     final comboRecords = performanceRecords
-        .where((record) => record.jockey == currentJockey)
+        .where((record) => record.jockey == currentJockeyId)
         .toList();
 
     if (comboRecords.isEmpty) {

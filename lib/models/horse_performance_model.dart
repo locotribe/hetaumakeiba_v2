@@ -19,6 +19,7 @@ class HorseRaceRecord {
   final String popularity; // 人気 (例: '7')
   final String rank; // 着順 (例: '5')
   final String jockey; // 騎手 (例: '大江原圭')
+  final String jockeyId; // 騎手ID
   final String carriedWeight; // 斤量 (例: '60')
   final String distance; // 距離 (例: '障3380')
   final String trackCondition; // 馬場 (例: '良')
@@ -47,6 +48,7 @@ class HorseRaceRecord {
     required this.popularity,
     required this.rank,
     required this.jockey,
+    required this.jockeyId,
     required this.carriedWeight,
     required this.distance,
     required this.trackCondition,
@@ -78,6 +80,7 @@ class HorseRaceRecord {
       popularity: map['popularity'] as String,
       rank: map['rank'] as String,
       jockey: map['jockey'] as String,
+      jockeyId: map['jockey_id'] as String? ?? '',
       carriedWeight: map['carried_weight'] as String,
       distance: map['distance'] as String,
       trackCondition: map['track_condition'] as String,
@@ -110,6 +113,7 @@ class HorseRaceRecord {
       'popularity': popularity,
       'rank': rank,
       'jockey': jockey,
+      'jockey_id': jockeyId,
       'carried_weight': carriedWeight,
       'distance': distance,
       'track_condition': trackCondition,

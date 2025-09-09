@@ -22,7 +22,7 @@ class ShutubaTableScraperService {
       initialUrlRequest: URLRequest(url: url),
       initialSettings: InAppWebViewSettings(
         userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5.37.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/5.37.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5.37.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/5.37.36",
         javaScriptEnabled: true,
         loadsImagesAutomatically: false,
         blockNetworkImage: true,
@@ -30,12 +30,14 @@ class ShutubaTableScraperService {
       onLoadStop: (controller, url) async {
         if (completer.isCompleted) return;
         try {
-          final result = await controller.evaluateJavascript(source: _getScrapingJs());
+          final result =
+              await controller.evaluateJavascript(source: _getScrapingJs());
           if (result != null) {
             final data = _parseScrapedData(result, raceId);
             completer.complete(data);
           } else {
-            completer.completeError(Exception("Failed to get data from JavaScript for $raceId"));
+            completer.completeError(
+                Exception("Failed to get data from JavaScript for $raceId"));
           }
         } catch (e) {
           if (!completer.isCompleted) {
@@ -45,7 +47,8 @@ class ShutubaTableScraperService {
       },
       onReceivedError: (controller, request, error) {
         if (!completer.isCompleted) {
-          completer.completeError(Exception("Failed to load page: ${error.description}"));
+          completer.completeError(
+              Exception("Failed to load page: ${error.description}"));
         }
       },
     );
@@ -75,7 +78,7 @@ class ShutubaTableScraperService {
       initialUrlRequest: URLRequest(url: url),
       initialSettings: InAppWebViewSettings(
         userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5.37.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/5.37.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5.37.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/5.37.36",
         javaScriptEnabled: true,
         loadsImagesAutomatically: false,
         blockNetworkImage: true,
@@ -83,7 +86,8 @@ class ShutubaTableScraperService {
       onLoadStop: (controller, url) async {
         if (completer.isCompleted) return;
         try {
-          final result = await controller.evaluateJavascript(source: _getScrapingJs());
+          final result =
+              await controller.evaluateJavascript(source: _getScrapingJs());
           if (result != null) {
             final data = _parseScrapedData(result, raceId);
             final horses = data.horses.map((h) {
@@ -94,6 +98,7 @@ class ShutubaTableScraperService {
                 horseName: h.horseName,
                 sexAndAge: h.sexAndAge,
                 jockey: h.jockey,
+                jockeyId: h.jockeyId,
                 carriedWeight: h.carriedWeight,
                 trainerName: h.trainerName,
                 trainerAffiliation: h.trainerAffiliation,
@@ -105,7 +110,8 @@ class ShutubaTableScraperService {
             }).toList();
             completer.complete(horses);
           } else {
-            completer.completeError(Exception("Failed to get data from JavaScript for $raceId"));
+            completer.completeError(
+                Exception("Failed to get data from JavaScript for $raceId"));
           }
         } catch (e) {
           if (!completer.isCompleted) {
@@ -115,7 +121,8 @@ class ShutubaTableScraperService {
       },
       onReceivedError: (controller, request, error) {
         if (!completer.isCompleted) {
-          completer.completeError(Exception("Failed to load page: ${error.description}"));
+          completer.completeError(
+              Exception("Failed to load page: ${error.description}"));
         }
       },
     );
@@ -133,7 +140,8 @@ class ShutubaTableScraperService {
     final Map<String, dynamic> jsonData = jsonDecode(result);
 
     final String raceName = jsonData["raceName"] ?? "";
-    final String raceGrade = _getGradeTypeText(jsonData["raceGradeClass"] ?? "");
+    final String raceGrade =
+        _getGradeTypeText(jsonData["raceGradeClass"] ?? "");
     final String raceData01 = jsonData["raceData01"] ?? "";
     final String raceData02 = jsonData["raceData02"] ?? "";
     final List<dynamic> horsesData = jsonData["horses"] ?? [];
@@ -142,7 +150,9 @@ class ShutubaTableScraperService {
     String venue = '';
     String raceNumber = '';
 
-    final raceData01Match = RegExp(r'(\d{4}年\d{1,2}月\d{1,2}日)\s*(.*?)\s*(\d{1,2}R)').firstMatch(raceData01);
+    final raceData01Match =
+        RegExp(r'(\d{4}年\d{1,2}月\d{1,2}日)\s*(.*?)\s*(\d{1,2}R)')
+            .firstMatch(raceData01);
     if (raceData01Match != null) {
       raceDate = raceData01Match.group(1) ?? '';
       venue = raceData01Match.group(2) ?? '';
@@ -150,7 +160,8 @@ class ShutubaTableScraperService {
     }
 
     final List<PredictionHorseDetail> horses = horsesData.map((horseData) {
-      final Map<String, dynamic> horseMap = Map<String, dynamic>.from(horseData);
+      final Map<String, dynamic> horseMap =
+          Map<String, dynamic>.from(horseData);
       final trainerText = horseMap['厩舎'] ?? '';
       String trainerAffiliation = '';
       String trainerName = trainerText;
@@ -169,6 +180,7 @@ class ShutubaTableScraperService {
         horseName: horseMap['馬名'] ?? '',
         sexAndAge: horseMap['性齢'] ?? '',
         jockey: horseMap['騎手'] ?? '',
+        jockeyId: horseMap['騎手ID'] ?? '',
         carriedWeight: double.tryParse(horseMap['斤量'] ?? '0.0') ?? 0.0,
         trainerName: trainerName,
         trainerAffiliation: trainerAffiliation,
@@ -240,6 +252,13 @@ class ShutubaTableScraperService {
           if (match) {
             horseId = match[1];
           }
+          const jockeyAnchor = tds[6]?.querySelector("a");
+          const jockeyUrl = jockeyAnchor ? jockeyAnchor.href.trim() : "";
+          let jockeyId = "";
+          const jockeyMatch = jockeyUrl.match(/\/jockey\/result\/recent\/(\d{5})/);
+          if (jockeyMatch) {
+            jockeyId = jockeyMatch[1];
+            }
 
           horses.push({
             "枠": tds[0]?.innerText.trim() || "",
@@ -250,6 +269,7 @@ class ShutubaTableScraperService {
             "性齢": tds[4]?.innerText.trim() || "",
             "斤量": tds[5]?.innerText.trim() || "",
             "騎手": tds[6]?.querySelector("a")?.innerText.trim() || "",
+            "騎手ID": jockeyId,
             "厩舎": tds[7]?.innerText.trim() || "",
             "馬体重": tds[8]?.innerText.trim() || "",
             "オッズ": tds[9]?.innerText.trim() || "",

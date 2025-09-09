@@ -86,6 +86,7 @@ extension PredictionHorseDetailJson on PredictionHorseDetail {
     horseName: json['horseName'],
     sexAndAge: json['sexAndAge'],
     jockey: json['jockey'],
+    jockeyId: json['jockeyId'] ?? '',
     carriedWeight: json['carriedWeight'],
     trainerName: json['trainerName'],
     trainerAffiliation: json['trainerAffiliation'],

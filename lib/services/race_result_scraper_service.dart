@@ -139,6 +139,11 @@ class RaceResultScraperService {
         trainerAffiliation = '栗';
         trainerName = trainerText.substring(1);
       }
+      final jockeyLink = cells[6].querySelector('a');
+      final jockeyId = jockeyLink?.attributes['href']
+          ?.split('/')
+          .firstWhere((s) => RegExp(r'^\d{5}$').hasMatch(s), orElse: () => '') ??
+          '';
 
       results.add(HorseResult(
         rank: _safeGetText(cells[0]),
@@ -149,6 +154,7 @@ class RaceResultScraperService {
         sexAndAge: _safeGetText(cells[4]),
         weightCarried: _safeGetText(cells[5]),
         jockeyName: _safeGetText(cells[6].querySelector('a')),
+        jockeyId: jockeyId,
         time: _safeGetText(cells[7]),
         margin: _safeGetText(cells[8]),
         cornerRanking: _safeGetText(cells[10]),

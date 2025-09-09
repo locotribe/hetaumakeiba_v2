@@ -94,6 +94,7 @@ class DatabaseHelper {
             popularity TEXT,
             rank TEXT,
             jockey TEXT,
+            jockey_id TEXT,
             carried_weight TEXT,
             distance TEXT,
             track_condition TEXT,

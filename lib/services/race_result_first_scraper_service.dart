@@ -199,6 +199,7 @@ class RaceResultFirstScraperService {
         trainerAffiliation = '栗東';
         trainerName = trainerText.substring(2);
       }
+
       return HorseResult(
         rank: horse['rank'] ?? '',
         frameNumber: horse['waku'] ?? '',
@@ -208,6 +209,7 @@ class RaceResultFirstScraperService {
         sexAndAge: horse['sex_age'] ?? '',
         weightCarried: horse['kilo'] ?? '',
         jockeyName: horse['jockey'] ?? '',
+        jockeyId: horse['jockey_id'] ?? '',
         time: horse['time'] ?? '',
         margin: horse['margin'] ?? '',
         cornerRanking: horse['corner'] ?? '',

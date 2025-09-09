@@ -73,6 +73,7 @@ class PredictionHorseDetail {
   final String horseName;
   final String sexAndAge;
   final String jockey;
+  final String jockeyId;
   final double carriedWeight;
   final String trainerName;
   final String trainerAffiliation;
@@ -95,6 +96,7 @@ class PredictionHorseDetail {
     required this.horseName,
     required this.sexAndAge,
     required this.jockey,
+    required this.jockeyId,
     required this.carriedWeight,
     required this.trainerName,
     required this.trainerAffiliation,
@@ -119,6 +121,7 @@ class PredictionHorseDetail {
       horseName: detail.horseName,
       sexAndAge: detail.sexAndAge,
       jockey: detail.jockey,
+      jockeyId: detail.jockeyId,
       carriedWeight: detail.carriedWeight,
       trainerName: detail.trainerName,
       trainerAffiliation: detail.trainerAffiliation,
@@ -137,6 +140,7 @@ class PredictionHorseDetail {
       'horseName': horseName,
       'sexAndAge': sexAndAge,
       'jockey': jockey,
+      'jockeyId': jockeyId,
       'carriedWeight': carriedWeight,
       'trainerName': trainerName,
       'trainerAffiliation': trainerAffiliation,
@@ -155,6 +159,7 @@ class PredictionHorseDetail {
       horseName: json['horseName'] as String,
       sexAndAge: json['sexAndAge'] as String,
       jockey: json['jockey'] as String,
+      jockeyId: json['jockeyId'] as String? ?? '',
       carriedWeight: (json['carriedWeight'] as num).toDouble(),
       trainerName: json['trainerName'] as String,
       trainerAffiliation: json['trainerAffiliation'] as String,

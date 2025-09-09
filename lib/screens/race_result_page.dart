@@ -118,6 +118,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 horseName: horseResult.horseName,
                 sexAndAge: horseResult.sexAndAge,
                 jockey: horseResult.jockeyName,
+                jockeyId: horseResult.jockeyId,
                 carriedWeight: double.tryParse(horseResult.weightCarried) ?? 0.0,
                 trainerName: trainerName,
                 trainerAffiliation: trainerAffiliation,
