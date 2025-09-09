@@ -95,7 +95,8 @@ class ShutubaTableScraperService {
                 sexAndAge: h.sexAndAge,
                 jockey: h.jockey,
                 carriedWeight: h.carriedWeight,
-                trainer: h.trainer,
+                trainerName: h.trainerName,
+                trainerAffiliation: h.trainerAffiliation,
                 odds: h.odds,
                 popularity: h.popularity,
                 horseWeight: h.horseWeight,
@@ -150,6 +151,17 @@ class ShutubaTableScraperService {
 
     final List<PredictionHorseDetail> horses = horsesData.map((horseData) {
       final Map<String, dynamic> horseMap = Map<String, dynamic>.from(horseData);
+      final trainerText = horseMap['厩舎'] ?? '';
+      String trainerAffiliation = '';
+      String trainerName = trainerText;
+
+      if (trainerText.startsWith('美浦') || trainerText.startsWith('栗東')) {
+        final parts = trainerText.split(' ');
+        if (parts.length > 1) {
+          trainerAffiliation = parts[0];
+          trainerName = parts.sublist(1).join(' ');
+        }
+      }
       return PredictionHorseDetail(
         horseId: horseMap['馬ID'] ?? '',
         horseNumber: int.tryParse(horseMap['馬番'] ?? '0') ?? 0,
@@ -158,7 +170,8 @@ class ShutubaTableScraperService {
         sexAndAge: horseMap['性齢'] ?? '',
         jockey: horseMap['騎手'] ?? '',
         carriedWeight: double.tryParse(horseMap['斤量'] ?? '0.0') ?? 0.0,
-        trainer: horseMap['厩舎'] ?? '',
+        trainerName: trainerName,
+        trainerAffiliation: trainerAffiliation,
         odds: double.tryParse(horseMap['オッズ'] ?? ''),
         popularity: int.tryParse(horseMap['人気'] ?? ''),
         horseWeight: horseMap['馬体重'] ?? '',

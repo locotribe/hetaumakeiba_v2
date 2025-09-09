@@ -85,7 +85,8 @@ class HorseResult {
   final String odds; // 単勝オッズ
   final String popularity; // 人気
   final String horseWeight; // 馬体重
-  final String trainerName; // 調教師
+  final String trainerName; // 調教師名
+  final String trainerAffiliation; // 所属
   final String ownerName; // 馬主
   final String prizeMoney; // 賞金(万円)
   HorseMemo? userMemo;
@@ -107,6 +108,7 @@ class HorseResult {
     required this.popularity,
     required this.horseWeight,
     required this.trainerName,
+    required this.trainerAffiliation,
     required this.ownerName,
     required this.prizeMoney,
     this.userMemo,
@@ -129,6 +131,7 @@ class HorseResult {
     popularity: json["popularity"],
     horseWeight: json["horseWeight"],
     trainerName: json["trainerName"],
+    trainerAffiliation: json["trainerAffiliation"],
     ownerName: json["ownerName"],
     prizeMoney: json["prizeMoney"],
   );
@@ -150,6 +153,7 @@ class HorseResult {
     "popularity": popularity,
     "horseWeight": horseWeight,
     "trainerName": trainerName,
+    "trainerAffiliation": trainerAffiliation,
     "ownerName": ownerName,
     "prizeMoney": prizeMoney,
   };

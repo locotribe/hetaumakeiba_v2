@@ -8,8 +8,9 @@ class ShutubaHorseDetail {
   final String sexAndAge; // 性齢
   final String jockey; // 騎手
   final double carriedWeight; // 斤量
-  final String trainer;
-  final String? horseWeight;
+  final String trainerName; // 調教師
+  final String trainerAffiliation; // 所属
+  final String? horseWeight;  //  馬体重
   double? odds; // オッズ (変動するためNullable)
   int? popularity; // 人気 (変動するためNullable)
   final bool isScratched; // 出走取消フラグ
@@ -22,7 +23,8 @@ class ShutubaHorseDetail {
     required this.sexAndAge,
     required this.jockey,
     required this.carriedWeight,
-    required this.trainer,
+    required this.trainerName,
+    required this.trainerAffiliation,
     this.horseWeight,
     this.odds,
     this.popularity,
@@ -38,11 +40,12 @@ class ShutubaHorseDetail {
       'sexAndAge': sexAndAge,
       'jockey': jockey,
       'carriedWeight': carriedWeight,
-      'trainer': trainer,
+      'trainerName': trainerName,
+      'trainerAffiliation': trainerAffiliation,
       'horseWeight': horseWeight,
       'odds': odds,
       'popularity': popularity,
-      'isScratched': isScratched ? 1 : 0, // SQLiteではboolをINTEGERで保存
+      'isScratched': isScratched ? 1 : 0,
     };
   }
 
@@ -54,10 +57,11 @@ class ShutubaHorseDetail {
       horseName: map['horseName'] as String,
       sexAndAge: map['sexAndAge'] as String,
       jockey: map['jockey'] as String,
-      carriedWeight: (map['carriedWeight'] as num).toDouble(), // numからdoubleにキャスト
-      trainer: map['trainer'] as String,
+      carriedWeight: (map['carriedWeight'] as num).toDouble(),
+      trainerName: map['trainerName'] as String,
+      trainerAffiliation: map['trainerAffiliation'] as String,
       horseWeight: map['horseWeight'] as String?,
-      odds: (map['odds'] as num?)?.toDouble(), // numからdoubleにキャスト, null許容
+      odds: (map['odds'] as num?)?.toDouble(),
       popularity: map['popularity'] as int?,
       isScratched: map['isScratched'] == 1,
     );

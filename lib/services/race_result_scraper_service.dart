@@ -2,7 +2,6 @@
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
-import 'dart:convert';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
@@ -48,7 +47,6 @@ class RaceResultScraperService {
       final resultTable = document.querySelector('#All_Result_Table');
       return resultTable != null;
     } catch (e) {
-      print('[ERROR] レース結果確定チェック中にエラー: $e');
       return false;
     }
   }
@@ -56,7 +54,6 @@ class RaceResultScraperService {
   /// netkeiba.comのレース結果ページをスクレイピングし、RaceResultオブジェクトを返す
   static Future<RaceResult> scrapeRaceDetails(String url) async {
     try {
-      // まずはデータベースページ（db.netkeiba.com）から試行
       final dbUrl = url.replaceFirst('race.netkeiba.com/race/result.html?race_id=', 'db.netkeiba.com/race/');
       final raceId = getRaceIdFromUrl(dbUrl);
       if (raceId == null) {
@@ -72,11 +69,8 @@ class RaceResultScraperService {
       await CharsetConverter.decode('EUC-JP', response.bodyBytes);
       final document = html.parse(decodedBody);
 
-      // データベースページに結果テーブルがあるかチェック
       final resultTable = document.querySelector('table.race_table_01');
       if (resultTable != null && resultTable.querySelectorAll('tr').length > 1) {
-        // データがあれば、従来通りのパース処理を実行
-        print('INFO: レース結果をデータベースページから取得しました: $raceId');
         final raceTitle = _safeGetText(document.querySelector('div.race_head h1'));
         final raceInfoSpan =
         document.querySelector('div.data_intro p diary_snap_cut span');
@@ -101,22 +95,16 @@ class RaceResultScraperService {
           lapTimes: lapTimes,
         );
       } else {
-        // データがなければ、当日の結果ページにフォールバック
-        print('INFO: データベースページに結果がありません。当日の結果ページから取得を試みます: $raceId');
         final firstUrl = 'https://race.netkeiba.com/race/result.html?race_id=$raceId';
         return await RaceResultFirstScraperService.scrapeRaceDetails(firstUrl);
       }
     } catch (e) {
-      print('[ERROR]スクレイピングエラー: $e');
-      // DBページでエラーが発生した場合も、当日の結果ページにフォールバックを試みる
       try {
         final raceId = getRaceIdFromUrl(url);
-        print('INFO: エラー発生のため、当日の結果ページから取得を試みます: $raceId');
         final firstUrl = 'https://race.netkeiba.com/race/result.html?race_id=$raceId';
         return await RaceResultFirstScraperService.scrapeRaceDetails(firstUrl);
       } catch (fallbackError) {
-        print('[ERROR]フォールバック処理も失敗しました: $fallbackError');
-        rethrow; // 両方失敗した場合はエラーを投げる
+        rethrow;
       }
     }
   }
@@ -140,6 +128,18 @@ class RaceResultScraperService {
           ?.split('/')
           .lastWhere((part) => part.isNotEmpty, orElse: () => '') ??
           '';
+      final trainerText = _safeGetText(cells[18].querySelector('a'));
+      String trainerAffiliation = '';
+      String trainerName = trainerText;
+
+      if (trainerText.isNotEmpty) {
+        // "美" or "栗" で始まり、スペースを含む場合
+        final parts = trainerText.split(' ');
+        if ((parts[0] == '美' || parts[0] == '栗') && parts.length > 1) {
+          trainerAffiliation = parts[0];
+          trainerName = parts.sublist(1).join(' ');
+        }
+      }
 
       results.add(HorseResult(
         rank: _safeGetText(cells[0]),
@@ -157,7 +157,8 @@ class RaceResultScraperService {
         odds: _safeGetText(cells[12]),
         popularity: _safeGetText(cells[13]),
         horseWeight: _safeGetText(cells[14]),
-        trainerName: _safeGetText(cells[18].querySelector('a')),
+        trainerName: trainerName,
+        trainerAffiliation: trainerAffiliation,
         ownerName: _safeGetText(cells[19].querySelector('a')),
         prizeMoney: _safeGetText(cells[20]),
       ));
@@ -222,11 +223,6 @@ class RaceResultScraperService {
         refundList.add(Refund(ticketTypeId: ticketTypeId, payouts: payouts));
       }
     }
-    // ▼▼▼【ここから追加】▼▼▼
-    print('--- START: race_result_scraper_service REFUND DATA ---');
-    print(json.encode(refundList.map((r) => r.toJson()).toList()));
-    print('--- END: race_result_scraper_service REFUND DATA ---');
-    // ▲▲▲【ここまで追加】▲▲▲
     return refundList;
   }
 

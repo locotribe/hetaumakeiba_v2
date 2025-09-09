@@ -441,7 +441,17 @@ class ScraperService {
       final horseId = horseLink?.attributes['href']?.split('/').lastWhere((p) => p.isNotEmpty, orElse: () => '') ?? '';
 
       if (horseId.isEmpty) continue;
+      final trainerText = _safeGetText(row.querySelector('td.Trainer a'));
+      String trainerAffiliation = '';
+      String trainerName = trainerText;
 
+      if (trainerText.startsWith('美') || trainerText.startsWith('栗')) {
+        final parts = trainerText.split(' ');
+        if (parts.length > 1) {
+          trainerAffiliation = parts[0];
+          trainerName = parts.sublist(1).join(' ');
+        }
+      }
       horses.add(ShutubaHorseDetail(
         horseId: horseId,
         gateNumber: int.tryParse(_safeGetText(row.querySelector('td[class^="Waku"]'))) ?? 0,
@@ -450,7 +460,8 @@ class ScraperService {
         sexAndAge: _safeGetText(row.querySelector('td.Barei')),
         carriedWeight: isScratched ? 0.0 : double.tryParse(_safeGetText(cells[5])) ?? 0.0,
         jockey: _safeGetText(row.querySelector('td.Jockey a')),
-        trainer: _safeGetText(row.querySelector('td.Trainer a')),
+        trainerName: trainerName,
+        trainerAffiliation: trainerAffiliation,
         horseWeight: _safeGetText(row.querySelector('td.Weight')),
         isScratched: isScratched,
       ));

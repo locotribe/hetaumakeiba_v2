@@ -98,6 +98,17 @@ class _RaceResultPageState extends State<RaceResultPage> {
           }
           final pastRecords = await _dbHelper.getHorsePerformanceRecords(horseResult.horseId);
           allPastRecords[horseResult.horseId] = pastRecords;
+          final trainerText = horseResult.trainerName;
+          String trainerAffiliation = '';
+          String trainerName = trainerText;
+
+          if (trainerText.startsWith('美') || trainerText.startsWith('栗')) {
+            final parts = trainerText.split(' ');
+            if (parts.length > 1) {
+              trainerAffiliation = parts[0];
+              trainerName = parts.sublist(1).join(' ');
+            }
+          }
           // 展開予測のためにPredictionHorseDetailのリストを作成（ダミーデータを含む）
           horseDetailsForPacePrediction.add(
               PredictionHorseDetail(
@@ -108,7 +119,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 sexAndAge: horseResult.sexAndAge,
                 jockey: horseResult.jockeyName,
                 carriedWeight: double.tryParse(horseResult.weightCarried) ?? 0.0,
-                trainer: horseResult.trainerName,
+                trainerName: trainerName,
+                trainerAffiliation: trainerAffiliation,
                 isScratched: false,
               )
           );

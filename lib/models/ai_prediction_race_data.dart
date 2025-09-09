@@ -71,7 +71,8 @@ class PredictionHorseDetail {
   final String sexAndAge;
   final String jockey;
   final double carriedWeight;
-  final String trainer;
+  final String trainerName;
+  final String trainerAffiliation;
   double? odds;
   int? popularity;
   String? horseWeight;
@@ -89,7 +90,8 @@ class PredictionHorseDetail {
     required this.sexAndAge,
     required this.jockey,
     required this.carriedWeight,
-    required this.trainer,
+    required this.trainerName,
+    required this.trainerAffiliation,
     this.odds,
     this.popularity,
     this.horseWeight,
@@ -109,7 +111,8 @@ class PredictionHorseDetail {
       sexAndAge: detail.sexAndAge,
       jockey: detail.jockey,
       carriedWeight: detail.carriedWeight,
-      trainer: detail.trainer,
+      trainerName: detail.trainerName,
+      trainerAffiliation: detail.trainerAffiliation,
       horseWeight: detail.horseWeight,
       odds: detail.odds,
       popularity: detail.popularity,
@@ -126,7 +129,8 @@ class PredictionHorseDetail {
       'sexAndAge': sexAndAge,
       'jockey': jockey,
       'carriedWeight': carriedWeight,
-      'trainer': trainer,
+      'trainerName': trainerName,
+      'trainerAffiliation': trainerAffiliation,
       'odds': odds,
       'popularity': popularity,
       'horseWeight': horseWeight,
@@ -143,7 +147,8 @@ class PredictionHorseDetail {
       sexAndAge: json['sexAndAge'] as String,
       jockey: json['jockey'] as String,
       carriedWeight: (json['carriedWeight'] as num).toDouble(),
-      trainer: json['trainer'] as String,
+      trainerName: json['trainerName'] as String,
+      trainerAffiliation: json['trainerAffiliation'] as String,
       odds: (json['odds'] as num?)?.toDouble(),
       popularity: json['popularity'] as int?,
       horseWeight: json['horseWeight'] as String?,

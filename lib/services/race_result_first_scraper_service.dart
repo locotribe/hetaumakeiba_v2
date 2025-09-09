@@ -9,7 +9,6 @@ import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 /// netkeiba.comの当日のレース結果ページ（JavaScript動的生成）を
 /// InAppWebViewを使用してスクレイピングすることに特化したサービスクラスです。
 class RaceResultFirstScraperService {
-  // ▼▼▼【修正箇所】払い戻し情報の解析ロジックを強化したJavaScript ▼▼▼
   static const String _scrapeJs = r'''
 (function(){
   function textOrEmpty(el){ return el ? el.innerText.trim() : ''; }
@@ -104,7 +103,6 @@ class RaceResultFirstScraperService {
   return JSON.stringify(res);
 })();
 ''';
-  // ▲▲▲【修正箇所】払い戻し情報の解析ロジックを強化したJavaScript ▲▲▲
 
   /// URLからレースIDを抽出するヘルパー関数
   static String? getRaceIdFromUrl(String url) {
@@ -190,6 +188,17 @@ class RaceResultFirstScraperService {
   /// 競走馬の結果リストを解析する
   static List<HorseResult> _parseHorseResults(List<dynamic> horsesData) {
     return horsesData.map((horse) {
+      final trainerText = horse['trainer'] ?? '';
+      String trainerAffiliation = '';
+      String trainerName = trainerText;
+
+      if (trainerText.startsWith('美') || trainerText.startsWith('栗')) {
+        final parts = trainerText.split(' ');
+        if (parts.length > 1) {
+          trainerAffiliation = parts[0];
+          trainerName = parts.sublist(1).join(' ');
+        }
+      }
       return HorseResult(
         rank: horse['rank'] ?? '',
         frameNumber: horse['waku'] ?? '',
@@ -206,14 +215,14 @@ class RaceResultFirstScraperService {
         odds: horse['odds'] ?? '',
         popularity: horse['popularity'] ?? '',
         horseWeight: horse['weight'] ?? '',
-        trainerName: horse['trainer'] ?? '',
+        trainerName: trainerName,
+        trainerAffiliation: trainerAffiliation,
         ownerName: '', // 当日ページからは取得不可
         prizeMoney: '', // 当日ページからは取得不可
       );
     }).toList();
   }
 
-  // ▼▼▼【修正箇所】払い戻し情報の解析ロジックを修正 ▼▼▼
   /// 払戻金情報を解析する
   static List<Refund> _parseRefunds(List<dynamic> payoutsData) {
     final List<Refund> refundList = [];
@@ -266,7 +275,6 @@ class RaceResultFirstScraperService {
     }
     return refundList;
   }
-  // ▲▲▲【修正箇所】払い戻し情報の解析ロジックを修正 ▲▲▲
 
   /// コーナー通過順位を解析する
   static List<String> _parseCornerPassages(List<dynamic> cornersData) {

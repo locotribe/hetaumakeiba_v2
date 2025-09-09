@@ -133,6 +133,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   PredictionRaceData _createPredictionDataFromRaceResult(RaceResult raceResult) {
     final horses = raceResult.horseResults.map((hr) {
       final weightMatch = RegExp(r'(\d+)\((.*?)\)').firstMatch(hr.horseWeight);
+      final trainerText = hr.trainerName;
+      String trainerAffiliation = '';
+      String trainerName = trainerText;
+
+      if (trainerText.startsWith('美') || trainerText.startsWith('栗')) {
+        // "美" や "栗" で始まり、スペースが含まれているかチェック
+        final parts = trainerText.split(' ');
+        if (parts.length > 1) {
+          trainerAffiliation = parts[0];
+          trainerName = parts.sublist(1).join(' ');
+        }
+      }
       return PredictionHorseDetail(
         horseId: hr.horseId,
         horseNumber: int.tryParse(hr.horseNumber) ?? 0,
@@ -141,7 +153,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         sexAndAge: hr.sexAndAge,
         jockey: hr.jockeyName,
         carriedWeight: double.tryParse(hr.weightCarried) ?? 0.0,
-        trainer: hr.trainerName,
+        trainerName: trainerName,
+        trainerAffiliation: trainerAffiliation,
         odds: double.tryParse(hr.odds),
         popularity: int.tryParse(hr.popularity),
         horseWeight: weightMatch?.group(1),
@@ -192,7 +205,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             sexAndAge: updatedHorse.sexAndAge,
             jockey: updatedHorse.jockey,
             carriedWeight: updatedHorse.carriedWeight,
-            trainer: updatedHorse.trainer,
+            trainerName: updatedHorse.trainerName,
+            trainerAffiliation: updatedHorse.trainerAffiliation,
             isScratched: updatedHorse.isScratched,
             odds: updatedHorse.odds,
             popularity: updatedHorse.popularity,
@@ -950,6 +964,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
         const DataColumn2(label: Text('騎手'), fixedWidth: 70,),
+        const DataColumn2(label: Text('所属'), fixedWidth: 50,),
         const DataColumn2(label: Text('調教師'), fixedWidth: 70,),
         DataColumn2(label: const Text('馬体重'), fixedWidth: 70, onSort: (i, asc) => _onSort(SortableColumn.horseWeight)),
       ],
@@ -969,7 +984,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           ),
         ),
         DataCell(Text(horse.jockey)),
-        DataCell(Text(horse.trainer)),
+        DataCell(Text(horse.trainerAffiliation)),
+        DataCell(Text(horse.trainerName)),
         DataCell(Text(horse.horseWeight ?? '--')),
       ],
     );
