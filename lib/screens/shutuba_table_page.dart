@@ -28,6 +28,9 @@ import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
+import 'package:hetaumakeiba_v2/models/complex_aptitude_model.dart';
+import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
+import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
 
 enum SortableColumn {
   mark,
@@ -39,6 +42,8 @@ enum SortableColumn {
   carriedWeight,
   horseWeight,
   overallScore,
+  bestTime,
+  fastestAgari,
 }
 
 
@@ -72,7 +77,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _loadShutubaData();
   }
 
@@ -133,18 +138,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   PredictionRaceData _createPredictionDataFromRaceResult(RaceResult raceResult) {
     final horses = raceResult.horseResults.map((hr) {
       final weightMatch = RegExp(r'(\d+)\((.*?)\)').firstMatch(hr.horseWeight);
-      final trainerText = hr.trainerName;
-      String trainerAffiliation = '';
-      String trainerName = trainerText;
+      final trainerName = hr.trainerName;
+      final trainerAffiliation = hr.trainerAffiliation;
 
-      if (trainerText.startsWith('美') || trainerText.startsWith('栗')) {
-        // "美" や "栗" で始まり、スペースが含まれているかチェック
-        final parts = trainerText.split(' ');
-        if (parts.length > 1) {
-          trainerAffiliation = parts[0];
-          trainerName = parts.sublist(1).join(' ');
-        }
-      }
       return PredictionHorseDetail(
         horseId: hr.horseId,
         horseNumber: int.tryParse(hr.horseNumber) ?? 0,
@@ -315,6 +311,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
+      // 複合適性分析を実行し、結果をセットする
+      horse.complexAptitudeStats = AiPredictionAnalyzer.analyzeComplexAptitude(
+        raceData: raceData,
+        pastRecords: pastRecords,
+      );
+      horse.bestTimeStats = AiPredictionAnalyzer.analyzeBestTime(
+        raceData: raceData,
+        pastRecords: pastRecords,
+      );
+      horse.fastestAgariStats = AiPredictionAnalyzer.analyzeFastestAgari(
+        pastRecords: pastRecords,
+      );
     }
 
     raceData.racePacePrediction = AiPredictionAnalyzer.predictRacePace(raceData.horses, allPastRecords);
@@ -613,6 +621,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                     Tab(text: '情報'),
                     Tab(text: '騎手・調教師'),
                     Tab(text: '分析'),
+                    Tab(text: '時計'),
                     Tab(text: '成績'),
                     Tab(text: 'メモ'),
                   ],
@@ -666,6 +675,20 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                               final bScore = _overallScores[b.horseId];
                               comparison = compareNullsLast(aScore, bScore);
                               break;
+                            case SortableColumn.bestTime:
+                              final aTime = a.bestTimeStats?.timeInSeconds;
+                              final bTime = b.bestTimeStats?.timeInSeconds;
+                              if (aTime == null && bTime == null) comparison = 0;
+                              else if (aTime == null) comparison = 1;
+                              else if (bTime == null) comparison = -1;
+                              else comparison = aTime.compareTo(bTime);
+                              break;
+                            case SortableColumn.fastestAgari:
+                              final aAgari = a.fastestAgariStats?.agariInSeconds;
+                              final bAgari = b.fastestAgariStats?.agariInSeconds;
+                              comparison = compareNullsLast(aAgari, bAgari);
+                              break;
+
                             default:
                               comparison = a.horseNumber.compareTo(b.horseNumber);
                               break;
@@ -680,6 +703,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             _buildInfoTab(sortedHorses),
                             _buildJockeyTrainerTab(sortedHorses),
                             _buildAnalysisTab(sortedHorses),
+                            _buildTimeTab(sortedHorses),
                             _buildPerformanceTab(sortedHorses),
                             _buildMemoTab(sortedHorses),
                           ],
@@ -998,6 +1022,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
         DataColumn2(label: const Text('総合評価'), fixedWidth: 80, onSort: (i, asc) => _onSort(SortableColumn.overallScore)),
+        const DataColumn2(label: Text('条件適性'), fixedWidth: 80,),
         const DataColumn2(label: Text('複合適性'), fixedWidth: 80,),
       ],
       horses: horses,
@@ -1005,6 +1030,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         final score = _overallScores[horse.horseId] ?? 0.0;
         final rank = _getRankFromScore(score);
         final fitResult = _conditionFits[horse.horseId];
+        final complexStats = horse.complexAptitudeStats;
         return [
           DataCell(
             horse.isScratched
@@ -1026,6 +1052,61 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ),
           ),
           DataCell(_buildConditionFitCell(fitResult)),
+          DataCell(
+            Tooltip(
+              message: '複勝率: ${complexStats?.showRate.toStringAsFixed(1) ?? '0.0'}%',
+              child: Text(
+                (complexStats == null || complexStats.raceCount == 0) ? '-' : complexStats.recordString,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ];
+      },
+    );
+  }
+
+  /// 時計タブ
+  Widget _buildTimeTab(List<PredictionHorseDetail> horses) {
+    return _buildDataTableForTab(
+      columns: [
+        DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
+        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
+        DataColumn2(label: const Text('持ち時計'), fixedWidth: 80, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.bestTime)),
+        const DataColumn2(label: Text('記録時馬場'), fixedWidth: 80),
+        DataColumn2(label: const Text('最速上がり'), fixedWidth: 80, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.fastestAgari)),
+      ],
+      horses: horses,
+      cellBuilder: (horse) {
+        final bestTime = horse.bestTimeStats;
+        final fastestAgari = horse.fastestAgariStats;
+        return [
+          DataCell(
+            horse.isScratched
+                ? const Text('取消', style: TextStyle(color: Colors.red))
+                : _buildMarkDropdown(horse),
+          ),
+          DataCell(
+            Text(
+              horse.horseName,
+              style: TextStyle(
+                decoration: horse.isScratched ? TextDecoration.lineThrough : null,
+              ),
+            ),
+          ),
+          DataCell(
+            Tooltip(
+              message: bestTime != null ? '${bestTime.date}\n${bestTime.raceName}' : 'データなし',
+              child: Text(bestTime?.formattedTime ?? '-'),
+            ),
+          ),
+          DataCell(Text(bestTime?.trackCondition ?? '-')),
+          DataCell(
+            Tooltip(
+              message: fastestAgari != null ? '${fastestAgari.date}\n${fastestAgari.raceName}\n馬場: ${fastestAgari.trackCondition}' : 'データなし',
+              child: Text(fastestAgari?.formattedAgari ?? '-'),
+            ),
+          ),
         ];
       },
     );

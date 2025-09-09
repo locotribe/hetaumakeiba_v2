@@ -132,13 +132,12 @@ class RaceResultScraperService {
       String trainerAffiliation = '';
       String trainerName = trainerText;
 
-      if (trainerText.isNotEmpty) {
-        // "美" or "栗" で始まり、スペースを含む場合
-        final parts = trainerText.split(' ');
-        if ((parts[0] == '美' || parts[0] == '栗') && parts.length > 1) {
-          trainerAffiliation = parts[0];
-          trainerName = parts.sublist(1).join(' ');
-        }
+      if (trainerText.startsWith('美')) { // 美浦のケース
+        trainerAffiliation = '美';
+        trainerName = trainerText.substring(1);
+      } else if (trainerText.startsWith('栗')) { // 栗東のケース
+        trainerAffiliation = '栗';
+        trainerName = trainerText.substring(1);
       }
 
       results.add(HorseResult(

@@ -155,12 +155,12 @@ class ShutubaTableScraperService {
       String trainerAffiliation = '';
       String trainerName = trainerText;
 
-      if (trainerText.startsWith('美浦') || trainerText.startsWith('栗東')) {
-        final parts = trainerText.split(' ');
-        if (parts.length > 1) {
-          trainerAffiliation = parts[0];
-          trainerName = parts.sublist(1).join(' ');
-        }
+      if (trainerText.startsWith('美浦')) {
+        trainerAffiliation = '美浦';
+        trainerName = trainerText.substring(2);
+      } else if (trainerText.startsWith('栗東')) {
+        trainerAffiliation = '栗東';
+        trainerName = trainerText.substring(2);
       }
       return PredictionHorseDetail(
         horseId: horseMap['馬ID'] ?? '',

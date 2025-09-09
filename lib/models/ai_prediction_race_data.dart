@@ -4,6 +4,9 @@ import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
+import 'package:hetaumakeiba_v2/models/complex_aptitude_model.dart';
+import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
+import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
 
 /// レース全体の予想データを保持するコンテナです。
 class PredictionRaceData {
@@ -81,6 +84,9 @@ class PredictionHorseDetail {
   final bool isScratched;
   HorsePredictionScore? predictionScore;
   ConditionFitResult? conditionFit;
+  ComplexAptitudeStats? complexAptitudeStats;
+  BestTimeStats? bestTimeStats;
+  FastestAgariStats? fastestAgariStats;
 
   PredictionHorseDetail({
     required this.horseId,
@@ -100,6 +106,9 @@ class PredictionHorseDetail {
     required this.isScratched,
     this.predictionScore,
     this.conditionFit,
+    this.complexAptitudeStats,
+    this.bestTimeStats,
+    this.fastestAgariStats,
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
@@ -155,4 +164,6 @@ class PredictionHorseDetail {
       isScratched: json['isScratched'] as bool,
     );
   }
+
+
 }
