@@ -65,13 +65,13 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
     switch (result.status) {
       case FetchStatus.success:
-        final bool? confirmed = await _showRaceIdConfirmationDialog(result.raceIds);
+        final bool? confirmed = await _showRaceIdConfirmationDialog(result.pastRaces);
         if (confirmed == true && mounted) {
           setState(() {
             _statisticsFuture = _statisticsService.processAndSaveRaceStatisticsByIds(
               raceId: widget.raceId,
               raceName: widget.raceName,
-              pastRaceIds: result.raceIds,
+              pastRaceIds: result.pastRaces.keys.toList(),
             );
           });
         }
@@ -87,7 +87,9 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   }
 
   /// [新規追加] 取得したレースIDリストをユーザーに確認させるダイアログ
-  Future<bool?> _showRaceIdConfirmationDialog(List<String> raceIds) {
+  Future<bool?> _showRaceIdConfirmationDialog(Map<String, String> pastRaces) {
+    final raceNames = pastRaces.values.toList();
+
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -98,13 +100,13 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('${raceIds.length}件の過去レースが見つかりました。\nこれらのレースデータを取得しますか？'),
+              Text('${pastRaces.length}件の過去レースが見つかりました。\nこれらのレースデータを取得しますか？'),
               const SizedBox(height: 8),
               Expanded(
                 child: ListView.builder(
                   shrinkWrap: true,
-                  itemCount: raceIds.length,
-                  itemBuilder: (context, index) => Text('- ${raceIds[index]}'),
+                  itemCount: raceNames.length,
+                  itemBuilder: (context, index) => Text('- ${raceNames[index]}'),
                 ),
               ),
             ],

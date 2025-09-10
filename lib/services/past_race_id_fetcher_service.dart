@@ -8,10 +8,10 @@ enum FetchStatus { success, pageNotSupported, temporaryError, empty }
 // 取得結果を格納するクラス
 class PastRaceIdResult {
   final FetchStatus status;
-  final List<String> raceIds;
+  final Map<String, String> pastRaces;
   final String? message;
 
-  PastRaceIdResult(this.status, {this.raceIds = const [], this.message});
+  PastRaceIdResult(this.status, {this.pastRaces = const {}, this.message});
 }
 
 class PastRaceIdFetcherService {
@@ -73,33 +73,50 @@ class PastRaceIdFetcherService {
             return;
           }
 
-          // レースIDのリストを取得
+          // レースIDとレース名の両方を取得
           final result = await controller.evaluateJavascript(source: """
             (function() {
               const links = document.querySelectorAll('a[href*="race_id="]');
               return Array.from(links)
-                .map(a => a.href)
-                .map(href => href.match(/race_id=(\\d{12})/)?.[1])
-                .filter(id => id);
+                .map(a => {
+                  const idMatch = a.href.match(/race_id=(\\d{12})/);
+                  if (idMatch) {
+                    return {
+                      id: idMatch[1],
+                      name: a.innerText.trim()
+                    };
+                  }
+                  return null;
+                })
+                .filter(item => item !== null);
             })();
           """);
 
-          final List<dynamic> ids = result ?? [];
-          final allUniqueIds = ids.whereType<String>().toSet();
+          final List<dynamic> raceObjects = result ?? [];
+          final Map<String, String> pastRaces = {};
 
           final currentYear = DateTime.now().year;
           final startYear = currentYear - 1;
           final endYear = currentYear - 10;
 
-          final filteredIds = allUniqueIds.where((id) {
-            final year = int.tryParse(id.substring(0, 4));
-            return id != baseRaceId && year != null && year <= startYear && year >= endYear;
-          }).toList();
+          for (var item in raceObjects) {
+            if (item is Map) {
+              final id = item['id'] as String?;
+              final name = item['name'] as String?;
 
-          if (filteredIds.isEmpty) {
+              if (id != null && name != null && name.isNotEmpty) {
+                final year = int.tryParse(id.substring(0, 4));
+                if (id != baseRaceId && year != null && year <= startYear && year >= endYear) {
+                  pastRaces[id] = name;
+                }
+              }
+            }
+          }
+
+          if (pastRaces.isEmpty) {
             completer.complete(PastRaceIdResult(FetchStatus.empty));
           } else {
-            completer.complete(PastRaceIdResult(FetchStatus.success, raceIds: filteredIds));
+            completer.complete(PastRaceIdResult(FetchStatus.success, pastRaces: pastRaces));
           }
 
         } catch (e) {
