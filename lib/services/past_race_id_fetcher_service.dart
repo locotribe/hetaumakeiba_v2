@@ -75,22 +75,25 @@ class PastRaceIdFetcherService {
 
           // レースIDとレース名の両方を取得
           final result = await controller.evaluateJavascript(source: """
-            (function() {
-              const links = document.querySelectorAll('a[href*="race_id="]');
-              return Array.from(links)
-                .map(a => {
-                  const idMatch = a.href.match(/race_id=(\\d{12})/);
-                  if (idMatch) {
-                    return {
-                      id: idMatch[1],
-                      name: a.innerText.trim()
-                    };
-                  }
-                  return null;
-                })
-                .filter(item => item !== null);
-            })();
-          """);
+  (function() {
+    const links = document.querySelectorAll('a[href*="race_id="]');
+    return Array.from(links)
+      .map(a => {
+        const idMatch = a.href.match(/race_id=(\\d{12})/);
+        const title = a.getAttribute('title'); // <a>タグのtitle属性を取得
+
+        if (idMatch && title) {
+          return {
+            id: idMatch[1],
+            // titleから「 レース映像」という文字列を削除し、前後の空白も除去
+            name: title.replace(' レース映像', '').trim()
+          };
+        }
+        return null;
+      })
+      .filter(item => item !== null);
+  })();
+""");
 
           final List<dynamic> raceObjects = result ?? [];
           final Map<String, String> pastRaces = {};

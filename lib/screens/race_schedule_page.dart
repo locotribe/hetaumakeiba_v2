@@ -475,7 +475,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: schedule.venues.map((venue) {
                       return Container(
-                        width: 200,
+                        width: 180,
                         margin: const EdgeInsets.only(right: 8.0),
                         child: Column(
                           children: [
@@ -511,7 +511,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                     : null,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      vertical: 12.0, horizontal: 8.0),
+                                      vertical: 8.0, horizontal: 4.0),
                                   decoration: BoxDecoration(
                                       border: Border(
                                           bottom: BorderSide(
@@ -521,9 +521,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                         CrossAxisAlignment.center,
                                     children: [
                                       Container(
-                                        width: 50,
+                                        width: 40,
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 10.0),
+                                            vertical: 8.0),
                                         decoration: BoxDecoration(
                                           color: isConfirmed
                                               ? Colors.redAccent
@@ -542,7 +542,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(width: 12),
+                                      const SizedBox(width: 8),
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment:

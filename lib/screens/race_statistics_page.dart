@@ -93,9 +93,16 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('過去レースデータ取得の確認'),
+        // タイトルのテキストサイズを調整
+        title: const Text(
+          '過去レースデータ取得の確認',
+          style: TextStyle(fontSize: 20.0), // <-- フォントサイズを指定
+        ),
         content: SizedBox(
+          // ダイアログのサイズを調整
           width: double.maxFinite,
+          height: MediaQuery.of(context).size.height * 0.35, // <-- 高さを画面の50%に設定
+
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,7 +113,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                 child: ListView.builder(
                   shrinkWrap: true,
                   itemCount: raceNames.length,
-                  itemBuilder: (context, index) => Text('- ${raceNames[index]}'),
+                  itemBuilder: (context, index) => Text('⫸✅ ${raceNames[index]}'),
                 ),
               ),
             ],
