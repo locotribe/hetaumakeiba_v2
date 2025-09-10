@@ -550,35 +550,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<void> _navigateToStatisticsPage() async {
-    RaceStatistics? stats;
-    try {
-      stats = await _dbHelper.getRaceStatistics(widget.raceId);
-    } catch (e) {
-      print('統計データの読み込みに失敗: $e');
-      stats = null;
-    }
-    if (stats == null) {
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('過去データの取得'),
-          content: const Text('このレースの過去10年分のデータを取得しますか？\nデータ量に応じて時間がかかる場合があります。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('キャンセル'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('取得する'),
-            ),
-          ],
-        ),
-      );
-
-      if (confirm != true || !mounted) return;
-    }
-
+    // データベースの事前チェックと確認ダイアログのロジックを削除。
+    // RaceStatisticsPage自体にデータがない場合の処理が実装されているため、
+    // ここでは直接ページに遷移させます。
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => RaceStatisticsPage(
