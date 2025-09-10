@@ -7,6 +7,7 @@ import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+import 'package:hetaumakeiba_v2/services/past_race_id_fetcher_service.dart';
 
 class RaceStatisticsPage extends StatefulWidget {
   final String raceId;
@@ -24,6 +25,7 @@ class RaceStatisticsPage extends StatefulWidget {
 
 class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   final StatisticsService _statisticsService = StatisticsService();
+  final PastRaceIdFetcherService _pastRaceIdFetcher = PastRaceIdFetcherService();
   final DatabaseHelper _dbHelper = DatabaseHelper();
   Future<RaceStatistics?>? _statisticsFuture;
 
@@ -39,13 +41,108 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     });
   }
 
-  void _fetchAndLoadStatistics() {
-    setState(() {
-      _statisticsFuture = _statisticsService.processAndSaveRaceStatistics(
-        widget.raceId,
-        widget.raceName,
-      );
-    });
+  /// [修正] データ取得のメインロジック
+  void _startFetchingProcess() async {
+    // 1. まずはraceIdで過去レースIDの取得を試みる
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 24),
+            Text("過去レースIDを検索中..."),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final List<String> pastRaceIds = await _pastRaceIdFetcher.fetchPastRaceIds(widget.raceId);
+      Navigator.of(context).pop(); // ローディングダイアログを閉じる
+
+      if (pastRaceIds.isNotEmpty) {
+        // 2. 成功すれば、ユーザーに確認ダイアログを表示
+        final bool? confirmed = await _showRaceIdConfirmationDialog(pastRaceIds);
+        if (confirmed == true) {
+          setState(() {
+            _statisticsFuture = _statisticsService.processAndSaveRaceStatisticsByIds(
+              raceId: widget.raceId,
+              raceName: widget.raceName,
+              pastRaceIds: pastRaceIds,
+            );
+          });
+        }
+      } else {
+        // 3. 失敗すれば、フォールバックの確認
+        _showFallbackConfirmation();
+      }
+    } catch (e) {
+      Navigator.of(context).pop();
+      _showFallbackConfirmation(error: e.toString());
+    }
+  }
+
+  /// [新規追加] 取得したレースIDリストをユーザーに確認させるダイアログ
+  Future<bool?> _showRaceIdConfirmationDialog(List<String> raceIds) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('過去レースデータ取得の確認'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${raceIds.length}件の過去レースが見つかりました。\nこれらのレースデータを取得しますか？'),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: raceIds.length,
+                  itemBuilder: (context, index) => Text('- ${raceIds[index]}'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('取得開始'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// [新規追加] フォールバック（レース名検索）の確認ダイアログ
+  void _showFallbackConfirmation({String? error}) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('レースIDでの検索失敗'),
+        content: Text(error != null ? 'エラーが発生しました。\n$error\n\n代わりにレース名「${widget.raceName}」で検索しますか？\n（精度が低下する場合があります）' : '過去10年のレースIDが見つかりませんでした。\n\n代わりにレース名「${widget.raceName}」で検索しますか？\n（精度が低下する場合があります）'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('キャンセル')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              setState(() {
+                _statisticsFuture = _statisticsService.processAndSaveRaceStatistics(widget.raceId, widget.raceName);
+              });
+            },
+            child: const Text('レース名で検索'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -105,7 +202,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             ElevatedButton.icon(
               icon: const Icon(Icons.download),
               label: const Text('データ取得を開始'),
-              onPressed: _fetchAndLoadStatistics,
+              onPressed: _startFetchingProcess,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),

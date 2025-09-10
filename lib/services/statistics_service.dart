@@ -11,6 +11,40 @@ import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 class StatisticsService {
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
+  /// [新規追加] レースIDのリストを直接受け取り、統計データを生成・保存する
+  Future<RaceStatistics?> processAndSaveRaceStatisticsByIds({
+    required String raceId,
+    required String raceName,
+    required List<String> pastRaceIds,
+  }) async {
+    final List<RaceResult> pastResults = [];
+    for (final pastId in pastRaceIds) {
+      RaceResult? result = await _dbHelper.getRaceResult(pastId);
+      if (result == null) {
+        result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
+        await _dbHelper.insertOrUpdateRaceResult(result);
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+      pastResults.add(result);
+    }
+
+    if (pastResults.isEmpty) {
+      throw Exception('過去のレース結果を取得できませんでした。');
+    }
+
+    final statistics = _calculateStatistics(pastResults);
+
+    final statsToSave = RaceStatistics(
+      raceId: raceId,
+      raceName: raceName,
+      statisticsJson: json.encode(statistics),
+      lastUpdatedAt: DateTime.now(),
+    );
+
+    await _dbHelper.insertOrUpdateRaceStatistics(statsToSave);
+    return statsToSave;
+  }
+
   /// 分析のために、指定されたレースの過去結果リストを取得する
   Future<List<RaceResult>> fetchPastRacesForAnalysis(String raceName, String raceId) async {
     // scraper_serviceから全ての候補IDを取得
