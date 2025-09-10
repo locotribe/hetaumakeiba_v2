@@ -188,7 +188,7 @@ class _MainScaffoldState extends State<MainScaffold> {
     }
   }
 
-  // Drawerの情報を読み込むための新しいメソッド
+// Drawerの情報を読み込むための新しいメソッド
   Future<void> _loadUserInfoForDrawer() async {
     if (localUserId == null) return;
     final prefs = await SharedPreferences.getInstance();
@@ -196,15 +196,21 @@ class _MainScaffoldState extends State<MainScaffold> {
     final user = await db.getUserByUuid(localUserId!);
     final profileImagePath = prefs.getString('profile_picture_path_${localUserId!}');
 
+    File? newImageFile;
+    if (profileImagePath != null) {
+      newImageFile = File(profileImagePath);
+      // --- ▼▼▼ キャッシュクリアのロジック ▼▼▼ ---
+      // FileImageオブジェクトを作成し、キャッシュを無効化(evict)する
+      // これにより、次にこの画像が要求されたときにディスクから再読み込みされる
+      FileImage(newImageFile).evict();
+      // --- ▲▲▲ キャッシュクリアのロジック ▲▲▲ ---
+    }
+
     if (mounted) {
       setState(() {
         _displayName =
             prefs.getString('display_name_${localUserId!}') ?? user?.username ?? '';
-        if (profileImagePath != null) {
-          _profileImageFile = File(profileImagePath);
-        } else {
-          _profileImageFile = null;
-        }
+        _profileImageFile = newImageFile;
       });
     }
   }
@@ -312,17 +318,16 @@ class _MainScaffoldState extends State<MainScaffold> {
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text('ユーザー設定'),
-              onTap: () async {
-                Navigator.of(context).pop(); // Drawerを閉じる
-                final result = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(
-                    builder: (context) => UserSettingsPage(onLogout: widget.onLogout),
-                  ),
-                );
-                // 設定画面から更新通知(true)が返ってきたら、Drawerの情報を再読み込み
-                if (result == true) {
+                onTap: () async {
+                  Navigator.of(context).pop(); // Drawerを閉じる
+                  // ユーザー設定画面から戻ってきた後に必ず再読み込みを実行
+                  await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(
+                      builder: (context) => UserSettingsPage(onLogout: widget.onLogout),
+                    ),
+                  );
+                  // 戻ってきたら、変更の有無にかかわらず情報を再読み込みする
                   _loadUserInfoForDrawer();
-                }
               },
             ),
             const Divider(), // 他のメニュー項目との区切り線

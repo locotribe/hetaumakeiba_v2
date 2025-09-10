@@ -76,11 +76,13 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: source);
+    if (source == ImageSource.gallery || source == ImageSource.camera) {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: source);
 
-    if (pickedFile != null) {
-      _cropImage(pickedFile.path);
+      if (pickedFile != null) {
+        _cropImage(pickedFile.path);
+      }
     }
   }
 
@@ -123,14 +125,18 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
     await prefs.setString(
         'display_name_${localUserId!}', _displayNameController.text);
 
+    final imagePathKey = 'profile_picture_path_${localUserId!}';
     if (_profileImageFile != null) {
       final appDir = await getApplicationDocumentsDirectory();
       final fileName = 'profile_picture_${localUserId!}.jpg';
       final savedImage =
       await _profileImageFile!.copy(p.join(appDir.path, fileName));
-      await prefs.setString(
-          'profile_picture_path_${localUserId!}', savedImage.path);
+      await prefs.setString(imagePathKey, savedImage.path);
+    } else {
+      // 画像がnullの場合（削除された場合）、保存パスを削除
+      await prefs.remove(imagePathKey);
     }
+
     if (_newPasswordController.text.isNotEmpty) {
       final success = await _localAuthService.updatePassword(
         username: _currentUser!.username,
@@ -149,9 +155,19 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('設定を保存しました。')),
       );
-      Navigator.of(context).pop(true);
+      // 画面を閉じずにローディング状態だけを解除
+      setState(() {
+        _isLoading = false;
+        // パスワードが変更された可能性があるので、状態を再読み込み
+        _hasPassword = _newPasswordController.text.isNotEmpty;
+        _currentPasswordController.clear();
+        _newPasswordController.clear();
+        _confirmPasswordController.clear();
+      });
+      // Navigator.of(context).pop(true); // この行は以前の修正で削除済み
     }
   }
+
   Future<void> _removePassword() async {
     if (_currentUser == null) return;
 
@@ -229,6 +245,17 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
                                 Navigator.of(context).pop();
                               },
                             ),
+                            if (_profileImageFile != null) // 画像が設定されている場合のみ削除オプションを表示
+                              ListTile(
+                                leading: const Icon(Icons.delete, color: Colors.red),
+                                title: const Text('画像を削除', style: TextStyle(color: Colors.red)),
+                                onTap: () {
+                                  setState(() {
+                                    _profileImageFile = null;
+                                  });
+                                  Navigator.of(context).pop();
+                                },
+                              ),
                           ],
                         ),
                       );
