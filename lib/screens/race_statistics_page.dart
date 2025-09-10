@@ -41,46 +41,48 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     });
   }
 
-  /// [修正] データ取得のメインロジック
+  /// データ取得のメインロジック
   void _startFetchingProcess() async {
-    // 1. まずはraceIdで過去レースIDの取得を試みる
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 24),
-            Text("過去レースIDを検索中..."),
-          ],
-        ),
-      ),
+      builder: (context) {
+        return const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 24),
+              Text("過去レースを検索中..."),
+            ],
+          ),
+        );
+      },
     );
 
-    try {
-      final List<String> pastRaceIds = await _pastRaceIdFetcher.fetchPastRaceIds(widget.raceId);
-      Navigator.of(context).pop(); // ローディングダイアログを閉じる
+    final PastRaceIdResult result = await _pastRaceIdFetcher.fetchPastRaceIds(widget.raceId);
 
-      if (pastRaceIds.isNotEmpty) {
-        // 2. 成功すれば、ユーザーに確認ダイアログを表示
-        final bool? confirmed = await _showRaceIdConfirmationDialog(pastRaceIds);
-        if (confirmed == true) {
+    if (mounted) Navigator.of(context).pop(); // ローディングダイアログを閉じる
+
+    switch (result.status) {
+      case FetchStatus.success:
+        final bool? confirmed = await _showRaceIdConfirmationDialog(result.raceIds);
+        if (confirmed == true && mounted) {
           setState(() {
             _statisticsFuture = _statisticsService.processAndSaveRaceStatisticsByIds(
               raceId: widget.raceId,
               raceName: widget.raceName,
-              pastRaceIds: pastRaceIds,
+              pastRaceIds: result.raceIds,
             );
           });
         }
-      } else {
-        // 3. 失敗すれば、フォールバックの確認
-        _showFallbackConfirmation();
-      }
-    } catch (e) {
-      Navigator.of(context).pop();
-      _showFallbackConfirmation(error: e.toString());
+        break;
+      case FetchStatus.pageNotSupported:
+      case FetchStatus.empty:
+        if (mounted) _showFallbackConfirmation(isNotSupported: true);
+        break;
+      case FetchStatus.temporaryError:
+        if (mounted) _showManualRetryOrFallbackDialog(result.message);
+        break;
     }
   }
 
@@ -122,13 +124,17 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     );
   }
 
-  /// [新規追加] フォールバック（レース名検索）の確認ダイアログ
-  void _showFallbackConfirmation({String? error}) {
+  /// [修正] フォールバック（レース名検索）の確認ダイアログ
+  void _showFallbackConfirmation({bool isNotSupported = false, String? error}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('レースIDでの検索失敗'),
-        content: Text(error != null ? 'エラーが発生しました。\n$error\n\n代わりにレース名「${widget.raceName}」で検索しますか？\n（精度が低下する場合があります）' : '過去10年のレースIDが見つかりませんでした。\n\n代わりにレース名「${widget.raceName}」で検索しますか？\n（精度が低下する場合があります）'),
+        title: Text(isNotSupported ? 'レースIDでの検索非対応' : 'レースIDでの検索失敗'),
+        content: Text(
+            isNotSupported
+                ? 'このレースは重賞ではないため、レースIDによる過去データ検索に対応していません。\n\n代わりにレース名「${widget.raceName}」で検索しますか？\n（精度が低下する場合があります）'
+                : 'エラーが発生しました。\n$error\n\n代わりにレース名「${widget.raceName}」で検索しますか？\n（精度が低下する場合があります）'
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('キャンセル')),
           ElevatedButton(
@@ -139,6 +145,33 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
               });
             },
             child: const Text('レース名で検索'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// [新規追加] 手動リトライかフォールバックかを選択させるダイアログ
+  void _showManualRetryOrFallbackDialog(String? errorMessage) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('データ取得エラー'),
+        content: Text('通信エラーによりデータの取得に失敗しました。\n詳細: $errorMessage'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _showFallbackConfirmation(error: errorMessage);
+            },
+            child: const Text('レース名で検索'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _startFetchingProcess();
+            },
+            child: const Text('もう一度試す'),
           ),
         ],
       ),
