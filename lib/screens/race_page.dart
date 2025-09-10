@@ -7,6 +7,8 @@ import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_result_page.dart';
+import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
 
 // レースの状態を管理するためのenum
 enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
@@ -78,8 +80,35 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
 
   Future<void> _fetchAndSaveRaceResult() async {
     try {
+      // 1. Webからレース結果を取得
       final result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/${widget.raceId}');
+      // 2. 取得したレース結果をDBに保存
       await _dbHelper.insertOrUpdateRaceResult(result);
+
+      // --- ▼▼▼ ここからが追加されたロジック ▼▼▼ ---
+
+      // 3. レース結果に含まれる各馬について、全競走成績がDBに存在するかチェック
+      for (final horse in result.horseResults) {
+        // DBにその馬のデータが1件もなければ、Webから全成績を取得する
+        final existingRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+        if (existingRecords.isEmpty) {
+          try {
+            print('競走馬データ取得開始: ${horse.horseName} (ID: ${horse.horseId})');
+            // 4. Webから馬の全成績を取得
+            final horseRecords = await HorsePerformanceScraperService.scrapeHorsePerformance(horse.horseId);
+            // 5. 取得した全成績をDBに保存
+            for (final record in horseRecords) {
+              await _dbHelper.insertOrUpdateHorsePerformance(record);
+            }
+            // サーバー負荷軽減のための待機
+            await Future.delayed(const Duration(milliseconds: 500));
+          } catch (e) {
+            print('ERROR: 競走馬ID ${horse.horseId} の成績スクレイピングまたは保存中にエラーが発生しました: $e');
+          }
+        }
+      }
+      // --- ▲▲▲ ここまでが追加されたロジック ▲▲▲ ---
+
       if (mounted) {
         setState(() {
           _raceResult = result;

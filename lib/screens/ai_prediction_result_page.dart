@@ -89,25 +89,28 @@ class _AiPredictionResultPageState extends State<AiPredictionResultPage> {
         final viewData = snapshot.data!;
 
         return SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: DataTable(
-              columns: const [
-                DataColumn(label: Text('馬名')),
-                DataColumn(label: Text('着順'), numeric: true),
-                DataColumn(label: Text('総合評価'), numeric: true),
-                DataColumn(label: Text('期待値'), numeric: true),
-              ],
-              rows: viewData.map((data) {
-                return DataRow(
-                  cells: [
-                    DataCell(Text(data.horseName)),
-                    DataCell(Text(data.rank)),
-                    DataCell(Text(data.overallScore.toStringAsFixed(1))),
-                    DataCell(Text(data.expectedValue.toStringAsFixed(2))),
-                  ],
-                );
-              }).toList(),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('馬名')),
+                  DataColumn(label: Text('着順'), numeric: true),
+                  DataColumn(label: Text('総合評価'), numeric: true),
+                  DataColumn(label: Text('期待値'), numeric: true),
+                ],
+                rows: viewData.map((data) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(data.horseName)),
+                      DataCell(Text(data.rank)),
+                      DataCell(Text(data.overallScore.toStringAsFixed(1))),
+                      DataCell(Text(data.expectedValue.toStringAsFixed(2))),
+                    ],
+                  );
+                }).toList(),
+              ),
             ),
           ),
         );
