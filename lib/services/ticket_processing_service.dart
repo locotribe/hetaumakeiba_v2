@@ -11,6 +11,7 @@ import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
+import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
 
 class TicketProcessingService {
   final DatabaseHelper _dbHelper;
@@ -76,7 +77,7 @@ class TicketProcessingService {
             if (latestRecord == null || latestRecord.date != raceResult.raceDate) {
               try {
                 final horseRecords =
-                await ScraperService.scrapeHorsePerformance(horse.horseId);
+                await HorsePerformanceScraperService.scrapeHorsePerformance(horse.horseId);
                 for (final record in horseRecords) {
                   await dbHelper.insertOrUpdateHorsePerformance(record);
                 }
