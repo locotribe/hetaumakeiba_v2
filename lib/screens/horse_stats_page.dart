@@ -197,7 +197,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
           raceResults: allRaceResults,
         );
         newJockeyComboStats[horse.horseId] = HorseStatsAnalyzer.analyzeJockeyCombo(
-          currentJockeyId: horse.jockeyId,
+          currentJockeyId: horse.jockeyId, // horse.jockey -> horse.jockeyId に変更
           performanceRecords: records,
           raceResults: allRaceResults,
         );
@@ -634,7 +634,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             return DataRow(
               cells: [
                 DataCell(Text(horse.horseName)),
-                DataCell(Text(horse.jockey)),
+                DataCell(Text(horse.jockeyId)),
                 DataCell(
                   stats.isFirstRide
                       ? const Text('初', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold))

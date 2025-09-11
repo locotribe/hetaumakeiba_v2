@@ -8,6 +8,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
+import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';
+import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
+import 'package:data_table_2/data_table_2.dart';
 
 class _HorseNumberDotPainter extends FlDotPainter {
   final Color color;
@@ -109,6 +112,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   Map<String, double> _staminaScores = {};
   Map<String, List<HorseRaceRecord>> _allPastRecords = {};
   int? _touchedSpotIndex; // タップされた点のインデックスを保持する状態変数
+  final JockeyAnalysisService _jockeyAnalysisService = JockeyAnalysisService();
+  Map<String, JockeyStats> _jockeyStats = {};
 
   @override
   void initState() {
@@ -116,14 +121,26 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     // 初期状態では馬番順にソート
     _sortedHorses = List.from(widget.raceData.horses);
     _sortHorses();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _calculateLegStylesAndDevelopment();
     _calculateDetailedScores();
+    _loadJockeyAnalysisData();
+  }
+
+  Future<void> _loadJockeyAnalysisData() async {
+    final jockeyIds = widget.raceData.horses.map((h) => h.jockeyId).toList();
+    final stats = await _jockeyAnalysisService.analyzeAllJockeys(jockeyIds);
+    if (mounted) {
+      setState(() {
+        _jockeyStats = stats;
+      });
+    }
   }
 
   void _generateSummary() {
     setState(() {
-      _predictionSummary = AiPredictionAnalyzer.generatePredictionSummary(widget.raceData, widget.overallScores, _allPastRecords);
+      _predictionSummary = AiPredictionAnalyzer.generatePredictionSummary(
+          widget.raceData, widget.overallScores, _allPastRecords);
     });
   }
 
@@ -133,10 +150,16 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     final Map<String, double> staminaScores = {};
 
     for (var horse in widget.raceData.horses) {
-      final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
-      earlySpeedScores[horse.horseId] = AiPredictionAnalyzer.evaluateEarlySpeedFit(horse, widget.raceData, pastRecords);
-      finishingKickScores[horse.horseId] = AiPredictionAnalyzer.evaluateFinishingKickFit(horse, widget.raceData, pastRecords);
-      staminaScores[horse.horseId] = AiPredictionAnalyzer.evaluateStaminaFit(horse, widget.raceData, pastRecords);
+      final pastRecords = await _dbHelper.getHorsePerformanceRecords(
+          horse.horseId);
+      earlySpeedScores[horse.horseId] =
+          AiPredictionAnalyzer.evaluateEarlySpeedFit(
+              horse, widget.raceData, pastRecords);
+      finishingKickScores[horse.horseId] =
+          AiPredictionAnalyzer.evaluateFinishingKickFit(
+              horse, widget.raceData, pastRecords);
+      staminaScores[horse.horseId] = AiPredictionAnalyzer.evaluateStaminaFit(
+          horse, widget.raceData, pastRecords);
     }
 
     if (mounted) {
@@ -154,9 +177,11 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     final Map<String, String> legStyles = {};
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
     for (var horse in widget.raceData.horses) {
-      final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      final pastRecords = await _dbHelper.getHorsePerformanceRecords(
+          horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
-      legStyles[horse.horseId] = AiPredictionAnalyzer.getRunningStyle(pastRecords);
+      legStyles[horse.horseId] =
+          AiPredictionAnalyzer.getRunningStyle(pastRecords);
 
       horse.conditionFit = AiPredictionAnalyzer.analyzeConditionFit(
         horse: horse,
@@ -167,11 +192,15 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     }
 
     final statisticsService = StatisticsService();
-    final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(widget.raceData.raceName, widget.raceData.raceId);
+    final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(
+        widget.raceData.raceName, widget.raceData.raceId);
     final cornersToPredict = <String>{};
     for (final result in pastRaceResults) {
       for (final cornerPassage in result.cornerPassages) {
-        final cornerName = cornerPassage.split(':').first.trim();
+        final cornerName = cornerPassage
+            .split(':')
+            .first
+            .trim();
         // 1-2コーナーのような表記を統一
         if (cornerName.contains('1') || cornerName.contains('2')) {
           cornersToPredict.add('1-2コーナー');
@@ -182,13 +211,18 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         }
       }
     }
-    final sortedCorners = cornersToPredict.toList()..sort();
+    final sortedCorners = cornersToPredict.toList()
+      ..sort();
 
     final development = AiPredictionAnalyzer.simulateRaceDevelopment(
         widget.raceData,
         legStyles,
         allPastRecords, // allPastRecords を渡す
-        sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']
+        sortedCorners.isNotEmpty ? sortedCorners : [
+          '1-2コーナー',
+          '3コーナー',
+          '4コーナー'
+        ]
     );
     if (mounted) {
       setState(() {
@@ -251,6 +285,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
           tabs: const [
             Tab(text: '総合評価'),
             Tab(text: '推奨馬'),
+            Tab(text: '騎手特性'),
             Tab(text: '複合適性'),
             Tab(text: '全馬リスト'),
           ],
@@ -261,6 +296,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         children: [
           _buildSummaryTab(),
           _buildRecommendationTab(),
+          _buildJockeyStatsTab(),
           _buildConditionFitTab(),
           _buildAllHorsesListCard(),
         ],
@@ -278,11 +314,12 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   }
 
   Widget _buildRecommendationTab() {
-    final hitFocusHorses = [...widget.raceData.horses]..sort((a, b) {
-      final scoreA = widget.overallScores[a.horseId] ?? 0.0;
-      final scoreB = widget.overallScores[b.horseId] ?? 0.0;
-      return scoreB.compareTo(scoreA);
-    });
+    final hitFocusHorses = [...widget.raceData.horses]
+      ..sort((a, b) {
+        final scoreA = widget.overallScores[a.horseId] ?? 0.0;
+        final scoreB = widget.overallScores[b.horseId] ?? 0.0;
+        return scoreB.compareTo(scoreA);
+      });
 
     final recoveryFocusHorses = [...widget.raceData.horses]
         .where((h) => (widget.expectedValues[h.horseId] ?? -1.0) > 0)
@@ -296,7 +333,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     return ListView(
       padding: const EdgeInsets.all(12.0),
       children: [
-        _buildDualPredictionCard(hitFocusHorses.take(3).toList(), recoveryFocusHorses.take(3).toList()),
+        _buildDualPredictionCard(hitFocusHorses.take(3).toList(),
+            recoveryFocusHorses.take(3).toList()),
       ],
     );
   }
@@ -310,15 +348,22 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.raceData.raceName, style: Theme.of(context).textTheme.titleLarge),
+            Text(widget.raceData.raceName, style: Theme
+                .of(context)
+                .textTheme
+                .titleLarge),
             const SizedBox(height: 8),
             const Divider(),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildSummaryItem('予測ペース', widget.raceData.racePacePrediction?.predictedPace ?? '不明'),
-                _buildSummaryItem('有利な脚質', widget.raceData.racePacePrediction?.advantageousStyle ?? '不明'),
+                _buildSummaryItem('予測ペース',
+                    widget.raceData.racePacePrediction?.predictedPace ??
+                        '不明'),
+                _buildSummaryItem('有利な脚質',
+                    widget.raceData.racePacePrediction?.advantageousStyle ??
+                        '不明'),
               ],
             ),
             const SizedBox(height: 16),
@@ -338,9 +383,13 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                     Container(
                       color: Colors.grey.shade100,
                       child: TabBar(
-                        labelColor: Theme.of(context).primaryColorDark,
+                        labelColor: Theme
+                            .of(context)
+                            .primaryColorDark,
                         unselectedLabelColor: Colors.grey.shade600,
-                        indicatorColor: Theme.of(context).primaryColor,
+                        indicatorColor: Theme
+                            .of(context)
+                            .primaryColor,
                         tabs: const [
                           Tab(text: '脚質構成'),
                           Tab(text: 'コーナー予測'),
@@ -357,7 +406,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                             padding: const EdgeInsets.all(8.0),
                             child: ListView(
                               children: _raceDevelopment.entries.map((entry) {
-                                return _buildCornerPredictionDisplay(entry.key, entry.value);
+                                return _buildCornerPredictionDisplay(
+                                    entry.key, entry.value);
                               }).toList(),
                             ),
                           ),
@@ -372,7 +422,10 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
             const SizedBox(height: 16),
             Text(
               '解説: $_predictionSummary',
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .bodyMedium,
             ),
           ],
         ),
@@ -397,7 +450,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
           if (['(', ')', ',', '-', '=', '*'].contains(char)) {
             widgets.add(Padding(
               padding: const EdgeInsets.symmetric(horizontal: 1.0),
-              child: Text(char, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              child: Text(char, style: const TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 14)),
             ));
           }
         }
@@ -413,7 +467,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(cornerName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(cornerName, style: const TextStyle(
+              fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Wrap(
             spacing: 2.0,
@@ -469,9 +524,12 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         BarChartData(
           barGroups: barGroups,
           titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false)),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -490,18 +548,23 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 final horses = groupedByLegStyle[style]!;
                 showDialog(
                   context: context,
-                  builder: (context) => AlertDialog(
-                    title: Text('脚質: $style'),
-                    content: SizedBox(
-                      width: double.minPositive,
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: horses.length,
-                        itemBuilder: (context, i) => Text('${horses[i].horseNumber} ${horses[i].horseName}'),
+                  builder: (context) =>
+                      AlertDialog(
+                        title: Text('脚質: $style'),
+                        content: SizedBox(
+                          width: double.minPositive,
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: horses.length,
+                            itemBuilder: (context, i) =>
+                                Text('${horses[i].horseNumber} ${horses[i]
+                                    .horseName}'),
+                          ),
+                        ),
+                        actions: [TextButton(onPressed: () =>
+                            Navigator.pop(context), child: const Text('閉じる'))
+                        ],
                       ),
-                    ),
-                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('閉じる'))],
-                  ),
                 );
               }
             },
@@ -514,7 +577,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   Widget _buildAbilityPopularityTab() {
     final spots = widget.raceData.horses.map((horse) {
       final score = widget.overallScores[horse.horseId] ?? 0.0;
-      final popularity = horse.popularity?.toDouble() ?? (widget.raceData.horses.length + 1).toDouble();
+      final popularity = horse.popularity?.toDouble() ??
+          (widget.raceData.horses.length + 1).toDouble();
       final style = _legStyles[horse.horseId] ?? '不明';
       return ScatterSpot(
         popularity,
@@ -545,14 +609,18 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 minY: (minScore - padding).floorToDouble(),
                 maxY: (maxScore + 2).ceilToDouble(),
                 titlesData: const FlTitlesData(
-                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                   bottomTitles: AxisTitles(axisNameWidget: Text('人気 →')),
                   leftTitles: AxisTitles(axisNameWidget: Text('スコア →')),
                 ),
                 gridData: const FlGridData(show: true),
                 borderData: FlBorderData(show: true),
-                showingTooltipIndicators: _touchedSpotIndex != null ? [_touchedSpotIndex!] : [],
+                showingTooltipIndicators: _touchedSpotIndex != null ? [
+                  _touchedSpotIndex!
+                ] : [],
                 scatterTouchData: ScatterTouchData(
                   enabled: true,
                   handleBuiltInTouches: false, // デフォルトの長押しツールチップを無効化
@@ -586,9 +654,13 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                     fitInsideVertically: true,
                     getTooltipItems: (touchedSpot) {
                       // touchedSpot の spotIndex を使って馬を特定する
-                      final horse = widget.raceData.horses[spots.indexOf(touchedSpot)];
+                      final horse = widget.raceData.horses[spots.indexOf(
+                          touchedSpot)];
                       return ScatterTooltipItem(
-                        '${horse.horseNumber} ${horse.horseName}\nスコア: ${touchedSpot.y.toStringAsFixed(1)}\n人気: ${touchedSpot.x.toInt()}番',
+                        '${horse.horseNumber} ${horse
+                            .horseName}\nスコア: ${touchedSpot.y
+                            .toStringAsFixed(1)}\n人気: ${touchedSpot.x
+                            .toInt()}番',
                         textStyle: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -631,12 +703,17 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   }
 
   Color _getColorForLegStyle(String style) {
-    switch(style) {
-      case '逃げ': return Colors.red;
-      case '先行': return Colors.blue;
-      case '差し': return Colors.orange;
-      case '追込': return Colors.purple;
-      default: return Colors.grey;
+    switch (style) {
+      case '逃げ':
+        return Colors.red;
+      case '先行':
+        return Colors.blue;
+      case '差し':
+        return Colors.orange;
+      case '追込':
+        return Colors.purple;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -645,13 +722,18 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       children: [
         Text(title, style: TextStyle(color: Colors.grey.shade600)),
         const SizedBox(height: 4),
-        Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        Text(value, style: Theme
+            .of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(fontWeight: FontWeight.bold)),
       ],
     );
   }
 
   // エリア2: デュアル予測推奨
-  Widget _buildDualPredictionCard(List<PredictionHorseDetail> hitHorses, List<PredictionHorseDetail> recoveryHorses) {
+  Widget _buildDualPredictionCard(List<PredictionHorseDetail> hitHorses,
+      List<PredictionHorseDetail> recoveryHorses) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -668,13 +750,18 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  Widget _buildPredictionColumn(String title, List<PredictionHorseDetail> horses, bool isHitFocus) {
+  Widget _buildPredictionColumn(String title,
+      List<PredictionHorseDetail> horses, bool isHitFocus) {
     const marks = ['◎', '〇', '▲'];
     const recoveryMarks = ['穴', '妙', '激'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        Text(title, style: Theme
+            .of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         if (horses.isEmpty)
           const Padding(
@@ -691,15 +778,18 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  Widget _buildRecommendedHorseTile(PredictionHorseDetail horse, String mark, bool isHitFocus) {
+  Widget _buildRecommendedHorseTile(PredictionHorseDetail horse, String mark,
+      bool isHitFocus) {
     final score = widget.overallScores[horse.horseId] ?? 0.0;
     final expectedValue = widget.expectedValues[horse.horseId] ?? -1.0;
 
     // アプリ勝率を計算
-    final totalScore = widget.overallScores.values.fold(0.0, (sum, s) => sum + s);
+    final totalScore = widget.overallScores.values.fold(
+        0.0, (sum, s) => sum + s);
     final appWinRate = totalScore > 0 ? (score / totalScore) * 100 : 0.0;
     // 市場勝率を計算 (単勝オッズから)
-    final marketWinRate = horse.odds != null && horse.odds! > 0 ? (1.0 / horse.odds!) * 100 * 0.8 : 0.0; // 控除率20%と仮定
+    final marketWinRate = horse.odds != null && horse.odds! > 0 ? (1.0 /
+        horse.odds!) * 100 * 0.8 : 0.0; // 控除率20%と仮定
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -715,24 +805,33 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(mark, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(mark, style: const TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.bold)),
               if (isHitFocus)
-                Text('総合スコア: ${score.toStringAsFixed(1)}', style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold))
+                Text('総合スコア: ${score.toStringAsFixed(1)}',
+                    style: TextStyle(color: Colors.blue.shade700,
+                        fontWeight: FontWeight.bold))
               else
-                Text('期待値: ${expectedValue.toStringAsFixed(2)}', style: TextStyle(color: Colors.amber.shade800, fontWeight: FontWeight.bold)),
+                Text('期待値: ${expectedValue.toStringAsFixed(2)}',
+                    style: TextStyle(color: Colors.amber.shade800,
+                        fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 4),
           // 2段目: 馬番と馬名
-          Text('${horse.horseNumber} ${horse.horseName}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text('${horse.horseNumber} ${horse.horseName}',
+              style: const TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           // 3段目: 詳細
           if (isHitFocus)
             const Row(
               children: [
-                Chip(label: Text('#コース巧者', style: TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
+                Chip(label: Text('#コース巧者', style: TextStyle(fontSize: 10)),
+                    visualDensity: VisualDensity.compact),
                 SizedBox(width: 4),
-                Chip(label: Text('#騎手得意', style: TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
+                Chip(label: Text('#騎手得意', style: TextStyle(fontSize: 10)),
+                    visualDensity: VisualDensity.compact),
               ],
             )
           else
@@ -740,7 +839,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                  'アプリ勝率${appWinRate.toStringAsFixed(1)}% > 市場勝率${marketWinRate.toStringAsFixed(1)}%',
+                  'アプリ勝率${appWinRate.toStringAsFixed(
+                      1)}% > 市場勝率${marketWinRate.toStringAsFixed(1)}%',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade700)
               ),
             ),
@@ -761,12 +861,16 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('全出走馬 詳細データ', style: Theme.of(context).textTheme.titleLarge),
+                Text('全出走馬 詳細データ', style: Theme
+                    .of(context)
+                    .textTheme
+                    .titleLarge),
                 const SizedBox(height: 8),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
-                    columnSpacing: 24.0, // 列の間隔を詰める
+                    columnSpacing: 24.0,
+                    // 列の間隔を詰める
                     sortColumnIndex: _sortColumnIndex,
                     sortAscending: _sortAscending,
                     columns: [
@@ -810,9 +914,12 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                     rows: _sortedHorses.map((horse) {
                       final score = widget.overallScores[horse.horseId] ?? 0.0;
                       final rank = _getRankFromScore(score);
-                      final expectedValue = widget.expectedValues[horse.horseId] ?? -1.0;
-                      final earlySpeed = _earlySpeedScores[horse.horseId] ?? 0.0;
-                      final finishingKick = _finishingKickScores[horse.horseId] ?? 0.0;
+                      final expectedValue = widget.expectedValues[horse
+                          .horseId] ?? -1.0;
+                      final earlySpeed = _earlySpeedScores[horse.horseId] ??
+                          0.0;
+                      final finishingKick = _finishingKickScores[horse
+                          .horseId] ?? 0.0;
                       final stamina = _staminaScores[horse.horseId] ?? 0.0;
                       return DataRow(
                         cells: [
@@ -860,6 +967,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       ),
     );
   }
+
 // ▲▲▲【テスト用コード】▲▲▲
 
   Widget _buildConditionFitTab() {
@@ -875,7 +983,10 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${horse.horseNumber} ${horse.horseName}', style: Theme.of(context).textTheme.titleMedium),
+                Text('${horse.horseNumber} ${horse.horseName}', style: Theme
+                    .of(context)
+                    .textTheme
+                    .titleMedium),
                 const Divider(),
                 _buildFitRow('馬場適性', horse.conditionFit?.trackFit),
                 _buildFitRow('ペース適性', horse.conditionFit?.paceFit),
@@ -899,7 +1010,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
           Expanded(
             child: Text(
               _getRatingText(rating),
-              style: TextStyle(color: _getRatingColor(rating), fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: _getRatingColor(rating), fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -909,10 +1021,14 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
   String _getRatingText(FitnessRating rating) {
     switch (rating) {
-      case FitnessRating.excellent: return '◎ 絶好';
-      case FitnessRating.good: return '〇 好条件';
-      case FitnessRating.average: return '△ 普通';
-      case FitnessRating.poor: return '✕ 割引';
+      case FitnessRating.excellent:
+        return '◎ 絶好';
+      case FitnessRating.good:
+        return '〇 好条件';
+      case FitnessRating.average:
+        return '△ 普通';
+      case FitnessRating.poor:
+        return '✕ 割引';
       case FitnessRating.unknown:
         return '－ データなし';
     }
@@ -920,12 +1036,92 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
   Color _getRatingColor(FitnessRating rating) {
     switch (rating) {
-      case FitnessRating.excellent: return Colors.red;
-      case FitnessRating.good: return Colors.orange;
-      case FitnessRating.average: return Colors.black87;
-      case FitnessRating.poor: return Colors.blue;
+      case FitnessRating.excellent:
+        return Colors.red;
+      case FitnessRating.good:
+        return Colors.orange;
+      case FitnessRating.average:
+        return Colors.black87;
+      case FitnessRating.poor:
+        return Colors.blue;
       case FitnessRating.unknown:
         return Colors.grey;
     }
+  }
+
+  Widget _buildJockeyStatsTab() {
+    if (_jockeyStats.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // データを馬番順にソート
+    final sortedHorses = List<PredictionHorseDetail>.from(widget.raceData.horses)
+      ..sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
+
+    return DataTable2(
+      columnSpacing: 12.0,
+      dataRowHeight: 60,
+      columns: const [
+        DataColumn2(
+          label: Text('騎手 (成績)'),
+        ),
+        DataColumn2(
+          label: Text('得意コース'),
+          size: ColumnSize.L, // 得意コース列は他の列より広くする
+        ),
+        DataColumn2(
+          label: Text('得意馬場'),
+        ),
+      ],
+      rows: sortedHorses.map((horse) {
+        final stats = _jockeyStats[horse.jockeyId];
+        if (stats == null) {
+          return DataRow(cells: [
+            DataCell(Text('${horse.jockey} (データなし)')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+          ]);
+        }
+
+        // 得意コースを勝率でソートして上位3つを取得
+        final topCourses = stats.statsByCourse.entries.toList()
+          ..sort((a, b) => b.value.winRate.compareTo(a.value.winRate));
+
+        // 得意馬場を勝率でソートして取得
+        final topConditions = stats.statsByTrackCondition.entries.toList()
+          ..sort((a, b) => b.value.winRate.compareTo(a.value.winRate));
+
+        return DataRow(
+          cells: [
+            DataCell(
+              RichText(
+                text: TextSpan(
+                  style: DefaultTextStyle.of(context).style,
+                  children: <TextSpan>[
+                    TextSpan(
+                      text: stats.jockeyName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Colors.black,
+                        decoration: TextDecoration.none, // ← 黄色い下線を削除
+                      ),
+                    ),
+                    const TextSpan(text: '\n'),
+                    TextSpan(
+                      text: '総合: ${stats.overallStats.recordString}', // ← 「総合:」を追加
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            DataCell(Text(topCourses.take(3).map((e) => e.key).join('\n'))), // 改行で表示
+            DataCell(Text(topConditions.take(3).map((e) => e.key).join(', '))),
+          ],
+        );
+      }).toList(),
+    );
   }
 }

@@ -1006,4 +1006,16 @@ class DatabaseHelper {
       return AiPrediction.fromMap(maps[i]);
     });
   }
+
+  /// データベースに保存されている全レース結果から、騎手ごとの得意条件を分析するロジック
+  Future<Map<String, RaceResult>> getAllRaceResults() async {
+    final db = await database;
+    final maps = await db.query('race_results');
+    final Map<String, RaceResult> results = {};
+    for (final map in maps) {
+      final result = raceResultFromJson(map['race_result_json'] as String);
+      results[result.raceId] = result;
+    }
+    return results;
+  }
 }
