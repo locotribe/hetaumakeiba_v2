@@ -158,17 +158,10 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
           }
         }
       }
-      // --- DEBUG PRINT START ---
-      print('【デバッグ情報】収集した全過去レースID数: ${allPastRaceIds.length}');
-      // --- DEBUG PRINT END ---
 
       // 2. DBにないレース結果のみをダウンロード対象とする
       final existingResults = await _dbHelper.getMultipleRaceResults(allPastRaceIds.toList());
       final raceIdsToFetch = allPastRaceIds.where((id) => !existingResults.containsKey(id)).toList();
-      // --- DEBUG PRINT START ---
-      print('【デバッグ情報】DBに存在したレース結果数: ${existingResults.length}');
-      print('【デバッグ情報】新規にダウンロードするレース結果数: ${raceIdsToFetch.length}');
-      // --- DEBUG PRINT END ---
 
       // 3. 不足しているレース結果をダウンロード
       final Map<String, RaceResult> fetchedResults = {};

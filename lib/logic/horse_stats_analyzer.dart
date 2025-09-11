@@ -139,7 +139,7 @@ class HorseStatsAnalyzer {
     required Map<String, RaceResult> raceResults,
   }) {
     final comboRecords = performanceRecords
-        .where((record) => record.jockey == currentJockeyId)
+        .where((record) => record.jockeyId == currentJockeyId)
         .toList();
 
     if (comboRecords.isEmpty) {
