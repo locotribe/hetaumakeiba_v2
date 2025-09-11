@@ -356,14 +356,10 @@ class AiPredictionAnalyzer {
   // 4. 人的要因評価
   static double _evaluateHumanFactors(PredictionHorseDetail horse, List<HorseRaceRecord> pastRecords) {
     // 1. 今回と同じ騎手が騎乗した過去レースを抽出
-    final sameJockeyRaces = pastRecords.where((record) => record.jockey == horse.jockey).toList();
+    final sameJockeyRaces = pastRecords.where((record) => record.jockeyId == horse.jockeyId).toList();
 
     if (sameJockeyRaces.isEmpty) {
-      // トップジョッキーなら初騎乗でも高評価
-      if (horse.jockey.contains('ルメール') || horse.jockey.contains('川田')) {
-        return 85.0;
-      }
-      return 70.0; // コンビ実績がない場合は平均的な点数
+      return 75.0; // コンビ実績がない場合は中立的な点数
     }
 
     // 2. コンビでの複勝率を計算
