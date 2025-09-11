@@ -55,7 +55,7 @@ class PastRaceIdFetcherService {
         if (completer.isCompleted) return;
 
         // ページの描画とJS実行のために3秒間待機する
-        await Future.delayed(const Duration(seconds: 3));
+        await Future.delayed(const Duration(seconds: 5));
 
         // 待機中にタイムアウトした可能性を考慮して再度チェック
         if (completer.isCompleted) return;
