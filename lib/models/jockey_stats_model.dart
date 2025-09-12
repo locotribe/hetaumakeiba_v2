@@ -5,16 +5,16 @@ class JockeyStats {
   final String jockeyId;
   final FactorStats overallStats;
   final FactorStats? courseStats;
-  final Map<String, FactorStats> statsByCourse;
-  final Map<String, FactorStats> statsByTrackCondition;
+  final FactorStats popularHorseStats;
+  final FactorStats unpopularHorseStats;
 
   JockeyStats({
     required this.jockeyName,
     required this.jockeyId,
     required this.overallStats,
     this.courseStats,
-    required this.statsByCourse,
-    required this.statsByTrackCondition,
+    required this.popularHorseStats,
+    required this.unpopularHorseStats,
   });
 }
 

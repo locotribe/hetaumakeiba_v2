@@ -111,14 +111,13 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   Map<String, double> _finishingKickScores = {};
   Map<String, double> _staminaScores = {};
   Map<String, List<HorseRaceRecord>> _allPastRecords = {};
-  int? _touchedSpotIndex; // タップされた点のインデックスを保持する状態変数
+  int? _touchedSpotIndex;
   final JockeyAnalysisService _jockeyAnalysisService = JockeyAnalysisService();
   Map<String, JockeyStats> _jockeyStats = {};
 
   @override
   void initState() {
     super.initState();
-    // 初期状態では馬番順にソート
     _sortedHorses = List.from(widget.raceData.horses);
     _sortHorses();
     _tabController = TabController(length: 5, vsync: this);
@@ -129,7 +128,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
   Future<void> _loadJockeyAnalysisData() async {
     final jockeyIds = widget.raceData.horses.map((h) => h.jockeyId).toList();
-    // ★修正：引数に raceData を追加
     final stats = await _jockeyAnalysisService.analyzeAllJockeys(jockeyIds, raceData: widget.raceData);
     if (mounted) {
       setState(() {
@@ -218,7 +216,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     final development = AiPredictionAnalyzer.simulateRaceDevelopment(
         widget.raceData,
         legStyles,
-        allPastRecords, // allPastRecords を渡す
+        allPastRecords,
         sortedCorners.isNotEmpty ? sortedCorners : [
           '1-2コーナー',
           '3コーナー',
@@ -624,10 +622,9 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 ] : [],
                 scatterTouchData: ScatterTouchData(
                   enabled: true,
-                  handleBuiltInTouches: false, // デフォルトの長押しツールチップを無効化
+                  handleBuiltInTouches: false,
                   touchCallback: (event, response) {
                     if (response == null || response.touchedSpot == null) {
-                      // グラフの外側をタップした場合はツールチップを消す
                       if (_touchedSpotIndex != null) {
                         setState(() {
                           _touchedSpotIndex = null;
@@ -637,7 +634,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                     }
                     if (event is FlTapUpEvent) {
                       final spotIndex = response.touchedSpot!.spotIndex;
-                      // 同じ点を再度タップした場合は選択解除、違う点をタップしたら選択
                       setState(() {
                         if (_touchedSpotIndex == spotIndex) {
                           _touchedSpotIndex = null;
@@ -654,7 +650,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                     fitInsideHorizontally: true,
                     fitInsideVertically: true,
                     getTooltipItems: (touchedSpot) {
-                      // touchedSpot の spotIndex を使って馬を特定する
                       final horse = widget.raceData.horses[spots.indexOf(
                           touchedSpot)];
                       return ScatterTooltipItem(
@@ -944,7 +939,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  // ▼▼▼【テスト用コード】▼▼▼
   Widget _buildScoreIndicator(double score) {
     return Tooltip(
       message: score.toStringAsFixed(1),
@@ -968,8 +962,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       ),
     );
   }
-
-// ▲▲▲【テスト用コード】▲▲▲
 
   Widget _buildConditionFitTab() {
     return ListView.builder(
@@ -1055,23 +1047,21 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       return const Center(child: CircularProgressIndicator());
     }
 
-    // データを馬番順にソート
     final sortedHorses = List<PredictionHorseDetail>.from(widget.raceData.horses)
       ..sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
 
     return DataTable2(
-      columnSpacing: 12.0,
+      columnSpacing: 0.0,
       dataRowHeight: 60,
       columns: const [
         DataColumn2(
-          label: Text('騎手\n(当コース成績)'),
+          label: Text('騎手\n(当コース)'),
         ),
         DataColumn2(
-          label: Text('得意コース'),
-          size: ColumnSize.L, // 得意コース列は他の列より広くする
+          label: Text('人気馬信頼度\n(1-3人気/複勝率)'),
         ),
         DataColumn2(
-          label: Text('得意馬場'),
+          label: Text('穴馬一発度\n(6人気~/単複回収率)'),
         ),
       ],
       rows: sortedHorses.map((horse) {
@@ -1083,18 +1073,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
             const DataCell(Text('-')),
           ]);
         }
-        // ★★★ ここからが修正箇所 ★★★
-        // courseStatsがあればその成績を、なければデフォルト(0-0-0-0)の成績を使用
+
         final courseStatsString = stats.courseStats?.recordString ?? '0-0-0-0';
-        // ★★★ ここまでが修正箇所 ★★★
-
-        // 得意コースを勝率でソートして上位3つを取得
-        final topCourses = stats.statsByCourse.entries.toList()
-          ..sort((a, b) => b.value.winRate.compareTo(a.value.winRate));
-
-        // 得意馬場を勝率でソートして取得
-        final topConditions = stats.statsByTrackCondition.entries.toList()
-          ..sort((a, b) => b.value.winRate.compareTo(a.value.winRate));
 
         return DataRow(
           cells: [
@@ -1109,23 +1089,30 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                         color: Colors.black,
-                        decoration: TextDecoration.none, // ← 黄色い下線を削除
+                        decoration: TextDecoration.none,
                       ),
                     ),
                     const TextSpan(text: '\n'),
-                    // ★★★ ここからが修正箇所 ★★★
                     TextSpan(
-                      text: '($courseStatsString)', // 表示するテキストとラベルを更新
+                      text: '($courseStatsString)',
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-                    // ★★★ ここまでが修正箇所 ★★★
                   ],
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            DataCell(Text(topCourses.take(3).map((e) => e.key).join('\n'))), // 改行で表示
-            DataCell(Text(topConditions.take(3).map((e) => e.key).join(', '))),
+            DataCell(
+                Text(
+                  '${stats.popularHorseStats.showRate.toStringAsFixed(1)}%',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                )
+            ),
+            DataCell(
+                Text(
+                  '単(${stats.unpopularHorseStats.winRecoveryRate.toStringAsFixed(0)}%)複(${stats.unpopularHorseStats.showRecoveryRate.toStringAsFixed(0)}%)',
+                )
+            ),
           ],
         );
       }).toList(),
