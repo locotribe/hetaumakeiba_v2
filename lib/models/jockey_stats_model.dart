@@ -4,14 +4,16 @@ class JockeyStats {
   final String jockeyName;
   final String jockeyId;
   final FactorStats overallStats;
-  final Map<String, FactorStats> statsByCourse; // ← statsByVenueとstatsByDistanceをこれに統合
+  final FactorStats? courseStats;
+  final Map<String, FactorStats> statsByCourse;
   final Map<String, FactorStats> statsByTrackCondition;
 
   JockeyStats({
     required this.jockeyName,
     required this.jockeyId,
     required this.overallStats,
-    required this.statsByCourse, // ← 変更
+    this.courseStats,
+    required this.statsByCourse,
     required this.statsByTrackCondition,
   });
 }

@@ -4,18 +4,47 @@ import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart'; // ★追加
 
 class JockeyAnalysisService {
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  Future<Map<String, JockeyStats>> analyzeAllJockeys(List<String> jockeyIdsInRace) async {
+  Future<Map<String, JockeyStats>> analyzeAllJockeys(List<String> jockeyIdsInRace, {PredictionRaceData? raceData}) async { // ★引数追加
     final allRaceResults = await _dbHelper.getAllRaceResults();
     final Map<String, JockeyStats> analysisResults = {};
+
+    // ★追加：現在のコースを特定するキーを作成
+    String? currentCourseKey;
+    if (raceData != null && raceData.raceDetails1 != null) {
+      String venue = '';
+      // raceDetails1から開催場名を抽出する
+      for (final entry in racecourseDict.entries) {
+        if (raceData.raceDetails1!.contains(entry.value)) {
+          venue = entry.value;
+          break;
+        }
+      }
+      final distance = _extractDistance(raceData.raceDetails1!);
+      // ★★★ ここからが差し替え箇所 ★★★
+      print('--- Jockey Analysis Debug ---');
+      print('【デバッグ】raceData.venue: "$venue"');
+      print('【デバッグ】raceData.raceDetails1: "${raceData.raceDetails1}"');
+      print('【デバッグ】抽出されたdistance: "$distance"');
+      // ★★★ ここまでが差し替え箇所 ★★★
+      if (venue.isNotEmpty && distance.isNotEmpty) {
+        currentCourseKey = '$venue $distance';
+      }
+    }
+
+    // ★★★ ここからが追加箇所 ★★★
+    print('【デバッグ】現在のレースのコース特定キー: $currentCourseKey');
+    print('--------------------------');
+    // ★★★ ここまでが追加箇所 ★★★
 
     for (final jockeyId in jockeyIdsInRace) {
       String jockeyName = '';
       final overallStats = FactorStats();
-      final Map<String, FactorStats> statsByCourse = {}; // ← statsByVenueとstatsByDistanceをこれに統合
+      final Map<String, FactorStats> statsByCourse = {};
       final Map<String, FactorStats> statsByTrackCondition = {};
 
       for (final raceResult in allRaceResults.values) {
@@ -24,14 +53,13 @@ class JockeyAnalysisService {
             jockeyName = horseResult.jockeyName;
             _updateFactorStats(overallStats, horseResult, raceResult);
 
-            // ▼▼▼ ここからが修正箇所 ▼▼▼
             final venue = _extractVenue(raceResult.raceId);
             final distance = _extractDistance(raceResult.raceInfo);
+
             if (venue.isNotEmpty && distance.isNotEmpty) {
-              final courseKey = '$venue $distance'; // "東京 芝1600m" のようなキーを作成
+              final courseKey = '$venue $distance';
               _updateFactorStats(statsByCourse.putIfAbsent(courseKey, () => FactorStats()), horseResult, raceResult);
             }
-            // ▲▲▲ ここまでが修正箇所 ▲▲▲
 
             final trackCondition = _extractTrackCondition(raceResult.raceInfo);
             if (trackCondition.isNotEmpty) {
@@ -42,11 +70,17 @@ class JockeyAnalysisService {
       }
 
       if (overallStats.raceCount > 0) {
+        // ★★★ ここからが追加箇所 ★★★
+        if (jockeyId == jockeyIdsInRace.first) { // 最初の騎手についてのみ、集計された全コースキーを出力
+          print('【デバッグ】DBから集計されたコースキーのサンプル: ${statsByCourse.keys.take(5).join(', ')}');
+        }
+        // ★★★ ここまでが追加箇所 ★★★
         analysisResults[jockeyId] = JockeyStats(
           jockeyId: jockeyId,
           jockeyName: jockeyName,
           overallStats: overallStats,
-          statsByCourse: statsByCourse, // ← 変更
+          courseStats: currentCourseKey != null ? statsByCourse[currentCourseKey] : null, // ★追加：該当コースの成績をセット
+          statsByCourse: statsByCourse,
           statsByTrackCondition: statsByTrackCondition,
         );
       }

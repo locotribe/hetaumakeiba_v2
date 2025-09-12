@@ -129,7 +129,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
   Future<void> _loadJockeyAnalysisData() async {
     final jockeyIds = widget.raceData.horses.map((h) => h.jockeyId).toList();
-    final stats = await _jockeyAnalysisService.analyzeAllJockeys(jockeyIds);
+    // ★修正：引数に raceData を追加
+    final stats = await _jockeyAnalysisService.analyzeAllJockeys(jockeyIds, raceData: widget.raceData);
     if (mounted) {
       setState(() {
         _jockeyStats = stats;
@@ -1063,7 +1064,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       dataRowHeight: 60,
       columns: const [
         DataColumn2(
-          label: Text('騎手 (成績)'),
+          label: Text('騎手\n(当コース成績)'),
         ),
         DataColumn2(
           label: Text('得意コース'),
@@ -1082,6 +1083,10 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
             const DataCell(Text('-')),
           ]);
         }
+        // ★★★ ここからが修正箇所 ★★★
+        // courseStatsがあればその成績を、なければデフォルト(0-0-0-0)の成績を使用
+        final courseStatsString = stats.courseStats?.recordString ?? '0-0-0-0';
+        // ★★★ ここまでが修正箇所 ★★★
 
         // 得意コースを勝率でソートして上位3つを取得
         final topCourses = stats.statsByCourse.entries.toList()
@@ -1108,10 +1113,12 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                       ),
                     ),
                     const TextSpan(text: '\n'),
+                    // ★★★ ここからが修正箇所 ★★★
                     TextSpan(
-                      text: '総合: ${stats.overallStats.recordString}', // ← 「総合:」を追加
+                      text: '($courseStatsString)', // 表示するテキストとラベルを更新
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
+                    // ★★★ ここまでが修正箇所 ★★★
                   ],
                 ),
                 overflow: TextOverflow.ellipsis,
