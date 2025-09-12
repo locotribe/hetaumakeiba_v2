@@ -36,7 +36,6 @@ class PastRaceIdFetcherService {
     final completer = Completer<PastRaceIdResult>();
     late HeadlessInAppWebView browser;
     final url = "https://race.netkeiba.com/race/past10.html?race_id=$baseRaceId";
-
     // タイムアウトを短めに設定し、リトライしやすくする
     final timer = Timer(const Duration(seconds: 20), () {
       if (!completer.isCompleted) {
@@ -129,15 +128,20 @@ class PastRaceIdFetcherService {
         }
       },
       onReceivedError: (controller, request, error) {
+        // メインフレーム以外のエラー（広告など）は無視する
+        if (request.isForMainFrame != true) return;
         if (!completer.isCompleted) {
           completer.completeError(Exception("Failed to load page: ${error.description}"));
         }
       },
-    );
 
+
+    );
     try {
       await browser.run();
       return await completer.future;
+    } catch (e) {
+      rethrow;
     } finally {
       timer.cancel();
       await browser.dispose();
