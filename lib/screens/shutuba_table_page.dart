@@ -31,6 +31,7 @@ import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/models/complex_aptitude_model.dart';
 import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
+import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 
 enum SortableColumn {
   mark,
@@ -298,6 +299,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
 
+    // 過去レースの結果を取得
+    final statisticsService = StatisticsService();
+    final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(
+        raceData.raceName, widget.raceId);
+
     for (var horse in raceData.horses) {
       if (marksMap.containsKey(horse.horseId)) {
         horse.userMark = marksMap[horse.horseId];
@@ -327,8 +333,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       );
     }
 
-    raceData.racePacePrediction = AiPredictionAnalyzer.predictRacePace(raceData.horses, allPastRecords);
-
+    raceData.racePacePrediction = AiPredictionAnalyzer.predictRacePace(
+        raceData.horses, allPastRecords, pastRaceResults);
     return raceData;
   }
 

@@ -18,6 +18,7 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
+import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 
 class PageData {
   final Map<String, dynamic>? parsedTicket;
@@ -85,7 +86,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
       RaceResult? raceResult = await _dbHelper.getRaceResult(widget.raceId);
 
-      final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+      final userId = localUserId;
       if (raceResult != null && userId != null) {
         final memos = await _dbHelper.getMemosForRace(userId, widget.raceId);
         final memosMap = {for (var memo in memos) memo.horseId: memo};
@@ -127,7 +128,13 @@ class _RaceResultPageState extends State<RaceResultPage> {
           );
         }
 
-        final pacePrediction = AiPredictionAnalyzer.predictRacePace(horseDetailsForPacePrediction, allPastRecords);
+        // 過去レースの結果を取得する
+        final statisticsService = StatisticsService();
+        final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(
+            raceResult.raceTitle, widget.raceId);
+
+        final pacePrediction = AiPredictionAnalyzer.predictRacePace(
+            horseDetailsForPacePrediction, allPastRecords, pastRaceResults);
 
         return PageData(
           parsedTicket: parsedTicket,
@@ -148,7 +155,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
   Future<void> _handleRefresh() async {
     try {
-      final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+      final userId = localUserId;
       if (userId == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -187,7 +194,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   Future<void> _showMemoDialog(HorseResult horse) async {
-    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+    final userId = localUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),
@@ -252,13 +259,13 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     userId: userId,
                     raceId: widget.raceId,
                     horseId: horse.horseId,
-                    predictionMemo: horse.userMemo?.predictionMemo, // 既存の予想メモを保持
+                    predictionMemo: horse.userMemo?.predictionMemo,
                     reviewMemo: memoController.text,
                     timestamp: DateTime.now(),
                   );
                   await _dbHelper.insertOrUpdateHorseMemo(newMemo);
                   Navigator.of(context).pop();
-                  _loadPageData(); // データを再読み込み
+                  _loadPageData();
                 }
               },
               child: const Text('保存'),
@@ -309,7 +316,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 for (var detail in purchaseDetails) {
                   final ticketTypeId = detail['式別'] as String?;
                   if (ticketTypeId != null && detail['all_combinations'] != null) {
-                    // この式別のセットがまだMapになければ初期化
                     userCombinationsByType.putIfAbsent(ticketTypeId, () => []);
 
                     final combinations = detail['all_combinations'] as List;
@@ -560,10 +566,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
                               case 'ワイド':
                               case '3連複':
                               case '枠連':
-                              // 順序不問の券種はSetで比較
                                 return setEquals(userCombo.toSet(), payout.combinationNumbers.toSet());
                               default:
-                              // 順序が重要な券種はListで比較
                                 return listEquals(userCombo, payout.combinationNumbers);
                             }
                           });

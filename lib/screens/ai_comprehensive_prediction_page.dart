@@ -217,12 +217,11 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         widget.raceData,
         legStyles,
         allPastRecords,
-        sortedCorners.isNotEmpty ? sortedCorners : [
-          '1-2コーナー',
-          '3コーナー',
-          '4コーナー'
-        ]
+        sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']
     );
+
+    widget.raceData.racePacePrediction = AiPredictionAnalyzer.predictRacePace(
+        widget.raceData.horses, allPastRecords, pastRaceResults);
     if (mounted) {
       setState(() {
         _legStyles = legStyles;
@@ -271,6 +270,31 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       }
       return _sortAscending ? result : -result;
     });
+  }
+
+  // 枠番の色分けロジック
+  Color _getGateColor(int gateNumber) {
+    switch (gateNumber) {
+      case 1: return Colors.white;
+      case 2: return Colors.black;
+      case 3: return Colors.red;
+      case 4: return Colors.blue;
+      case 5: return Colors.yellow;
+      case 6: return Colors.green;
+      case 7: return Colors.orange;
+      case 8: return Colors.pink.shade200;
+      default: return Colors.grey;
+    }
+  }
+
+  Color _getTextColorForGate(int gateNumber) {
+    switch (gateNumber) {
+      case 1:
+      case 5:
+        return Colors.black;
+      default:
+        return Colors.white;
+    }
   }
 
   @override
@@ -347,21 +371,12 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.raceData.raceName, style: Theme
-                .of(context)
-                .textTheme
-                .titleLarge),
-            const SizedBox(height: 8),
-            const Divider(),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildSummaryItem('予測ペース',
                     widget.raceData.racePacePrediction?.predictedPace ??
-                        '不明'),
-                _buildSummaryItem('有利な脚質',
-                    widget.raceData.racePacePrediction?.advantageousStyle ??
                         '不明'),
               ],
             ),
@@ -785,7 +800,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     final appWinRate = totalScore > 0 ? (score / totalScore) * 100 : 0.0;
     // 市場勝率を計算 (単勝オッズから)
     final marketWinRate = horse.odds != null && horse.odds! > 0 ? (1.0 /
-        horse.odds!) * 100 * 0.8 : 0.0; // 控除率20%と仮定
+        horse.odds!) * 100 * 0.75 : 0.0; // 控除率20%と仮定
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -847,7 +862,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
   // エリア3: 全出走馬詳細リスト
   Widget _buildAllHorsesListCard() {
-    // ★★★ ここからが差し替え箇所 ★★★
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: DataTable2(
@@ -911,7 +925,27 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
           final stamina = _staminaScores[horse.horseId] ?? 0.0;
           return DataRow(
             cells: [
-              DataCell(Text(horse.horseNumber.toString())),
+              DataCell(
+                Center( // Centerウィジェットで中央揃えに
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: _getGateColor(horse.gateNumber),
+                      border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      horse.horseNumber.toString(),
+                      style: TextStyle(
+                        color: _getTextColorForGate(horse.gateNumber),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               DataCell(Text(horse.horseName)),
               DataCell(Text('$rank (${score.toStringAsFixed(1)})')),
               DataCell(Text(expectedValue.toStringAsFixed(2))),
@@ -923,7 +957,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         }).toList(),
       ),
     );
-    // ★★★ ここまでが差し替え箇所 ★★★
   }
 
   Widget _buildScoreIndicator(double score) {
@@ -967,7 +1000,27 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         ],
         rows: widget.raceData.horses.map((horse) {
           return DataRow(cells: [
-            DataCell(Text(horse.horseNumber.toString())),
+            DataCell(
+              Center( // Centerウィジェットで中央揃えに
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: _getGateColor(horse.gateNumber),
+                    border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    horse.horseNumber.toString(),
+                    style: TextStyle(
+                      color: _getTextColorForGate(horse.gateNumber),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
             DataCell(Text(horse.horseName)),
             DataCell(_buildFitCell(horse.conditionFit?.trackFit)),
             DataCell(_buildFitCell(horse.conditionFit?.paceFit)),
@@ -979,7 +1032,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  // _buildConditionFitTab で使用するための新しいヘルパーメソッドを追加
   Widget _buildFitCell(FitnessRating? rating) {
     rating ??= FitnessRating.unknown;
     return Text(
@@ -991,24 +1043,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  Widget _buildFitRow(String title, FitnessRating? rating) {
-    rating ??= FitnessRating.unknown;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        children: [
-          SizedBox(width: 80, child: Text(title)),
-          Expanded(
-            child: Text(
-              _getRatingText(rating),
-              style: TextStyle(
-                  color: _getRatingColor(rating), fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   String _getRatingText(FitnessRating rating) {
     switch (rating) {
@@ -1049,23 +1084,39 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       ..sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
 
     return DataTable2(
-      columnSpacing: 0.0,
-      dataRowHeight: 60,
+      columnSpacing: 12.0, // 列の間隔を調整
+      horizontalMargin: 12,
+      minWidth: 400, // テーブル全体の最小幅
       columns: const [
         DataColumn2(
+          label: Text('馬番'),
+          fixedWidth: 50,
+          numeric: true,
+        ),
+        DataColumn2(
+          label: Text('人気'),
+          fixedWidth: 50,
+          numeric: true,
+        ),
+        DataColumn2(
           label: Text('騎手\n(当コース)'),
+          fixedWidth: 100,
         ),
         DataColumn2(
-          label: Text('人気馬信頼度\n(1-3人気/複勝率)'),
+          label: Text('1~3人気\n(複勝率)'),
+          fixedWidth: 100,
         ),
         DataColumn2(
-          label: Text('穴馬一発度\n(6人気~/単複回収率)'),
+          label: Text('6人気~\n(単複回収率)'),
+          size: ColumnSize.M,
         ),
       ],
       rows: sortedHorses.map((horse) {
         final stats = _jockeyStats[horse.jockeyId];
         if (stats == null) {
           return DataRow(cells: [
+            DataCell(Text(horse.horseNumber.toString())),
+            DataCell(Text(horse.popularity?.toString() ?? '-')),
             DataCell(Text('${horse.jockey} (データなし)')),
             const DataCell(Text('-')),
             const DataCell(Text('-')),
@@ -1077,6 +1128,28 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         return DataRow(
           cells: [
             DataCell(
+              Center( // Centerウィジェットで中央揃えに
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: _getGateColor(horse.gateNumber),
+                    border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    horse.horseNumber.toString(),
+                    style: TextStyle(
+                      color: _getTextColorForGate(horse.gateNumber),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            DataCell(Text(horse.popularity?.toString() ?? '-')),
+            DataCell(
               RichText(
                 text: TextSpan(
                   style: DefaultTextStyle.of(context).style,
@@ -1085,30 +1158,27 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                       text: stats.jockeyName,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: Colors.black,
-                        decoration: TextDecoration.none,
+                        fontSize: 14,
                       ),
                     ),
-                    const TextSpan(text: '\n'),
                     TextSpan(
-                      text: '($courseStatsString)',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      text: '\n($courseStatsString)',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   ],
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
             ),
             DataCell(
                 Text(
                   '${stats.popularHorseStats.showRate.toStringAsFixed(1)}%',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 )
             ),
             DataCell(
                 Text(
-                  '単(${stats.unpopularHorseStats.winRecoveryRate.toStringAsFixed(0)}%)複(${stats.unpopularHorseStats.showRecoveryRate.toStringAsFixed(0)}%)',
+                  '単 ${stats.unpopularHorseStats.winRecoveryRate.toStringAsFixed(0)}%\n複 ${stats.unpopularHorseStats.showRecoveryRate.toStringAsFixed(0)}%',
+                  style: const TextStyle(fontSize: 12),
                 )
             ),
           ],

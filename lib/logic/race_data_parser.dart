@@ -1,4 +1,7 @@
 // lib/logic/race_data_parser.dart
+
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+
 class RaceDataParser {
   /// コーナー通過順位の文字列（例: "1角:1-2-3 / 2角:2-1-3"）を解析し、
   /// 構造化データ（Map<String, List<int>>）に変換します。
@@ -74,4 +77,48 @@ class RaceDataParser {
       return 'ミドル';
     }
   }
+
+  /// RaceResultオブジェクトからレースペースを判定する
+  static String calculatePaceFromRaceResult(RaceResult raceResult) {
+    // 距離を取得
+    final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceResult.raceInfo);
+    if (distanceMatch == null) return 'ミドル';
+    final distance = int.tryParse(distanceMatch.group(1)!);
+    if (distance == null) return 'ミドル';
+
+    // ラップタイムを数値のリストに変換
+    final lapTimes = raceResult.lapTimes
+        .expand((lapStr) => lapStr.split(':').last.trim().split('-'))
+        .map((s) => double.tryParse(s.trim()))
+        .where((d) => d != null)
+        .cast<double>()
+        .toList();
+
+    if (lapTimes.isEmpty) return 'ミドル';
+
+    // 前半・後半のラップを計算
+    final halfPoint = (distance / 2).floor();
+    double firstHalfTime = 0;
+    double secondHalfTime = 0;
+    int currentDistance = 0;
+
+    for (final lap in lapTimes) {
+      // 200mごとのラップ
+      currentDistance += 200;
+      if (currentDistance <= halfPoint) {
+        firstHalfTime += lap;
+      } else {
+        secondHalfTime += lap;
+      }
+    }
+
+    if (firstHalfTime == 0 || secondHalfTime == 0) return 'ミドル';
+
+    final difference = secondHalfTime - firstHalfTime;
+
+    if (difference >= 1.0) return 'スロー';
+    if (difference <= -1.0) return 'ハイ';
+    return 'ミドル';
+  }
+
 }

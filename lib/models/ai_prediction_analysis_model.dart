@@ -12,12 +12,10 @@ class HorsePredictionScore {
 }
 
 class RacePacePrediction {
-  final String predictedPace; // 例: "ハイペース", "スローペース"
-  final String advantageousStyle; // 例: "差し・追込有利", "逃げ・先行有利"
+  final String predictedPace; // 例: "ハイペース", "ミドルペース", "スローペース"など5段階
 
   RacePacePrediction({
-    this.predictedPace = "不明",
-    this.advantageousStyle = "不明",
+    this.predictedPace = "予測不能", // デフォルト値を変更
   });
 }
 

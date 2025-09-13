@@ -7,6 +7,8 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/complex_aptitude_model.dart';
 import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 
 // シミュレーション中の馬の状態を管理するための内部ヘルパークラス
 class _SimHorse {
@@ -513,13 +515,15 @@ class AiPredictionAnalyzer {
     final frontRunners = nigeCount + senkoCount;
     if (frontRunners == 0) {
       sentences.add('明確な逃げ・先行馬が不在。');
-    } else if (frontRunners >= raceData.horses.length / 2) sentences.add('先行馬が揃い、ペースは速くなる可能性がある。');
-    else if (nigeCount > 1) sentences.add('逃げ馬が複数おり、先行争いが激化しそう。');
+    } else if (frontRunners >= raceData.horses.length / 2) {
+      sentences.add('先行馬が揃い、ペースは速くなる可能性がある。');
+    } else if (nigeCount > 1) {
+      sentences.add('逃げ馬が複数おり、先行争いが激化しそう。');
+    }
 
-    // 2. 予測ペースと展開の言語化
-    final pace = raceData.racePacePrediction?.predictedPace ?? 'ミドル';
-    final advantageousStyle = raceData.racePacePrediction?.advantageousStyle ?? '展開次第';
-    sentences.add('AIの予測ペースは「$pace」。$advantageousStyleと分析。');
+    // 2. 予測ペースの言語化
+    final pace = raceData.racePacePrediction?.predictedPace ?? '不明';
+    sentences.add('AIの予測ペースは「$pace」。'); // advantageousStyleの参照を削除
 
     // 3. 本命馬の強み分析
     final sortedHorses = raceData.horses.toList()
@@ -671,12 +675,12 @@ class AiPredictionAnalyzer {
 
   // 内部ヘルパー：脚質を判定する
   static String getRunningStyle(List<HorseRaceRecord> records) {
-    if (records.isEmpty) return "不明";
+    if (records.isEmpty) return "自在";
 
     List<double> avgPositionRates = [];
     final recentRaces = records.where((r) => !r.cornerPassage.contains('(') && r.cornerPassage.contains('-')).take(5);
 
-    if (recentRaces.isEmpty) return "不明";
+    if (recentRaces.isEmpty) return "自在";
 
     for (var record in recentRaces) {
       final horseCount = int.tryParse(record.numberOfHorses);
@@ -689,7 +693,7 @@ class AiPredictionAnalyzer {
       avgPositionRates.add(positionRate);
     }
 
-    if (avgPositionRates.isEmpty) return "不明";
+    if (avgPositionRates.isEmpty) return "自在";
 
     final avgRate = avgPositionRates.reduce((a, b) => a + b) / avgPositionRates.length;
 
@@ -700,35 +704,68 @@ class AiPredictionAnalyzer {
   }
 
   // レースに出走する全馬のデータを受け取り、レース全体の展開を予測して返すメソッド
-  static RacePacePrediction predictRacePace(List<PredictionHorseDetail> horses, Map<String, List<HorseRaceRecord>> allPastRecords) {
-    int frontRunners = 0;
-    for (var horse in horses) {
-      final records = allPastRecords[horse.horseId] ?? [];
-      final style = getRunningStyle(records);
-      if (style == "逃げ" || style == "先行") {
-        frontRunners++;
+  static RacePacePrediction predictRacePace(
+      List<PredictionHorseDetail> horses,
+      Map<String, List<HorseRaceRecord>> allPastRecords,
+      List<RaceResult> pastRaceResults, // 過去10年間のレース結果を追加
+      ) {
+    // 1. レースの基本特性（過去10年）を分析
+    final paceCounts = <String, int>{'ハイ': 0, 'ミドル': 0, 'スロー': 0};
+    if (pastRaceResults.isNotEmpty) {
+      for (final result in pastRaceResults) {
+        final pace = RaceDataParser.calculatePaceFromRaceResult(result);
+        paceCounts[pace] = (paceCounts[pace] ?? 0) + 1;
       }
     }
 
-    String predictedPace;
-    String advantageousStyle;
+    // 2. メンバー特性（今回の出走馬）を分析
+    int nigeCount = 0;
+    int senkoCount = 0;
+    for (var horse in horses) {
+      final records = allPastRecords[horse.horseId] ?? [];
+      final style = getRunningStyle(records);
+      if (style == "逃げ") nigeCount++;
+      if (style == "先行") senkoCount++;
+    }
+    final frontRunners = nigeCount + senkoCount;
 
-    // 逃げ・先行タイプの馬の数に応じてペースを予測
-    if (frontRunners >= (horses.length / 3)) {
-      predictedPace = "ハイペース";
-      advantageousStyle = "差し・追込有利";
-    } else if (frontRunners <= 1) {
-      predictedPace = "スローペース";
-      advantageousStyle = "逃げ・先行有利";
-    } else {
-      predictedPace = "ミドルペース";
-      advantageousStyle = "展開次第";
+    // 3. 予測ロジック
+    String finalPrediction;
+    final totalPastRaces = pastRaceResults.length;
+
+    // 過去傾向が極端な場合 (7割以上)
+    if (totalPastRaces > 0) {
+      if (paceCounts['ハイ']! / totalPastRaces >= 0.7) {
+        finalPrediction = 'ハイペース';
+      } else if (paceCounts['スロー']! / totalPastRaces >= 0.7) {
+        finalPrediction = 'スローペース';
+      }
     }
 
-    return RacePacePrediction(
-      predictedPace: predictedPace,
-      advantageousStyle: advantageousStyle,
-    );
+    // メンバー構成から予測を微調整
+    if (frontRunners >= (horses.length / 2)) {
+      finalPrediction = paceCounts['ハイ']! > paceCounts['スロー']! ? 'ハイペース' : 'ミドルからハイ';
+    } else if (nigeCount == 0 && frontRunners <= 2) {
+      finalPrediction = paceCounts['スロー']! > paceCounts['ハイ']! ? 'スローペース' : 'スローからミドル';
+    } else {
+      finalPrediction = 'ミドルペース';
+    }
+
+    // 最終的な5段階評価に決定
+    if (nigeCount >= 2 && frontRunners > (horses.length * 0.4)) {
+      finalPrediction = 'ハイペース';
+    } else if (nigeCount == 1 && frontRunners > (horses.length * 0.4)) {
+      finalPrediction = 'ミドルからハイ';
+    } else if (nigeCount == 0 && frontRunners <= 1) {
+      finalPrediction = 'スローペース';
+    } else if (nigeCount == 0 && frontRunners <= 3) {
+      finalPrediction = 'スローからミドル';
+    } else {
+      finalPrediction = 'ミドルペース';
+    }
+
+    // advantageousStyle を削除
+    return RacePacePrediction(predictedPace: finalPrediction);
   }
 
   /// コース・距離・馬場状態の3要素が完全に一致する過去レースを分析する
