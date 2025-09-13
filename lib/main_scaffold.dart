@@ -42,7 +42,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   String _displayName = '';
   File? _profileImageFile;
 
-    /// データベースをバックアップファイルとして共有する
+  /// データベースをバックアップファイルとして共有する
   Future<void> _backupDatabase() async {
     if (!mounted) return;
 
@@ -111,8 +111,7 @@ class _MainScaffoldState extends State<MainScaffold> {
 
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['db'],
+        type: FileType.any,
       );
 
       if (result == null || result.files.single.path == null) {
@@ -318,16 +317,16 @@ class _MainScaffoldState extends State<MainScaffold> {
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text('ユーザー設定'),
-                onTap: () async {
-                  Navigator.of(context).pop(); // Drawerを閉じる
-                  // ユーザー設定画面から戻ってきた後に必ず再読み込みを実行
-                  await Navigator.of(context).push<bool>(
-                    MaterialPageRoute(
-                      builder: (context) => UserSettingsPage(onLogout: widget.onLogout),
-                    ),
-                  );
-                  // 戻ってきたら、変更の有無にかかわらず情報を再読み込みする
-                  _loadUserInfoForDrawer();
+              onTap: () async {
+                Navigator.of(context).pop(); // Drawerを閉じる
+                // ユーザー設定画面から戻ってきた後に必ず再読み込みを実行
+                await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (context) => UserSettingsPage(onLogout: widget.onLogout),
+                  ),
+                );
+                // 戻ってきたら、変更の有無にかかわらず情報を再読み込みする
+                _loadUserInfoForDrawer();
               },
             ),
             const Divider(), // 他のメニュー項目との区切り線

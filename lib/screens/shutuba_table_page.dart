@@ -108,6 +108,19 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
         if (cache != null && !refresh) {
           data = cache.predictionRaceData;
+          // キャッシュデータを読み込んだ後、最新の印とメモで上書きする
+          final userId = localUserId;
+          if (userId != null) {
+            final userMarks = await _dbHelper.getAllUserMarksForRace(userId, widget.raceId);
+            final userMemos = await _dbHelper.getMemosForRace(userId, widget.raceId);
+            final marksMap = {for (var mark in userMarks) mark.horseId: mark};
+            final memosMap = {for (var memo in userMemos) memo.horseId: memo};
+
+            for (var horse in data.horses) {
+              horse.userMark = marksMap[horse.horseId];
+              horse.userMemo = memosMap[horse.horseId];
+            }
+          }
         } else {
           data = await _fetchDataWithUserMarks();
           if (data != null) {
@@ -137,6 +150,33 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _updateMarkAndSaveInBackground(UserMark mark) async {
+    await _dbHelper.insertOrUpdateUserMark(mark);
+    if (_predictionRaceData != null) {
+      final newCache = ShutubaTableCache(
+        raceId: widget.raceId,
+        predictionRaceData: _predictionRaceData!,
+        lastUpdatedAt: DateTime.now(),
+      );
+      await _dbHelper.insertOrUpdateShutubaTableCache(newCache);
+    }
+  }
+
+  Future<void> _deleteMarkAndSaveInBackground(PredictionHorseDetail horse) async {
+    final userId = localUserId;
+    if (userId == null) return;
+
+    await _dbHelper.deleteUserMark(userId, widget.raceId, horse.horseId);
+    if (_predictionRaceData != null) {
+      final newCache = ShutubaTableCache(
+        raceId: widget.raceId,
+        predictionRaceData: _predictionRaceData!,
+        lastUpdatedAt: DateTime.now(),
+      );
+      await _dbHelper.insertOrUpdateShutubaTableCache(newCache);
     }
   }
 
@@ -454,7 +494,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   );
                   await _dbHelper.insertOrUpdateHorseMemo(newMemo);
                   Navigator.of(context).pop();
-                  _loadShutubaData();
+                  _loadShutubaData(refresh: true); // refresh: true を追加
                 }
               },
               child: const Text('保存'),
@@ -1200,7 +1240,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
-  /// メモタブ
   Widget _buildMemoTab(List<PredictionHorseDetail> horses) {
     return Column(
       children: [
@@ -1264,7 +1303,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             columns: [
               DataColumn2(label: const Text('印'), fixedWidth: 80, onSort: (i, asc) => _onSort(SortableColumn.mark)),
               DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-              const DataColumn2(label: Text('メモ'), fixedWidth: 50,),
+              const DataColumn2(label: Text('メモ'), size: ColumnSize.L), // fixedWidth を size に変更
             ],
             horses: horses,
             cellBuilder: (horse) => [
@@ -1289,7 +1328,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
-  /// 印のポップアップメニューを作成
   Widget _buildMarkDropdown(PredictionHorseDetail horse) {
     return PopupMenuButton<String>(
       // セル内に表示するウィジェット
@@ -1313,10 +1351,27 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           height: 36, // 高さを詰める
           child: Center(child: Text('消')), // 中央揃えにする
         ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: '--',
+          height: 36, // 高さを詰める
+          child: Center(child: Text('--')), // 中央揃えにする
+        ),
       ],
-      onSelected: (String newValue) async {
+      onSelected: (String newValue) {
         final userId = localUserId;
-        if (userId != null) {
+        if (userId == null) return;
+
+        if (newValue == '--') {
+          // 印を削除する場合
+          if (horse.userMark != null) {
+            setState(() {
+              horse.userMark = null;
+            });
+            _deleteMarkAndSaveInBackground(horse);
+          }
+        } else {
+          // 印を保存または更新する場合
           final userMark = UserMark(
             userId: userId,
             raceId: widget.raceId,
@@ -1324,10 +1379,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             mark: newValue,
             timestamp: DateTime.now(),
           );
-          await _dbHelper.insertOrUpdateUserMark(userMark);
+          // UIを即時更新
           setState(() {
             horse.userMark = userMark;
           });
+          // 保存とキャッシュ更新をバックグラウンドで実行
+          _updateMarkAndSaveInBackground(userMark);
         }
       },
       padding: EdgeInsets.zero,
@@ -1342,13 +1399,24 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   Widget _buildMemoCell(PredictionHorseDetail horse) {
     bool hasMemo = horse.userMemo?.predictionMemo != null && horse.userMemo!.predictionMemo!.isNotEmpty;
-    return IconButton(
-      icon: Icon(
-        hasMemo ? Icons.speaker_notes : Icons.speaker_notes_off_outlined,
-        color: hasMemo ? Colors.blueAccent : Colors.grey,
-        size: 20,
-      ),
-      onPressed: horse.isScratched ? null : () => _showMemoDialog(horse),
+    return Row(
+      children: [
+        IconButton(
+          icon: Icon(
+            hasMemo ? Icons.speaker_notes : Icons.speaker_notes_off_outlined,
+            color: hasMemo ? Colors.blueAccent : Colors.grey,
+            size: 20,
+          ),
+          onPressed: horse.isScratched ? null : () => _showMemoDialog(horse),
+        ),
+        Expanded(
+          child: Text(
+            horse.userMemo?.predictionMemo ?? '',
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+          ),
+        ),
+      ],
     );
   }
 
