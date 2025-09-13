@@ -29,16 +29,21 @@ class AiPredictionService {
   Future<AiPredictionScores> calculatePredictionScores(
       PredictionRaceData raceData, String raceId) async {
     final prefs = await SharedPreferences.getInstance();
+
+    // raceIdを使ってキーを動的に生成
+    String key(String base) => '${base}_$raceId';
+
     // getDoubleをgetIntに変更し、型をMap<String, int>にする
+    // raceId用の設定があればそれを使い、なければグローバル設定、それもなければデフォルト値を使う
     final customWeights = {
-      'legType': prefs.getInt('legTypeWeight') ?? 20,
-      'courseFit': prefs.getInt('courseFitWeight') ?? 20,
-      'trackCondition': prefs.getInt('trackConditionWeight') ?? 15,
-      'humanFactor': prefs.getInt('humanFactorWeight') ?? 15,
-      'condition': prefs.getInt('conditionWeight') ?? 10,
-      'earlySpeed': prefs.getInt('earlySpeedWeight') ?? 5,
-      'finishingKick': prefs.getInt('finishingKickWeight') ?? 10,
-      'stamina': prefs.getInt('staminaWeight') ?? 5,
+      'legType': prefs.getInt(key('legTypeWeight')) ?? prefs.getInt('legTypeWeight') ?? 20,
+      'courseFit': prefs.getInt(key('courseFitWeight')) ?? prefs.getInt('courseFitWeight') ?? 20,
+      'trackCondition': prefs.getInt(key('trackConditionWeight')) ?? prefs.getInt('trackConditionWeight') ?? 15,
+      'humanFactor': prefs.getInt(key('humanFactorWeight')) ?? prefs.getInt('humanFactorWeight') ?? 15,
+      'condition': prefs.getInt(key('conditionWeight')) ?? prefs.getInt('conditionWeight') ?? 10,
+      'earlySpeed': prefs.getInt(key('earlySpeedWeight')) ?? prefs.getInt('earlySpeedWeight') ?? 5,
+      'finishingKick': prefs.getInt(key('finishingKickWeight')) ?? prefs.getInt('finishingKickWeight') ?? 10,
+      'stamina': prefs.getInt(key('staminaWeight')) ?? prefs.getInt('staminaWeight') ?? 5,
     };
 
     final Map<String, double> scores = {};

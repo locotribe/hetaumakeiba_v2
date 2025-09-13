@@ -1,37 +1,38 @@
 // lib/screens/shutuba_table_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
-import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
-import 'package:hetaumakeiba_v2/main.dart';
-import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:data_table_2/data_table_2.dart';
+import 'package:hetaumakeiba_v2/main.dart';
+import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/ai_prediction_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
+import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
+import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
+import 'package:hetaumakeiba_v2/services/statistics_service.dart';
+import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
 import 'package:hetaumakeiba_v2/screens/ai_comprehensive_prediction_page.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
-import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
-import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
-import 'package:data_table_2/data_table_2.dart';
-import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
-import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
-import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
-import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
+import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
+import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/complex_aptitude_model.dart';
 import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
-import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 
 enum SortableColumn {
   mark,
@@ -795,10 +796,38 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           detailsLine2: race.raceDetails1 ?? details,
         ),
         if (widget.raceResult == null)
-          ElevatedButton.icon(
-            onPressed: _updateDynamicData,
-            icon: const Icon(Icons.refresh),
-            label: const Text('出馬表更新'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ElevatedButton.icon(
+                onPressed: _updateDynamicData,
+                icon: const Icon(Icons.refresh),
+                label: const Text('出馬表更新'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final result = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AiPredictionSettingsPage(raceId: widget.raceId),
+                    ),
+                  );
+                  if (result == true && mounted) {
+                    // 設定が変更された可能性があるので、スコアを再計算
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('AI予測を再計算しています...')),
+                    );
+                    await _calculatePredictionScores(_predictionRaceData!);
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('AI予測を更新しました。')),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.tune),
+                label: const Text('AIチューニング'),
+              ),
+            ],
           ),
         const Divider(),
         ListTile(

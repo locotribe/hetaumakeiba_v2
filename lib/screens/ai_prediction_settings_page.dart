@@ -1,10 +1,15 @@
 // lib/screens/ai_prediction_settings_page.dart
+
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AiPredictionSettingsPage extends StatefulWidget {
-  const AiPredictionSettingsPage({super.key});
+  final String? raceId; // raceIdを受け取れるようにする
+
+  const AiPredictionSettingsPage({super.key, this.raceId});
 
   @override
   State<AiPredictionSettingsPage> createState() => _AiPredictionSettingsPageState();
@@ -46,6 +51,8 @@ class _AiPredictionSettingsPageState extends State<AiPredictionSettingsPage> {
   };
 
   String _selectedPreset = 'カスタム';
+  List<String> _customPresetNames = []; // カスタムプリセット名リスト
+  static const int _maxCustomPresets = 5; // 保存できるプリセットの上限
 
   @override
   void initState() {
@@ -53,19 +60,29 @@ class _AiPredictionSettingsPageState extends State<AiPredictionSettingsPage> {
     _loadWeights();
   }
 
+  // SharedPreferencesのキーを生成するヘルパーメソッド
+  String _key(String base) {
+    if (widget.raceId != null && widget.raceId!.isNotEmpty) {
+      return '${base}_${widget.raceId}';
+    }
+    // グローバル設定用のキー
+    return base;
+  }
+
   Future<void> _loadWeights() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      // getIntを使い、デフォルト値もintにする
-      _legTypeWeight = prefs.getInt('legTypeWeight') ?? _presets['バランス重視']!['legType']!;
-      _courseFitWeight = prefs.getInt('courseFitWeight') ?? _presets['バランス重視']!['courseFit']!;
-      _trackConditionWeight = prefs.getInt('trackConditionWeight') ?? _presets['バランス重視']!['trackCondition']!;
-      _humanFactorWeight = prefs.getInt('humanFactorWeight') ?? _presets['バランス重視']!['humanFactor']!;
-      _conditionWeight = prefs.getInt('conditionWeight') ?? _presets['バランス重視']!['condition']!;
-      _earlySpeedWeight = prefs.getInt('earlySpeedWeight') ?? _presets['バランス重視']!['earlySpeed']!;
-      _finishingKickWeight = prefs.getInt('finishingKickWeight') ?? _presets['バランス重視']!['finishingKick']!;
-      _staminaWeight = prefs.getInt('staminaWeight') ?? _presets['バランス重視']!['stamina']!;
-      _selectedPreset = prefs.getString('selectedPreset') ?? 'カスタム';
+      _customPresetNames = prefs.getStringList('custom_preset_names') ?? [];
+
+      _legTypeWeight = prefs.getInt(_key('legTypeWeight')) ?? _presets['バランス重視']!['legType']!;
+      _courseFitWeight = prefs.getInt(_key('courseFitWeight')) ?? _presets['バランス重視']!['courseFit']!;
+      _trackConditionWeight = prefs.getInt(_key('trackConditionWeight')) ?? _presets['バランス重視']!['trackCondition']!;
+      _humanFactorWeight = prefs.getInt(_key('humanFactorWeight')) ?? _presets['バランス重視']!['humanFactor']!;
+      _conditionWeight = prefs.getInt(_key('conditionWeight')) ?? _presets['バランス重視']!['condition']!;
+      _earlySpeedWeight = prefs.getInt(_key('earlySpeedWeight')) ?? _presets['バランス重視']!['earlySpeed']!;
+      _finishingKickWeight = prefs.getInt(_key('finishingKickWeight')) ?? _presets['バランス重視']!['finishingKick']!;
+      _staminaWeight = prefs.getInt(_key('staminaWeight')) ?? _presets['バランス重視']!['stamina']!;
+      _selectedPreset = prefs.getString(_key('selectedPreset')) ?? 'カスタム';
     });
   }
 
@@ -77,20 +94,20 @@ class _AiPredictionSettingsPageState extends State<AiPredictionSettingsPage> {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    // setIntで保存
-    await prefs.setInt('legTypeWeight', _legTypeWeight);
-    await prefs.setInt('courseFitWeight', _courseFitWeight);
-    await prefs.setInt('trackConditionWeight', _trackConditionWeight);
-    await prefs.setInt('humanFactorWeight', _humanFactorWeight);
-    await prefs.setInt('conditionWeight', _conditionWeight);
-    await prefs.setInt('earlySpeedWeight', _earlySpeedWeight);
-    await prefs.setInt('finishingKickWeight', _finishingKickWeight);
-    await prefs.setInt('staminaWeight', _staminaWeight);
-    await prefs.setString('selectedPreset', _selectedPreset);
+    await prefs.setInt(_key('legTypeWeight'), _legTypeWeight);
+    await prefs.setInt(_key('courseFitWeight'), _courseFitWeight);
+    await prefs.setInt(_key('trackConditionWeight'), _trackConditionWeight);
+    await prefs.setInt(_key('humanFactorWeight'), _humanFactorWeight);
+    await prefs.setInt(_key('conditionWeight'), _conditionWeight);
+    await prefs.setInt(_key('earlySpeedWeight'), _earlySpeedWeight);
+    await prefs.setInt(_key('finishingKickWeight'), _finishingKickWeight);
+    await prefs.setInt(_key('staminaWeight'), _staminaWeight);
+    await prefs.setString(_key('selectedPreset'), _selectedPreset);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('設定を保存しました。')),
+        const SnackBar(content: Text('設定を反映しました。')),
       );
+      Navigator.of(context).pop(true);
     }
   }
 
@@ -111,16 +128,33 @@ class _AiPredictionSettingsPageState extends State<AiPredictionSettingsPage> {
     });
   }
 
+  Future<void> _applyCustomPreset(String presetName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final presetJson = prefs.getString('preset_data_$presetName');
+    if (presetJson != null) {
+      final presetData = json.decode(presetJson) as Map<String, dynamic>;
+      setState(() {
+        _legTypeWeight = presetData['legType']!;
+        _courseFitWeight = presetData['courseFit']!;
+        _trackConditionWeight = presetData['trackCondition']!;
+        _humanFactorWeight = presetData['humanFactor']!;
+        _conditionWeight = presetData['condition']!;
+        _earlySpeedWeight = presetData['earlySpeed']!;
+        _finishingKickWeight = presetData['finishingKick']!;
+        _staminaWeight = presetData['stamina']!;
+        _selectedPreset = presetName;
+      });
+    }
+  }
+
   void _resetToDefault() {
     _applyPreset('バランス重視');
   }
 
-  // ポイントを更新するロジック
   void _updateWeight(Function(int) update, int currentValue, int change) {
     final newValue = currentValue + change;
-    if (newValue < 0) return; // 0未満にはしない
+    if (newValue < 0) return;
 
-    // 合計が100を超える場合は更新しない
     if (_totalWeight - currentValue + newValue > 100) return;
 
     setState(() {
@@ -129,11 +163,97 @@ class _AiPredictionSettingsPageState extends State<AiPredictionSettingsPage> {
     });
   }
 
+  Future<void> _showSavePresetDialog() async {
+    if (_totalWeight != 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('合計ポイントが100でないと保存できません。')),
+      );
+      return;
+    }
+
+    if (_customPresetNames.length >= _maxCustomPresets) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('カスタムプリセットは$_maxCustomPresets個まで保存できます。')),
+      );
+      return;
+    }
+
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('カスタムプリセットを保存'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'プリセット名を入力'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('キャンセル')),
+          TextButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty && !_presets.containsKey(name) && !_customPresetNames.contains(name)) {
+                Navigator.of(context).pop(name);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('その名前は使用できません。')),
+                );
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      await _saveCustomPreset(result);
+    }
+  }
+
+  Future<void> _saveCustomPreset(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    final presetData = {
+      'legType': _legTypeWeight,
+      'courseFit': _courseFitWeight,
+      'trackCondition': _trackConditionWeight,
+      'humanFactor': _humanFactorWeight,
+      'condition': _conditionWeight,
+      'earlySpeed': _earlySpeedWeight,
+      'finishingKick': _finishingKickWeight,
+      'stamina': _staminaWeight,
+    };
+    await prefs.setString('preset_data_$name', json.encode(presetData));
+
+    final updatedNames = List<String>.from(_customPresetNames)..add(name);
+    await prefs.setStringList('custom_preset_names', updatedNames);
+
+    setState(() {
+      _customPresetNames = updatedNames;
+      _selectedPreset = name;
+    });
+  }
+
+  Future<void> _deleteCustomPreset(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('preset_data_$name');
+    final updatedNames = List<String>.from(_customPresetNames)..remove(name);
+    await prefs.setStringList('custom_preset_names', updatedNames);
+    setState(() {
+      _customPresetNames = updatedNames;
+      if (_selectedPreset == name) {
+        _selectedPreset = 'カスタム';
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final appBarTitle = widget.raceId == null ? 'AIチューニング (全体設定)' : 'AIチューニング';
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AIチューニング'),
+        title: Text(appBarTitle),
       ),
       body: Stack(
         children: [
@@ -148,6 +268,8 @@ class _AiPredictionSettingsPageState extends State<AiPredictionSettingsPage> {
             padding: const EdgeInsets.all(16.0),
             children: [
               _buildPresetSection(),
+              const SizedBox(height: 16),
+              _buildCustomPresetList(),
               const SizedBox(height: 24),
               _buildCustomSliderSection(),
               const SizedBox(height: 24),
@@ -155,10 +277,9 @@ class _AiPredictionSettingsPageState extends State<AiPredictionSettingsPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   OutlinedButton(onPressed: _resetToDefault, child: const Text('デフォルトに戻す')),
-                  // 合計が100でない場合はボタンを非活性化
                   ElevatedButton(
                     onPressed: _totalWeight == 100 ? _saveWeights : null,
-                    child: const Text('この設定を保存する'),
+                    child: const Text('この設定を反映'),
                   ),
                 ],
               )
@@ -166,6 +287,50 @@ class _AiPredictionSettingsPageState extends State<AiPredictionSettingsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCustomPresetList() {
+    if (_customPresetNames.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('カスタムプリセット', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _customPresetNames.length,
+          itemBuilder: (context, index) {
+            final name = _customPresetNames[index];
+            return Slidable(
+              key: Key(name),
+              endActionPane: ActionPane(
+                motion: const ScrollMotion(),
+                extentRatio: 0.20,
+                children: [
+                  SlidableAction(
+                    onPressed: (context) => _deleteCustomPreset(name),
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    icon: Icons.delete,
+                    label: '削除',
+                  ),
+                ],
+              ),
+              child: Card(
+                child: ListTile(
+                  title: Text(name),
+                  selected: _selectedPreset == name,
+                  onTap: () => _applyCustomPreset(name),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -189,7 +354,6 @@ class _AiPredictionSettingsPageState extends State<AiPredictionSettingsPage> {
   }
 
   Widget _buildCustomSliderSection() {
-    // 合計ポイントの表示スタイルを更新
     final totalColor = _totalWeight == 100 ? Colors.green : Colors.red;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,7 +366,12 @@ class _AiPredictionSettingsPageState extends State<AiPredictionSettingsPage> {
           ],
         ),
         const SizedBox(height: 8),
-        // 各項目を新しいUIに変更
+        ElevatedButton.icon(
+          icon: const Icon(Icons.save),
+          label: const Text('現在の設定をプリセットに保存'),
+          onPressed: _showSavePresetDialog,
+        ),
+        const SizedBox(height: 8),
         _buildPointAllocationTile('脚質・展開適性', _legTypeWeight, (val) => setState(() => _legTypeWeight = val)),
         _buildPointAllocationTile('コース適性', _courseFitWeight, (val) => setState(() => _courseFitWeight = val)),
         _buildPointAllocationTile('馬場適性', _trackConditionWeight, (val) => setState(() => _trackConditionWeight = val)),
