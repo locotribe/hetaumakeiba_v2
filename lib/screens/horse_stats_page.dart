@@ -145,7 +145,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     });
 
     try {
-      // 1. 全出走馬の過去成績から、必要な全レースIDを収集
       final allPastRaceIds = <String>{};
       final Map<String, List<HorseRaceRecord>> allPerformanceRecords = {};
 
@@ -159,11 +158,9 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         }
       }
 
-      // 2. DBにないレース結果のみをダウンロード対象とする
       final existingResults = await _dbHelper.getMultipleRaceResults(allPastRaceIds.toList());
       final raceIdsToFetch = allPastRaceIds.where((id) => !existingResults.containsKey(id)).toList();
 
-      // 3. 不足しているレース結果をダウンロード
       final Map<String, RaceResult> fetchedResults = {};
       if (raceIdsToFetch.isNotEmpty) {
         for (int i = 0; i < raceIdsToFetch.length; i++) {
@@ -177,17 +174,15 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             final result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$raceId');
             await _dbHelper.insertOrUpdateRaceResult(result);
             fetchedResults[raceId] = result;
-            await Future.delayed(const Duration(milliseconds: 200)); // サーバー負荷軽減
+            await Future.delayed(const Duration(milliseconds: 200));
           } catch (e) {
             print('Failed to fetch race result for $raceId: $e');
           }
         }
       }
 
-      // 4. 全てのレース結果を結合
       final allRaceResults = {...existingResults, ...fetchedResults};
 
-      // 5. 各馬の統計を計算
       final newStatsMap = <String, HorseStats>{};
       final newJockeyComboStats = <String, JockeyComboStats>{};
       for (final horse in widget.horses) {
@@ -197,7 +192,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
           raceResults: allRaceResults,
         );
         newJockeyComboStats[horse.horseId] = HorseStatsAnalyzer.analyzeJockeyCombo(
-          currentJockeyId: horse.jockeyId, // horse.jockey -> horse.jockeyId に変更
+          currentJockeyId: horse.jockeyId,
           performanceRecords: records,
           raceResults: allRaceResults,
         );
@@ -208,7 +203,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         allPerformanceRecords: allPerformanceRecords,
       );
 
-      // 6. 計算結果をキャッシュに保存
       final cacheToSave = HorseStatsCache(
         raceId: widget.raceId,
         statsMap: newStatsMap,
@@ -360,7 +354,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     const double headerHeight = 50.0;
     const double totalCellWidth = 70.0; // 集計列の幅
 
-    // 各馬の対戦成績を集計
     final Map<String, Map<String, int>> horseTotals = {};
     for (final horseA in widget.horses) {
       int totalOpponentWins = 0;
@@ -400,7 +393,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 固定された行ヘッダー
           IntrinsicWidth(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,14 +417,12 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
               ],
             ),
           ),
-          // 水平スクロール可能なデータ部分
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // スクロールする列ヘッダー
                   Row(
                     children: [
                       ...widget.horses.map((horse) {
@@ -454,13 +444,12 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                           ),
                         );
                       }),
-                      // 追加ヘッダー
                       Container(
                           width: totalCellWidth,
                           height: headerHeight,
                           alignment: Alignment.center,
                           child: const Text('WIN',
-                              style: TextStyle(fontSize: 20),
+                              style: TextStyle(fontSize: 14),
                               textAlign: TextAlign.center
                           )
                       ),
@@ -469,7 +458,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                           height: headerHeight,
                           alignment: Alignment.center,
                           child: const Text('W-Leg',
-                              style: TextStyle(fontSize: 20),
+                              style: TextStyle(fontSize: 12),
                               textAlign: TextAlign.center
                           )
                       ),
@@ -478,13 +467,12 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                           height: headerHeight,
                           alignment: Alignment.center,
                           child: const Text('L-Leg',
-                              style: TextStyle(fontSize: 20),
+                              style: TextStyle(fontSize: 12),
                               textAlign: TextAlign.center
                           )
                       ),
                     ],
                   ),
-                  // データ行
                   ...widget.horses.map((horseA) {
                     final totals = horseTotals[horseA.horseId] ?? {'Win': 0, 'WinLeg': 0, 'LosLeg': 0};
                     return Row(
@@ -521,7 +509,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                                 bottom: BorderSide(color: Colors.grey.shade300, width: 1),
                               ),
                             ),
-                            child: Builder( // Builderウィジェットを追加
+                            child: Builder(
                               builder: (context) {
                                 Widget symbolWidget = const SizedBox.shrink();
                                 if (cellText.isNotEmpty && cellText != '-') {
@@ -566,7 +554,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                             ),
                           );
                         }),
-                        // 追加セル
                         Container(
                             width: totalCellWidth,
                             height: cellHeight,
@@ -634,7 +621,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             return DataRow(
               cells: [
                 DataCell(Text(horse.horseName)),
-                DataCell(Text(horse.jockeyId)),
+                DataCell(Text(horse.jockey)),
                 DataCell(
                   stats.isFirstRide
                       ? const Text('初', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold))

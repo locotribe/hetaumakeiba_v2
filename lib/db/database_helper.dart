@@ -236,20 +236,21 @@ class DatabaseHelper {
             overall_score REAL NOT NULL,
             expected_value REAL NOT NULL,
             prediction_timestamp TEXT NOT NULL,
+            analysis_details_json TEXT,
             UNIQUE(race_id, horse_id) ON CONFLICT REPLACE
           )
         ''');
       },
       /// データベースのバージョンがアップグレードされたときに呼び出されます。
-      //onUpgrade: (db, oldVersion, newVersion) async {
+    //  onUpgrade: (db, oldVersion, newVersion) async {
 
-      //  if (oldVersion < 2) {
+    //    if (oldVersion < 2) {
 
-      //  }
+    //    }
       //  if (oldVersion < 3) {
 
       //  }
-      //},
+    //  },
     );
   }
 
@@ -563,7 +564,6 @@ class DatabaseHelper {
   }
 
   /// 全てのテーブルから全てのデータを削除します。
-  /// 主にデバッグやリセット機能のために使用します。
   Future<void> deleteAllDataForUser(String userId) async {
 
     final db = await database;
@@ -573,7 +573,6 @@ class DatabaseHelper {
     await db.delete('analytics_aggregates', where: 'userId = ?', whereArgs: [userId]);
   }
 
-  /// 分析用の集計データを更新します。
   /// 投資額、払戻額、的中数、ベット数などの差分を受け取り、データベースの値を更新します。
   Future<void> updateAggregates(String userId, Map<String, Map<String, int>> updates) async {
     final db = await database;

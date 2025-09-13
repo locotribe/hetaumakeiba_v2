@@ -1,4 +1,6 @@
 // lib/services/ai_prediction_service.dart
+
+import 'dart:convert';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/ai_prediction_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -8,18 +10,23 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 
-// 計算結果をまとめて返すためのデータクラス
 class AiPredictionScores {
   final Map<String, double> overallScores;
   final Map<String, double> expectedValues;
   final Map<String, String> legStyles;
   final Map<String, ConditionFitResult> conditionFits;
+  final Map<String, double> earlySpeedScores;
+  final Map<String, double> finishingKickScores;
+  final Map<String, double> staminaScores;
 
   AiPredictionScores({
     required this.overallScores,
     required this.expectedValues,
     required this.legStyles,
     required this.conditionFits,
+    required this.earlySpeedScores,
+    required this.finishingKickScores,
+    required this.staminaScores,
   });
 }
 
@@ -29,37 +36,32 @@ class AiPredictionService {
   Future<AiPredictionScores> calculatePredictionScores(
       PredictionRaceData raceData, String raceId) async {
     final prefs = await SharedPreferences.getInstance();
-
-    // raceIdを使ってキーを動的に生成
-    String key(String base) => '${base}_$raceId';
-
-    // getDoubleをgetIntに変更し、型をMap<String, int>にする
-    // raceId用の設定があればそれを使い、なければグローバル設定、それもなければデフォルト値を使う
     final customWeights = {
-      'legType': prefs.getInt(key('legTypeWeight')) ?? prefs.getInt('legTypeWeight') ?? 20,
-      'courseFit': prefs.getInt(key('courseFitWeight')) ?? prefs.getInt('courseFitWeight') ?? 20,
-      'trackCondition': prefs.getInt(key('trackConditionWeight')) ?? prefs.getInt('trackConditionWeight') ?? 15,
-      'humanFactor': prefs.getInt(key('humanFactorWeight')) ?? prefs.getInt('humanFactorWeight') ?? 15,
-      'condition': prefs.getInt(key('conditionWeight')) ?? prefs.getInt('conditionWeight') ?? 10,
-      'earlySpeed': prefs.getInt(key('earlySpeedWeight')) ?? prefs.getInt('earlySpeedWeight') ?? 5,
-      'finishingKick': prefs.getInt(key('finishingKickWeight')) ?? prefs.getInt('finishingKickWeight') ?? 10,
-      'stamina': prefs.getInt(key('staminaWeight')) ?? prefs.getInt('staminaWeight') ?? 5,
+      'legType': prefs.getInt('legTypeWeight_${raceId}') ?? prefs.getInt('legTypeWeight') ?? 20,
+      'courseFit': prefs.getInt('courseFitWeight_${raceId}') ?? prefs.getInt('courseFitWeight') ?? 20,
+      'trackCondition': prefs.getInt('trackConditionWeight_${raceId}') ?? prefs.getInt('trackConditionWeight') ?? 15,
+      'humanFactor': prefs.getInt('humanFactorWeight_${raceId}') ?? prefs.getInt('humanFactorWeight') ?? 15,
+      'condition': prefs.getInt('conditionWeight_${raceId}') ?? prefs.getInt('conditionWeight') ?? 10,
+      'earlySpeed': prefs.getInt('earlySpeedWeight_${raceId}') ?? prefs.getInt('earlySpeedWeight') ?? 5,
+      'finishingKick': prefs.getInt('finishingKickWeight_${raceId}') ?? prefs.getInt('finishingKickWeight') ?? 10,
+      'stamina': prefs.getInt('staminaWeight_${raceId}') ?? prefs.getInt('staminaWeight') ?? 5,
     };
 
     final Map<String, double> scores = {};
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
     final Map<String, String> legStyles = {};
     final Map<String, ConditionFitResult> conditionFits = {};
+    final Map<String, double> earlySpeedScores = {};
+    final Map<String, double> finishingKickScores = {};
+    final Map<String, double> staminaScores = {};
     RaceStatistics? raceStats;
     try {
-      // 統計データの取得を試みる
       raceStats = await _dbHelper.getRaceStatistics(raceId);
     } catch (e) {
-      // テーブルが存在しない等のエラーが発生しても処理を続行する
       print('レース統計データの取得に失敗しました (テーブル未作成の可能性があります): $e');
-      raceStats = null; // エラー時はnullとして扱う
+      raceStats = null;
     }
-    // まず全馬の過去成績を取得し、総合適性スコアと脚質を計算
+
     for (var horse in raceData.horses) {
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
@@ -69,7 +71,6 @@ class AiPredictionService {
         pastRecords,
         customWeights: customWeights,
       );
-      // ▼▼▼ ここからが修正箇所 ▼▼▼
       legStyles[horse.horseId] = AiPredictionAnalyzer.getRunningStyle(pastRecords);
       conditionFits[horse.horseId] = AiPredictionAnalyzer.analyzeConditionFit(
         horse: horse,
@@ -77,35 +78,39 @@ class AiPredictionService {
         pastRecords: pastRecords,
         raceStats: raceStats,
       );
-      // ▲▲▲ ここまでが修正箇所 ▲▲▲
+      earlySpeedScores[horse.horseId] = AiPredictionAnalyzer.evaluateEarlySpeedFit(horse, raceData, pastRecords);
+      finishingKickScores[horse.horseId] = AiPredictionAnalyzer.evaluateFinishingKickFit(horse, raceData, pastRecords);
+      staminaScores[horse.horseId] = AiPredictionAnalyzer.evaluateStaminaFit(horse, raceData, pastRecords);
     }
 
-    // 全馬のスコア合計を算出
     final double totalScore = scores.values.fold(0.0, (sum, score) => sum + score);
-
     final Map<String, double> expectedValues = {};
-    // 各馬の期待値を計算
     for (var horse in raceData.horses) {
       final score = scores[horse.horseId] ?? 0.0;
       final odds = horse.odds ?? 0.0;
-      // ▼▼▼ ここからが修正箇所 ▼▼▼
       expectedValues[horse.horseId] = AiPredictionAnalyzer.calculateExpectedValue(
         score,
         odds,
         totalScore,
       );
-      // ▲▲▲ ここまでが修正箇所 ▲▲▲
     }
 
-    // 計算結果をデータベースに保存
     final List<AiPrediction> predictionsToSave = [];
     for (final horse in raceData.horses) {
+      final details = {
+        'legStyle': legStyles[horse.horseId],
+        'earlySpeedScore': earlySpeedScores[horse.horseId],
+        'finishingKickScore': finishingKickScores[horse.horseId],
+        'staminaScore': staminaScores[horse.horseId],
+      };
+
       predictionsToSave.add(AiPrediction(
         raceId: raceId,
         horseId: horse.horseId,
         overallScore: scores[horse.horseId] ?? 0.0,
         expectedValue: expectedValues[horse.horseId] ?? 0.0,
         predictionTimestamp: DateTime.now(),
+        analysisDetailsJson: json.encode(details),
       ));
     }
     await _dbHelper.insertOrUpdateAiPredictions(predictionsToSave);
@@ -115,6 +120,9 @@ class AiPredictionService {
       expectedValues: expectedValues,
       legStyles: legStyles,
       conditionFits: conditionFits,
+      earlySpeedScores: earlySpeedScores,
+      finishingKickScores: finishingKickScores,
+      staminaScores: staminaScores,
     );
   }
 }

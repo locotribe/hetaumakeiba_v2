@@ -7,6 +7,7 @@ class AiPrediction {
   final double overallScore;
   final double expectedValue;
   final DateTime predictionTimestamp;
+  final String? analysisDetailsJson; // この行を新しく追加
 
   AiPrediction({
     this.id,
@@ -15,6 +16,7 @@ class AiPrediction {
     required this.overallScore,
     required this.expectedValue,
     required this.predictionTimestamp,
+    this.analysisDetailsJson, // コンストラクタに追加
   });
 
   Map<String, dynamic> toMap() {
@@ -25,6 +27,7 @@ class AiPrediction {
       'overall_score': overallScore,
       'expected_value': expectedValue,
       'prediction_timestamp': predictionTimestamp.toIso8601String(),
+      'analysis_details_json': analysisDetailsJson, // toMapに追加
     };
   }
 
@@ -36,6 +39,7 @@ class AiPrediction {
       overallScore: map['overall_score'] as double,
       expectedValue: map['expected_value'] as double,
       predictionTimestamp: DateTime.parse(map['prediction_timestamp'] as String),
+      analysisDetailsJson: map['analysis_details_json'] as String?, // fromMapに追加
     );
   }
 }

@@ -109,7 +109,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
         if (cache != null && !refresh) {
           data = cache.predictionRaceData;
-          // キャッシュデータを読み込んだ後、最新の印とメモで上書きする
           final userId = localUserId;
           if (userId != null) {
             final userMarks = await _dbHelper.getAllUserMarksForRace(userId, widget.raceId);
@@ -135,9 +134,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         }
       }
 
-      if (data != null) {
-        await _calculatePredictionScores(data);
-      }
       if (mounted) {
         setState(() {
           _predictionRaceData = data;
@@ -270,7 +266,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           shutubaTableUrl: _predictionRaceData!.shutubaTableUrl,
           raceGrade: _predictionRaceData!.raceGrade,
           raceDetails1: _predictionRaceData!.raceDetails1,
-          horses: newHorsesList, // 再構築した馬リストを使用
+          horses: newHorsesList,
           racePacePrediction: _predictionRaceData!.racePacePrediction,
         );
 
@@ -344,11 +340,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
 
-    // 過去レースの結果を取得
-    final statisticsService = StatisticsService();
-    final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(
-        raceData.raceName, widget.raceId);
-
     for (var horse in raceData.horses) {
       if (marksMap.containsKey(horse.horseId)) {
         horse.userMark = marksMap[horse.horseId];
@@ -364,7 +355,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
-      // 複合適性分析を実行し、結果をセットする
       horse.complexAptitudeStats = AiPredictionAnalyzer.analyzeComplexAptitude(
         raceData: raceData,
         pastRecords: pastRecords,
@@ -379,7 +369,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
 
     raceData.racePacePrediction = AiPredictionAnalyzer.predictRacePace(
-        raceData.horses, allPastRecords, pastRaceResults);
+        raceData.horses, allPastRecords, []);
     return raceData;
   }
 
@@ -495,7 +485,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   );
                   await _dbHelper.insertOrUpdateHorseMemo(newMemo);
                   Navigator.of(context).pop();
-                  _loadShutubaData(refresh: true); // refresh: true を追加
+                  _loadShutubaData(refresh: true);
                 }
               },
               child: const Text('保存'),
@@ -508,10 +498,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   Future<void> _exportMemosAsCsv(PredictionRaceData raceData) async {
     final List<List<dynamic>> rows = [];
-    // ヘッダー行
     rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'predictionMemo', 'reviewMemo']);
 
-    // データ行
     for (final horse in raceData.horses) {
       rows.add([
         widget.raceId,
@@ -561,7 +549,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       if (rows.length < 2) {
         throw Exception('CSVファイルにデータがありません。');
       }
-      // ヘッダーの検証
       final header = rows.first;
       if (header.join(',') != 'raceId,horseId,horseNumber,horseName,predictionMemo,reviewMemo') {
         throw Exception('CSVファイルのヘッダー形式が正しくありません。');
@@ -601,9 +588,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<void> _navigateToStatisticsPage() async {
-    // データベースの事前チェックと確認ダイアログのロジックを削除。
-    // RaceStatisticsPage自体にデータがない場合の処理が実装されているため、
-    // ここでは直接ページに遷移させます。
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => RaceStatisticsPage(
@@ -657,7 +641,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                 Expanded(
                   child: Builder(
                       builder: (context) {
-                        // ソート処理
                         final sortedHorses = List<PredictionHorseDetail>.from(_predictionRaceData!.horses);
                         sortedHorses.sort((a, b) {
                           int comparison;
@@ -789,7 +772,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             Icon(Icons.expand_less),
           ],
         ),
-        // 共通ヘッダーウィジェット
         RaceHeaderCard(
           title: title,
           detailsLine1: '${race.raceDate} ${race.venue}',
@@ -813,7 +795,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                     ),
                   );
                   if (result == true && mounted) {
-                    // 設定が変更された可能性があるので、スコアを再計算
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('AI予測を再計算しています...')),
                     );
@@ -842,17 +823,63 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ),
           ),
           trailing: const Icon(Icons.chevron_right),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ComprehensivePredictionPage(
-                  raceData: _predictionRaceData!,
-                  overallScores: _overallScores,
-                  expectedValues: _expectedValues,
+          onTap: () async {
+            final existingPredictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
+
+            if (existingPredictions.isNotEmpty) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ComprehensivePredictionPage(
+                    raceId: widget.raceId,
+                    raceData: _predictionRaceData!,
+                  ),
                 ),
-              ),
-            );
+              );
+            } else {
+              final result = await showDialog<String>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('AI総合予測'),
+                  content: const Text('このレースのAI予測をまだ行っていません。\nデフォルト設定（バランス重視）で予測を計算しますか？\n（計算には少し時間がかかります）'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop('tune'),
+                      child: const Text('チューニング'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop('yes'),
+                      child: const Text('はい'),
+                    ),
+                  ],
+                ),
+              );
+
+              if (result == 'yes' && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('AI予測を計算しています...')),
+                );
+                await _calculatePredictionScores(_predictionRaceData!);
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ComprehensivePredictionPage(
+                      raceId: widget.raceId,
+                      raceData: _predictionRaceData!,
+                    ),
+                  ),
+                );
+              } else if (result == 'tune' && mounted) {
+                await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AiPredictionSettingsPage(raceId: widget.raceId),
+                  ),
+                );
+              }
+            }
           },
         ),
         ListTile(
@@ -950,7 +977,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         _sortColumn = column;
         _isAscending = true;
       }
-      // ソートロジックをここに移動
       _predictionRaceData?.horses.sort((a, b) {
         int comparison;
         int compareNullsLast(Comparable? valA, Comparable? valB) {
@@ -999,7 +1025,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           case SortableColumn.overallScore:
             final aScore = _overallScores[a.horseId];
             final bScore = _overallScores[b.horseId];
-            comparison = compareNullsLast(bScore, aScore); // 降順
+            comparison = compareNullsLast(bScore, aScore);
             break;
           case SortableColumn.bestTime:
             final aTime = a.bestTimeStats?.timeInSeconds;
@@ -1047,7 +1073,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
         DataColumn2(label: const Text('枠'), fixedWidth: 45, onSort: (i, asc) => _onSort(SortableColumn.gateNumber)),
         DataColumn2(label: const Text('番'), fixedWidth: 45, onSort: (i, asc) => _onSort(SortableColumn.horseNumber)),
-        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)), // 馬名の幅を150pxに固定
+        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
         DataColumn2(label: const Text('人気'), fixedWidth: 50, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.popularity)),
       ],
       horses: horses,
@@ -1332,7 +1358,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             columns: [
               DataColumn2(label: const Text('印'), fixedWidth: 80, onSort: (i, asc) => _onSort(SortableColumn.mark)),
               DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-              const DataColumn2(label: Text('メモ'), size: ColumnSize.L), // fixedWidth を size に変更
+              const DataColumn2(label: Text('メモ'), size: ColumnSize.L),
             ],
             horses: horses,
             cellBuilder: (horse) => [
@@ -1359,13 +1385,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   Widget _buildMarkDropdown(PredictionHorseDetail horse) {
     return PopupMenuButton<String>(
-      // セル内に表示するウィジェット
       constraints: const BoxConstraints(
         minWidth: 2.0 * 24.0, // 最小幅を指定
         maxWidth: 2.0 * 24.0,  // 最大幅を指定
       ),
 
-      // ポップアップメニューの項目
       itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
         ...['◎', '〇', '▲', '△', '✕', '★'].map((String value) {
           return PopupMenuItem<String>(
@@ -1392,7 +1416,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         if (userId == null) return;
 
         if (newValue == '--') {
-          // 印を削除する場合
           if (horse.userMark != null) {
             setState(() {
               horse.userMark = null;
@@ -1400,7 +1423,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             _deleteMarkAndSaveInBackground(horse);
           }
         } else {
-          // 印を保存または更新する場合
           final userMark = UserMark(
             userId: userId,
             raceId: widget.raceId,
@@ -1408,18 +1430,16 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             mark: newValue,
             timestamp: DateTime.now(),
           );
-          // UIを即時更新
           setState(() {
             horse.userMark = userMark;
           });
-          // 保存とキャッシュ更新をバックグラウンドで実行
           _updateMarkAndSaveInBackground(userMark);
         }
       },
       padding: EdgeInsets.zero,
       child: Center(
         child: Text(
-          horse.userMark?.mark ?? '--', // 選択されていれば印、なければ空白
+          horse.userMark?.mark ?? '--',
           style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
         ),
       ),
@@ -1547,7 +1567,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                         ),
                       ),
                     ),
-                    // 固定幅のコンテナでラップ
                     child: SizedBox(
                       width: 100, // 過去レースの列の固定幅
                       child: Stack(
