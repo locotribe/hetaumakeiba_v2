@@ -45,6 +45,7 @@ enum SortableColumn {
   overallScore,
   bestTime,
   fastestAgari,
+  legStyle,
 }
 
 
@@ -58,7 +59,7 @@ class ShutubaTablePage extends StatefulWidget {
   State<ShutubaTablePage> createState() => _ShutubaTablePageState();
 }
 
-class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerProviderStateMixin {
+class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   PredictionRaceData? _predictionRaceData;
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
@@ -73,6 +74,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   bool _isAscending = true;
   late TabController _tabController;
   bool _isCardExpanded = true;
+
+  @override
+  bool get wantKeepAlive => true;
 
 
   @override
@@ -571,6 +575,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return _isLoading
         ? const Center(child: CircularProgressIndicator())
         : _predictionRaceData == null
@@ -876,6 +881,73 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         _sortColumn = column;
         _isAscending = true;
       }
+      // ソートロジックをここに移動
+      _predictionRaceData?.horses.sort((a, b) {
+        int comparison;
+        int compareNullsLast(Comparable? valA, Comparable? valB) {
+          if (valA == null && valB == null) return 0;
+          if (valA == null) return 1;
+          if (valB == null) return -1;
+          return valA.compareTo(valB);
+        }
+
+        switch (_sortColumn) {
+          case SortableColumn.mark:
+            const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '★': 5, '消': 6};
+            final aMark = markOrder[a.userMark?.mark] ?? 99;
+            final bMark = markOrder[b.userMark?.mark] ?? 99;
+            comparison = aMark.compareTo(bMark);
+            break;
+          case SortableColumn.gateNumber:
+            comparison = a.gateNumber.compareTo(b.gateNumber);
+            break;
+          case SortableColumn.horseNumber:
+            comparison = a.horseNumber.compareTo(b.horseNumber);
+            break;
+          case SortableColumn.horseName:
+            comparison = a.horseName.compareTo(b.horseName);
+            break;
+          case SortableColumn.legStyle:
+            const styleOrder = {'逃げ': 0, '先行': 1, '差し': 2, '追込': 3, '自在': 4, '不明': 5};
+            final aStyle = styleOrder[_legStyles[a.horseId]] ?? 99;
+            final bStyle = styleOrder[_legStyles[b.horseId]] ?? 99;
+            comparison = aStyle.compareTo(bStyle);
+            break;
+          case SortableColumn.popularity:
+            comparison = compareNullsLast(a.popularity, b.popularity);
+            break;
+          case SortableColumn.odds:
+            comparison = compareNullsLast(a.odds, b.odds);
+            break;
+          case SortableColumn.carriedWeight:
+            comparison = a.carriedWeight.compareTo(b.carriedWeight);
+            break;
+          case SortableColumn.horseWeight:
+            final aWeight = int.tryParse(a.horseWeight?.split('(').first ?? '');
+            final bWeight = int.tryParse(b.horseWeight?.split('(').first ?? '');
+            comparison = compareNullsLast(aWeight, bWeight);
+            break;
+          case SortableColumn.overallScore:
+            final aScore = _overallScores[a.horseId];
+            final bScore = _overallScores[b.horseId];
+            comparison = compareNullsLast(bScore, aScore); // 降順
+            break;
+          case SortableColumn.bestTime:
+            final aTime = a.bestTimeStats?.timeInSeconds;
+            final bTime = b.bestTimeStats?.timeInSeconds;
+            comparison = compareNullsLast(aTime, bTime);
+            break;
+          case SortableColumn.fastestAgari:
+            final aAgari = a.fastestAgariStats?.agariInSeconds;
+            final bAgari = b.fastestAgariStats?.agariInSeconds;
+            comparison = compareNullsLast(aAgari, bAgari);
+            break;
+          default:
+            comparison = a.horseNumber.compareTo(b.horseNumber);
+            break;
+        }
+        return _isAscending ? comparison : -comparison;
+      });
     });
   }
 
@@ -936,9 +1008,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     return _buildDataTableForTab(
       columns: [
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
-        DataColumn2(label: const Text('馬名'), fixedWidth: 150,  onSort: (i, asc) => _onSort(SortableColumn.horseName)),
+        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
+        DataColumn2(label: const Text('脚質'), fixedWidth: 60, onSort: (i, asc) => _onSort(SortableColumn.legStyle)),
         DataColumn2(label: const Text('オッズ'), fixedWidth: 70, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.odds)),
-        const DataColumn2(label: Text('性齢'), fixedWidth: 40,),
+        const DataColumn2(label: Text('性齢'), fixedWidth: 40),
         DataColumn2(label: const Text('斤量'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.carriedWeight)),
       ],
       horses: horses,
@@ -956,6 +1029,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ),
           ),
         ),
+        DataCell(Text(_legStyles[horse.horseId] ?? '不明')),
         DataCell(Text(horse.odds?.toString() ?? '--')),
         DataCell(Text(horse.sexAndAge)),
         DataCell(Text(horse.carriedWeight.toString())),
