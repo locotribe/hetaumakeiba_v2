@@ -2,13 +2,16 @@
 
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/ai_prediction_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
+import 'package:hetaumakeiba_v2/logic/ai/aptitude_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/condition_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/value_calculator.dart';
 
 class AiPredictionScores {
   final Map<String, double> overallScores;
@@ -65,22 +68,22 @@ class AiPredictionService {
     for (var horse in raceData.horses) {
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
-      scores[horse.horseId] = AiPredictionAnalyzer.calculateOverallAptitudeScore(
+      scores[horse.horseId] = AptitudeAnalyzer.calculateOverallAptitudeScore(
         horse,
         raceData,
         pastRecords,
         customWeights: customWeights,
       );
-      legStyles[horse.horseId] = AiPredictionAnalyzer.getRunningStyle(pastRecords);
-      conditionFits[horse.horseId] = AiPredictionAnalyzer.analyzeConditionFit(
+      legStyles[horse.horseId] = RaceAnalyzer.getRunningStyle(pastRecords);
+      conditionFits[horse.horseId] = ConditionAnalyzer.analyzeConditionFit(
         horse: horse,
         raceData: raceData,
         pastRecords: pastRecords,
         raceStats: raceStats,
       );
-      earlySpeedScores[horse.horseId] = AiPredictionAnalyzer.evaluateEarlySpeedFit(horse, raceData, pastRecords);
-      finishingKickScores[horse.horseId] = AiPredictionAnalyzer.evaluateFinishingKickFit(horse, raceData, pastRecords);
-      staminaScores[horse.horseId] = AiPredictionAnalyzer.evaluateStaminaFit(horse, raceData, pastRecords);
+      earlySpeedScores[horse.horseId] = AptitudeAnalyzer.evaluateEarlySpeedFit(horse, raceData, pastRecords);
+      finishingKickScores[horse.horseId] = AptitudeAnalyzer.evaluateFinishingKickFit(horse, raceData, pastRecords);
+      staminaScores[horse.horseId] = AptitudeAnalyzer.evaluateStaminaFit(horse, raceData, pastRecords);
     }
 
     final double totalScore = scores.values.fold(0.0, (sum, score) => sum + score);
@@ -88,7 +91,7 @@ class AiPredictionService {
     for (var horse in raceData.horses) {
       final score = scores[horse.horseId] ?? 0.0;
       final odds = horse.odds ?? 0.0;
-      expectedValues[horse.horseId] = AiPredictionAnalyzer.calculateExpectedValue(
+      expectedValues[horse.horseId] = ValueCalculator.calculateExpectedValue(
         score,
         odds,
         totalScore,

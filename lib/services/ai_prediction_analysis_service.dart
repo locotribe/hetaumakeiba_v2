@@ -3,8 +3,8 @@
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai_prediction_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 
 // AI予測全体の分析結果サマリーを保持するクラス
 class AiOverallAnalysis {
@@ -175,7 +175,7 @@ class AiPredictionAnalysisService {
       final distance = _extractDistance(raceResult.raceInfo);
       final trackCondition = _extractTrackCondition(raceResult.raceInfo);
       final popularity = _extractPopularity(honmeiResult);
-      final legStyle = AiPredictionAnalyzer.getRunningStyle(allPastRecords[honmeiPrediction.horseId] ?? []);
+      final legStyle = RaceAnalyzer.getRunningStyle(allPastRecords[honmeiPrediction.horseId] ?? []);
 
       // ファクターごとに成績を更新
       _updateFactorAnalysis(venueAnalysis, venue, honmeiResult, raceResult);

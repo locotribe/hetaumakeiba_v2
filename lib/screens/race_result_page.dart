@@ -12,13 +12,13 @@ import 'package:hetaumakeiba_v2/widgets/betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai_prediction_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
+import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 
 class PageData {
   final Map<String, dynamic>? parsedTicket;
@@ -133,7 +133,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
         final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(
             raceResult.raceTitle, widget.raceId);
 
-        final pacePrediction = AiPredictionAnalyzer.predictRacePace(
+        final pacePrediction = RaceAnalyzer.predictRacePace(
             horseDetailsForPacePrediction, allPastRecords, pastRaceResults);
 
         return PageData(

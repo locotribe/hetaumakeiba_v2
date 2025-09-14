@@ -9,8 +9,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/ai_prediction_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/logic/ai/stats_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -355,20 +356,20 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
-      horse.complexAptitudeStats = AiPredictionAnalyzer.analyzeComplexAptitude(
+      horse.complexAptitudeStats = StatsAnalyzer.analyzeComplexAptitude(
         raceData: raceData,
         pastRecords: pastRecords,
       );
-      horse.bestTimeStats = AiPredictionAnalyzer.analyzeBestTime(
+      horse.bestTimeStats = StatsAnalyzer.analyzeBestTime(
         raceData: raceData,
         pastRecords: pastRecords,
       );
-      horse.fastestAgariStats = AiPredictionAnalyzer.analyzeFastestAgari(
+      horse.fastestAgariStats = StatsAnalyzer.analyzeFastestAgari(
         pastRecords: pastRecords,
       );
     }
 
-    raceData.racePacePrediction = AiPredictionAnalyzer.predictRacePace(
+    raceData.racePacePrediction = RaceAnalyzer.predictRacePace(
         raceData.horses, allPastRecords, []);
     return raceData;
   }
