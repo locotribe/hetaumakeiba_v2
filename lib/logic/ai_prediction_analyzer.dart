@@ -1,4 +1,5 @@
-// lib/logic/prediction_analyzer.dart
+// lib/logic/ai_prediction_analyzer.dart
+
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
@@ -203,32 +204,45 @@ class AiPredictionAnalyzer {
     return normalizedScore.clamp(0, 100); // 最終スコアを0-100の範囲に収める
   }
 
-  // 1. 脚質・展開適性評価
+// 1. 脚質・展開適性評価
   static double _evaluateLegTypeAndPaceFit(
       PredictionHorseDetail horse,
       PredictionRaceData raceData,
       List<HorseRaceRecord> pastRecords,
       ) {
-    final predictedPace = raceData.racePacePrediction?.predictedPace ?? 'ミドル';
-    final horseStyle = getRunningStyle(pastRecords);
-
-    switch (predictedPace) {
-      case 'ハイペース':
-        if (horseStyle == '差し' || horseStyle == '追込') {
-          return 95.0; // 展開が向く
-        } else {
-          return 60.0; // 展開が向かない
-        }
-      case 'スローペース':
-        if (horseStyle == '逃げ' || horseStyle == '先行') {
-          return 95.0; // 展開が向く
-        } else {
-          return 60.0; // 展開が向かない
-        }
-      case 'ミドルペース':
-      default:
-        return 80.0; // 平均的な評価
+    // 予測ペースを特定（ハイ, ミドル, スローに正規化）
+    final predictedPaceRaw = raceData.racePacePrediction?.predictedPace ?? 'ミドルペース';
+    String predictedPace;
+    if (predictedPaceRaw.contains('ハイ')) {
+      predictedPace = 'ハイ';
+    } else if (predictedPaceRaw.contains('スロー')) {
+      predictedPace = 'スロー';
+    } else {
+      predictedPace = 'ミドル';
     }
+
+    // 予測ペースに一致する過去レースを抽出
+    final relevantRaces = pastRecords.where((record) {
+      final pace = RaceDataParser.calculatePace(record.pace);
+      return pace == predictedPace;
+    }).toList();
+
+    // 一致するレースがない場合は基準点を返す
+    if (relevantRaces.isEmpty) {
+      return 70.0;
+    }
+
+    // 抽出したレースでの複勝率を計算
+    final totalCount = relevantRaces.length;
+    final placeCount = relevantRaces.where((record) {
+      final rank = int.tryParse(record.rank);
+      return rank != null && rank <= 3;
+    }).length;
+
+    final placeRate = placeCount / totalCount;
+
+    // 複勝率を50点から100点の範囲のスコアに変換して返す
+    return 50.0 + (placeRate * 50.0);
   }
 
   // 2. コース適性評価
