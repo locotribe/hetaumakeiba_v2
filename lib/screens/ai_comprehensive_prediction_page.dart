@@ -102,6 +102,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   late TabController _tabController;
   final DatabaseHelper _dbHelper = DatabaseHelper();
   final JockeyAnalysisService _jockeyAnalysisService = JockeyAnalysisService();
+  int? _touchedSpotIndex;
 
   late Future<Map<String, dynamic>> _pageDataFuture;
 
@@ -607,7 +608,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     double minScore = scores.isNotEmpty ? scores.reduce(min) : 0;
     double maxScore = scores.isNotEmpty ? scores.reduce(max) : 100;
     const padding = 2.0;
-    int? _touchedSpotIndex;
 
     return Padding(
       padding: const EdgeInsets.all(8.0),
