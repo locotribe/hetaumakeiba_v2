@@ -13,8 +13,9 @@ import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 import 'package:hetaumakeiba_v2/logic/ai/summary_generator.dart';
-import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/condition_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 
 class _HorseNumberDotPainter extends FlDotPainter {
   final Color color;
@@ -142,7 +143,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     final Map<String, String> legStyles = {};
     for (var horse in widget.raceData.horses) {
       final pastRecords = allPastRecords[horse.horseId] ?? [];
-      legStyles[horse.horseId] = RaceAnalyzer.getRunningStyle(pastRecords);
+      legStyles[horse.horseId] = LegStyleAnalyzer.getRunningStyle(pastRecords).primaryStyle;
     }
 
     final statisticsService = StatisticsService();

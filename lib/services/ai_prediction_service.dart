@@ -10,8 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 import 'package:hetaumakeiba_v2/logic/ai/aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/condition_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/value_calculator.dart';
+import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 
 class AiPredictionScores {
   final Map<String, double> overallScores;
@@ -74,7 +74,7 @@ class AiPredictionService {
         pastRecords,
         customWeights: customWeights,
       );
-      legStyles[horse.horseId] = RaceAnalyzer.getRunningStyle(pastRecords);
+      legStyles[horse.horseId] = LegStyleAnalyzer.getRunningStyle(pastRecords).primaryStyle;
       conditionFits[horse.horseId] = ConditionAnalyzer.analyzeConditionFit(
         horse: horse,
         raceData: raceData,

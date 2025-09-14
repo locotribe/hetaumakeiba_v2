@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 
 class ConditionAnalyzer {
   static ConditionFitResult analyzeConditionFit({
@@ -78,7 +79,7 @@ class ConditionAnalyzer {
       PredictionRaceData raceData, List<HorseRaceRecord> pastRecords) {
     final predictedPace =
         raceData.racePacePrediction?.predictedPace ?? 'ミドルペース';
-    final horseStyle = RaceAnalyzer.getRunningStyle(pastRecords);
+    final horseStyle = LegStyleAnalyzer.getRunningStyle(pastRecords).primaryStyle;
 
     if (horseStyle == '不明') return FitnessRating.unknown;
 

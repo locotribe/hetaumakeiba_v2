@@ -2,8 +2,8 @@
 
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/aptitude_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 
 class SummaryGenerator {
   /// AI予測のサマリーと解説文を生成する
@@ -19,7 +19,7 @@ class SummaryGenerator {
     int senkoCount = 0;
     for (var horse in raceData.horses) {
       final style =
-      RaceAnalyzer.getRunningStyle(allPastRecords[horse.horseId] ?? []);
+          LegStyleAnalyzer.getRunningStyle(allPastRecords[horse.horseId] ?? []).primaryStyle;
       if (style == '逃げ') nigeCount++;
       if (style == '先行') senkoCount++;
     }
@@ -35,7 +35,7 @@ class SummaryGenerator {
 
     // 2. 予測ペースの言語化
     final pace = raceData.racePacePrediction?.predictedPace ?? '不明';
-    sentences.add('AIの予測ペースは「$pace」。'); // advantageousStyleの参照を削除
+    sentences.add('AIの予測ペースは「$pace」。');
 
     // 3. 本命馬の強み分析
     final sortedHorses = raceData.horses.toList()

@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/logic/ai/aptitude_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 
 // シミュレーション中の馬の状態を管理するための内部ヘルパークラス
 class _SimHorse {
@@ -43,7 +44,7 @@ class RaceAnalyzer {
     int senkoCount = 0;
     for (var horse in horses) {
       final records = allPastRecords[horse.horseId] ?? [];
-      final style = getRunningStyle(records);
+      final style = LegStyleAnalyzer.getRunningStyle(records).primaryStyle;
       if (style == "逃げ") nigeCount++;
       if (style == "先行") senkoCount++;
     }
@@ -90,43 +91,7 @@ class RaceAnalyzer {
     return RacePacePrediction(predictedPace: finalPrediction);
   }
 
-  // 内部ヘルパー：脚質を判定する
-  static String getRunningStyle(List<HorseRaceRecord> records) {
-    if (records.isEmpty) return "自在";
 
-    List<double> avgPositionRates = [];
-    final recentRaces = records
-        .where((r) => !r.cornerPassage.contains('(') && r.cornerPassage.contains('-'))
-        .take(5);
-
-    if (recentRaces.isEmpty) return "自在";
-
-    for (var record in recentRaces) {
-      final horseCount = int.tryParse(record.numberOfHorses);
-      final positions = record.cornerPassage
-          .split('-')
-          .map((p) => int.tryParse(p) ?? -1)
-          .where((p) => p != -1)
-          .toList();
-
-      if (horseCount == null || horseCount == 0 || positions.length < 2)
-        continue;
-
-      // 2コーナーまたはそれに相当する位置の通過順位率を計算
-      final positionRate = positions[1] / horseCount;
-      avgPositionRates.add(positionRate);
-    }
-
-    if (avgPositionRates.isEmpty) return "自在";
-
-    final avgRate =
-        avgPositionRates.reduce((a, b) => a + b) / avgPositionRates.length;
-
-    if (avgRate <= 0.15) return "逃げ";
-    if (avgRate <= 0.40) return "先行";
-    if (avgRate <= 0.80) return "差し";
-    return "追込";
-  }
 
   /// 各馬の脚質と枠順を元に、各コーナーの展開を予測（シミュレーション）します。
   static Map<String, String> simulateRaceDevelopment(
@@ -156,8 +121,11 @@ class RaceAnalyzer {
         default:
           initialPositionScore = 2.5;
       }
-      // 内枠ほど前に出やすいと仮定し、スコアを微調整
-      initialPositionScore -= (horse.gateNumber * 0.05);
+      // 先行力スコアを取得し、初期位置を補正
+      final earlySpeedScore =
+      AptitudeAnalyzer.evaluateEarlySpeedFit(horse, raceData, pastRecords);
+      // 先行力が高いほどスコアが小さくなる（前に位置する）ように補正
+      initialPositionScore -= (earlySpeedScore / 100.0) * 0.5;
 
       return _SimHorse(
         detail: horse,
