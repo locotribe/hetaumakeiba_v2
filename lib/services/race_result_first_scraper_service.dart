@@ -31,7 +31,13 @@ class RaceResultFirstScraperService {
     horse.horse_id = tds[3]?.querySelector('.Horse_Name a')?.href.split('/horse/')[1] || '';
     horse.sex_age = textOrEmpty(tds[4]);
     horse.kilo = textOrEmpty(tds[5]);
-    horse.jockey = textOrEmpty(tds[6]);
+    
+    const jockeyAnchor = tds[6]?.querySelector('a');
+    horse.jockey = textOrEmpty(jockeyAnchor);
+    const jockeyHref = jockeyAnchor ? jockeyAnchor.href : '';
+    const jockeyMatch = jockeyHref.match(/\/jockey\/result\/recent\/(\d{5})\//);
+    horse.jockey_id = jockeyMatch ? jockeyMatch[1] : '';
+
     horse.time = textOrEmpty(tds[7]);
     horse.margin = textOrEmpty(tds[8]);
     horse.popularity = textOrEmpty(tds[9]);
