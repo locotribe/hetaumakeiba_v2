@@ -148,6 +148,8 @@ class PredictionHorseDetail {
       'popularity': popularity,
       'horseWeight': horseWeight,
       'isScratched': isScratched,
+      'userMark': userMark?.toMap(),
+      'userMemo': userMemo?.toMap(),
     };
   }
 
@@ -167,6 +169,12 @@ class PredictionHorseDetail {
       popularity: json['popularity'] as int?,
       horseWeight: json['horseWeight'] as String?,
       isScratched: json['isScratched'] as bool,
+      userMark: json['userMark'] != null
+          ? UserMark.fromMap(json['userMark'] as Map<String, dynamic>)
+          : null,
+      userMemo: json['userMemo'] != null
+          ? HorseMemo.fromMap(json['userMemo'] as Map<String, dynamic>)
+          : null,
     );
   }
 

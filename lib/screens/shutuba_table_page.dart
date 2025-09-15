@@ -54,8 +54,10 @@ enum SortableColumn {
 class ShutubaTablePage extends StatefulWidget {
   final String raceId;
   final RaceResult? raceResult;
+  final PredictionRaceData? predictionRaceData;
 
-  const ShutubaTablePage({super.key, required this.raceId, this.raceResult});
+  const ShutubaTablePage({super.key, required this.raceId, this.raceResult,
+    this.predictionRaceData,});
 
   @override
   State<ShutubaTablePage> createState() => _ShutubaTablePageState();
@@ -104,14 +106,23 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     try {
       PredictionRaceData? data;
-      if (widget.raceResult != null) {
+
+      // 1. race_pageから分析済みデータが渡されていれば最優先でそれを使う
+      if (widget.predictionRaceData != null && !refresh) {
+        data = widget.predictionRaceData;
+      }
+      // 2. race_pageからデータが無く、レース結果だけがある場合 (キャッシュはrace_pageで確認済み)
+      else if (widget.raceResult != null && !refresh) {
         data = _createPredictionDataFromRaceResult(widget.raceResult!);
-      } else {
+      }
+      // 3. 上記以外の場合 (キャッシュ確認 or Webから新規取得)
+      else {
         final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
         if (cache != null && !refresh) {
           data = cache.predictionRaceData;
           final userId = localUserId;
           if (userId != null) {
+            // キャッシュデータに最新の印とメモ情報をマージする
             final userMarks = await _dbHelper.getAllUserMarksForRace(userId, widget.raceId);
             final userMemos = await _dbHelper.getMemosForRace(userId, widget.raceId);
             final marksMap = {for (var mark in userMarks) mark.horseId: mark};

@@ -9,13 +9,13 @@ import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_result_page.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
+import '../models/ai_prediction_race_data.dart';
 
-// レースの状態を管理するためのenum
 enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
 
 class RacePage extends StatefulWidget {
   final String raceId;
-  final String raceDate; // YYYY年MM月DD日の形式を想定
+  final String raceDate;
 
   const RacePage({
     super.key,
@@ -32,6 +32,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   final DatabaseHelper _dbHelper = DatabaseHelper();
   RaceStatus _status = RaceStatus.loading;
   RaceResult? _raceResult;
+  PredictionRaceData? _cachedPredictionRaceData;
 
   @override
   void initState() {
@@ -47,32 +48,46 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   }
 
   Future<void> _determineRaceStatus() async {
-    // 1. DBキャッシュチェックを先に行う
+    // 1. DBから分析済みの出馬表キャッシュがあるか確認
+    final shutubaCache = await _dbHelper.getShutubaTableCache(widget.raceId);
+    // 2. DBからレース結果があるか確認
     final dbResult = await _dbHelper.getRaceResult(widget.raceId);
-    if (dbResult != null) {
+
+    if (shutubaCache != null) {
+      // 3. キャッシュが存在する場合 (最優先)
       setState(() {
-        _raceResult = dbResult;
-        _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(1); // DBに結果があれば、結果タブを初期表示
+        _cachedPredictionRaceData = shutubaCache.predictionRaceData;
+        _raceResult = dbResult; // レース結果があればセット
+        _status = RaceStatus.resultConfirmed; // キャッシュがあれば常にこの状態でOK
+        _tabController.animateTo(dbResult != null ? 1 : 0); // 結果があれば結果タブ、なければ出馬表タブ
       });
       return;
     }
 
-    // 2. レース結果がWebで確定しているかチェック
+    // 4. キャッシュがない場合
+    if (dbResult != null) {
+      // レース結果だけはある場合
+      setState(() {
+        _raceResult = dbResult;
+        _status = RaceStatus.resultConfirmed;
+        _tabController.animateTo(1);
+      });
+      return;
+    }
+
+    // 5. キャッシュもレース結果もない場合 (Web確認)
     final isConfirmed = await RaceResultScraperService.isRaceResultConfirmed(widget.raceId);
 
     if (isConfirmed) {
-      // 3. 結果確定後（キャッシュなし）
       setState(() {
         _status = RaceStatus.resultUnconfirmed;
-        _tabController.animateTo(0); // まずは出馬表タブを表示しつつ裏で結果取得
+        _tabController.animateTo(0);
       });
       _fetchAndSaveRaceResult();
     } else {
-      // 4. 結果未確定（開催前または当日未実施）
       setState(() {
         _status = RaceStatus.beforeHolding;
-        _tabController.animateTo(0); // 出馬表タブを初期表示
+        _tabController.animateTo(0);
       });
     }
   }
@@ -84,9 +99,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
       final result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/${widget.raceId}');
       // 2. 取得したレース結果をDBに保存
       await _dbHelper.insertOrUpdateRaceResult(result);
-
-      // --- ▼▼▼ ここからが追加されたロジック ▼▼▼ ---
-
       // 3. レース結果に含まれる各馬について、全競走成績がDBに存在するかチェック
       for (final horse in result.horseResults) {
         // DBにその馬のデータが1件もなければ、Webから全成績を取得する
@@ -100,28 +112,25 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
             for (final record in horseRecords) {
               await _dbHelper.insertOrUpdateHorsePerformance(record);
             }
-            // サーバー負荷軽減のための待機
             await Future.delayed(const Duration(milliseconds: 500));
           } catch (e) {
             print('ERROR: 競走馬ID ${horse.horseId} の成績スクレイピングまたは保存中にエラーが発生しました: $e');
           }
         }
       }
-      // --- ▲▲▲ ここまでが追加されたロジック ▲▲▲ ---
 
       if (mounted) {
         setState(() {
           _raceResult = result;
           _status = RaceStatus.resultConfirmed;
-          _tabController.animateTo(1); // データ取得後に結果タブへ移動
+          _tabController.animateTo(1);
         });
       }
     } catch (e) {
       print('Failed to fetch race result in RacePage: $e');
-      // エラーが発生した場合でも、UIは「開催前」のような状態で操作可能にしておく
       if (mounted) {
         setState(() {
-          _status = RaceStatus.beforeHolding; // フォールバックとして開催前状態にする
+          _status = RaceStatus.beforeHolding;
         });
       }
     }
@@ -155,13 +164,11 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
             TabBarView(
               controller: _tabController,
               children: [
-                // データ取得中も出馬表は表示
                 ShutubaTablePage(raceId: widget.raceId),
                 const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
               ],
             ),
-            // ローディングインジケータをオーバーレイ表示
             const Center(child: CircularProgressIndicator()),
           ],
         );
@@ -172,9 +179,10 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           children: [
             ShutubaTablePage(
               raceId: widget.raceId,
-              raceResult: _raceResult, // 確定済みの場合はRaceResultを渡す
+              predictionRaceData: _cachedPredictionRaceData,
+              raceResult: _raceResult,
             ),
-            RaceResultPage(raceId: widget.raceId, qrData: null), // qrDataはnullで渡す
+            RaceResultPage(raceId: widget.raceId, qrData: null),
             AiPredictionResultPage(raceId: widget.raceId),
           ],
         );
