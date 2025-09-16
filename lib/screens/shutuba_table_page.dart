@@ -147,6 +147,26 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
 
       if (mounted) {
+        if (data != null) {
+          // 読み込んだデータにスコアが含まれていれば、State変数にも反映
+          if (data.horses.any((h) => h.overallScore != null)) {
+            _overallScores = {
+              for (var h in data.horses)
+                if (h.overallScore != null) h.horseId: h.overallScore!
+            };
+            _expectedValues = {
+              for (var h in data.horses)
+                if (h.expectedValue != null) h.horseId: h.expectedValue!
+            };
+          } else {
+            // スコアがない場合、念のためai_predictionsテーブルからも読み込みを試す
+            final predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
+            if(predictions.isNotEmpty){
+              _overallScores = {for (var p in predictions) p.horseId: p.overallScore};
+              _expectedValues = {for (var p in predictions) p.horseId: p.expectedValue};
+            }
+          }
+        }
         setState(() {
           _predictionRaceData = data;
           _isLoading = false;
@@ -238,67 +258,19 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('最新情報を取得中...')));
     try {
-      final updatedHorsesData = await _scraperService.scrapeDynamicData(widget.raceId);
+      // データを再取得して分析をかけ直すため、既存の _loadShutubaData を refresh: true で呼び出す
+      await _loadShutubaData(refresh: true);
 
-      if (_predictionRaceData != null) {
-        final staticDataMap = {for (var h in _predictionRaceData!.horses) h.horseId: h};
-
-        // 1. 最新の出走馬リストを基準に、新しい馬リストを再構築
-        final newHorsesList = updatedHorsesData.map((updatedHorse) {
-          final oldHorseData = staticDataMap[updatedHorse.horseId];
-
-          // 2. 最新の動的情報と、既存の静的情報を組み合わせて新しいオブジェクトを作成
-          return PredictionHorseDetail(
-            horseId: updatedHorse.horseId,
-            horseNumber: updatedHorse.horseNumber,
-            gateNumber: updatedHorse.gateNumber,
-            horseName: updatedHorse.horseName,
-            sexAndAge: updatedHorse.sexAndAge,
-            jockey: updatedHorse.jockey,
-            jockeyId: updatedHorse.jockeyId,
-            carriedWeight: updatedHorse.carriedWeight,
-            trainerName: updatedHorse.trainerName,
-            trainerAffiliation: updatedHorse.trainerAffiliation,
-            isScratched: updatedHorse.isScratched,
-            odds: updatedHorse.odds,
-            popularity: updatedHorse.popularity,
-            horseWeight: updatedHorse.horseWeight,
-            userMark: oldHorseData?.userMark,
-            userMemo: oldHorseData?.userMemo,
-          );
-        }).toList();
-
-        // 3. 新しい馬リストを使って、レースデータ全体を新しく作成
-        final newRaceData = PredictionRaceData(
-          raceId: _predictionRaceData!.raceId,
-          raceName: _predictionRaceData!.raceName,
-          raceDate: _predictionRaceData!.raceDate,
-          venue: _predictionRaceData!.venue,
-          raceNumber: _predictionRaceData!.raceNumber,
-          shutubaTableUrl: _predictionRaceData!.shutubaTableUrl,
-          raceGrade: _predictionRaceData!.raceGrade,
-          raceDetails1: _predictionRaceData!.raceDetails1,
-          horses: newHorsesList,
-          racePacePrediction: _predictionRaceData!.racePacePrediction,
-        );
-
-        // 4. データベースキャッシュを更新
-        final newCache = ShutubaTableCache(
-          raceId: widget.raceId,
-          predictionRaceData: newRaceData,
-          lastUpdatedAt: DateTime.now(),
-        );
-        await _dbHelper.insertOrUpdateShutubaTableCache(newCache);
-
-        // 5. 新しいオブジェクトで状態を丸ごと入れ替える
-        setState(() {
-          _predictionRaceData = newRaceData;
-        });
-
+      if(mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar(); // 「取得中...」を消す
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('情報を更新しました。')));
       }
+
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('情報の更新に失敗しました: $e')));
+      if(mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('情報の更新に失敗しました: $e')));
+      }
     }
   }
 
@@ -309,8 +281,23 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       widget.raceId,
     );
 
+    // 1. スコアを_predictionRaceDataにマージ
+    for (var horse in raceData.horses) {
+      horse.overallScore = scores.overallScores[horse.horseId];
+      horse.expectedValue = scores.expectedValues[horse.horseId];
+    }
+
+    // 2. 更新されたデータでキャッシュを保存
+    final newCache = ShutubaTableCache(
+      raceId: widget.raceId,
+      predictionRaceData: raceData,
+      lastUpdatedAt: DateTime.now(),
+    );
+    await _dbHelper.insertOrUpdateShutubaTableCache(newCache);
+
     if (mounted) {
       setState(() {
+        _predictionRaceData = raceData; // 更新されたraceDataでStateも更新
         _overallScores = scores.overallScores;
         _expectedValues = scores.expectedValues;
         _legStyles = scores.legStyles;

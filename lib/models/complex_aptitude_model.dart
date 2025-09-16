@@ -17,4 +17,24 @@ class ComplexAptitudeStats {
 
   // 複勝率
   double get showRate => raceCount > 0 ? (showCount / raceCount) * 100 : 0.0;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'raceCount': raceCount,
+      'winCount': winCount,
+      'placeCount': placeCount,
+      'showCount': showCount,
+      'recordString': recordString,
+    };
+  }
+
+  factory ComplexAptitudeStats.fromMap(Map<String, dynamic> map) {
+    return ComplexAptitudeStats(
+      raceCount: map['raceCount'] as int? ?? 0,
+      winCount: map['winCount'] as int? ?? 0,
+      placeCount: map['placeCount'] as int? ?? 0,
+      showCount: map['showCount'] as int? ?? 0,
+      recordString: map['recordString'] as String? ?? '0-0-0-0',
+    );
+  }
 }

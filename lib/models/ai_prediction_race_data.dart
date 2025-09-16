@@ -91,6 +91,8 @@ class PredictionHorseDetail {
   // ▲▲▲ ここまで追加 ▲▲▲
   BestTimeStats? bestTimeStats;
   FastestAgariStats? fastestAgariStats;
+  double? overallScore;
+  double? expectedValue;
 
   PredictionHorseDetail({
     required this.horseId,
@@ -117,6 +119,8 @@ class PredictionHorseDetail {
     // ▲▲▲ ここまで追加 ▲▲▲
     this.bestTimeStats,
     this.fastestAgariStats,
+    this.overallScore,
+    this.expectedValue,
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
@@ -156,6 +160,10 @@ class PredictionHorseDetail {
       'isScratched': isScratched,
       'userMark': userMark?.toMap(),
       'userMemo': userMemo?.toMap(),
+      'overallScore': overallScore,
+      'expectedValue': expectedValue,
+      'distanceCourseAptitudeStats': distanceCourseAptitudeStats?.toMap(),
+      'trackAptitudeLabel': trackAptitudeLabel,
     };
   }
 
@@ -181,6 +189,12 @@ class PredictionHorseDetail {
       userMemo: json['userMemo'] != null
           ? HorseMemo.fromMap(json['userMemo'] as Map<String, dynamic>)
           : null,
+      overallScore: (json['overallScore'] as num?)?.toDouble(),
+      expectedValue: (json['expectedValue'] as num?)?.toDouble(),
+      distanceCourseAptitudeStats: json['distanceCourseAptitudeStats'] != null
+          ? ComplexAptitudeStats.fromMap(json['distanceCourseAptitudeStats'] as Map<String, dynamic>)
+          : null,
+      trackAptitudeLabel: json['trackAptitudeLabel'] as String?,
     );
   }
 
