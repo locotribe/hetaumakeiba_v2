@@ -86,13 +86,14 @@ class PredictionHorseDetail {
   final bool isScratched;
   HorsePredictionScore? predictionScore;
   ConditionFitResult? conditionFit;
-  ComplexAptitudeStats? distanceCourseAptitudeStats; // 距離・コース適性
-  String? trackAptitudeLabel; // 馬場適性
+  ComplexAptitudeStats? distanceCourseAptitudeStats;
+  String? trackAptitudeLabel;
   BestTimeStats? bestTimeStats;
   FastestAgariStats? fastestAgariStats;
   double? overallScore;
   double? expectedValue;
   LegStyleProfile? legStyleProfile;
+  String? previousHorseWeight;
 
   PredictionHorseDetail({
     required this.horseId,
@@ -120,6 +121,7 @@ class PredictionHorseDetail {
     this.overallScore,
     this.expectedValue,
     this.legStyleProfile,
+    this.previousHorseWeight,
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
@@ -164,6 +166,7 @@ class PredictionHorseDetail {
       'distanceCourseAptitudeStats': distanceCourseAptitudeStats?.toMap(),
       'trackAptitudeLabel': trackAptitudeLabel,
       'legStyleProfile': legStyleProfile?.toJson(),
+      'previousHorseWeight': previousHorseWeight,
     };
   }
 
@@ -195,11 +198,10 @@ class PredictionHorseDetail {
           ? ComplexAptitudeStats.fromMap(json['distanceCourseAptitudeStats'] as Map<String, dynamic>)
           : null,
       trackAptitudeLabel: json['trackAptitudeLabel'] as String?,
-      legStyleProfile: json['legStyleProfile'] != null // <<< 新しく追加
+      legStyleProfile: json['legStyleProfile'] != null
           ? LegStyleProfile.fromJson(json['legStyleProfile'] as Map<String, dynamic>)
           : null,
+      previousHorseWeight: json['previousHorseWeight'] as String?,
     );
   }
-
-
 }

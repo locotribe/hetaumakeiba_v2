@@ -354,9 +354,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
-      // ▼▼▼ ここから修正 ▼▼▼
+      if (pastRecords.isNotEmpty) {
+        horse.previousHorseWeight = pastRecords.first.horseWeight;
+      }
       horse.legStyleProfile = LegStyleAnalyzer.getRunningStyle(pastRecords);
-      // ▲▲▲ ここまで修正 ▲▲▲
       horse.distanceCourseAptitudeStats = StatsAnalyzer.analyzeDistanceCourseAptitude(
         raceData: raceData,
         pastRecords: pastRecords,
@@ -1057,6 +1058,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     required List<PredictionHorseDetail> horses,
     required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
   }) {
+    // ▼▼▼ ここから修正 ▼▼▼
     return DataTable2(
       key: ValueKey(_predictionRaceData.hashCode),
       minWidth: 800,
@@ -1064,8 +1066,20 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       sortColumnIndex: columns.indexWhere((c) => (c.onSort != null)),
       sortAscending: _isAscending,
       columnSpacing: 8.0,
-      headingRowHeight: 40,
-      dataRowHeight: 48,
+      headingRowHeight: 50,
+      dataRowHeight: 40,
+      // --- ヘッダーのテキストスタイルをここで指定 ---
+      headingTextStyle: const TextStyle(
+        fontSize: 12.0, // ヘッダーの文字サイズ
+        fontWeight: FontWeight.bold,
+        color: Colors.black87,
+      ),
+      // --- データセル全体のデフォルトテキストスタイルをここで指定 ---
+      dataTextStyle: const TextStyle(
+        fontSize: 14.0, // セルの文字サイズ
+        color: Colors.black87,
+      ),
+      // ▲▲▲ ここまで修正 ▲▲▲
       columns: columns,
       rows: horses.map((horse) => DataRow(cells: cellBuilder(horse))).toList(),
     );
@@ -1076,8 +1090,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     return _buildDataTableForTab(
       columns: [
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
-        DataColumn2(label: const Text('枠'), fixedWidth: 45, onSort: (i, asc) => _onSort(SortableColumn.gateNumber)),
-        DataColumn2(label: const Text('番'), fixedWidth: 45, onSort: (i, asc) => _onSort(SortableColumn.horseNumber)),
+        DataColumn2(label: const Text('枠\n番'), fixedWidth: 40, onSort: (i, asc) => _onSort(SortableColumn.gateNumber)),
+        DataColumn2(label: const Text('馬\n番'), fixedWidth: 40, onSort: (i, asc) => _onSort(SortableColumn.horseNumber)),
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
         DataColumn2(label: const Text('人気'), fixedWidth: 65, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.popularity)),
         DataColumn2(label: const Text('オッズ'), fixedWidth: 70, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.odds)),
@@ -1113,29 +1127,39 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
         DataColumn2(label: const Text('脚質'), fixedWidth: 130, onSort: (i, asc) => _onSort(SortableColumn.legStyle)),
         const DataColumn2(label: Text('性齢'), fixedWidth: 40),
-        DataColumn2(label: const Text('斤量'), fixedWidth: 60, onSort: (i, asc) => _onSort(SortableColumn.carriedWeight)),
+        DataColumn2(label: const Text('斤量'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.carriedWeight)),
         DataColumn2(label: const Text('馬体重'), fixedWidth: 70, onSort: (i, asc) => _onSort(SortableColumn.horseWeight)),
+        const DataColumn2(label: Text('前走馬体重'), fixedWidth: 70),
       ],
       horses: horses,
-      cellBuilder: (horse) => [
-        DataCell(
-          horse.isScratched
-              ? const Text('取消', style: TextStyle(color: Colors.red))
-              : _buildMarkDropdown(horse),
-        ),
-        DataCell(
-          Text(
-            horse.horseName,
-            style: TextStyle(
-              decoration: horse.isScratched ? TextDecoration.lineThrough : null,
+      cellBuilder: (horse) {
+        String? parsedPreviousWeight;
+        if (horse.previousHorseWeight != null && horse.previousHorseWeight!.contains('(')) {
+          parsedPreviousWeight = horse.previousHorseWeight!.split('(').first;
+        } else if (horse.previousHorseWeight != null) {
+          parsedPreviousWeight = horse.previousHorseWeight;
+        }
+        return [
+          DataCell(
+            horse.isScratched
+                ? const Text('取消', style: TextStyle(color: Colors.red))
+                : _buildMarkDropdown(horse),
+          ),
+          DataCell(
+            Text(
+              horse.horseName,
+              style: TextStyle(
+                decoration: horse.isScratched ? TextDecoration.lineThrough : null,
+              ),
             ),
           ),
-        ),
-        DataCell(LegStyleIndicator(legStyleProfile: horse.legStyleProfile)),
-        DataCell(Text(horse.sexAndAge)),
-        DataCell(Text(horse.carriedWeight.toString())),
-        DataCell(Text(horse.horseWeight ?? '--')),
-      ],
+          DataCell(LegStyleIndicator(legStyleProfile: horse.legStyleProfile)),
+          DataCell(Text(horse.sexAndAge)),
+          DataCell(Text(horse.carriedWeight.toString())),
+          DataCell(Text(horse.horseWeight ?? '--')),
+          DataCell(Text(parsedPreviousWeight ?? '--')),
+        ];
+      },
     );
   }
 
