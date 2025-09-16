@@ -318,6 +318,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     return 'D';
   }
 
+// in _ShutubaTablePageState class
+
   Future<PredictionRaceData?> _fetchDataWithUserMarks() async {
     final userId = localUserId;
     if (userId == null) {
@@ -338,6 +340,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     final memosMap = {for (var memo in userMemos) memo.horseId: memo};
 
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
+    final Set<String> pastRaceIdsToFetch = {};
 
     for (var horse in raceData.horses) {
       if (marksMap.containsKey(horse.horseId)) {
@@ -354,9 +357,35 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
+
       if (pastRecords.isNotEmpty) {
-        horse.previousHorseWeight = pastRecords.first.horseWeight;
+        final previousRaceId = pastRecords.first.raceId;
+        if (previousRaceId.isNotEmpty) {
+          pastRaceIdsToFetch.add(previousRaceId);
+        }
       }
+    }
+
+    final pastRaceResults = await _dbHelper.getMultipleRaceResults(pastRaceIdsToFetch.toList());
+
+    for (var horse in raceData.horses) {
+      final pastRecords = allPastRecords[horse.horseId] ?? [];
+
+      if (pastRecords.isNotEmpty) {
+        final previousRecord = pastRecords.first;
+        horse.previousJockey = previousRecord.jockey;
+        horse.previousHorseWeight = previousRecord.horseWeight;
+
+        final previousRaceResult = pastRaceResults[previousRecord.raceId];
+        if (previousRaceResult != null) {
+          try {
+            final horseResult = previousRaceResult.horseResults.firstWhere((hr) => hr.horseId == horse.horseId);
+            horse.ownerName = horseResult.ownerName;
+          } catch (e) {
+          }
+        }
+      }
+
       horse.legStyleProfile = LegStyleAnalyzer.getRunningStyle(pastRecords);
       horse.distanceCourseAptitudeStats = StatsAnalyzer.analyzeDistanceCourseAptitude(
         raceData: raceData,
@@ -1163,15 +1192,19 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
+// in _ShutubaTablePageState class
+
   /// 騎手・調教師タブ
   Widget _buildJockeyTrainerTab(List<PredictionHorseDetail> horses) {
     return _buildDataTableForTab(
       columns: [
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-        const DataColumn2(label: Text('騎手'), fixedWidth: 70,),
-        const DataColumn2(label: Text('所属'), fixedWidth: 50,),
-        const DataColumn2(label: Text('調教師'), fixedWidth: 70,),
+        const DataColumn2(label: Text('騎手'), fixedWidth: 80),
+        const DataColumn2(label: Text('前走騎手'), fixedWidth: 80),
+        const DataColumn2(label: Text('所属'), fixedWidth: 50),
+        const DataColumn2(label: Text('調教師'), fixedWidth: 80),
+        const DataColumn2(label: Text('馬主'), size: ColumnSize.L),
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -1189,8 +1222,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           ),
         ),
         DataCell(Text(horse.jockey)),
+        DataCell(Text(horse.previousJockey ?? '--')),
         DataCell(Text(horse.trainerAffiliation)),
         DataCell(Text(horse.trainerName)),
+        DataCell(Text(horse.ownerName ?? '--')),
       ],
     );
   }

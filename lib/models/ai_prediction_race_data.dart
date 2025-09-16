@@ -94,6 +94,8 @@ class PredictionHorseDetail {
   double? expectedValue;
   LegStyleProfile? legStyleProfile;
   String? previousHorseWeight;
+  String? previousJockey;
+  String? ownerName;
 
   PredictionHorseDetail({
     required this.horseId,
@@ -122,6 +124,8 @@ class PredictionHorseDetail {
     this.expectedValue,
     this.legStyleProfile,
     this.previousHorseWeight,
+    this.previousJockey,
+    this.ownerName,
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
@@ -167,6 +171,8 @@ class PredictionHorseDetail {
       'trackAptitudeLabel': trackAptitudeLabel,
       'legStyleProfile': legStyleProfile?.toJson(),
       'previousHorseWeight': previousHorseWeight,
+      'previousJockey': previousJockey,
+      'ownerName': ownerName,
     };
   }
 
@@ -202,6 +208,8 @@ class PredictionHorseDetail {
           ? LegStyleProfile.fromJson(json['legStyleProfile'] as Map<String, dynamic>)
           : null,
       previousHorseWeight: json['previousHorseWeight'] as String?,
+      previousJockey: json['previousJockey'] as String?,
+      ownerName: json['ownerName'] as String?,
     );
   }
 }
