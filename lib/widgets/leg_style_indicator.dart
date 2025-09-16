@@ -16,7 +16,7 @@ class LegStyleIndicator extends StatelessWidget {
     } else if (percentage > 0) {
       return Colors.blue; // 1%～19% : 青
     } else {
-      return Colors.grey.shade300; // 0% : 無色 (薄いグレー)
+      return Colors.grey.shade500; // 0% : 無色 (薄いグレー)
     }
   }
 

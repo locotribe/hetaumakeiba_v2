@@ -16,6 +16,8 @@
         # Icons
         cupertino_icons: ^1.0.8
 
+        just_the_tooltip: ^0.0.12
+
         # QR Scanner
         mobile_scanner: ^7.0.1
         image_picker: ^1.1.2

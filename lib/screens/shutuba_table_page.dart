@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:just_the_tooltip/just_the_tooltip.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:data_table_2/data_table_2.dart';
@@ -1323,15 +1324,30 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ),
           ),
           DataCell(
-            Tooltip(
-              message: bestTime != null ? '${bestTime.date}\n${bestTime.raceName}' : 'データなし',
+            JustTheTooltip(
+              triggerMode: TooltipTriggerMode.tap,
+              backgroundColor: const Color.fromRGBO(0, 0, 0, 0.5),
+              content: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(bestTime != null ? '${bestTime.date}\n${bestTime.raceName}' : 'データなし',
+                  style: const TextStyle(color: Colors.white),),
+              ),
               child: Text(bestTime?.formattedTime ?? '-'),
             ),
           ),
           DataCell(Text(bestTime?.trackCondition ?? '-')),
           DataCell(
-            Tooltip(
-              message: fastestAgari != null ? '${fastestAgari.date}\n${fastestAgari.raceName}\n馬場: ${fastestAgari.trackCondition}' : 'データなし',
+            JustTheTooltip(
+              triggerMode: TooltipTriggerMode.tap,
+              backgroundColor: const Color.fromRGBO(0, 0, 0, 0.5),
+              content: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(fastestAgari != null ? '${
+                    fastestAgari.date}\n${
+                    fastestAgari.raceName}\n馬場: ${
+                    fastestAgari.trackCondition}' : 'データなし',
+                  style: const TextStyle(color: Colors.white),),
+              ),
               child: Text(fastestAgari?.formattedAgari ?? '-'),
             ),
           ),
