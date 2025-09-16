@@ -3,14 +3,12 @@
 import 'package:intl/intl.dart';
 
 class RaceIntervalAnalyzer {
-  // ▼▼▼ ここから修正 ▼▼▼
-  // 日付文字列 (yyyy/MM/dd, yyyy.MM.dd, yyyy年MM月dd日) をDateTimeオブジェクトに変換
   static DateTime? _parseDate(String dateStr) {
     try {
       if (dateStr.contains('/')) {
         return DateFormat('yyyy/M/d').parse(dateStr);
       } else if (dateStr.contains('.')) {
-        return DateFormat('yyyy.M.d').parse(dateStr); // ドット形式に対応
+        return DateFormat('yyyy.M.d').parse(dateStr);
       } else if (dateStr.contains('年')) {
         return DateFormat('yyyy年M月d日').parse(dateStr);
       }
@@ -23,6 +21,12 @@ class RaceIntervalAnalyzer {
   // 距離文字列 (例: "芝1600m") から数値 (例: 1600) を抽出
   static int? _parseDistance(String distanceStr) {
     final match = RegExp(r'(\d+)m?').firstMatch(distanceStr);
+    return match != null ? int.tryParse(match.group(1)!) : null;
+  }
+
+  // "m"を目印に距離を抽出する新しいヘルパー関数
+  static int? _parseDistanceWithUnit(String distanceStr) {
+    final match = RegExp(r'(\d+)m').firstMatch(distanceStr);
     return match != null ? int.tryParse(match.group(1)!) : null;
   }
 
@@ -68,7 +72,12 @@ class RaceIntervalAnalyzer {
 
   // 距離変化をフォーマットする
   static String formatDistanceChange(String currentDistanceStr, String previousDistanceStr) {
-    final currentDistance = _parseDistance(currentDistanceStr);
+    final bool isCurrentRaceDetail = currentDistanceStr.contains('/');
+
+    final currentDistance = isCurrentRaceDetail
+        ? _parseDistanceWithUnit(currentDistanceStr)
+        : _parseDistance(currentDistanceStr);
+
     final previousDistance = _parseDistance(previousDistanceStr);
 
     if (currentDistance == null || previousDistance == null) {

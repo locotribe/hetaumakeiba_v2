@@ -146,17 +146,17 @@ class ShutubaTableScraperService {
     final String raceData02 = jsonData["raceData02"] ?? "";
     final List<dynamic> horsesData = jsonData["horses"] ?? [];
 
-    String raceDate = '';
+    String raceDate = jsonData["raceDate"] ?? ""; // JSから直接日付を取得
     String venue = '';
     String raceNumber = '';
 
+    // 日付部分を削除し、開催場所とレース番号のみを抽出する正規表現に変更
     final raceData01Match =
-        RegExp(r'(\d{4}年\d{1,2}月\d{1,2}日)\s*(.*?)\s*(\d{1,2}R)')
-            .firstMatch(raceData01);
+    RegExp(r'\s*(.*?)\s*(\d{1,2}R)')
+        .firstMatch(raceData01);
     if (raceData01Match != null) {
-      raceDate = raceData01Match.group(1) ?? '';
-      venue = raceData01Match.group(2) ?? '';
-      raceNumber = raceData01Match.group(3) ?? '';
+      venue = raceData01Match.group(1)?.trim() ?? ''; // trim()を追加
+      raceNumber = raceData01Match.group(2) ?? '';
     }
 
     final List<PredictionHorseDetail> horses = horsesData.map((horseData) {
@@ -220,6 +220,11 @@ class ShutubaTableScraperService {
     return r'''
       (() => {
         const result = {};
+        
+        // titleタグから日付情報を正規表現で抽出
+        const titleText = document.querySelector('title').innerText;
+        const dateMatch = titleText.match(/(\d{4}年\d{1,2}月\d{1,2}日)/);
+        result.raceDate = dateMatch ? dateMatch[1] : '';
 
         // レース名
         const nameElem = document.querySelector("h1.RaceName");

@@ -109,22 +109,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     try {
       PredictionRaceData? data;
 
-      // 1. race_pageから分析済みデータが渡されていれば最優先でそれを使う
       if (widget.predictionRaceData != null && !refresh) {
         data = widget.predictionRaceData;
       }
-      // 2. race_pageからデータが無く、レース結果だけがある場合 (キャッシュはrace_pageで確認済み)
       else if (widget.raceResult != null && !refresh) {
         data = _createPredictionDataFromRaceResult(widget.raceResult!);
       }
-      // 3. 上記以外の場合 (キャッシュ確認 or Webから新規取得)
       else {
         final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
         if (cache != null && !refresh) {
           data = cache.predictionRaceData;
           final userId = localUserId;
           if (userId != null) {
-            // キャッシュデータに最新の印とメモ情報をマージする
             final userMarks = await _dbHelper.getAllUserMarksForRace(userId, widget.raceId);
             final userMemos = await _dbHelper.getMemosForRace(userId, widget.raceId);
             final marksMap = {for (var mark in userMarks) mark.horseId: mark};
@@ -150,7 +146,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
       if (mounted) {
         if (data != null) {
-          // 読み込んだデータにスコアが含まれていれば、State変数にも反映
           if (data.horses.any((h) => h.overallScore != null)) {
             _overallScores = {
               for (var h in data.horses)
@@ -161,7 +156,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                 if (h.expectedValue != null) h.horseId: h.expectedValue!
             };
           } else {
-            // スコアがない場合、念のためai_predictionsテーブルからも読み込みを試す
             final predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
             if(predictions.isNotEmpty){
               _overallScores = {for (var p in predictions) p.horseId: p.overallScore};
@@ -260,11 +254,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('最新情報を取得中...')));
     try {
-      // データを再取得して分析をかけ直すため、既存の _loadShutubaData を refresh: true で呼び出す
       await _loadShutubaData(refresh: true);
 
       if(mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar(); // 「取得中...」を消す
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('情報を更新しました。')));
       }
 
@@ -283,13 +276,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       widget.raceId,
     );
 
-    // 1. スコアを_predictionRaceDataにマージ
     for (var horse in raceData.horses) {
       horse.overallScore = scores.overallScores[horse.horseId];
       horse.expectedValue = scores.expectedValues[horse.horseId];
     }
 
-    // 2. 更新されたデータでキャッシュを保存
     final newCache = ShutubaTableCache(
       raceId: widget.raceId,
       predictionRaceData: raceData,
@@ -299,7 +290,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     if (mounted) {
       setState(() {
-        _predictionRaceData = raceData; // 更新されたraceDataでStateも更新
+        _predictionRaceData = raceData;
         _overallScores = scores.overallScores;
         _expectedValues = scores.expectedValues;
         _conditionFits = scores.conditionFits;
@@ -307,7 +298,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
   }
 
-  // ランク表示用のヘルパー関数
   String _getRankFromScore(double score) {
     if (score >= 90) return 'S';
     if (score >= 85) return 'A+';
@@ -1384,7 +1374,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ),
           ),
         ),
-        // 以下のヘルパーが10個のDataCellをリストとして返す
         ..._buildPerformanceCells(horse.horseId),
       ],
     );
@@ -1612,13 +1601,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   /// 過去5走分のセルを作成
   List<DataCell> _buildPerformanceCells(String horseId) {
-    // 1頭の馬の全過去成績を一度だけ取得するためのFuture
     final futureRecords = _dbHelper.getHorsePerformanceRecords(horseId);
 
-    // 常に10個のDataCellを生成する
     final List<DataCell> cells = [];
 
-    // 1. 今回と前走の間隔/距離セル
     cells.add(DataCell(
       FutureBuilder<List<HorseRaceRecord>>(
         future: futureRecords,
@@ -1630,14 +1616,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             final distanceChange = RaceIntervalAnalyzer.formatDistanceChange(currentRace.raceDetails1 ?? '', previousRace.distance);
             return _buildIntervalCell(interval, distanceChange);
           }
-          return const SizedBox(width: 70); // データがない場合やロード中のプレースホルダー
+          return const SizedBox(width: 70);
         },
       ),
     ));
 
-    // 2. 過去5走分のレース結果と、その間の間隔/距離セル (合計9セル)
     for (int i = 0; i < 5; i++) {
-      // レース結果セル
       cells.add(DataCell(
         FutureBuilder<List<HorseRaceRecord>>(
           future: futureRecords,
@@ -1682,12 +1666,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                 ),
               );
             }
-            return const SizedBox(width: 120); // データがなければ空のSizedBox
+            return const SizedBox(width: 120);
           },
         ),
       ));
 
-      // 間隔/距離セル (5走前と6走前の間は不要なので i < 4 の条件)
       if (i < 4) {
         cells.add(DataCell(
           FutureBuilder<List<HorseRaceRecord>>(
@@ -1700,7 +1683,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                 final distanceChange = RaceIntervalAnalyzer.formatDistanceChange(current.distance, previous.distance);
                 return _buildIntervalCell(interval, distanceChange);
               }
-              return const SizedBox(width: 70); // データがなければ空のSizedBox
+              return const SizedBox(width: 70);
             },
           ),
         ));
@@ -1708,7 +1691,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
     return cells;
   }
-  // 間隔/距離セルを生成する新しいヘルパーウィジェット
   Widget _buildIntervalCell(String interval, String distanceChange) {
     Color distanceColor;
     switch (distanceChange) {
@@ -1728,7 +1710,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
-  // 枠番の色分けロジック
   Color _getGateColor(int gateNumber) {
     switch (gateNumber) {
       case 1: return Colors.white;
