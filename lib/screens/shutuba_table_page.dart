@@ -1084,7 +1084,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       fixedTopRows: 1,
       sortColumnIndex: columns.indexWhere((c) => (c.onSort != null)),
       sortAscending: _isAscending,
-      columnSpacing: 8.0,
+      columnSpacing: 6.0,
       headingRowHeight: 50,
       dataRowHeight: 40,
       // --- ヘッダーのテキストスタイルをここで指定 ---
@@ -1110,7 +1110,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
         DataColumn2(label: const Text('枠\n番'), fixedWidth: 40, onSort: (i, asc) => _onSort(SortableColumn.gateNumber)),
         DataColumn2(label: const Text('馬\n番'), fixedWidth: 40, onSort: (i, asc) => _onSort(SortableColumn.horseNumber)),
-        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
+        DataColumn2(label: const Text('馬名'), fixedWidth: 130, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
         DataColumn2(label: const Text('人気'), fixedWidth: 65, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.popularity)),
         DataColumn2(label: const Text('オッズ'), fixedWidth: 70, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.odds)),
       ],

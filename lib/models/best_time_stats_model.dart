@@ -14,4 +14,24 @@ class BestTimeStats {
     required this.raceName,
     required this.date,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'timeInSeconds': timeInSeconds,
+      'formattedTime': formattedTime,
+      'trackCondition': trackCondition,
+      'raceName': raceName,
+      'date': date,
+    };
+  }
+
+  factory BestTimeStats.fromMap(Map<String, dynamic> map) {
+    return BestTimeStats(
+      timeInSeconds: (map['timeInSeconds'] as num).toDouble(),
+      formattedTime: map['formattedTime'] as String,
+      trackCondition: map['trackCondition'] as String,
+      raceName: map['raceName'] as String,
+      date: map['date'] as String,
+    );
+  }
 }

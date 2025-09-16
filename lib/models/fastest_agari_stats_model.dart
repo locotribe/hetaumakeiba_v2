@@ -14,4 +14,24 @@ class FastestAgariStats {
     required this.raceName,
     required this.date,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'agariInSeconds': agariInSeconds,
+      'formattedAgari': formattedAgari,
+      'trackCondition': trackCondition,
+      'raceName': raceName,
+      'date': date,
+    };
+  }
+
+  factory FastestAgariStats.fromMap(Map<String, dynamic> map) {
+    return FastestAgariStats(
+      agariInSeconds: (map['agariInSeconds'] as num).toDouble(),
+      formattedAgari: map['formattedAgari'] as String,
+      trackCondition: map['trackCondition'] as String,
+      raceName: map['raceName'] as String,
+      date: map['date'] as String,
+    );
+  }
 }

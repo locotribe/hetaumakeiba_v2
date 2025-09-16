@@ -173,6 +173,8 @@ class PredictionHorseDetail {
       'previousHorseWeight': previousHorseWeight,
       'previousJockey': previousJockey,
       'ownerName': ownerName,
+      'bestTimeStats': bestTimeStats?.toMap(),
+      'fastestAgariStats': fastestAgariStats?.toMap(),
     };
   }
 
@@ -210,6 +212,12 @@ class PredictionHorseDetail {
       previousHorseWeight: json['previousHorseWeight'] as String?,
       previousJockey: json['previousJockey'] as String?,
       ownerName: json['ownerName'] as String?,
+      bestTimeStats: json['bestTimeStats'] != null
+          ? BestTimeStats.fromMap(json['bestTimeStats'] as Map<String, dynamic>)
+          : null,
+      fastestAgariStats: json['fastestAgariStats'] != null
+          ? FastestAgariStats.fromMap(json['fastestAgariStats'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
