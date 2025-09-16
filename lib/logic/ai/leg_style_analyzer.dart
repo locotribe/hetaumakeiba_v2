@@ -11,6 +11,23 @@ class LegStyleProfile {
     required this.primaryStyle,
     required this.styleDistribution,
   });
+  Map<String, dynamic> toJson() {
+    return {
+      'primaryStyle': primaryStyle,
+      'styleDistribution': styleDistribution,
+    };
+  }
+
+  factory LegStyleProfile.fromJson(Map<String, dynamic> json) {
+    // JSONのvalueがdynamic型なので、doubleにキャストする
+    final Map<String, double> distribution = (json['styleDistribution'] as Map<String, dynamic>).map(
+          (key, value) => MapEntry(key, (value as num).toDouble()),
+    );
+    return LegStyleProfile(
+      primaryStyle: json['primaryStyle'] as String,
+      styleDistribution: distribution,
+    );
+  }
 }
 
 // 1レースごとの行動分析データ
@@ -79,24 +96,39 @@ class LegStyleAnalyzer {
     }
 
     // 3. 最終判定
-    String primaryStyle = styleCounts.entries
-        .reduce((a, b) => a.value > b.value ? a : b)
-        .key;
-
     final totalRaces = tentativeStyles.length;
-    final styleDistribution = styleCounts
-        .map((key, value) => MapEntry(key, value / totalRaces));
 
-    // 「自在」判定
-    final topStyleRate = styleCounts.values.reduce((a, b) => a > b ? a : b) / totalRaces;
-    final hasFrontStyle = styleCounts.containsKey('逃げ') || styleCounts.containsKey('先行');
-    final hasBackStyle = styleCounts.containsKey('差し') || styleCounts.containsKey('追い込み');
+    // 3a. 基本4脚質の分布図を作成
+    final Map<String, double> styleDistribution = {
+      '逃げ': (styleCounts['逃げ'] ?? 0) / totalRaces,
+      '先行': (styleCounts['先行'] ?? 0) / totalRaces,
+      '差し': (styleCounts['差し'] ?? 0) / totalRaces,
+      '追い込み': (styleCounts['追い込み'] ?? 0) / totalRaces,
+    };
 
-    if (topStyleRate < 0.5 && hasFrontStyle && hasBackStyle) {
-      primaryStyle = '自在';
-    } else if (totalRaces <= 2 && topStyleRate < 1.0) {
-      // キャリアが浅い場合は安易に決めつけず「自在」とする
-      primaryStyle = '自在';
+    // 3b. 主要ラベル（キャッチコピー）を決定
+    String primaryStyle;
+    final makuriRate = (styleCounts['マクリ'] ?? 0) / totalRaces;
+
+    if (makuriRate > 0.3) { // 例：マクリ率が30%以上なら最優先
+      primaryStyle = 'マクリ';
+    } else {
+      // 最も出現率の高い基本脚質を見つける
+      final topStyleEntry = styleDistribution.entries
+          .reduce((a, b) => a.value > b.value ? a : b);
+
+      // 「自在」の判定
+      final hasFrontStyle = (styleDistribution['逃げ']! + styleDistribution['先行']!) > 0;
+      final hasBackStyle = (styleDistribution['差し']! + styleDistribution['追い込み']!) > 0;
+
+      if (topStyleEntry.value < 0.5 && hasFrontStyle && hasBackStyle) {
+        primaryStyle = '自在';
+      } else if (totalRaces <= 2 && topStyleEntry.value < 1.0) {
+        primaryStyle = '自在'; // キャリアが浅い場合
+      }
+      else {
+        primaryStyle = topStyleEntry.key; // 最も多い脚質
+      }
     }
 
     return LegStyleProfile(
@@ -105,7 +137,7 @@ class LegStyleAnalyzer {
     );
   }
 
-  // 1レースごとの暫定脚質を判定するヘルパー
+  // 1レースごとの暫定脚質を判定するヘルパー (変更なし)
   static String _getTentativeLegStyle(_RaceActionProfile profile) {
     // マクリ判定
     if (profile.makuriIndex > 0.3) {

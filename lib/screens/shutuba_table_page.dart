@@ -12,15 +12,17 @@ import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/logic/ai/stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
+import 'package:hetaumakeiba_v2/widgets/leg_style_indicator.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
-import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
@@ -71,7 +73,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   final AiPredictionService _predictionService = AiPredictionService();
   Map<String, double> _overallScores = {};
   Map<String, double> _expectedValues = {};
-  Map<String, String> _legStyles = {};
   Map<String, ConditionFitResult> _conditionFits = {};
 
   SortableColumn _sortColumn = SortableColumn.horseNumber;
@@ -300,7 +301,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         _predictionRaceData = raceData; // 更新されたraceDataでStateも更新
         _overallScores = scores.overallScores;
         _expectedValues = scores.expectedValues;
-        _legStyles = scores.legStyles;
         _conditionFits = scores.conditionFits;
       });
     }
@@ -354,6 +354,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
+      // ▼▼▼ ここから修正 ▼▼▼
+      horse.legStyleProfile = LegStyleAnalyzer.getRunningStyle(pastRecords);
+      // ▲▲▲ ここまで修正 ▲▲▲
       horse.distanceCourseAptitudeStats = StatsAnalyzer.analyzeDistanceCourseAptitude(
         raceData: raceData,
         pastRecords: pastRecords,
@@ -1005,9 +1008,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             comparison = a.horseName.compareTo(b.horseName);
             break;
           case SortableColumn.legStyle:
-            const styleOrder = {'逃げ': 0, '先行': 1, '差し': 2, '追込': 3, '自在': 4, '不明': 5};
-            final aStyle = styleOrder[_legStyles[a.horseId]] ?? 99;
-            final bStyle = styleOrder[_legStyles[b.horseId]] ?? 99;
+            const styleOrder = {'逃げ': 0, '先行': 1, '差し': 2, '追い込み': 3, '自在': 4, 'マクリ': 5, '不明': 99};
+            final aStyle = styleOrder[a.legStyleProfile?.primaryStyle] ?? 99;
+            final bStyle = styleOrder[b.legStyleProfile?.primaryStyle] ?? 99;
             comparison = aStyle.compareTo(bStyle);
             break;
           case SortableColumn.popularity:
@@ -1076,7 +1079,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataColumn2(label: const Text('枠'), fixedWidth: 45, onSort: (i, asc) => _onSort(SortableColumn.gateNumber)),
         DataColumn2(label: const Text('番'), fixedWidth: 45, onSort: (i, asc) => _onSort(SortableColumn.horseNumber)),
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-        DataColumn2(label: const Text('人気'), fixedWidth: 50, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.popularity)),
+        DataColumn2(label: const Text('人気'), fixedWidth: 65, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.popularity)),
+        DataColumn2(label: const Text('オッズ'), fixedWidth: 70, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.odds)),
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -1096,6 +1100,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           ),
         ),
         DataCell(Text(horse.popularity?.toString() ?? '--')),
+        DataCell(Text(horse.odds?.toString() ?? '--')),
       ],
     );
   }
@@ -1106,10 +1111,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       columns: [
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-        DataColumn2(label: const Text('脚質'), fixedWidth: 60, onSort: (i, asc) => _onSort(SortableColumn.legStyle)),
-        DataColumn2(label: const Text('オッズ'), fixedWidth: 70, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.odds)),
+        DataColumn2(label: const Text('脚質'), fixedWidth: 130, onSort: (i, asc) => _onSort(SortableColumn.legStyle)),
         const DataColumn2(label: Text('性齢'), fixedWidth: 40),
-        DataColumn2(label: const Text('斤量'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.carriedWeight)),
+        DataColumn2(label: const Text('斤量'), fixedWidth: 60, onSort: (i, asc) => _onSort(SortableColumn.carriedWeight)),
+        DataColumn2(label: const Text('馬体重'), fixedWidth: 70, onSort: (i, asc) => _onSort(SortableColumn.horseWeight)),
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -1126,10 +1131,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ),
           ),
         ),
-        DataCell(Text(_legStyles[horse.horseId] ?? '不明')),
-        DataCell(Text(horse.odds?.toString() ?? '--')),
+        DataCell(LegStyleIndicator(legStyleProfile: horse.legStyleProfile)),
         DataCell(Text(horse.sexAndAge)),
         DataCell(Text(horse.carriedWeight.toString())),
+        DataCell(Text(horse.horseWeight ?? '--')),
       ],
     );
   }
@@ -1143,7 +1148,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         const DataColumn2(label: Text('騎手'), fixedWidth: 70,),
         const DataColumn2(label: Text('所属'), fixedWidth: 50,),
         const DataColumn2(label: Text('調教師'), fixedWidth: 70,),
-        DataColumn2(label: const Text('馬体重'), fixedWidth: 70, onSort: (i, asc) => _onSort(SortableColumn.horseWeight)),
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -1163,7 +1167,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataCell(Text(horse.jockey)),
         DataCell(Text(horse.trainerAffiliation)),
         DataCell(Text(horse.trainerName)),
-        DataCell(Text(horse.horseWeight ?? '--')),
       ],
     );
   }

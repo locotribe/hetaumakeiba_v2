@@ -1,4 +1,4 @@
-// lib/models/prediction_race_data.dart
+// lib/models/ai_prediction_race_data.dart
 
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
@@ -7,6 +7,7 @@ import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/complex_aptitude_model.dart';
 import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
+import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 
 /// レース全体の予想データを保持するコンテナです。
 class PredictionRaceData {
@@ -85,14 +86,13 @@ class PredictionHorseDetail {
   final bool isScratched;
   HorsePredictionScore? predictionScore;
   ConditionFitResult? conditionFit;
-  // ▼▼▼ ここから2行追加 ▼▼▼
   ComplexAptitudeStats? distanceCourseAptitudeStats; // 距離・コース適性
   String? trackAptitudeLabel; // 馬場適性
-  // ▲▲▲ ここまで追加 ▲▲▲
   BestTimeStats? bestTimeStats;
   FastestAgariStats? fastestAgariStats;
   double? overallScore;
   double? expectedValue;
+  LegStyleProfile? legStyleProfile;
 
   PredictionHorseDetail({
     required this.horseId,
@@ -113,14 +113,13 @@ class PredictionHorseDetail {
     required this.isScratched,
     this.predictionScore,
     this.conditionFit,
-    // ▼▼▼ ここから2行追加 ▼▼▼
     this.distanceCourseAptitudeStats,
     this.trackAptitudeLabel,
-    // ▲▲▲ ここまで追加 ▲▲▲
     this.bestTimeStats,
     this.fastestAgariStats,
     this.overallScore,
     this.expectedValue,
+    this.legStyleProfile,
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
@@ -164,6 +163,7 @@ class PredictionHorseDetail {
       'expectedValue': expectedValue,
       'distanceCourseAptitudeStats': distanceCourseAptitudeStats?.toMap(),
       'trackAptitudeLabel': trackAptitudeLabel,
+      'legStyleProfile': legStyleProfile?.toJson(),
     };
   }
 
@@ -195,6 +195,9 @@ class PredictionHorseDetail {
           ? ComplexAptitudeStats.fromMap(json['distanceCourseAptitudeStats'] as Map<String, dynamic>)
           : null,
       trackAptitudeLabel: json['trackAptitudeLabel'] as String?,
+      legStyleProfile: json['legStyleProfile'] != null // <<< 新しく追加
+          ? LegStyleProfile.fromJson(json['legStyleProfile'] as Map<String, dynamic>)
+          : null,
     );
   }
 
