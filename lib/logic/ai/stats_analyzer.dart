@@ -7,8 +7,8 @@ import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
 
 class StatsAnalyzer {
-  /// コース・距離・馬場状態の3要素が完全に一致する過去レースを分析する
-  static ComplexAptitudeStats analyzeComplexAptitude({
+  /// コース種別・距離が完全に一致する過去レースを分析する
+  static ComplexAptitudeStats analyzeDistanceCourseAptitude({ // ← メソッド名を変更
     required PredictionRaceData raceData,
     required List<HorseRaceRecord> pastRecords,
   }) {
@@ -23,32 +23,22 @@ class StatsAnalyzer {
     // 距離
     final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceInfo);
     final String currentDistance = distanceMatch?.group(1) ?? '';
-    // 馬場状態
-    String currentTrackCondition = '良'; // デフォルト
-    if (raceInfo.contains('稍重'))
-      currentTrackCondition = '稍重';
-    else if (raceInfo.contains('重'))
-      currentTrackCondition = '重';
-    else if (raceInfo.contains('不良')) currentTrackCondition = '不良';
 
     if (currentDistance.isEmpty) return ComplexAptitudeStats();
 
-    // 2. 条件に完全一致する過去レースをフィルタリング
+    // 2. 条件に一致する過去レースをフィルタリング (馬場状態の条件を削除)
     final List<HorseRaceRecord> filteredRecords = pastRecords.where((record) {
-      // 過去レースのコース種別
       final String recordTrackType = record.distance.startsWith('障')
           ? '障'
           : (record.distance.startsWith('ダ') ? 'ダ' : '芝');
-      // 過去レースの距離
       final String recordDistance =
       record.distance.replaceAll(RegExp(r'[^0-9]'), '');
 
       return recordTrackType == currentTrackType &&
-          recordDistance == currentDistance &&
-          record.trackCondition == currentTrackCondition;
+          recordDistance == currentDistance;
     }).toList();
 
-    // 3. 成績を集計
+    // 3. 成績を集計 (ここから下は変更なし)
     if (filteredRecords.isEmpty) {
       return ComplexAptitudeStats();
     }
@@ -166,5 +156,40 @@ class StatsAnalyzer {
       raceName: bestAgariRecord.raceName,
       date: bestAgariRecord.date,
     );
+  }
+
+  /// 馬場適性を分析し、評価ラベルを返す
+  static String analyzeTrackAptitude({
+    required List<HorseRaceRecord> pastRecords,
+  }) {
+    final heavyTrackRaces = pastRecords
+        .where((r) => ['稍重', '重', '不良'].contains(r.trackCondition))
+        .toList();
+    final goodTrackRaces =
+    pastRecords.where((r) => r.trackCondition == '良').toList();
+
+    if (heavyTrackRaces.isEmpty) {
+      return '道悪未知 －';
+    }
+
+    final double goodTrackShowRate = goodTrackRaces.isEmpty
+        ? -1.0 // 良馬場経験がない場合は比較対象外
+        : goodTrackRaces.where((r) => (int.tryParse(r.rank) ?? 99) <= 3).length / goodTrackRaces.length;
+
+    final double heavyTrackShowRate =
+        heavyTrackRaces.where((r) => (int.tryParse(r.rank) ?? 99) <= 3).length / heavyTrackRaces.length;
+
+    if (goodTrackShowRate < 0) { // 良馬場経験なしで道悪経験あり
+      if (heavyTrackShowRate >= 0.5) return '道悪巧者 ◎';
+      return '平均的 〇';
+    }
+
+    if (heavyTrackShowRate >= goodTrackShowRate + 0.1) {
+      return '道悪巧者 ◎'; // 良馬場より複勝率が10%以上高い
+    } else if (heavyTrackShowRate >= goodTrackShowRate - 0.1) {
+      return '平均的 〇'; // 悪化が10%未満
+    } else {
+      return '道悪不得手 ✕'; // 10%以上悪化
+    }
   }
 }

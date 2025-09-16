@@ -367,8 +367,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
       final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
-      horse.complexAptitudeStats = StatsAnalyzer.analyzeComplexAptitude(
+      horse.distanceCourseAptitudeStats = StatsAnalyzer.analyzeDistanceCourseAptitude(
         raceData: raceData,
+        pastRecords: pastRecords,
+      );
+      horse.trackAptitudeLabel = StatsAnalyzer.analyzeTrackAptitude(
         pastRecords: pastRecords,
       );
       horse.bestTimeStats = StatsAnalyzer.analyzeBestTime(
@@ -1186,14 +1189,32 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
         DataColumn2(label: const Text('総合評価'), fixedWidth: 80, onSort: (i, asc) => _onSort(SortableColumn.overallScore)),
         const DataColumn2(label: Text('条件適性'), fixedWidth: 80,),
-        const DataColumn2(label: Text('複合適性'), fixedWidth: 80,),
+        DataColumn2(
+          label: Row(
+            children: [
+              const Text('距離適性'),
+              _buildHelpIcon('距離・コース適性', 'コース種別・距離が今回と完全に一致した過去レースでの成績を「1着-2着-3着-着外」で表示します。'),
+            ],
+          ),
+          fixedWidth: 100,
+        ),
+        DataColumn2(
+          label: Row(
+            children: [
+              const Text('馬場適性'),
+              _buildHelpIcon('馬場適性', '良馬場と道悪（稍重・重・不良）での複勝率を比較し、道悪でのパフォーマンスを評価します。'),
+            ],
+          ),
+          fixedWidth: 120,
+        ),
       ],
       horses: horses,
       cellBuilder: (horse) {
         final score = _overallScores[horse.horseId] ?? 0.0;
         final rank = _getRankFromScore(score);
         final fitResult = _conditionFits[horse.horseId];
-        final complexStats = horse.complexAptitudeStats;
+        final distanceCourseStats = horse.distanceCourseAptitudeStats;
+        final trackAptitudeLabel = horse.trackAptitudeLabel ?? '－';
         return [
           DataCell(
             horse.isScratched
@@ -1216,11 +1237,17 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           ),
           DataCell(_buildConditionFitCell(fitResult)),
           DataCell(
-            Tooltip(
-              message: '複勝率: ${complexStats?.showRate.toStringAsFixed(1) ?? '0.0'}%',
-              child: Text(
-                (complexStats == null || complexStats.raceCount == 0) ? '-' : complexStats.recordString,
-                style: const TextStyle(fontWeight: FontWeight.bold),
+            Text(
+              (distanceCourseStats == null || distanceCourseStats.raceCount == 0) ? '-' : distanceCourseStats.recordString,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          DataCell(
+            Text(
+              trackAptitudeLabel,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: trackAptitudeLabel.contains('◎') ? Colors.red : (trackAptitudeLabel.contains('✕') ? Colors.blue : Colors.black87),
               ),
             ),
           ),
@@ -1641,5 +1668,30 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       default:
         return Colors.white;
     }
+  }
+
+  Widget _buildHelpIcon(String title, String content) {
+    return InkWell(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) =>
+              AlertDialog(
+                title: Text(title),
+                content: Text(content),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('閉じる'),
+                  ),
+                ],
+              ),
+        );
+      },
+      child: const Padding(
+        padding: EdgeInsets.only(left: 4.0),
+        child: Icon(Icons.help_outline, color: Colors.grey, size: 16),
+      ),
+    );
   }
 }

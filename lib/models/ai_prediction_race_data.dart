@@ -85,7 +85,10 @@ class PredictionHorseDetail {
   final bool isScratched;
   HorsePredictionScore? predictionScore;
   ConditionFitResult? conditionFit;
-  ComplexAptitudeStats? complexAptitudeStats;
+  // ▼▼▼ ここから2行追加 ▼▼▼
+  ComplexAptitudeStats? distanceCourseAptitudeStats; // 距離・コース適性
+  String? trackAptitudeLabel; // 馬場適性
+  // ▲▲▲ ここまで追加 ▲▲▲
   BestTimeStats? bestTimeStats;
   FastestAgariStats? fastestAgariStats;
 
@@ -108,7 +111,10 @@ class PredictionHorseDetail {
     required this.isScratched,
     this.predictionScore,
     this.conditionFit,
-    this.complexAptitudeStats,
+    // ▼▼▼ ここから2行追加 ▼▼▼
+    this.distanceCourseAptitudeStats,
+    this.trackAptitudeLabel,
+    // ▲▲▲ ここまで追加 ▲▲▲
     this.bestTimeStats,
     this.fastestAgariStats,
   });
