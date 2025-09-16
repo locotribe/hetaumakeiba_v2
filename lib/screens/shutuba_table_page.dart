@@ -13,6 +13,7 @@ import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/logic/ai/stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/widgets/leg_style_indicator.dart';
@@ -1087,10 +1088,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     required List<PredictionHorseDetail> horses,
     required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
   }) {
-    // ▼▼▼ ここから修正 ▼▼▼
     return DataTable2(
       key: ValueKey(_predictionRaceData.hashCode),
-      minWidth: 800,
+      minWidth: 1500,
       fixedTopRows: 1,
       sortColumnIndex: columns.indexWhere((c) => (c.onSort != null)),
       sortAscending: _isAscending,
@@ -1108,7 +1108,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         fontSize: 14.0, // セルの文字サイズ
         color: Colors.black87,
       ),
-      // ▲▲▲ ここまで修正 ▲▲▲
       columns: columns,
       rows: horses.map((horse) => DataRow(cells: cellBuilder(horse))).toList(),
     );
@@ -1204,7 +1203,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         const DataColumn2(label: Text('前走騎手'), fixedWidth: 80),
         const DataColumn2(label: Text('所属'), fixedWidth: 50),
         const DataColumn2(label: Text('調教師'), fixedWidth: 80),
-        const DataColumn2(label: Text('馬主'), size: ColumnSize.L),
+        const DataColumn2(label: Text('馬主'), fixedWidth: 250),
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -1312,7 +1311,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
         DataColumn2(label: const Text('持ち時計'), fixedWidth: 80, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.bestTime)),
-        const DataColumn2(label: Text('記録時馬場'), fixedWidth: 80),
+        const DataColumn2(label: Text('馬場\n(記録時)'), fixedWidth: 60),
         DataColumn2(label: const Text('最速上がり'), fixedWidth: 80, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.fastestAgari)),
       ],
       horses: horses,
@@ -1351,16 +1350,23 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
+// in _ShutubaTablePageState class
+
   /// 成績タブ
   Widget _buildPerformanceTab(List<PredictionHorseDetail> horses) {
     return _buildDataTableForTab(
       columns: [
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
+        const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
         const DataColumn2(label: SizedBox(width: 120, child: Text('前走'))),
+        const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
         const DataColumn2(label: SizedBox(width: 120, child: Text('前々走'))),
+        const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
         const DataColumn2(label: SizedBox(width: 120, child: Text('3走前'))),
+        const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
         const DataColumn2(label: SizedBox(width: 120, child: Text('4走前'))),
+        const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
         const DataColumn2(label: SizedBox(width: 120, child: Text('5走前'))),
       ],
       horses: horses,
@@ -1378,7 +1384,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ),
           ),
         ),
-        ..._buildPastRaceCells(horse.horseId),
+        // 以下のヘルパーが10個のDataCellをリストとして返す
+        ..._buildPerformanceCells(horse.horseId),
       ],
     );
   }
@@ -1601,98 +1608,125 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
+// in _ShutubaTablePageState class
+
   /// 過去5走分のセルを作成
-  List<DataCell> _buildPastRaceCells(String horseId) {
-    return [
-      for (int i = 0; i < 5; i++)
-        DataCell(
-          FutureBuilder<List<HorseRaceRecord>>(
-            future: _dbHelper.getHorsePerformanceRecords(horseId),
-            builder: (context, snapshot) {
-              if (snapshot.hasData && snapshot.data!.length > i) {
-                final record = snapshot.data![i];
+  List<DataCell> _buildPerformanceCells(String horseId) {
+    // 1頭の馬の全過去成績を一度だけ取得するためのFuture
+    final futureRecords = _dbHelper.getHorsePerformanceRecords(horseId);
 
-                String extractedGrade = '';
-                final gradePattern = RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false);
-                final match = gradePattern.firstMatch(record.raceName);
-                if (match != null) {
-                  extractedGrade = match.group(1)!;
-                }
+    // 常に10個のDataCellを生成する
+    final List<DataCell> cells = [];
 
-                final gradeColor = getGradeColor(extractedGrade);
+    // 1. 今回と前走の間隔/距離セル
+    cells.add(DataCell(
+      FutureBuilder<List<HorseRaceRecord>>(
+        future: futureRecords,
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+            final currentRace = _predictionRaceData!;
+            final previousRace = snapshot.data!.first;
+            final interval = RaceIntervalAnalyzer.formatRaceInterval(currentRace.raceDate, previousRace.date);
+            final distanceChange = RaceIntervalAnalyzer.formatDistanceChange(currentRace.raceDetails1 ?? '', previousRace.distance);
+            return _buildIntervalCell(interval, distanceChange);
+          }
+          return const SizedBox(width: 70); // データがない場合やロード中のプレースホルダー
+        },
+      ),
+    ));
 
-                Color backgroundColor = Colors.transparent;
-                bool isTopThree = false;
-
-                switch (record.rank) {
-                  case '1':
-                    backgroundColor = Colors.red.withAlpha((0.4 * 255).toInt()); // 赤 40% 不透明
-                    isTopThree = true;
-                    break;
-                  case '2':
-                    backgroundColor = Colors.grey.withAlpha((0.5 * 255).toInt()); // グレー 50% 不透明
-                    isTopThree = true;
-                    break;
-                  case '3':
-                    backgroundColor = Colors.yellow.withAlpha((0.5 * 255).toInt()); // 黄 50% 不透明
-                    isTopThree = true;
-                    break;
-                  default:
-                    backgroundColor = Colors.transparent;
-                    isTopThree = false;
-                }
-
-                return InkWell(
-                  onTap: () => _showPastRaceDetailsPopup(context, record),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                    decoration: BoxDecoration(
-                      color: backgroundColor,
-                      border: Border(
-                        left: BorderSide(
-                          color: gradeColor, // グレードに応じた色を左ボーダーに適用
-                          width: 5.0, // 左ボーダーの幅
+    // 2. 過去5走分のレース結果と、その間の間隔/距離セル (合計9セル)
+    for (int i = 0; i < 5; i++) {
+      // レース結果セル
+      cells.add(DataCell(
+        FutureBuilder<List<HorseRaceRecord>>(
+          future: futureRecords,
+          builder: (context, snapshot) {
+            if (snapshot.hasData && snapshot.data!.length > i) {
+              final record = snapshot.data![i];
+              String extractedGrade = '';
+              final gradePattern = RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false);
+              final match = gradePattern.firstMatch(record.raceName);
+              if (match != null) extractedGrade = match.group(1)!;
+              final gradeColor = getGradeColor(extractedGrade);
+              Color backgroundColor = Colors.transparent;
+              bool isTopThree = false;
+              switch (record.rank) {
+                case '1': backgroundColor = Colors.red.withAlpha(102); isTopThree = true; break;
+                case '2': backgroundColor = Colors.grey.withAlpha(128); isTopThree = true; break;
+                case '3': backgroundColor = Colors.yellow.withAlpha(128); isTopThree = true; break;
+              }
+              return InkWell(
+                onTap: () => _showPastRaceDetailsPopup(context, record),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  decoration: BoxDecoration(
+                    color: backgroundColor,
+                    border: Border(left: BorderSide(color: gradeColor, width: 5.0)),
+                  ),
+                  child: SizedBox(
+                    width: 120, // セルの幅を固定
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (isTopThree) Center(child: Text(record.rank, style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white))),
+                        Text(
+                          record.raceName.length > 5 ? record.raceName.substring(0, 5) : record.raceName,
+                          style: const TextStyle(color: Colors.black, fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
-                      ),
-                    ),
-                    child: SizedBox(
-                      width: 100, // 過去レースの列の固定幅
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          if (isTopThree)
-                          // 着順を背景に大きく表示する
-                            Center(
-                              child: Text(
-                                record.rank,
-                                style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
-                              ),
-                            ),
-                          // レース名を5文字に制限し、オーバーフロー時に省略記号を表示
-                          Text(
-                            record.raceName.length > 5
-                                ? record.raceName.substring(0, 5)
-                                : record.raceName,
-                            style: const TextStyle(color: Colors.black, fontSize: 12),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1, // 1行に制限
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
                   ),
-                );
-              }
-              return const SizedBox(
-                width: 100, // 固定幅の空のコンテナ
-                child: Text(''),
+                ),
               );
+            }
+            return const SizedBox(width: 120); // データがなければ空のSizedBox
+          },
+        ),
+      ));
+
+      // 間隔/距離セル (5走前と6走前の間は不要なので i < 4 の条件)
+      if (i < 4) {
+        cells.add(DataCell(
+          FutureBuilder<List<HorseRaceRecord>>(
+            future: futureRecords,
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data!.length > i + 1) {
+                final current = snapshot.data![i];
+                final previous = snapshot.data![i + 1];
+                final interval = RaceIntervalAnalyzer.formatRaceInterval(current.date, previous.date);
+                final distanceChange = RaceIntervalAnalyzer.formatDistanceChange(current.distance, previous.distance);
+                return _buildIntervalCell(interval, distanceChange);
+              }
+              return const SizedBox(width: 70); // データがなければ空のSizedBox
             },
           ),
-        ),
-    ];
+        ));
+      }
+    }
+    return cells;
   }
-
+  // 間隔/距離セルを生成する新しいヘルパーウィジェット
+  Widget _buildIntervalCell(String interval, String distanceChange) {
+    Color distanceColor;
+    switch (distanceChange) {
+      case '延長': distanceColor = Colors.blue; break;
+      case '短縮': distanceColor = Colors.red; break;
+      default: distanceColor = Colors.black87;
+    }
+    return SizedBox(
+      width: 70,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(interval, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          Text(distanceChange, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: distanceColor)),
+        ],
+      ),
+    );
+  }
 
   // 枠番の色分けロジック
   Color _getGateColor(int gateNumber) {
