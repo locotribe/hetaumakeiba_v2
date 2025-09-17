@@ -830,6 +830,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('AI予測を更新しました。')),
                     );
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ComprehensivePredictionPage(
+                          raceId: widget.raceId,
+                          raceData: _predictionRaceData!,
+                        ),
+                      ),
+                    );
                   }
                 },
                 icon: const Icon(Icons.tune),
@@ -1652,9 +1661,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               Color backgroundColor = Colors.transparent;
               bool isTopThree = false;
               switch (record.rank) {
-                case '1': backgroundColor = Colors.red.withAlpha(102); isTopThree = true; break;
-                case '2': backgroundColor = Colors.grey.withAlpha(128); isTopThree = true; break;
-                case '3': backgroundColor = Colors.yellow.withAlpha(128); isTopThree = true; break;
+                case '1': backgroundColor = Colors.red.withAlpha(60); isTopThree = true; break;
+                case '2': backgroundColor = Colors.blue.withAlpha(80); isTopThree = true; break;
+                case '3': backgroundColor = Colors.yellow.withAlpha(140); isTopThree = true; break;
               }
               return InkWell(
                 onTap: () => _showPastRaceDetailsPopup(context, record),
@@ -1669,10 +1678,25 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        if (isTopThree) Center(child: Text(record.rank, style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white))),
+                        if (isTopThree) Center(
+                            child:
+                            Text(record.rank,
+                                style: const TextStyle(
+                                    fontSize: 40,
+                                    fontWeight:
+                                    FontWeight.bold,
+                                    color: Colors.white
+                                )
+                            )
+                        ),
                         Text(
-                          record.raceName.length > 5 ? record.raceName.substring(0, 5) : record.raceName,
-                          style: const TextStyle(color: Colors.black, fontSize: 12),
+                          record.raceName.length > 5 ?
+                          record.raceName.substring(0, 5) :
+                          record.raceName,
+                          style: const TextStyle(
+                              color: Colors.black,
+                              fontSize: 12
+                          ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),

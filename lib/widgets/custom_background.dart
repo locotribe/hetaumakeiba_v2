@@ -42,7 +42,7 @@ class _BackgroundPainter extends CustomPainter {
     // 縦ストライプの描画
     final stripePaint = Paint()..color = stripeColor;
     const double stripeWidth = 2.0; // ストライプの幅
-    const double stripeSpacing = 10.0; // ストライプの間隔 (stripeWidth + space)
+    const double stripeSpacing = 4.0; // ストライプの間隔 (stripeWidth + space)
 
     for (double x = 0; x < size.width; x += stripeSpacing) {
       canvas.drawRect(Rect.fromLTWH(x, 0, stripeWidth, size.height), stripePaint);
