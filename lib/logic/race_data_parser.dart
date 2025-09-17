@@ -120,5 +120,19 @@ class RaceDataParser {
     if (difference <= -1.0) return 'ハイ';
     return 'ミドル';
   }
+  static String getSimpleLegStyle(String cornerPassage, String numberOfHorsesStr) {
+    final horseCount = int.tryParse(numberOfHorsesStr);
+    if (horseCount == null || horseCount == 0) return '不明';
 
+    final positions = cornerPassage.split('-').map((p) => int.tryParse(p)).toList();
+    if (positions.isEmpty || positions.first == null) return '不明';
+
+    final firstCornerPosition = positions.first!;
+    final positionRate = firstCornerPosition / horseCount;
+
+    if (positionRate <= 0.25) return '逃げ';
+    if (positionRate <= 0.5) return '先行';
+    if (positionRate <= 0.75) return '差し';
+    return '追込';
+  }
 }

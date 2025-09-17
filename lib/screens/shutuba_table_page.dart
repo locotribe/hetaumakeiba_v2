@@ -15,6 +15,7 @@ import 'package:hetaumakeiba_v2/logic/ai/stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/widgets/leg_style_indicator.dart';
@@ -27,17 +28,12 @@ import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
-import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
 import 'package:hetaumakeiba_v2/screens/ai_comprehensive_prediction_page.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
 import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
-import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
-import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
-import 'package:hetaumakeiba_v2/models/complex_aptitude_model.dart';
-import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
-import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
+import '../utils/grade_utils.dart';
 
 enum SortableColumn {
   mark,
@@ -310,8 +306,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     return 'D';
   }
 
-// in _ShutubaTablePageState class
-
   Future<PredictionRaceData?> _fetchDataWithUserMarks() async {
     final userId = localUserId;
     if (userId == null) {
@@ -398,68 +392,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     raceData.racePacePrediction = RaceAnalyzer.predictRacePace(
         raceData.horses, allPastRecords, []);
     return raceData;
-  }
-
-  /// 過去レースの詳細情報をポップアップで表示するメソッド
-  void _showPastRaceDetailsPopup(BuildContext context, HorseRaceRecord record) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(record.raceName),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: <Widget>[
-                _buildDetailRow('日付:', record.date),
-                _buildDetailRow('開催:', record.venue),
-                _buildDetailRow('天候/馬場:', '${record.weather} / ${record.trackCondition}'),
-                _buildDetailRow('R:', record.raceNumber),
-                _buildDetailRow('頭数:', record.numberOfHorses),
-                _buildDetailRow('枠/馬:', '${record.frameNumber} / ${record.horseNumber}'),
-                _buildDetailRow('人気/オッズ:', '${record.popularity}番人気 / ${record.odds}倍'),
-                _buildDetailRow('着順:', record.rank),
-                _buildDetailRow('騎手/斤量:', '${record.jockey} / ${record.carriedWeight}kg'),
-                _buildDetailRow('距離:', record.distance),
-                _buildDetailRow('タイム/着差:', '${record.time} / ${record.margin}'),
-                _buildDetailRow('通過:', record.cornerPassage),
-                _buildDetailRow('ペース/上り:', '${record.pace} / ${record.agari}'),
-                _buildDetailRow('馬体重:', record.horseWeight),
-                _buildDetailRow('勝ち馬:', record.winnerOrSecondHorse),
-                _buildDetailRow('賞金:', record.prizeMoney),
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('閉じる'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// ポップアップ内の詳細表示用のヘルパーウィジェット
-  Widget _buildDetailRow(String label, String value) {
-    if (value.trim().isEmpty || value.trim() == '-') {
-      return const SizedBox.shrink();
-    }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
   }
 
   Future<void> _showMemoDialog(PredictionHorseDetail horse) async {
@@ -1090,20 +1022,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }) {
     return DataTable2(
       key: ValueKey(_predictionRaceData.hashCode),
-      minWidth: 1500,
+      minWidth: 2000,
       fixedTopRows: 1,
       sortColumnIndex: columns.indexWhere((c) => (c.onSort != null)),
       sortAscending: _isAscending,
       columnSpacing: 6.0,
       headingRowHeight: 50,
-      dataRowHeight: 40,
-      // --- ヘッダーのテキストスタイルをここで指定 ---
+      dataRowHeight: 60,
       headingTextStyle: const TextStyle(
         fontSize: 12.0, // ヘッダーの文字サイズ
         fontWeight: FontWeight.bold,
         color: Colors.black87,
       ),
-      // --- データセル全体のデフォルトテキストスタイルをここで指定 ---
       dataTextStyle: const TextStyle(
         fontSize: 14.0, // セルの文字サイズ
         color: Colors.black87,
@@ -1191,7 +1121,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
-// in _ShutubaTablePageState class
 
   /// 騎手・調教師タブ
   Widget _buildJockeyTrainerTab(List<PredictionHorseDetail> horses) {
@@ -1364,8 +1293,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       },
     );
   }
-
-// in _ShutubaTablePageState class
 
   /// 成績タブ
   Widget _buildPerformanceTab(List<PredictionHorseDetail> horses) {
@@ -1622,14 +1549,116 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
-// in _ShutubaTablePageState class
+
+  Widget _buildPastRaceDetailCard(HorseRaceRecord record) {
+    final rankInt = int.tryParse(record.rank);
+    Color backgroundColor = Colors.transparent;
+    if (rankInt != null) {
+      if (rankInt == 1) backgroundColor = Colors.red.withAlpha(60);
+      if (rankInt == 2) backgroundColor = Colors.blue.withAlpha(80);
+      if (rankInt == 3) backgroundColor = Colors.yellow.withAlpha(140);
+    }
+
+    // 脚質を簡易判定
+    final legStyle = RaceDataParser.getSimpleLegStyle(record.cornerPassage, record.numberOfHorses);
+
+    String extractedGrade = '';
+    final gradePattern = RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false);
+    final match = gradePattern.firstMatch(record.raceName);
+    if (match != null) extractedGrade = match.group(1)!;
+    final gradeColor = getGradeColor(extractedGrade);
+
+    return Container(
+      width: 250,
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: gradeColor, width: 5.0)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // --- 左列 (着順/印・人気・脚質) ---
+          Container(
+            width: 50,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              border: Border(right: BorderSide(color: Colors.grey.shade300)),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    FutureBuilder<UserMark?>(
+                      future: _dbHelper.getUserMark(localUserId!, record.raceId, record.horseId),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData && snapshot.data?.mark != null) {
+                          return Text(
+                            snapshot.data!.mark,
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black.withOpacity(0.15),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                    Text(
+                      record.rank,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                Text('${record.popularity}人気', style: const TextStyle(fontSize: 11)),
+                Text(legStyle, style: const TextStyle(fontSize: 11)),
+              ],
+            ),
+          ),
+          // --- 中央・右列 (レース詳細) ---
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8.0, 4.0, 4.0, 4.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: Text('${record.venue.replaceAll(RegExp(r'\d'), '')} ${record.weather}/${record.trackCondition}/${record.numberOfHorses}頭', style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
+                      Text(record.time, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: Text('${record.raceName.replaceAll(RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false), '').trim()}/${record.distance}', style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
+                      Text(record.agari, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: Text('${record.horseNumber}番 ${record.horseWeight} ${record.jockey}(${record.carriedWeight})', style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
+                      Text(record.margin, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// 過去5走分のセルを作成
   List<DataCell> _buildPerformanceCells(String horseId) {
     final futureRecords = _dbHelper.getHorsePerformanceRecords(horseId);
-
     final List<DataCell> cells = [];
 
+    // 前走との間隔を表示するセル
     cells.add(DataCell(
       FutureBuilder<List<HorseRaceRecord>>(
         future: futureRecords,
@@ -1646,71 +1675,21 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       ),
     ));
 
+    // 過去5走分のセル
     for (int i = 0; i < 5; i++) {
       cells.add(DataCell(
         FutureBuilder<List<HorseRaceRecord>>(
           future: futureRecords,
           builder: (context, snapshot) {
-            if (snapshot.hasData && snapshot.data!.length > i) {
-              final record = snapshot.data![i];
-              String extractedGrade = '';
-              final gradePattern = RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false);
-              final match = gradePattern.firstMatch(record.raceName);
-              if (match != null) extractedGrade = match.group(1)!;
-              final gradeColor = getGradeColor(extractedGrade);
-              Color backgroundColor = Colors.transparent;
-              bool isTopThree = false;
-              switch (record.rank) {
-                case '1': backgroundColor = Colors.red.withAlpha(60); isTopThree = true; break;
-                case '2': backgroundColor = Colors.blue.withAlpha(80); isTopThree = true; break;
-                case '3': backgroundColor = Colors.yellow.withAlpha(140); isTopThree = true; break;
-              }
-              return InkWell(
-                onTap: () => _showPastRaceDetailsPopup(context, record),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  decoration: BoxDecoration(
-                    color: backgroundColor,
-                    border: Border(left: BorderSide(color: gradeColor, width: 5.0)),
-                  ),
-                  child: SizedBox(
-                    width: 120, // セルの幅を固定
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        if (isTopThree) Center(
-                            child:
-                            Text(record.rank,
-                                style: const TextStyle(
-                                    fontSize: 40,
-                                    fontWeight:
-                                    FontWeight.bold,
-                                    color: Colors.white
-                                )
-                            )
-                        ),
-                        Text(
-                          record.raceName.length > 5 ?
-                          record.raceName.substring(0, 5) :
-                          record.raceName,
-                          style: const TextStyle(
-                              color: Colors.black,
-                              fontSize: 12
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
+            if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data!.length > i) {
+              return _buildPastRaceDetailCard(snapshot.data![i]);
             }
-            return const SizedBox(width: 120);
+            return const SizedBox(width: 250);
           },
         ),
       ));
 
+      // 4走前までのレース間隔を表示
       if (i < 4) {
         cells.add(DataCell(
           FutureBuilder<List<HorseRaceRecord>>(
