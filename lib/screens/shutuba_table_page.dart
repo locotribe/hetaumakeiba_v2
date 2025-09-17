@@ -50,6 +50,12 @@ enum SortableColumn {
   legStyle,
 }
 
+class _PerformanceData {
+  final List<HorseRaceRecord> records;
+  final Map<String, RaceResult> raceResults;
+
+  _PerformanceData(this.records, this.raceResults);
+}
 
 class ShutubaTablePage extends StatefulWidget {
   final String raceId;
@@ -77,6 +83,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   bool _isAscending = true;
   late TabController _tabController;
   bool _isCardExpanded = true;
+  String? _highlightedRaceId;
 
   @override
   bool get wantKeepAlive => true;
@@ -1550,13 +1557,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
 
-  Widget _buildPastRaceDetailCard(HorseRaceRecord record) {
+  Widget _buildPastRaceDetailCard(HorseRaceRecord record, HorseResult? horseResult) {
+
+    final isHighlighted = record.raceId.isNotEmpty && record.raceId == _highlightedRaceId;
+    final textColor = isHighlighted ? Colors.white : Colors.black87;
     final rankInt = int.tryParse(record.rank);
     Color backgroundColor = Colors.transparent;
-    if (rankInt != null) {
-      if (rankInt == 1) backgroundColor = Colors.red.withAlpha(60);
-      if (rankInt == 2) backgroundColor = Colors.blue.withAlpha(80);
-      if (rankInt == 3) backgroundColor = Colors.yellow.withAlpha(140);
+    if (isHighlighted) {
+      backgroundColor = Colors.black54;
+    } else if (rankInt != null) {
+      if (rankInt == 1) backgroundColor = Colors.red.withAlpha(30);
+      if (rankInt == 2) backgroundColor = Colors.blue.withAlpha(30);
+      if (rankInt == 3) backgroundColor = Colors.yellow.withAlpha(80);
     }
 
     // 脚質を簡易判定
@@ -1568,104 +1580,158 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     if (match != null) extractedGrade = match.group(1)!;
     final gradeColor = getGradeColor(extractedGrade);
 
-    return Container(
-      width: 250,
-      decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: gradeColor, width: 5.0)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // --- 左列 (着順/印・人気・脚質) ---
-          Container(
-            width: 50,
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              border: Border(right: BorderSide(color: Colors.grey.shade300)),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    FutureBuilder<UserMark?>(
-                      future: _dbHelper.getUserMark(localUserId!, record.raceId, record.horseId),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData && snapshot.data?.mark != null) {
-                          return Text(
-                            snapshot.data!.mark,
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black.withOpacity(0.15),
-                            ),
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    ),
-                    Text(
-                      record.rank,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                Text('${record.popularity}人気', style: const TextStyle(fontSize: 11)),
-                Text(legStyle, style: const TextStyle(fontSize: 11)),
-              ],
-            ),
-          ),
-          // --- 中央・右列 (レース詳細) ---
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8.0, 4.0, 4.0, 4.0),
+    // 2種類の着差を結合して表示用文字列を作成
+    final timeDiffMargin = record.margin; // タイム差（例: "3.3"）
+    final stringMargin = horseResult?.margin ?? ''; // 文字列着差（例: "ハナ"）
+    String displayMargin = timeDiffMargin; // デフォルトはタイム差
+
+    if (stringMargin.isNotEmpty && timeDiffMargin.isNotEmpty) {
+      displayMargin = '$stringMargin / $timeDiffMargin';
+    } else if (stringMargin.isNotEmpty) {
+      displayMargin = stringMargin;
+    }
+
+    return GestureDetector(
+      onTap: () {
+        if (record.raceId.isNotEmpty) {
+          setState(() {
+            if (_highlightedRaceId == record.raceId) {
+              _highlightedRaceId = null; // Toggle off
+            } else {
+              _highlightedRaceId = record.raceId; // Toggle on
+            }
+          });
+        }
+      },
+      child: Container(
+        width: 270,
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: gradeColor, width: 5.0)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // --- 左列 (着順/印・人気・脚質) ---
+            Container(
+              width: 50,
+              height: 80,
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                border: Border(right: BorderSide(color: Colors.grey.shade300)),
+              ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Stack(
+                    alignment: Alignment.center,
                     children: [
-                      Expanded(child: Text('${record.venue.replaceAll(RegExp(r'\d'), '')} ${record.weather}/${record.trackCondition}/${record.numberOfHorses}頭', style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
-                      Text(record.time, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text('${record.raceName.replaceAll(RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false), '').trim()}/${record.distance}', style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
-                      Text(record.agari, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text('${record.horseNumber}番 ${record.horseWeight} ${record.jockey}(${record.carriedWeight})', style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
-                      Text(record.margin, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      FutureBuilder<UserMark?>(
+                        future: _dbHelper.getUserMark(localUserId!, record.raceId, record.horseId),
+                        builder: (context, snapshot) {
+                          if (snapshot.hasData && snapshot.data?.mark != null) {
+                            return Text(
+                              snapshot.data!.mark,
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: isHighlighted ? Color.fromRGBO(255, 255, 255, 0.30) : Color.fromRGBO(0, 0, 0, 0.20),
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            record.rank,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: ['1','2','3'].contains(record.rank)
+                                  ? Colors.red
+                                  : textColor,
+                            ),
+                          ),
+
+                          Text(
+                            '${record.popularity}人気',
+                            style: TextStyle(fontSize: 11, color: textColor),
+                          ),
+                          Text(
+                            legStyle,
+                            style: TextStyle(fontSize: 11, color: textColor),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+            // --- 中央・右列 (レース詳細) ---
+            Expanded(
+              child: Container( // 背景色を適用するためにContainerでラップ
+                color: backgroundColor,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8.0, 4.0, 4.0, 4.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: Text('${record.venue.replaceAll(RegExp(r'\d'), '')} ${record.weather}/${record.trackCondition}/${record.numberOfHorses}頭', style: TextStyle(fontSize: 11, color: textColor), overflow: TextOverflow.ellipsis)),
+                          Text(record.time, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor)),
+                        ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: Text('${record.raceName.replaceAll(RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false), '').trim()}/${record.distance}', style: TextStyle(fontSize: 11, color: textColor), overflow: TextOverflow.ellipsis)),
+                          Text(record.agari, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor)),
+                        ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: Text('${record.horseNumber}番 ${record.horseWeight} ${record.jockey}(${record.carriedWeight})', style: TextStyle(fontSize: 11, color: textColor), overflow: TextOverflow.ellipsis)),
+                          Text(displayMargin, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   /// 過去5走分のセルを作成
   List<DataCell> _buildPerformanceCells(String horseId) {
-    final futureRecords = _dbHelper.getHorsePerformanceRecords(horseId);
+    // 競走成績と、それに紐づく全レース結果をまとめて非同期で取得するFutureを作成
+    final futurePerformanceData = Future<_PerformanceData>(() async {
+      final records = await _dbHelper.getHorsePerformanceRecords(horseId);
+      final raceIds = records.map((r) => r.raceId).where((id) => id.isNotEmpty).toSet().toList();
+      final raceResults = await _dbHelper.getMultipleRaceResults(raceIds);
+      return _PerformanceData(records, raceResults);
+    });
+
     final List<DataCell> cells = [];
 
     // 前走との間隔を表示するセル
     cells.add(DataCell(
-      FutureBuilder<List<HorseRaceRecord>>(
-        future: futureRecords,
+      FutureBuilder<_PerformanceData>(
+        future: futurePerformanceData,
         builder: (context, snapshot) {
-          if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+          if (snapshot.hasData && snapshot.data!.records.isNotEmpty) {
             final currentRace = _predictionRaceData!;
-            final previousRace = snapshot.data!.first;
+            final previousRace = snapshot.data!.records.first;
             final interval = RaceIntervalAnalyzer.formatRaceInterval(currentRace.raceDate, previousRace.date);
             final distanceChange = RaceIntervalAnalyzer.formatDistanceChange(currentRace.raceDetails1 ?? '', previousRace.distance);
             return _buildIntervalCell(interval, distanceChange);
@@ -1678,11 +1744,22 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     // 過去5走分のセル
     for (int i = 0; i < 5; i++) {
       cells.add(DataCell(
-        FutureBuilder<List<HorseRaceRecord>>(
-          future: futureRecords,
+        FutureBuilder<_PerformanceData>(
+          future: futurePerformanceData,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data!.length > i) {
-              return _buildPastRaceDetailCard(snapshot.data![i]);
+            if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data!.records.length > i) {
+              final record = snapshot.data!.records[i];
+              final raceResult = snapshot.data!.raceResults[record.raceId];
+              HorseResult? horseResultInRace;
+              if (raceResult != null) {
+                try {
+                  horseResultInRace = raceResult.horseResults.firstWhere((hr) => hr.horseId == record.horseId);
+                } catch (e) {
+                  // just in case
+                }
+              }
+              // 両方のデータをカード生成ウィジェットに渡す
+              return _buildPastRaceDetailCard(record, horseResultInRace);
             }
             return const SizedBox(width: 250);
           },
@@ -1692,12 +1769,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       // 4走前までのレース間隔を表示
       if (i < 4) {
         cells.add(DataCell(
-          FutureBuilder<List<HorseRaceRecord>>(
-            future: futureRecords,
+          FutureBuilder<_PerformanceData>(
+            future: futurePerformanceData,
             builder: (context, snapshot) {
-              if (snapshot.hasData && snapshot.data!.length > i + 1) {
-                final current = snapshot.data![i];
-                final previous = snapshot.data![i + 1];
+              if (snapshot.hasData && snapshot.data!.records.length > i + 1) {
+                final current = snapshot.data!.records[i];
+                final previous = snapshot.data!.records[i + 1];
                 final interval = RaceIntervalAnalyzer.formatRaceInterval(current.date, previous.date);
                 final distanceChange = RaceIntervalAnalyzer.formatDistanceChange(current.distance, previous.distance);
                 return _buildIntervalCell(interval, distanceChange);
