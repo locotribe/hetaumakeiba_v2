@@ -744,152 +744,56 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           detailsLine2: race.raceDetails1 ?? details,
         ),
         if (widget.raceResult == null)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              ElevatedButton.icon(
-                onPressed: _updateDynamicData,
-                icon: const Icon(Icons.refresh),
-                label: const Text('出馬表更新'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final result = await Navigator.push<bool>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => AiPredictionSettingsPage(raceId: widget.raceId),
+        // raceResultがnullの場合のみボタンを表示する
+          if (widget.raceResult == null)
+            Padding(
+              // ボタンと上下のDividerとの間に少し余白を追加
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Row(
+                // 3つのボタンを均等に配置
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // 1. 出馬表更新ボタン
+                  TextButton.icon(
+                    onPressed: _updateDynamicData,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('出馬表更新',
+                      style: TextStyle(fontSize: 10.0),
                     ),
-                  );
-                  if (result == true && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('AI予測を再計算しています...')),
-                    );
-                    await _calculatePredictionScores(_predictionRaceData!);
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('AI予測を更新しました。')),
-                    );
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ComprehensivePredictionPage(
-                          raceId: widget.raceId,
-                          raceData: _predictionRaceData!,
-                        ),
-                      ),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.tune),
-                label: const Text('AIチューニング'),
+                  ),
+                  // 2. 過去データ分析ボタン (ListTileから変換)
+                  TextButton.icon(
+                    onPressed: _navigateToStatisticsPage,
+                    icon: const Icon(Icons.history),
+                    label: const Text(
+                      '過去分析',
+                      style: TextStyle(fontSize: 10.0),
+                    ),
+                  ),
+                  // 3. 全出走馬データ分析ボタン (ListTileから変換)
+                  TextButton.icon(
+                    onPressed: () {
+                      if (_predictionRaceData != null) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => HorseStatsPage(
+                              raceId: widget.raceId,
+                              raceName: _predictionRaceData!.raceName,
+                              horses: _predictionRaceData!.horses,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.group),
+                    label: const Text(
+                      '出走馬分析',
+                      style: TextStyle(fontSize: 10.0),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        const Divider(),
-        ListTile(
-          visualDensity: const VisualDensity(vertical: -4.0),
-          leading: Icon(Icons.analytics_outlined, color: Theme.of(context).primaryColor),
-          title: Text(
-            'AI総合予測を見る',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).primaryColor,
-              fontSize: 14.0,
             ),
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () async {
-            final existingPredictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
-
-            if (existingPredictions.isNotEmpty) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ComprehensivePredictionPage(
-                    raceId: widget.raceId,
-                    raceData: _predictionRaceData!,
-                  ),
-                ),
-              );
-            } else {
-              final result = await showDialog<String>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('AI総合予測'),
-                  content: const Text('このレースのAI予測をまだ行っていません。\nデフォルト設定（バランス重視）で予測を計算しますか？\n（計算には少し時間がかかります）'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop('tune'),
-                      child: const Text('チューニング'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop('yes'),
-                      child: const Text('はい'),
-                    ),
-                  ],
-                ),
-              );
-
-              if (result == 'yes' && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('AI予測を計算しています...')),
-                );
-                await _calculatePredictionScores(_predictionRaceData!);
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ComprehensivePredictionPage(
-                      raceId: widget.raceId,
-                      raceData: _predictionRaceData!,
-                    ),
-                  ),
-                );
-              } else if (result == 'tune' && mounted) {
-                await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AiPredictionSettingsPage(raceId: widget.raceId),
-                  ),
-                );
-              }
-            }
-          },
-        ),
-        ListTile(
-          dense: true,
-          leading: const Icon(Icons.history),
-          title: const Text(
-            '過去データ分析',
-            style: TextStyle(fontSize: 14.0),
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: _navigateToStatisticsPage,
-        ),
-        ListTile(
-          dense: true,
-          leading: const Icon(Icons.group),
-          title: const Text(
-            '全出走馬データ分析',
-            style: TextStyle(fontSize: 14.0),
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () {
-            if (_predictionRaceData != null) {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => HorseStatsPage(
-                    raceId: widget.raceId,
-                    raceName: _predictionRaceData!.raceName,
-                    horses: _predictionRaceData!.horses,
-                  ),
-                ),
-              );
-            }
-          },
-        ),
-        const Divider(),
       ],
     );
   }

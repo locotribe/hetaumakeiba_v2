@@ -16,6 +16,10 @@ import 'package:hetaumakeiba_v2/logic/ai/summary_generator.dart';
 import 'package:hetaumakeiba_v2/logic/ai/condition_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
+import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
+import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
+
+import '../widgets/themed_tab_bar.dart';
 
 class _HorseNumberDotPainter extends FlDotPainter {
   final Color color;
@@ -105,6 +109,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   late TabController _tabController;
   final DatabaseHelper _dbHelper = DatabaseHelper();
   final JockeyAnalysisService _jockeyAnalysisService = JockeyAnalysisService();
+  final AiPredictionService _predictionService = AiPredictionService();
   int? _touchedSpotIndex;
 
   late Future<Map<String, dynamic>> _pageDataFuture;
@@ -117,10 +122,81 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     _pageDataFuture = _loadPageData();
   }
 
+  Future<void> _handleTuneAndRecalculate() async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AiPredictionSettingsPage(raceId: widget.raceId),
+      ),
+    );
+    if (result == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AI予測を再計算しています...')),
+      );
+      // calculatePredictionScoresを呼び出して再計算
+      await _predictionService.calculatePredictionScores(widget.raceData, widget.raceId);
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AI予測を更新しました。')),
+      );
+      // データを再読み込みして画面を更新
+      setState(() {
+        _pageDataFuture = _loadPageData();
+      });
+    }
+  }
+
   Future<Map<String, dynamic>> _loadPageData() async {
-    final predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
+    var predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
+
+    // 予測データがない場合に計算を促すダイアログを表示
     if (predictions.isEmpty) {
-      throw Exception('予測データが見つかりませんでした。');
+      final result = await showDialog<String>(
+        context: context,
+        barrierDismissible: false, // ダイアログ外タップで閉じないようにする
+        builder: (context) => AlertDialog(
+          title: const Text('AI総合予測'),
+          content: const Text('このレースのAI予測をまだ行っていません。\nデフォルト設定（バランス重視）で予測を計算しますか？\n（計算には少し時間がかかります）'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('cancel'), // キャンセルを返す
+              child: const Text('戻る'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('tune'),
+              child: const Text('チューニング'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop('yes'),
+              child: const Text('はい'),
+            ),
+          ],
+        ),
+      );
+
+      if (result == 'yes' && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('AI予測を計算しています...')),
+        );
+        await _predictionService.calculatePredictionScores(widget.raceData, widget.raceId);
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        // 再計算後に再度データを読み込む
+        predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
+      } else if (result == 'tune' && mounted) {
+        // チューニング画面に遷移し、戻ってきたらページを再読み込み
+        await _handleTuneAndRecalculate();
+        // チューニング後に再度データを読み込む
+        predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
+      } else {
+        // 'cancel' またはダイアログが閉じられた場合
+        if (mounted) Navigator.of(context).pop();
+        throw Exception('予測がキャンセルされました。');
+      }
+    }
+
+    if (predictions.isEmpty) {
+      // それでもデータがなければエラーとする
+      throw Exception('予測データの生成に失敗しました。');
     }
 
     final jockeyIds = widget.raceData.horses.map((h) => h.jockeyId).toList();
@@ -260,59 +336,63 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI総合予測'),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: '総合評価'),
-            Tab(text: '推奨馬'),
-            Tab(text: '騎手特性'),
-            Tab(text: '複合適性'),
-            Tab(text: '全馬リスト'),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _pageDataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('データ読み込みエラー: ${snapshot.error}'));
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: Text('データがありません。'));
+        }
+
+        final pageData = snapshot.data!;
+        final List<AiPrediction> predictions = pageData['predictions'];
+        final Map<String, JockeyStats> jockeyStats = pageData['jockeyStats'];
+        final String predictionSummary = pageData['predictionSummary'];
+        final Map<String, dynamic> analysisDetails = pageData['analysisDetails'];
+        final Map<String, String> legStyles = pageData['legStyles'];
+        final Map<String, String> raceDevelopment = pageData['raceDevelopment'];
+
+        final overallScores = {for (var p in predictions) p.horseId: p.overallScore};
+        final expectedValues = {for (var p in predictions) p.horseId: p.expectedValue};
+
+        _sortHorses(overallScores, expectedValues);
+
+        return Column(
+          children: [
+            Container(
+              child: ThemedTabBar(
+                controller: _tabController,
+                isScrollable: true,
+                tabs: const [
+                  Tab(text: '総合評価'),
+                  Tab(text: '推奨馬'),
+                  Tab(text: '騎手特性'),
+                  Tab(text: '複合適性'),
+                  Tab(text: '全馬リスト'),
+                ],
+              ),
+            ),
+            // TabBarView
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildSummaryTab(predictionSummary, legStyles, raceDevelopment, overallScores),
+                  _buildRecommendationTab(overallScores, expectedValues),
+                  _buildJockeyStatsTab(jockeyStats),
+                  _buildConditionFitTab(),
+                  _buildAllHorsesListCard(analysisDetails, overallScores, expectedValues),
+                ],
+              ),
+            ),
           ],
-        ),
-      ),
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _pageDataFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('データ読み込みエラー: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData) {
-            return const Center(child: Text('データがありません。'));
-          }
-
-          final pageData = snapshot.data!;
-          final List<AiPrediction> predictions = pageData['predictions'];
-          final Map<String, JockeyStats> jockeyStats = pageData['jockeyStats'];
-          final String predictionSummary = pageData['predictionSummary'];
-          final Map<String, dynamic> analysisDetails = pageData['analysisDetails'];
-          final Map<String, String> legStyles = pageData['legStyles'];
-          final Map<String, String> raceDevelopment = pageData['raceDevelopment'];
-
-          final overallScores = {for (var p in predictions) p.horseId: p.overallScore};
-          final expectedValues = {for (var p in predictions) p.horseId: p.expectedValue};
-
-          _sortHorses(overallScores, expectedValues);
-
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _buildSummaryTab(predictionSummary, legStyles, raceDevelopment, overallScores),
-              _buildRecommendationTab(overallScores, expectedValues),
-              _buildJockeyStatsTab(jockeyStats),
-              _buildConditionFitTab(),
-              _buildAllHorsesListCard(analysisDetails, overallScores, expectedValues),
-            ],
-          );
-        },
-      ),
+        );
+      },
     );
   }
 
@@ -359,7 +439,28 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.raceData.raceName, style: Theme.of(context).textTheme.titleLarge),
+            // 修正部分：Rowを使用して横並びに変更
+            Row(
+              // Row内の垂直方向の配置を中央に設定
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Expandedでラップして、テキストが利用可能な残りのスペースをすべて使用するようにする
+                Expanded(
+                  child: Text(
+                    widget.raceData.raceName,
+                    style: Theme.of(context).textTheme.titleLarge,
+                    // テキストが長すぎる場合に省略記号(...)で表示する
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // 右側に表示されるボタン
+                TextButton.icon(
+                  onPressed: _handleTuneAndRecalculate,
+                  icon: const Icon(Icons.tune),
+                  label: const Text('AIチューニング'),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             const Divider(),
             const SizedBox(height: 8),

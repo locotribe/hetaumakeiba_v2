@@ -10,6 +10,9 @@ import 'package:hetaumakeiba_v2/screens/ai_prediction_result_page.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
 import '../models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
+import 'package:hetaumakeiba_v2/screens/ai_comprehensive_prediction_page.dart';
 
 enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
 
@@ -32,12 +35,54 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   final DatabaseHelper _dbHelper = DatabaseHelper();
   RaceStatus _status = RaceStatus.loading;
   RaceResult? _raceResult;
-  PredictionRaceData? _cachedPredictionRaceData;
+  PredictionRaceData? _predictionRaceData;
+
+  PredictionRaceData _createPredictionDataFromRaceResult(RaceResult raceResult) {
+    final horses = raceResult.horseResults.map((hr) {
+      final weightMatch = RegExp(r'(\d+)\((.*?)\)').firstMatch(hr.horseWeight);
+      final trainerName = hr.trainerName;
+      final trainerAffiliation = hr.trainerAffiliation;
+
+      return PredictionHorseDetail(
+        horseId: hr.horseId,
+        horseNumber: int.tryParse(hr.horseNumber) ?? 0,
+        gateNumber: int.tryParse(hr.frameNumber) ?? 0,
+        horseName: hr.horseName,
+        sexAndAge: hr.sexAndAge,
+        jockey: hr.jockeyName,
+        jockeyId: hr.jockeyId,
+        carriedWeight: double.tryParse(hr.weightCarried) ?? 0.0,
+        trainerName: trainerName,
+        trainerAffiliation: trainerAffiliation,
+        odds: double.tryParse(hr.odds),
+        popularity: int.tryParse(hr.popularity),
+        horseWeight: weightMatch?.group(1),
+        isScratched: int.tryParse(hr.rank) == null,
+      );
+    }).toList();
+
+    final raceNumber = raceResult.raceId.length >= 2
+        ? int.tryParse(raceResult.raceId.substring(raceResult.raceId.length - 2))?.toString() ?? ''
+        : '';
+
+
+    return PredictionRaceData(
+      raceId: raceResult.raceId,
+      raceName: raceResult.raceTitle,
+      raceDate: raceResult.raceDate,
+      venue: racecourseDict.entries.firstWhere((e) => raceResult.raceInfo.contains(e.value), orElse: () => const MapEntry("", "")).value,
+      raceNumber: raceNumber,
+      shutubaTableUrl: 'https://db.netkeiba.com/race/${raceResult.raceId}',
+      raceGrade: raceResult.raceGrade,
+      raceDetails1: raceResult.raceInfo,
+      horses: horses,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _determineRaceStatus();
   }
 
@@ -46,6 +91,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
     _tabController.dispose();
     super.dispose();
   }
+
+// lib/screens/race_page.dart
 
   Future<void> _determineRaceStatus() async {
     // 1. DBから分析済みの出馬表キャッシュがあるか確認
@@ -56,10 +103,10 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
     if (shutubaCache != null) {
       // 3. キャッシュが存在する場合 (最優先)
       setState(() {
-        _cachedPredictionRaceData = shutubaCache.predictionRaceData;
+        _predictionRaceData = shutubaCache.predictionRaceData;
         _raceResult = dbResult; // レース結果があればセット
         _status = RaceStatus.resultConfirmed; // キャッシュがあれば常にこの状態でOK
-        _tabController.animateTo(dbResult != null ? 1 : 0); // 結果があれば結果タブ、なければ出馬表タブ
+        _tabController.animateTo(dbResult != null ? 2 : 0); // 結果があれば結果タブ、なければ出馬表タブ
       });
       return;
     }
@@ -69,8 +116,9 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
       // レース結果だけはある場合
       setState(() {
         _raceResult = dbResult;
+        _predictionRaceData = _createPredictionDataFromRaceResult(dbResult); // ここで変換
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(1);
+        _tabController.animateTo(2);
       });
       return;
     }
@@ -136,6 +184,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
     }
   }
 
+// lib/screens/race_page.dart
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -145,6 +195,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           controller: _tabController,
           tabs: const [
             Tab(text: '出馬表'),
+            Tab(text: 'AI予測'),
             Tab(text: 'レース結果'),
             Tab(text: 'AI予測結果'),
           ],
@@ -165,6 +216,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               controller: _tabController,
               children: [
                 ShutubaTablePage(raceId: widget.raceId),
+                const Center(child: CircularProgressIndicator()),
                 const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
               ],
@@ -179,9 +231,16 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           children: [
             ShutubaTablePage(
               raceId: widget.raceId,
-              predictionRaceData: _cachedPredictionRaceData,
+              predictionRaceData: _predictionRaceData,
               raceResult: _raceResult,
             ),
+            if (_predictionRaceData != null)
+              ComprehensivePredictionPage(
+                raceId: widget.raceId,
+                raceData: _predictionRaceData!,
+              )
+            else
+              const Center(child: Text('出馬表データを読み込んでいます...')),
             RaceResultPage(raceId: widget.raceId, qrData: null),
             AiPredictionResultPage(raceId: widget.raceId),
           ],
