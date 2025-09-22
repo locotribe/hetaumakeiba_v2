@@ -37,6 +37,12 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   RaceResult? _raceResult;
   PredictionRaceData? _predictionRaceData;
 
+  void _onShutubaDataRefreshed(PredictionRaceData newData) {
+    setState(() {
+      _predictionRaceData = newData;
+    });
+  }
+
   PredictionRaceData _createPredictionDataFromRaceResult(RaceResult raceResult) {
     final horses = raceResult.horseResults.map((hr) {
       final weightMatch = RegExp(r'(\d+)\((.*?)\)').firstMatch(hr.horseWeight);
@@ -233,6 +239,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               raceId: widget.raceId,
               predictionRaceData: _predictionRaceData,
               raceResult: _raceResult,
+              onDataRefreshed: _onShutubaDataRefreshed,
             ),
             if (_predictionRaceData != null)
               ComprehensivePredictionPage(

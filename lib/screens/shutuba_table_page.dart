@@ -61,9 +61,10 @@ class ShutubaTablePage extends StatefulWidget {
   final String raceId;
   final RaceResult? raceResult;
   final PredictionRaceData? predictionRaceData;
+  final Function(PredictionRaceData)? onDataRefreshed;
 
   const ShutubaTablePage({super.key, required this.raceId, this.raceResult,
-    this.predictionRaceData,});
+    this.predictionRaceData, this.onDataRefreshed,});
 
   @override
   State<ShutubaTablePage> createState() => _ShutubaTablePageState();
@@ -165,6 +166,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               _overallScores = {for (var p in predictions) p.horseId: p.overallScore};
               _expectedValues = {for (var p in predictions) p.horseId: p.expectedValue};
             }
+          }
+          if (refresh && widget.onDataRefreshed != null) {
+            widget.onDataRefreshed!(data);
           }
         }
         setState(() {
