@@ -62,9 +62,10 @@ class ShutubaTablePage extends StatefulWidget {
   final RaceResult? raceResult;
   final PredictionRaceData? predictionRaceData;
   final Function(PredictionRaceData)? onDataRefreshed;
+  final VoidCallback? onAnalysisDataReady;
 
   const ShutubaTablePage({super.key, required this.raceId, this.raceResult,
-    this.predictionRaceData, this.onDataRefreshed,});
+    this.predictionRaceData, this.onDataRefreshed, this.onAnalysisDataReady,});
 
   @override
   State<ShutubaTablePage> createState() => _ShutubaTablePageState();
@@ -167,7 +168,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               _expectedValues = {for (var p in predictions) p.horseId: p.expectedValue};
             }
           }
-          if (refresh && widget.onDataRefreshed != null) {
+          if (widget.onDataRefreshed != null) {
             widget.onDataRefreshed!(data);
           }
         }
@@ -558,7 +559,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<void> _navigateToStatisticsPage() async {
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => RaceStatisticsPage(
           raceId: widget.raceId,
@@ -566,6 +567,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         ),
       ),
     );
+    if (widget.onAnalysisDataReady != null) {
+      widget.onAnalysisDataReady!();
+    }
   }
 
   @override
@@ -776,9 +780,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   ),
                   // 3. 全出走馬データ分析ボタン (ListTileから変換)
                   TextButton.icon(
-                    onPressed: () {
+                    onPressed: () async {
                       if (_predictionRaceData != null) {
-                        Navigator.of(context).push(
+                        await Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => HorseStatsPage(
                               raceId: widget.raceId,
@@ -787,9 +791,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             ),
                           ),
                         );
+                        if (widget.onAnalysisDataReady != null) {
+                          widget.onAnalysisDataReady!();
+                        }
                       }
                     },
-                    icon: const Icon(Icons.group),
+                    icon: const Icon(Icons.archive),
                     label: const Text(
                       '出走馬分析',
                       style: TextStyle(fontSize: 10.0),
