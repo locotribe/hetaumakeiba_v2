@@ -189,34 +189,29 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.raceName} - 過去データ分析'),
-      ),
-      body: FutureBuilder<RaceStatistics?>(
-        future: _statisticsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && snapshot.data == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return FutureBuilder<RaceStatistics?>(
+      future: _statisticsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && snapshot.data == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text('エラーが発生しました: ${snapshot.error}'),
-              ),
-            );
-          }
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text('エラーが発生しました: ${snapshot.error}'),
+            ),
+          );
+        }
 
-          final stats = snapshot.data;
-          if (stats == null) {
-            return _buildInitialView();
-          } else {
-            return _buildStatisticsView(stats);
-          }
-        },
-      ),
+        final stats = snapshot.data;
+        if (stats == null) {
+          return _buildInitialView();
+        } else {
+          return _buildStatisticsView(stats);
+        }
+      },
     );
   }
 

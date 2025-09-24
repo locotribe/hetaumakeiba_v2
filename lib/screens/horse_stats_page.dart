@@ -227,36 +227,40 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.raceName),
-        actions: [
-          if (!_isLoading)
-            IconButton(
+    return Column(
+      children: [
+        if (!_isLoading)
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () => _showConfirmationDialog(isRefresh: true),
               tooltip: 'データを更新',
             ),
-        ],
-        bottom: _isLoading
-            ? PreferredSize(
-          preferredSize: const Size.fromHeight(4.0),
-          child: LinearProgressIndicator(
-            value: _loadingProgress,
-            backgroundColor: Colors.transparent,
           ),
-        )
-            : TabBar(
+        // TabBar
+        TabBar(
           controller: _tabController,
           tabs: const [
             Tab(text: '個別成績'),
             Tab(text: '対戦成績'),
             Tab(text: 'コンビ成績'),
           ],
+          labelColor: Colors.blue,
+          unselectedLabelColor: Colors.black,
+          indicatorColor: Colors.blue,
         ),
-      ),
-      body: _buildBody(),
+        if (_isLoading)
+          LinearProgressIndicator(
+            value: _loadingProgress,
+            backgroundColor: Colors.transparent,
+          ),
+        Expanded(
+          child: _buildBody(),
+        ),
+      ],
     );
   }
 

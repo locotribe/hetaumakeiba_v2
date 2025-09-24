@@ -62,10 +62,9 @@ class ShutubaTablePage extends StatefulWidget {
   final RaceResult? raceResult;
   final PredictionRaceData? predictionRaceData;
   final Function(PredictionRaceData)? onDataRefreshed;
-  final VoidCallback? onAnalysisDataReady;
 
   const ShutubaTablePage({super.key, required this.raceId, this.raceResult,
-    this.predictionRaceData, this.onDataRefreshed, this.onAnalysisDataReady,});
+    this.predictionRaceData, this.onDataRefreshed, });
 
   @override
   State<ShutubaTablePage> createState() => _ShutubaTablePageState();
@@ -84,7 +83,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   SortableColumn _sortColumn = SortableColumn.horseNumber;
   bool _isAscending = true;
   late TabController _tabController;
-  bool _isCardExpanded = true;
   String? _highlightedRaceId;
 
   @override
@@ -558,20 +556,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
   }
 
-  Future<void> _navigateToStatisticsPage() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => RaceStatisticsPage(
-          raceId: widget.raceId,
-          raceName: _predictionRaceData!.raceName,
-        ),
-      ),
-    );
-    if (widget.onAnalysisDataReady != null) {
-      widget.onAnalysisDataReady!();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -593,10 +577,23 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     )
         : Column(
       children: [
-        _buildCollapsibleRaceInfoCard(_predictionRaceData!),
+        if (widget.raceResult == null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: _updateDynamicData,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('オッズ・馬体重を更新'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ),
         Expanded(
-          child: IgnorePointer(
-            ignoring: _isCardExpanded,
             child: Column(
               children: [
                 ThemedTabBar(
@@ -699,129 +696,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               ],
             ),
           ),
-        ),
-      ],
-    );
-  }
-
-  /// 折りたたみ可能なレース情報カードを構築する
-  Widget _buildCollapsibleRaceInfoCard(PredictionRaceData race) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _isCardExpanded = !_isCardExpanded;
-          });
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-          child: AnimatedSize(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            child: _isCardExpanded
-                ? _buildExpandedCardContent(race)
-                : _buildCollapsedCardContent(race),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 展開時のカード内容
-  Widget _buildExpandedCardContent(PredictionRaceData race) {
-    String title = race.raceName;
-    String details = race.raceGrade ?? '';
-    if (widget.raceResult != null) {
-      title = widget.raceResult!.raceTitle;
-      details = widget.raceResult!.raceGrade;
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Icon(Icons.expand_less),
-          ],
-        ),
-        RaceHeaderCard(
-          title: title,
-          detailsLine1: '${race.raceDate} ${race.venue}',
-          detailsLine2: race.raceDetails1 ?? details,
-        ),
-        if (widget.raceResult == null)
-        // raceResultがnullの場合のみボタンを表示する
-          if (widget.raceResult == null)
-            Padding(
-              // ボタンと上下のDividerとの間に少し余白を追加
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Row(
-                // 3つのボタンを均等に配置
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // 1. 出馬表更新ボタン
-                  TextButton.icon(
-                    onPressed: _updateDynamicData,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('出馬表更新',
-                      style: TextStyle(fontSize: 10.0),
-                    ),
-                  ),
-                  // 2. 過去データ分析ボタン (ListTileから変換)
-                  TextButton.icon(
-                    onPressed: _navigateToStatisticsPage,
-                    icon: const Icon(Icons.history),
-                    label: const Text(
-                      '過去分析',
-                      style: TextStyle(fontSize: 10.0),
-                    ),
-                  ),
-                  // 3. 全出走馬データ分析ボタン (ListTileから変換)
-                  TextButton.icon(
-                    onPressed: () async {
-                      if (_predictionRaceData != null) {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => HorseStatsPage(
-                              raceId: widget.raceId,
-                              raceName: _predictionRaceData!.raceName,
-                              horses: _predictionRaceData!.horses,
-                            ),
-                          ),
-                        );
-                        if (widget.onAnalysisDataReady != null) {
-                          widget.onAnalysisDataReady!();
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.archive),
-                    label: const Text(
-                      '出走馬分析',
-                      style: TextStyle(fontSize: 10.0),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-      ],
-    );
-  }
-
-  /// 折りたたみ時のカード内容
-  Widget _buildCollapsedCardContent(PredictionRaceData race) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Flexible(
-          child: Text(
-            race.raceName,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        const Icon(Icons.expand_more),
       ],
     );
   }
