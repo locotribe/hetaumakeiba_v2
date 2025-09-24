@@ -131,11 +131,13 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('AI予測を再計算しています...')),
       );
+      // calculatePredictionScoresを呼び出して再計算
       await _predictionService.calculatePredictionScores(widget.raceData, widget.raceId);
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('AI予測を更新しました。')),
       );
+      // データを再読み込みして画面を更新
       setState(() {
         _pageDataFuture = _loadPageData();
       });
@@ -145,16 +147,17 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   Future<Map<String, dynamic>> _loadPageData() async {
     var predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
 
+    // 予測データがない場合に計算を促すダイアログを表示
     if (predictions.isEmpty) {
       final result = await showDialog<String>(
         context: context,
-        barrierDismissible: false,
+        barrierDismissible: false, // ダイアログ外タップで閉じないようにする
         builder: (context) => AlertDialog(
           title: const Text('AI総合予測'),
           content: const Text('このレースのAI予測をまだ行っていません。\nデフォルト設定（バランス重視）で予測を計算しますか？\n（計算には少し時間がかかります）'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop('cancel'),
+              onPressed: () => Navigator.of(context).pop('cancel'), // キャンセルを返す
               child: const Text('戻る'),
             ),
             TextButton(
@@ -175,17 +178,22 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         );
         await _predictionService.calculatePredictionScores(widget.raceData, widget.raceId);
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        // 再計算後に再度データを読み込む
         predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
       } else if (result == 'tune' && mounted) {
+        // チューニング画面に遷移し、戻ってきたらページを再読み込み
         await _handleTuneAndRecalculate();
+        // チューニング後に再度データを読み込む
         predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
       } else {
+        // 'cancel' またはダイアログが閉じられた場合
         if (mounted) Navigator.of(context).pop();
         throw Exception('予測がキャンセルされました。');
       }
     }
 
     if (predictions.isEmpty) {
+      // それでもデータがなければエラーとする
       throw Exception('予測データの生成に失敗しました。');
     }
 
@@ -211,27 +219,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
     final statisticsService = StatisticsService();
     final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(widget.raceData.raceName, widget.raceData.raceId);
-    final cornersToPredict = <String>{};
-    for (final result in pastRaceResults) {
-      for (final cornerPassage in result.cornerPassages) {
-        final cornerName = cornerPassage.split(':').first.trim();
-        if (cornerName.contains('1') || cornerName.contains('2')) {
-          cornersToPredict.add('1-2コーナー');
-        } else if (cornerName.contains('3')) {
-          cornersToPredict.add('3コーナー');
-        } else if (cornerName.contains('4')) {
-          cornersToPredict.add('4コーナー');
-        }
-      }
-    }
-    final sortedCorners = cornersToPredict.toList()..sort();
-
-    final development = RaceAnalyzer.simulateRaceDevelopment(
-        widget.raceData,
-        legStyles,
-        allPastRecords,
-        sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']
-    );
 
     widget.raceData.racePacePrediction = RaceAnalyzer.predictRacePace(widget.raceData.horses, allPastRecords, pastRaceResults);
 
@@ -251,7 +238,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       'predictionSummary': summary,
       'analysisDetails': analysisDetails,
       'legStyles': legStyles,
-      'raceDevelopment': development,
     };
   }
 
@@ -339,7 +325,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         final String predictionSummary = pageData['predictionSummary'];
         final Map<String, dynamic> analysisDetails = pageData['analysisDetails'];
         final Map<String, String> legStyles = pageData['legStyles'];
-        final Map<String, String> raceDevelopment = pageData['raceDevelopment'];
 
         final overallScores = {for (var p in predictions) p.horseId: p.overallScore};
         final expectedValues = {for (var p in predictions) p.horseId: p.expectedValue};
@@ -353,7 +338,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 controller: _tabController,
                 isScrollable: true,
                 tabs: const [
-                  Tab(text: '総合評価'),
+                  Tab(text: '展開予想'),
                   Tab(text: '推奨馬'),
                   Tab(text: '複合適性'),
                   Tab(text: '全馬リスト'),
@@ -365,7 +350,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildSummaryTab(predictionSummary, legStyles, raceDevelopment, overallScores),
+                  _buildSummaryTab(predictionSummary, legStyles, overallScores),
                   _buildRecommendationTab(overallScores, expectedValues),
                   _buildConditionFitTab(),
                   _buildAllHorsesListCard(analysisDetails, overallScores, expectedValues),
@@ -378,11 +363,11 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  Widget _buildSummaryTab(String predictionSummary, Map<String, String> legStyles, Map<String, String> raceDevelopment, Map<String, double> overallScores) {
+  Widget _buildSummaryTab(String predictionSummary, Map<String, String> legStyles, Map<String, double> overallScores) {
     return ListView(
       padding: const EdgeInsets.all(12.0),
       children: [
-        _buildRaceSummaryCard(predictionSummary, legStyles, raceDevelopment, overallScores),
+        _buildRaceSummaryCard(predictionSummary, legStyles, overallScores),
       ],
     );
   }
@@ -413,7 +398,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  Widget _buildRaceSummaryCard(String predictionSummary, Map<String, String> legStyles, Map<String, String> raceDevelopment, Map<String, double> overallScores) {
+  Widget _buildRaceSummaryCard(String predictionSummary, Map<String, String> legStyles, Map<String, double> overallScores) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -421,21 +406,16 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 修正部分：Rowを使用して横並びに変更
             Row(
-              // Row内の垂直方向の配置を中央に設定
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Expandedでラップして、テキストが利用可能な残りのスペースをすべて使用するようにする
                 Expanded(
                   child: Text(
                     widget.raceData.raceName,
                     style: Theme.of(context).textTheme.titleLarge,
-                    // テキストが長すぎる場合に省略記号(...)で表示する
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                // 右側に表示されるボタン
                 TextButton.icon(
                   onPressed: _handleTuneAndRecalculate,
                   icon: const Icon(Icons.tune),
@@ -443,14 +423,15 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 ),
               ],
             ),
+            const Divider(height: 16),
+            Text(
+              'AI展開予想 解説',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
-            const Divider(),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildSummaryItem('予測ペース', widget.raceData.racePacePrediction?.predictedPace ?? '予測不能'),
-              ],
+            Text(
+              predictionSummary,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
             ),
             const SizedBox(height: 16),
             Card(
@@ -462,16 +443,13 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               clipBehavior: Clip.antiAlias,
               margin: EdgeInsets.zero,
               child: DefaultTabController(
-                length: 3,
+                length: 2,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       color: Colors.grey.shade100,
                       child: TabBar(
-                        isScrollable: true,
-                        labelPadding: const EdgeInsets.symmetric(horizontal: 2.0),
-                        tabAlignment: TabAlignment.start,
                         labelColor: Theme.of(context).primaryColorDark,
                         unselectedLabelColor: Colors.grey.shade600,
                         indicatorColor: Theme.of(context).primaryColor,
@@ -482,15 +460,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                               children: [
                                 const Text('脚質構成'),
                                 _buildHelpIcon('脚質構成', '出走馬全頭の過去5走のコーナー通過順位を分析し、『逃げ』『先行』『差し』『追込』『自在』の5タイプに分類。今回のレースでどの脚質の馬が多いかを示しています。'),
-                              ],
-                            ),
-                          ),
-                          Tab(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text('コーナー予測'),
-                                _buildHelpIcon('コーナー予測', '各馬の脚質、ゲート番号、スタミナ、瞬発力などの要素から、レース展開をシミュレーションしたものです。特にどの馬がどの位置でレースを進めそうかの傾向を示します。'),
                               ],
                             ),
                           ),
@@ -511,14 +480,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                       child: TabBarView(
                         children: [
                           _buildLegStyleCompositionTab(legStyles),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: ListView(
-                              children: raceDevelopment.entries.map((entry) {
-                                return _buildCornerPredictionDisplay(entry.key, entry.value);
-                              }).toList(),
-                            ),
-                          ),
                           _buildAbilityPopularityTab(overallScores, legStyles),
                         ],
                       ),
@@ -527,75 +488,9 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              '解説: $predictionSummary',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildCornerPredictionDisplay(String cornerName, String prediction) {
-    List<Widget> buildWidgetsFromString(String text) {
-      final widgets = <Widget>[];
-      String currentNumber = "";
-
-      for (int i = 0; i < text.length; i++) {
-        String char = text[i];
-        if (int.tryParse(char) != null) {
-          currentNumber += char;
-        } else {
-          if (currentNumber.isNotEmpty) {
-            widgets.add(_buildHorseNumberChip(currentNumber));
-            currentNumber = "";
-          }
-          if (['(', ')', ',', '-', '=', '*'].contains(char)) {
-            widgets.add(Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1.0),
-              child: Text(char, style: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 14)),
-            ));
-          }
-        }
-      }
-      if (currentNumber.isNotEmpty) {
-        widgets.add(_buildHorseNumberChip(currentNumber));
-      }
-      return widgets;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(cornerName, style: const TextStyle(
-              fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 2.0,
-            runSpacing: 4.0,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: buildWidgetsFromString(prediction),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHorseNumberChip(String number) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      decoration: BoxDecoration(
-          color: Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade400, width: 0.5)
-      ),
-      child: Text(number, style: const TextStyle(fontSize: 12)),
     );
   }
 
@@ -795,16 +690,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       case '追込': return Colors.purple;
       default: return Colors.grey;
     }
-  }
-
-  Widget _buildSummaryItem(String title, String value) {
-    return Column(
-      children: [
-        Text(title, style: TextStyle(color: Colors.grey.shade600)),
-        const SizedBox(height: 4),
-        Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-      ],
-    );
   }
 
   Widget _buildDualPredictionCard(List<PredictionHorseDetail> hitHorses, List<PredictionHorseDetail> recoveryHorses, Map<String, double> overallScores, Map<String, double> expectedValues) {

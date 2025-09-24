@@ -8,10 +8,9 @@ import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/logic/ai/aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 
-// シミュレーション中の馬の状態を管理するための内部ヘルパークラス
 class _SimHorse {
   final PredictionHorseDetail detail;
-  double positionScore; // 数値が小さいほど前
+  double positionScore;
   final double staminaScore;
   final double finishingKickScore;
 
@@ -24,13 +23,11 @@ class _SimHorse {
 }
 
 class RaceAnalyzer {
-  // レースに出走する全馬のデータを受け取り、レース全体の展開を予測して返すメソッド
   static RacePacePrediction predictRacePace(
       List<PredictionHorseDetail> horses,
       Map<String, List<HorseRaceRecord>> allPastRecords,
-      List<RaceResult> pastRaceResults, // 過去10年間のレース結果を追加
+      List<RaceResult> pastRaceResults,
       ) {
-    // 1. レースの基本特性（過去10年）を分析
     final paceCounts = <String, int>{'ハイ': 0, 'ミドル': 0, 'スロー': 0};
     if (pastRaceResults.isNotEmpty) {
       for (final result in pastRaceResults) {
@@ -39,7 +36,6 @@ class RaceAnalyzer {
       }
     }
 
-    // 2. メンバー特性（今回の出走馬）を分析
     int nigeCount = 0;
     int senkoCount = 0;
     for (var horse in horses) {
@@ -50,11 +46,9 @@ class RaceAnalyzer {
     }
     final frontRunners = nigeCount + senkoCount;
 
-    // 3. 予測ロジック
     String finalPrediction;
     final totalPastRaces = pastRaceResults.length;
 
-    // 過去傾向が極端な場合 (7割以上)
     if (totalPastRaces > 0) {
       if (paceCounts['ハイ']! / totalPastRaces >= 0.7) {
         finalPrediction = 'ハイペース';
@@ -63,7 +57,6 @@ class RaceAnalyzer {
       }
     }
 
-    // メンバー構成から予測を微調整
     if (frontRunners >= (horses.length / 2)) {
       finalPrediction =
       paceCounts['ハイ']! > paceCounts['スロー']! ? 'ハイペース' : 'ミドルからハイ';
@@ -74,7 +67,6 @@ class RaceAnalyzer {
       finalPrediction = 'ミドルペース';
     }
 
-    // 最終的な5段階評価に決定
     if (nigeCount >= 2 && frontRunners > (horses.length * 0.4)) {
       finalPrediction = 'ハイペース';
     } else if (nigeCount == 1 && frontRunners > (horses.length * 0.4)) {
@@ -87,7 +79,6 @@ class RaceAnalyzer {
       finalPrediction = 'ミドルペース';
     }
 
-    // advantageousStyle を削除
     return RacePacePrediction(predictedPace: finalPrediction);
   }
 
@@ -96,35 +87,43 @@ class RaceAnalyzer {
   /// 各馬の脚質と枠順を元に、各コーナーの展開を予測（シミュレーション）します。
   static Map<String, String> simulateRaceDevelopment(
       PredictionRaceData raceData,
-      Map<String, String> legStyles,
       Map<String, List<HorseRaceRecord>> allPastRecords,
       List<String> cornersToPredict,
       ) {
-    // 1. 全出走馬の能力スコアを算出
     final simHorses = raceData.horses.map((horse) {
       final pastRecords = allPastRecords[horse.horseId] ?? [];
-      final style = legStyles[horse.horseId] ?? '不明';
+      final distribution = horse.legStyleProfile?.styleDistribution ?? {};
       double initialPositionScore;
-      switch (style) {
-        case '逃げ':
-          initialPositionScore = 1.0;
-          break;
-        case '先行':
-          initialPositionScore = 2.0;
-          break;
-        case '差し':
-          initialPositionScore = 3.0;
-          break;
-        case '追込':
-          initialPositionScore = 4.0;
-          break;
-        default:
-          initialPositionScore = 2.5;
+
+      final nigeRate = distribution['逃げ'] ?? 0.0;
+      final senkoRate = distribution['先行'] ?? 0.0;
+      final sashiRate = distribution['差し'] ?? 0.0;
+      final oikomiRate = distribution['追い込み'] ?? 0.0;
+
+      if ((nigeRate + senkoRate + sashiRate + oikomiRate) > 0) {
+        initialPositionScore = (nigeRate * 1.0) + (senkoRate * 2.0) + (sashiRate * 3.5) + (oikomiRate * 4.5);
+      } else {
+        final style = horse.legStyleProfile?.primaryStyle ?? '不明';
+        switch (style) {
+          case '逃げ':
+            initialPositionScore = 1.0;
+            break;
+          case '先行':
+            initialPositionScore = 2.0;
+            break;
+          case '差し':
+            initialPositionScore = 3.0;
+            break;
+          case '追込':
+            initialPositionScore = 4.0;
+            break;
+          default:
+            initialPositionScore = 2.5;
+        }
       }
-      // 先行力スコアを取得し、初期位置を補正
+
       final earlySpeedScore =
       AptitudeAnalyzer.evaluateEarlySpeedFit(horse, raceData, pastRecords);
-      // 先行力が高いほどスコアが小さくなる（前に位置する）ように補正
       initialPositionScore -= (earlySpeedScore / 100.0) * 0.5;
 
       return _SimHorse(
@@ -139,20 +138,16 @@ class RaceAnalyzer {
 
     final development = <String, String>{};
 
-    // 2. 1-2コーナー（初期位置）の予測
     simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
     if (cornersToPredict.contains('1-2コーナー')) {
       development['1-2コーナー'] = _formatTairetsu(simHorses);
     }
 
-    // 3. 3コーナーの予測 (スタミナの影響)
     if (cornersToPredict.contains('3コーナー')) {
       for (final horse in simHorses) {
-        // スタミナが低い先行馬は少し後退
         if (horse.positionScore < 2.5 && horse.staminaScore < 75.0) {
           horse.positionScore += 0.2;
         }
-        // スタミナがある差し馬は少し前進
         if (horse.positionScore >= 2.5 && horse.staminaScore > 80.0) {
           horse.positionScore -= 0.1;
         }
@@ -161,12 +156,9 @@ class RaceAnalyzer {
       development['3コーナー'] = _formatTairetsu(simHorses);
     }
 
-    // 4. 4コーナーの予測 (瞬発力の影響)
     if (cornersToPredict.contains('4コーナー')) {
       for (final horse in simHorses) {
-        // 瞬発力が高い馬は大きく前進
         horse.positionScore -= (horse.finishingKickScore / 100.0) * 1.5;
-        // 逃げ・先行馬で瞬発力が低い馬は後退
         if (horse.positionScore < 3.0 && horse.finishingKickScore < 70.0) {
           horse.positionScore += 0.3;
         }
@@ -178,7 +170,6 @@ class RaceAnalyzer {
     return development;
   }
 
-  // 隊列を文字列フォーマットするヘルパー関数
   static String _formatTairetsu(List<_SimHorse> simHorses) {
     final List<List<_SimHorse>> groups = [];
     if (simHorses.isNotEmpty) {
@@ -186,7 +177,6 @@ class RaceAnalyzer {
       for (int i = 1; i < simHorses.length; i++) {
         final currentHorse = simHorses[i];
         final prevHorse = simHorses[i - 1];
-        // 位置取りスコアの差が大きければ新しいグループを作成
         if ((currentHorse.positionScore - prevHorse.positionScore).abs() > 0.8) {
           groups.add([]);
         }
