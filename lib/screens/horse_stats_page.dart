@@ -323,6 +323,11 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             DataColumn(label: Text('複勝率'), numeric: true),
             DataColumn(label: Text('単回率'), numeric: true),
             DataColumn(label: Text('複回率'), numeric: true),
+            DataColumn(label: Text('G1')),
+            DataColumn(label: Text('G2')),
+            DataColumn(label: Text('G3')),
+            DataColumn(label: Text('OP')),
+            DataColumn(label: Text('条件戦')),
           ],
           rows: widget.horses.map((horse) {
             final stats = _statsMap[horse.horseId] ?? HorseStats();
@@ -336,6 +341,11 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
                 DataCell(Text('${stats.showRate.toStringAsFixed(1)}%')),
                 DataCell(Text('${stats.winRecoveryRate.toStringAsFixed(1)}%')),
                 DataCell(Text('${stats.showRecoveryRate.toStringAsFixed(1)}%')),
+                DataCell(Text(stats.g1Stats)),
+                DataCell(Text(stats.g2Stats)),
+                DataCell(Text(stats.g3Stats)),
+                DataCell(Text(stats.opStats)),
+                DataCell(Text(stats.conditionStats)),
               ],
             );
           }).toList(),

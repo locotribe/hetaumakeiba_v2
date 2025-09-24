@@ -24,13 +24,49 @@ class HorseStatsAnalyzer {
     double totalShowInvestment = 0;
     double totalShowPayout = 0;
 
+    // グレード別成績のカウンターを初期化
+    Map<String, List<int>> gradeCounts = {
+      'G1': [0, 0, 0, 0], // 1着, 2着, 3着, 着外
+      'G2': [0, 0, 0, 0],
+      'G3': [0, 0, 0, 0],
+      'OP': [0, 0, 0, 0],
+      '条件戦': [0, 0, 0, 0],
+    };
+
     for (final record in performanceRecords) {
       final rank = int.tryParse(record.rank);
       if (rank == null) continue; // 着順が数値でない場合はスキップ
 
-      if (rank == 1) winCount++;
+      // グレードを判定
+      String grade = '条件戦'; // デフォルトは条件戦
+      if (record.raceName.contains('(GI)')) {
+        grade = 'G1';
+      } else if (record.raceName.contains('(GII)')) {
+        grade = 'G2';
+      } else if (record.raceName.contains('(GIII)')) {
+        grade = 'G3';
+      } else if (record.raceName.contains('OP') || record.raceName.contains('L)')) {
+        grade = 'OP';
+      }
+
+      // 成績をカウント
+      if (rank == 1) {
+        gradeCounts[grade]![0]++;
+        winCount++;
+      }
+      if (rank == 2) {
+        gradeCounts[grade]![1]++;
+      }
+      if (rank == 3) {
+        gradeCounts[grade]![2]++;
+      }
+      if (rank > 3) {
+        gradeCounts[grade]![3]++;
+      }
+
       if (rank <= 2) placeCount++;
       if (rank <= 3) showCount++;
+
 
       // 単勝回収率の計算
       final odds = double.tryParse(record.odds);
@@ -74,6 +110,11 @@ class HorseStatsAnalyzer {
       showRate: raceCount > 0 ? (showCount / raceCount) * 100 : 0,
       winRecoveryRate: totalWinInvestment > 0 ? (totalWinPayout / totalWinInvestment) * 100 : 0,
       showRecoveryRate: totalShowInvestment > 0 ? (totalShowPayout / totalShowInvestment) * 100 : 0,
+      g1Stats: '${gradeCounts['G1']![0]}-${gradeCounts['G1']![1]}-${gradeCounts['G1']![2]}-${gradeCounts['G1']![3]}',
+      g2Stats: '${gradeCounts['G2']![0]}-${gradeCounts['G2']![1]}-${gradeCounts['G2']![2]}-${gradeCounts['G2']![3]}',
+      g3Stats: '${gradeCounts['G3']![0]}-${gradeCounts['G3']![1]}-${gradeCounts['G3']![2]}-${gradeCounts['G3']![3]}',
+      opStats: '${gradeCounts['OP']![0]}-${gradeCounts['OP']![1]}-${gradeCounts['OP']![2]}-${gradeCounts['OP']![3]}',
+      conditionStats: '${gradeCounts['条件戦']![0]}-${gradeCounts['条件戦']![1]}-${gradeCounts['条件戦']![2]}-${gradeCounts['条件戦']![3]}',
     );
   }
 

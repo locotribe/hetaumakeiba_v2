@@ -7,6 +7,11 @@ class HorseStats {
   final double showRate; // 複勝率
   final double winRecoveryRate; // 単勝回収率
   final double showRecoveryRate; // 複勝回収率
+  final String g1Stats; // G1成績
+  final String g2Stats; // G2成績
+  final String g3Stats; // G3成績
+  final String opStats; // OP成績
+  final String conditionStats; // 条件戦成績
 
   HorseStats({
     this.raceCount = 0,
@@ -15,5 +20,10 @@ class HorseStats {
     this.showRate = 0.0,
     this.winRecoveryRate = 0.0,
     this.showRecoveryRate = 0.0,
+    this.g1Stats = '0-0-0-0',
+    this.g2Stats = '0-0-0-0',
+    this.g3Stats = '0-0-0-0',
+    this.opStats = '0-0-0-0',
+    this.conditionStats = '0-0-0-0',
   });
 }

@@ -26,6 +26,11 @@ class HorseStatsCache {
         showRate: value['showRate'] ?? 0.0,
         winRecoveryRate: value['winRecoveryRate'] ?? 0.0,
         showRecoveryRate: value['showRecoveryRate'] ?? 0.0,
+        g1Stats: value['g1Stats'] ?? '0-0-0-0',
+        g2Stats: value['g2Stats'] ?? '0-0-0-0',
+        g3Stats: value['g3Stats'] ?? '0-0-0-0',
+        opStats: value['opStats'] ?? '0-0-0-0',
+        conditionStats: value['conditionStats'] ?? '0-0-0-0',
       ));
     });
 
@@ -47,6 +52,11 @@ class HorseStatsCache {
         'showRate': value.showRate,
         'winRecoveryRate': value.winRecoveryRate,
         'showRecoveryRate': value.showRecoveryRate,
+        'g1Stats': value.g1Stats,
+        'g2Stats': value.g2Stats,
+        'g3Stats': value.g3Stats,
+        'opStats': value.opStats,
+        'conditionStats': value.conditionStats,
       });
     });
 
