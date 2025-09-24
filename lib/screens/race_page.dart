@@ -239,13 +239,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),
             if (_predictionRaceData != null)
-              JockeyStatsPage(
-                raceData: _predictionRaceData!,
-              )
-            else
-              const Center(child: Text('出馬表データを読み込んでいます...')),
-
-            if (_predictionRaceData != null)
               HorseStatsPage(
                 raceId: widget.raceId,
                 raceName: _predictionRaceData!.raceName,
@@ -253,6 +246,13 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               )
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),
+            if (_predictionRaceData != null)
+              JockeyStatsPage(
+                raceData: _predictionRaceData!,
+              )
+            else
+              const Center(child: Text('出馬表データを読み込んでいます...')),
+
             if (_predictionRaceData != null)
               ComprehensivePredictionPage(
                 raceId: widget.raceId,
