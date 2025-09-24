@@ -1,4 +1,5 @@
 // lib/screens/ai_comprehensive_prediction_page.dart
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
@@ -8,8 +9,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
-import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';
-import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 import 'package:hetaumakeiba_v2/logic/ai/summary_generator.dart';
@@ -108,7 +107,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   late List<PredictionHorseDetail> _sortedHorses;
   late TabController _tabController;
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  final JockeyAnalysisService _jockeyAnalysisService = JockeyAnalysisService();
   final AiPredictionService _predictionService = AiPredictionService();
   int? _touchedSpotIndex;
 
@@ -118,7 +116,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   void initState() {
     super.initState();
     _sortedHorses = List.from(widget.raceData.horses);
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _pageDataFuture = _loadPageData();
   }
 
@@ -133,13 +131,11 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('AI予測を再計算しています...')),
       );
-      // calculatePredictionScoresを呼び出して再計算
       await _predictionService.calculatePredictionScores(widget.raceData, widget.raceId);
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('AI予測を更新しました。')),
       );
-      // データを再読み込みして画面を更新
       setState(() {
         _pageDataFuture = _loadPageData();
       });
@@ -149,17 +145,16 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   Future<Map<String, dynamic>> _loadPageData() async {
     var predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
 
-    // 予測データがない場合に計算を促すダイアログを表示
     if (predictions.isEmpty) {
       final result = await showDialog<String>(
         context: context,
-        barrierDismissible: false, // ダイアログ外タップで閉じないようにする
+        barrierDismissible: false,
         builder: (context) => AlertDialog(
           title: const Text('AI総合予測'),
           content: const Text('このレースのAI予測をまだ行っていません。\nデフォルト設定（バランス重視）で予測を計算しますか？\n（計算には少し時間がかかります）'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop('cancel'), // キャンセルを返す
+              onPressed: () => Navigator.of(context).pop('cancel'),
               child: const Text('戻る'),
             ),
             TextButton(
@@ -180,27 +175,19 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         );
         await _predictionService.calculatePredictionScores(widget.raceData, widget.raceId);
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        // 再計算後に再度データを読み込む
         predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
       } else if (result == 'tune' && mounted) {
-        // チューニング画面に遷移し、戻ってきたらページを再読み込み
         await _handleTuneAndRecalculate();
-        // チューニング後に再度データを読み込む
         predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
       } else {
-        // 'cancel' またはダイアログが閉じられた場合
         if (mounted) Navigator.of(context).pop();
         throw Exception('予測がキャンセルされました。');
       }
     }
 
     if (predictions.isEmpty) {
-      // それでもデータがなければエラーとする
       throw Exception('予測データの生成に失敗しました。');
     }
-
-    final jockeyIds = widget.raceData.horses.map((h) => h.jockeyId).toList();
-    final jockeyStats = await _jockeyAnalysisService.analyzeAllJockeys(jockeyIds, raceData: widget.raceData);
 
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
     for (var horse in widget.raceData.horses) {
@@ -239,7 +226,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     }
     final sortedCorners = cornersToPredict.toList()..sort();
 
-// 変更後
     final development = RaceAnalyzer.simulateRaceDevelopment(
         widget.raceData,
         legStyles,
@@ -262,7 +248,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
     return {
       'predictions': predictions,
-      'jockeyStats': jockeyStats,
       'predictionSummary': summary,
       'analysisDetails': analysisDetails,
       'legStyles': legStyles,
@@ -351,7 +336,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
         final pageData = snapshot.data!;
         final List<AiPrediction> predictions = pageData['predictions'];
-        final Map<String, JockeyStats> jockeyStats = pageData['jockeyStats'];
         final String predictionSummary = pageData['predictionSummary'];
         final Map<String, dynamic> analysisDetails = pageData['analysisDetails'];
         final Map<String, String> legStyles = pageData['legStyles'];
@@ -371,7 +355,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 tabs: const [
                   Tab(text: '総合評価'),
                   Tab(text: '推奨馬'),
-                  Tab(text: '騎手特性'),
                   Tab(text: '複合適性'),
                   Tab(text: '全馬リスト'),
                 ],
@@ -384,7 +367,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 children: [
                   _buildSummaryTab(predictionSummary, legStyles, raceDevelopment, overallScores),
                   _buildRecommendationTab(overallScores, expectedValues),
-                  _buildJockeyStatsTab(jockeyStats),
                   _buildConditionFitTab(),
                   _buildAllHorsesListCard(analysisDetails, overallScores, expectedValues),
                 ],
@@ -1139,96 +1121,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       case FitnessRating.poor: return Colors.blue;
       case FitnessRating.unknown: return Colors.grey;
     }
-  }
-
-  Widget _buildJockeyStatsTab(Map<String, JockeyStats> jockeyStats) {
-    if (jockeyStats.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final sortedHorses = List<PredictionHorseDetail>.from(widget.raceData.horses)
-      ..sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
-
-    return DataTable2(
-      columnSpacing: 12.0,
-      horizontalMargin: 12,
-      minWidth: 400,
-      columns: const [
-        DataColumn2(label: Text('馬番'), fixedWidth: 50, numeric: true),
-        DataColumn2(label: Text('人気'), fixedWidth: 50, numeric: true),
-        DataColumn2(label: Text('騎手\n(当コース)'), fixedWidth: 100),
-        DataColumn2(label: Text('1~3人気\n(複勝率)'), fixedWidth: 100),
-        DataColumn2(label: Text('6人気~\n(単複回収率)'), size: ColumnSize.M),
-      ],
-      rows: sortedHorses.map((horse) {
-        final stats = jockeyStats[horse.jockeyId];
-        if (stats == null) {
-          return DataRow(cells: [
-            DataCell(Text(horse.horseNumber.toString())),
-            DataCell(Text(horse.popularity?.toString() ?? '-')),
-            DataCell(Text('${horse.jockey} (データなし)')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-          ]);
-        }
-        final courseStatsString = stats.courseStats?.recordString ?? '0-0-0-0';
-        return DataRow(
-          cells: [
-            DataCell(
-              Center(
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: _getGateColor(horse.gateNumber),
-                    border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    horse.horseNumber.toString(),
-                    style: TextStyle(
-                      color: _getTextColorForGate(horse.gateNumber),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            DataCell(Text(horse.popularity?.toString() ?? '-')),
-            DataCell(
-              RichText(
-                text: TextSpan(
-                  style: DefaultTextStyle.of(context).style,
-                  children: <TextSpan>[
-                    TextSpan(
-                      text: stats.jockeyName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black, decoration: TextDecoration.none),
-                    ),
-                    TextSpan(
-                      text: '\n($courseStatsString)',
-                      style: const TextStyle(fontSize: 10, color: Colors.black, decoration: TextDecoration.none),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            DataCell(
-                Text(
-                  '${stats.popularHorseStats.showRate.toStringAsFixed(1)}%',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                )
-            ),
-            DataCell(
-                Text(
-                  '単 ${stats.unpopularHorseStats.winRecoveryRate.toStringAsFixed(0)}%\n複 ${stats.unpopularHorseStats.showRecoveryRate.toStringAsFixed(0)}%',
-                  style: const TextStyle(fontSize: 12),
-                )
-            ),
-          ],
-        );
-      }).toList(),
-    );
   }
 
   Widget _buildHelpIcon(String title, String content) {
