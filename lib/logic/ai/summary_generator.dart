@@ -4,14 +4,16 @@ import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/logic/ai/aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 
 class SummaryGenerator {
   /// AI予測のサマリーと解説文を生成する
   static String generatePredictionSummary(
       PredictionRaceData raceData,
       Map<String, double> overallScores,
-      Map<String, List<HorseRaceRecord>> allPastRecords,
-      ) {
+      Map<String, List<HorseRaceRecord>> allPastRecords, {
+        CoursePreset? coursePreset,
+      }) {
     // 1. レースの基本情報と脚質構成を分析
     int nigeCount = 0;
     int senkoCount = 0;
@@ -32,14 +34,27 @@ class SummaryGenerator {
     // 2. 文章パーツを生成
     final introPhrase = _generateIntroPhrase(raceData);
     final pacePhrase = _generatePacePhrase(raceData, nigeCount, frontRunners, backRunners);
+    final coursePhrase = coursePreset != null ? _generateCourseContextPhrase(coursePreset) : '';
     final honmeiPhrase = _generateHonmeiPhrase(raceData, overallScores, allPastRecords);
 
     // 3. 文章を結合して返す
-    return [introPhrase, pacePhrase, honmeiPhrase].where((s) => s.isNotEmpty).join(' ');
+    return [introPhrase, pacePhrase, coursePhrase, honmeiPhrase].where((s) => s.isNotEmpty).join(' ');
   }
 
   // --- 以下、文章パーツを生成するためのヘルパーメソッド ---
-
+  // 新しく追加するメソッド
+  static String _generateCourseContextPhrase(CoursePreset coursePreset) {
+    if (coursePreset.straightLength > 500) {
+      return '日本屈指の長い直線を考慮すると、末脚の持続力が問われる展開になりそうだ。';
+    }
+    if (coursePreset.straightLength < 300) {
+      return '直線が短いため、いかに早く前方のポジションを取れるかが鍵となる。';
+    }
+    if (coursePreset.keyPoints.contains('急坂')) {
+      return 'ゴール前の急坂をこなすパワーも重要な要素となる。';
+    }
+    return ''; // 特に特徴がなければ何も返さない
+  }
   // 導入文を生成
   static String _generateIntroPhrase(PredictionRaceData raceData) {
     final horseCount = raceData.horses.length;

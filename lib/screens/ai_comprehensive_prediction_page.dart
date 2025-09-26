@@ -17,6 +17,7 @@ import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
 import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
 import '../widgets/race_formation_painter.dart';
+import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 
 import '../widgets/themed_tab_bar.dart';
 
@@ -226,7 +227,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     }
     final sortedCorners = cornersToPredict.toList()..sort();
 
-    final development = RaceAnalyzer.simulateRaceDevelopment(
+    final development = await RaceAnalyzer.simulateRaceDevelopment(
         widget.raceData,
         allPastRecords,
         sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']
@@ -235,6 +236,27 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     widget.raceData.racePacePrediction = RaceAnalyzer.predictRacePace(widget.raceData.horses, allPastRecords, pastRaceResults);
 
     final raceStats = await _dbHelper.getRaceStatistics(widget.raceData.raceId);
+
+    CoursePreset? coursePreset;
+    final dbHelper = DatabaseHelper();
+    final venueCode = RaceAnalyzer.venueCodeMap[widget.raceData.venue];
+    String trackType = '';
+    String distance = '';
+    final raceInfo = widget.raceData.raceDetails1 ?? '';
+    if (raceInfo.contains('障')) {
+      trackType = 'obstacle';
+    } else if (raceInfo.contains('ダ')) {
+      trackType = 'dirt';
+    } else {
+      trackType = 'shiba';
+    }
+    final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceInfo);
+    if (distanceMatch != null) {
+      distance = distanceMatch.group(1)!;
+    }
+    final courseId = '${venueCode}_${trackType}_$distance';
+    coursePreset = await dbHelper.getCoursePreset(courseId);
+
     for (var horse in widget.raceData.horses) {
       final pastRecords = allPastRecords[horse.horseId] ?? [];
       horse.conditionFit = ConditionAnalyzer.analyzeConditionFit(
@@ -251,6 +273,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       'analysisDetails': analysisDetails,
       'legStyles': legStyles,
       'raceDevelopment': development,
+      'coursePreset': coursePreset, // coursePresetを結果に追加
     };
   }
 
@@ -339,6 +362,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         final Map<String, dynamic> analysisDetails = pageData['analysisDetails'];
         final Map<String, String> legStyles = pageData['legStyles'];
         final Map<String, String> raceDevelopment = pageData['raceDevelopment'];
+        final CoursePreset? coursePreset = pageData['coursePreset']; // coursePresetを取得
 
         final overallScores = {for (var p in predictions) p.horseId: p.overallScore};
         final expectedValues = {for (var p in predictions) p.horseId: p.expectedValue};
@@ -364,7 +388,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildSummaryTab(predictionSummary, legStyles, raceDevelopment, overallScores),
+                  _buildSummaryTab(predictionSummary, legStyles, raceDevelopment, overallScores, coursePreset), // coursePresetを渡す
                   _buildRecommendationTab(overallScores, expectedValues),
                   _buildConditionFitTab(),
                   _buildAllHorsesListCard(analysisDetails, overallScores, expectedValues),
@@ -377,11 +401,11 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  Widget _buildSummaryTab(String predictionSummary, Map<String, String> legStyles, Map<String, String> raceDevelopment, Map<String, double> overallScores) {
+  Widget _buildSummaryTab(String predictionSummary, Map<String, String> legStyles, Map<String, String> raceDevelopment, Map<String, double> overallScores, CoursePreset? coursePreset) {
     return ListView(
       padding: const EdgeInsets.all(12.0),
       children: [
-        _buildRaceSummaryCard(predictionSummary, legStyles, raceDevelopment, overallScores),
+        _buildRaceSummaryCard(predictionSummary, legStyles, raceDevelopment, overallScores, coursePreset), // coursePresetを渡す
       ],
     );
   }
@@ -412,7 +436,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  Widget _buildRaceSummaryCard(String predictionSummary, Map<String, String> legStyles, Map<String, String> raceDevelopment, Map<String, double> overallScores) {
+  Widget _buildRaceSummaryCard(String predictionSummary, Map<String, String> legStyles, Map<String, String> raceDevelopment, Map<String, double> overallScores, CoursePreset? coursePreset) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -447,6 +471,37 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               predictionSummary,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
             ),
+            const SizedBox(height: 8),
+            if (coursePreset != null) // coursePresetがあればキーポイントを表示
+              Container(
+                padding: const EdgeInsets.all(12.0),
+                margin: const EdgeInsets.symmetric(vertical: 8.0),
+                decoration: BoxDecoration(
+                    color: Colors.lightGreen.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200)
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.vpn_key_outlined, size: 16, color: Colors.green.shade800,),
+                        const SizedBox(width: 4),
+                        Text(
+                          'コースのキーポイント',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.green.shade900),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      coursePreset.keyPoints,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.black87),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 16),
             Card(
               elevation: 0,
@@ -474,8 +529,8 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Text('コーナー予測'),
-                                _buildHelpIcon('コーナー予測', '各馬の脚質、ゲート番号、スタミナ、瞬発力などの要素から、レース展開をシミュレーションしたものです。特にどの馬がどの位置でレースを進めそうかの傾向を示します。'),
+                                const Text('隊列予測'),
+                                _buildHelpIcon('隊列予測', '各馬の脚質、コース特性、スタミナ、瞬発力などの要素から、レース展開をシミュレーションしたものです。特にどの馬がどの位置でレースを進めそうかの傾向を示します。'),
                               ],
                             ),
                           ),
@@ -508,7 +563,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                             padding: const EdgeInsets.all(8.0),
                             child: ListView(
                               children: raceDevelopment.entries.map((entry) {
-                                return _buildCornerPredictionDisplay(entry.key, entry.value);
+                                return _buildCornerPredictionDisplay(entry.key, entry.value, coursePreset); // coursePresetを渡す
                               }).toList(),
                             ),
                           ),
@@ -527,7 +582,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  Widget _buildCornerPredictionDisplay(String cornerName, String prediction) {
+  Widget _buildCornerPredictionDisplay(String cornerName, String prediction, CoursePreset? coursePreset) {
     List<Widget> buildWidgetsFromString(String text) {
       final widgets = <Widget>[];
       String currentNumber = "";
@@ -575,6 +630,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
             RaceFormationDiagram(
               prediction: prediction,
               horses: widget.raceData.horses,
+              coursePreset: coursePreset, // coursePresetを渡す
             ),
         ],
       ),

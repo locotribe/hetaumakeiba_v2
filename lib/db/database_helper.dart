@@ -17,6 +17,8 @@ import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
+import 'package:hetaumakeiba_v2/db/course_presets.dart';
+import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -240,18 +242,41 @@ class DatabaseHelper {
             UNIQUE(race_id, horse_id) ON CONFLICT REPLACE
           )
         ''');
+        // 新しい course_presets テーブルを作成
+        await _createCoursePresetsTable(db);
+        // course_presets テーブルに初期データを投入
+        await _initCoursePresets(db);
       },
-      /// データベースのバージョンがアップグレードされたときに呼び出されます。
-    //  onUpgrade: (db, oldVersion, newVersion) async {
-
-    //    if (oldVersion < 2) {
-
-    //    }
-      //  if (oldVersion < 3) {
-
-      //  }
-    //  },
     );
+  }
+
+  /// course_presets テーブルを作成する独立したメソッド
+  Future<void> _createCoursePresetsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE course_presets(
+        id TEXT PRIMARY KEY,
+        venueCode TEXT NOT NULL,
+        venueName TEXT NOT NULL,
+        distance TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        straightLength INTEGER NOT NULL,
+        courseLayout TEXT NOT NULL,
+        keyPoints TEXT NOT NULL
+      )
+    ''');
+  }
+
+  /// course_presets テーブルに初期データを投入する
+  Future<void> _initCoursePresets(Database db) async {
+    final batch = db.batch();
+    for (final preset in coursePresets) {
+      batch.insert(
+        'course_presets',
+        preset.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   /// 指定されたQRコードがデータベースに存在するかを確認します。
@@ -1016,5 +1041,30 @@ class DatabaseHelper {
       results[result.raceId] = result;
     }
     return results;
+  }
+
+  /// IDを指定してコースプリセットを取得します。
+  Future<CoursePreset?> getCoursePreset(String id) async {
+    final db = await database;
+    final maps = await db.query(
+      'course_presets',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      final map = maps.first;
+      return CoursePreset(
+        id: map['id'] as String,
+        venueCode: map['venueCode'] as String,
+        venueName: map['venueName'] as String,
+        distance: map['distance'] as String,
+        direction: map['direction'] as String,
+        straightLength: map['straightLength'] as int,
+        courseLayout: map['courseLayout'] as String,
+        keyPoints: map['keyPoints'] as String,
+      );
+    }
+    return null;
   }
 }

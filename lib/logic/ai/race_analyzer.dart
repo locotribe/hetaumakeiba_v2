@@ -7,6 +7,8 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/logic/ai/aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 
 class _SimHorse {
   final PredictionHorseDetail detail;
@@ -23,6 +25,17 @@ class _SimHorse {
 }
 
 class RaceAnalyzer {
+  // JRA競馬場コードと名称のマッピング
+  static final Map<String, String> venueCodeMap = {
+    '札幌': '01', '函館': '02', '福島': '03', '新潟': '04', '東京': '05',
+    '中山': '06', '中京': '07', '京都': '08', '阪神': '09', '小倉': '10',
+  };
+
+  // トラック種別をID用の文字列に変換するマッピング
+  static final Map<String, String> trackIdMap = {
+    '芝': 'shiba', 'ダ': 'dirt', '障': 'obstacle',
+  };
+
   static RacePacePrediction predictRacePace(
       List<PredictionHorseDetail> horses,
       Map<String, List<HorseRaceRecord>> allPastRecords,
@@ -85,11 +98,33 @@ class RaceAnalyzer {
 
 
   /// 各馬の脚質と枠順を元に、各コーナーの展開を予測（シミュレーション）します。
-  static Map<String, String> simulateRaceDevelopment(
+  static Future<Map<String, String>> simulateRaceDevelopment(
       PredictionRaceData raceData,
       Map<String, List<HorseRaceRecord>> allPastRecords,
       List<String> cornersToPredict,
-      ) {
+      ) async {
+    final dbHelper = DatabaseHelper();
+    final venueCode = venueCodeMap[raceData.venue];
+    String trackType = '';
+    String distance = '';
+
+    final raceInfo = raceData.raceDetails1 ?? '';
+    if (raceInfo.contains('障')) {
+      trackType = 'obstacle';
+    } else if (raceInfo.contains('ダ')) {
+      trackType = 'dirt';
+    } else {
+      trackType = 'shiba';
+    }
+
+    final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceInfo);
+    if (distanceMatch != null) {
+      distance = distanceMatch.group(1)!;
+    }
+
+    final courseId = '${venueCode}_${trackType}_$distance';
+    final CoursePreset? coursePreset = await dbHelper.getCoursePreset(courseId);
+
     final simHorses = raceData.horses.map((horse) {
       final pastRecords = allPastRecords[horse.horseId] ?? [];
       final distribution = horse.legStyleProfile?.styleDistribution ?? {};
@@ -126,6 +161,17 @@ class RaceAnalyzer {
       AptitudeAnalyzer.evaluateEarlySpeedFit(horse, raceData, pastRecords);
       initialPositionScore -= (earlySpeedScore / 100.0) * 0.5;
 
+      // コース特性による補正
+      if (coursePreset != null) {
+        if (coursePreset.keyPoints.contains('内枠有利') && horse.gateNumber <= 2) {
+          initialPositionScore -= 0.2; // 内枠ボーナス
+        }
+        if (coursePreset.keyPoints.contains('外枠不利') && horse.gateNumber >= 7) {
+          initialPositionScore += 0.2; // 外枠ペナルティ
+        }
+      }
+
+
       return _SimHorse(
         detail: horse,
         positionScore: initialPositionScore,
@@ -158,7 +204,23 @@ class RaceAnalyzer {
 
     if (cornersToPredict.contains('4コーナー')) {
       for (final horse in simHorses) {
-        horse.positionScore -= (horse.finishingKickScore / 100.0) * 1.5;
+        // コース特性による補正
+        if (coursePreset != null) {
+          if (coursePreset.straightLength > 450) { // 長い直線
+            horse.positionScore -= (horse.finishingKickScore / 100.0) * 1.8; // 瞬発力の影響を大きく
+          } else if (coursePreset.straightLength < 330) { // 短い直線
+            horse.positionScore -= (horse.finishingKickScore / 100.0) * 1.2; // 瞬発力の影響を小さく
+            if (horse.positionScore < 3.0 && horse.finishingKickScore < 75.0) {
+              horse.positionScore += 0.4; // 前の馬はさらに粘りやすく
+            }
+          } else {
+            horse.positionScore -= (horse.finishingKickScore / 100.0) * 1.5;
+          }
+        } else {
+          horse.positionScore -= (horse.finishingKickScore / 100.0) * 1.5;
+        }
+
+
         if (horse.positionScore < 3.0 && horse.finishingKickScore < 70.0) {
           horse.positionScore += 0.3;
         }
