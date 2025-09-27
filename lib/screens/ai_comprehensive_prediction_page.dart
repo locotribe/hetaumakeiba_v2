@@ -16,7 +16,6 @@ import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
 import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
-import '../widgets/race_formation_painter.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 
 import '../widgets/themed_tab_bar.dart';
@@ -212,26 +211,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
     final statisticsService = StatisticsService();
     final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(widget.raceData.raceName, widget.raceData.raceId);
-    final cornersToPredict = <String>{};
-    for (final result in pastRaceResults) {
-      for (final cornerPassage in result.cornerPassages) {
-        final cornerName = cornerPassage.split(':').first.trim();
-        if (cornerName.contains('1') || cornerName.contains('2')) {
-          cornersToPredict.add('1-2コーナー');
-        } else if (cornerName.contains('3')) {
-          cornersToPredict.add('3コーナー');
-        } else if (cornerName.contains('4')) {
-          cornersToPredict.add('4コーナー');
-        }
-      }
-    }
-    final sortedCorners = cornersToPredict.toList()..sort();
-
-    final development = await RaceAnalyzer.simulateRaceDevelopment(
-        widget.raceData,
-        allPastRecords,
-        sortedCorners.isNotEmpty ? sortedCorners : ['1-2コーナー', '3コーナー', '4コーナー']
-    );
 
     widget.raceData.racePacePrediction = RaceAnalyzer.predictRacePace(widget.raceData.horses, allPastRecords, pastRaceResults);
 
@@ -272,8 +251,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       'predictionSummary': summary,
       'analysisDetails': analysisDetails,
       'legStyles': legStyles,
-      'raceDevelopment': development,
-      'coursePreset': coursePreset, // coursePresetを結果に追加
+      'coursePreset': coursePreset,
     };
   }
 
@@ -361,8 +339,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         final String predictionSummary = pageData['predictionSummary'];
         final Map<String, dynamic> analysisDetails = pageData['analysisDetails'];
         final Map<String, String> legStyles = pageData['legStyles'];
-        final Map<String, String> raceDevelopment = pageData['raceDevelopment'];
-        final CoursePreset? coursePreset = pageData['coursePreset']; // coursePresetを取得
+        final CoursePreset? coursePreset = pageData['coursePreset'];
 
         final overallScores = {for (var p in predictions) p.horseId: p.overallScore};
         final expectedValues = {for (var p in predictions) p.horseId: p.expectedValue};
@@ -383,12 +360,11 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                 ],
               ),
             ),
-            // TabBarView
             Expanded(
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildSummaryTab(predictionSummary, legStyles, raceDevelopment, overallScores, coursePreset), // coursePresetを渡す
+                  _buildSummaryTab(predictionSummary, legStyles, overallScores, coursePreset),
                   _buildRecommendationTab(overallScores, expectedValues),
                   _buildConditionFitTab(),
                   _buildAllHorsesListCard(analysisDetails, overallScores, expectedValues),
@@ -401,11 +377,11 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  Widget _buildSummaryTab(String predictionSummary, Map<String, String> legStyles, Map<String, String> raceDevelopment, Map<String, double> overallScores, CoursePreset? coursePreset) {
+  Widget _buildSummaryTab(String predictionSummary, Map<String, String> legStyles, Map<String, double> overallScores, CoursePreset? coursePreset) {
     return ListView(
       padding: const EdgeInsets.all(12.0),
       children: [
-        _buildRaceSummaryCard(predictionSummary, legStyles, raceDevelopment, overallScores, coursePreset), // coursePresetを渡す
+        _buildRaceSummaryCard(predictionSummary, legStyles, overallScores, coursePreset),
       ],
     );
   }
@@ -436,7 +412,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     );
   }
 
-  Widget _buildRaceSummaryCard(String predictionSummary, Map<String, String> legStyles, Map<String, String> raceDevelopment, Map<String, double> overallScores, CoursePreset? coursePreset) {
+  Widget _buildRaceSummaryCard(String predictionSummary, Map<String, String> legStyles, Map<String, double> overallScores, CoursePreset? coursePreset) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -472,7 +448,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
             ),
             const SizedBox(height: 8),
-            if (coursePreset != null) // coursePresetがあればキーポイントを表示
+            if (coursePreset != null)
               Container(
                 padding: const EdgeInsets.all(12.0),
                 margin: const EdgeInsets.symmetric(vertical: 8.0),
@@ -511,215 +487,29 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
               ),
               clipBehavior: Clip.antiAlias,
               margin: EdgeInsets.zero,
-              child: DefaultTabController(
-                length: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      color: Colors.grey.shade100,
-                      child: TabBar(
-                        isScrollable: true,
-                        tabAlignment: TabAlignment.start,
-                        labelColor: Theme.of(context).primaryColorDark,
-                        unselectedLabelColor: Colors.grey.shade600,
-                        indicatorColor: Theme.of(context).primaryColor,
-                        tabs: [
-                          Tab(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text('隊列予測'),
-                                _buildHelpIcon('隊列予測', '各馬の脚質、コース特性、スタミナ、瞬発力などの要素から、レース展開をシミュレーションしたものです。特にどの馬がどの位置でレースを進めそうかの傾向を示します。'),
-                              ],
-                            ),
-                          ),
-                          Tab(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text('脚質構成'),
-                                _buildHelpIcon('脚質構成', '出走馬全頭の過去5走のコーナー通過順位を分析し、『逃げ』『先行』『差し』『追込』『自在』の5タイプに分類。今回のレースでどの脚質の馬が多いかを示しています。'),
-                              ],
-                            ),
-                          ),
-                          Tab(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text('能力・人気'),
-                                _buildHelpIcon('能力・人気', '横軸が『人気』、縦軸がAIの『総合評価スコア』です。右上にいる馬ほど『人気と実力を兼ね備えた馬』、左上にいる馬ほど『人気はないがAI評価が高い妙味のある馬』と分析できます。'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    color: Colors.grey.shade100,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('能力・人気', style: TextStyle(fontWeight: FontWeight.bold)),
+                        _buildHelpIcon('能力・人気', '横軸が『人気』、縦軸がAIの『総合評価スコア』です。右上にいる馬ほど『人気と実力を兼ね備えた馬』、左上にいる馬ほど『人気はないがAI評価が高い妙味のある馬』と分析できます。'),
+                      ],
                     ),
-                    SizedBox(
-                      height: 250,
-                      child: TabBarView(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: ListView(
-                              children: raceDevelopment.entries.map((entry) {
-                                return _buildCornerPredictionDisplay(entry.key, entry.value, coursePreset); // coursePresetを渡す
-                              }).toList(),
-                            ),
-                          ),
-                          _buildLegStyleCompositionTab(legStyles),
-                          _buildAbilityPopularityTab(overallScores, legStyles),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  SizedBox(
+                    height: 250,
+                    child: _buildAbilityPopularityTab(overallScores, legStyles),
+                  ),
+                ],
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCornerPredictionDisplay(String cornerName, String prediction, CoursePreset? coursePreset) {
-    List<Widget> buildWidgetsFromString(String text) {
-      final widgets = <Widget>[];
-      String currentNumber = "";
-
-      for (int i = 0; i < text.length; i++) {
-        String char = text[i];
-        if (int.tryParse(char) != null) {
-          currentNumber += char;
-        } else {
-          if (currentNumber.isNotEmpty) {
-            widgets.add(_buildHorseNumberChip(currentNumber));
-            currentNumber = "";
-          }
-          if (['(', ')', ',', '-', '=', '*'].contains(char)) {
-            widgets.add(Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1.0),
-              child: Text(char, style: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 14)),
-            ));
-          }
-        }
-      }
-      if (currentNumber.isNotEmpty) {
-        widgets.add(_buildHorseNumberChip(currentNumber));
-      }
-      return widgets;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(cornerName, style: const TextStyle(
-              fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 2.0,
-            runSpacing: 4.0,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: buildWidgetsFromString(prediction),
-          ),
-          const SizedBox(height: 8),
-          if (prediction.isNotEmpty)
-            RaceFormationDiagram(
-              prediction: prediction,
-              horses: widget.raceData.horses,
-              coursePreset: coursePreset, // coursePresetを渡す
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHorseNumberChip(String number) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      decoration: BoxDecoration(
-          color: Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade400, width: 0.5)
-      ),
-      child: Text(number, style: const TextStyle(fontSize: 12)),
-    );
-  }
-
-  Widget _buildLegStyleCompositionTab(Map<String, String> legStyles) {
-    final Map<String, List<PredictionHorseDetail>> groupedByLegStyle = {
-      '逃げ': [], '先行': [], '差し': [], '追込': [], '不明': [],
-    };
-    for (final horse in widget.raceData.horses) {
-      final style = legStyles[horse.horseId] ?? '不明';
-      groupedByLegStyle[style]?.add(horse);
-    }
-
-    final barGroups = groupedByLegStyle.entries
-        .where((entry) => entry.value.isNotEmpty)
-        .map((entry) {
-      return BarChartGroupData(
-        x: ['逃げ', '先行', '差し', '追込', '不明'].indexOf(entry.key),
-        barRods: [
-          BarChartRodData(
-            toY: entry.value.length.toDouble(),
-            color: Colors.teal,
-            width: 20,
-          )
-        ],
-      );
-    }).toList();
-
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: BarChart(
-        BarChartData(
-          barGroups: barGroups,
-          titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, meta) {
-                  const styles = ['逃げ', '先行', '差し', '追込', '不明'];
-                  return Text(styles[value.toInt()]);
-                },
-              ),
-            ),
-          ),
-          barTouchData: BarTouchData(
-            touchCallback: (event, response) {
-              if (event is FlTapUpEvent && response?.spot != null) {
-                final index = response!.spot!.touchedBarGroup.x;
-                final style = ['逃げ', '先行', '差し', '追込', '不明'][index];
-                final horses = groupedByLegStyle[style]!;
-                showDialog(
-                  context: context,
-                  builder: (context) =>
-                      AlertDialog(
-                        title: Text('脚質: $style'),
-                        content: SizedBox(
-                          width: double.minPositive,
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: horses.length,
-                            itemBuilder: (context, i) =>
-                                Text('${horses[i].horseNumber} ${horses[i].horseName}'),
-                          ),
-                        ),
-                        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('閉じる'))
-                        ],
-                      ),
-                );
-              }
-            },
-          ),
         ),
       ),
     );

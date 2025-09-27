@@ -12,11 +12,19 @@ class HorsePredictionScore {
 }
 
 class RacePacePrediction {
-  final String predictedPace; // 例: "ハイペース", "ミドルペース", "スローペース"など5段階
+  final Map<String, double> paceProbabilities;
 
   RacePacePrediction({
-    this.predictedPace = "予測不能", // デフォルト値を変更
+    this.paceProbabilities = const {},
   });
+
+  String get predictedPace {
+    if (paceProbabilities.isEmpty) {
+      return "ミドルペース";
+    }
+    final topEntry = paceProbabilities.entries.reduce((a, b) => a.value > b.value ? a : b);
+    return topEntry.key;
+  }
 }
 
 enum FitnessRating { excellent, good, average, poor, unknown }

@@ -9,6 +9,7 @@ import 'package:hetaumakeiba_v2/logic/ai/aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
+import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 
 class _SimHorse {
   final PredictionHorseDetail detail;
@@ -41,14 +42,16 @@ class RaceAnalyzer {
       Map<String, List<HorseRaceRecord>> allPastRecords,
       List<RaceResult> pastRaceResults,
       ) {
-    final paceCounts = <String, int>{'ハイ': 0, 'ミドル': 0, 'スロー': 0};
+    // 1. 過去レースのペース傾向を分析
+    final Map<String, int> pastPaceCounts = {'ハイ': 0, 'ミドル': 0, 'スロー': 0};
     if (pastRaceResults.isNotEmpty) {
       for (final result in pastRaceResults) {
         final pace = RaceDataParser.calculatePaceFromRaceResult(result);
-        paceCounts[pace] = (paceCounts[pace] ?? 0) + 1;
+        pastPaceCounts[pace] = (pastPaceCounts[pace] ?? 0) + 1;
       }
     }
 
+    // 2. 今回のメンバー構成を分析
     int nigeCount = 0;
     int senkoCount = 0;
     for (var horse in horses) {
@@ -57,42 +60,46 @@ class RaceAnalyzer {
       if (style == "逃げ") nigeCount++;
       if (style == "先行") senkoCount++;
     }
-    final frontRunners = nigeCount + senkoCount;
+    final frontRunnersRatio = (nigeCount + senkoCount) / horses.length;
 
-    String finalPrediction;
+    // 3. ベースとなる確率を計算
+    Map<String, double> paceProbabilities = {'ハイペース': 0.33, 'ミドルペース': 0.34, 'スローペース': 0.33};
+
+    // 4. メンバー構成に応じて確率を調整
+    if (nigeCount >= 2 || frontRunnersRatio > 0.5) {
+      paceProbabilities['ハイペース'] = (paceProbabilities['ハイペース'] ?? 0) + 0.3;
+      paceProbabilities['スローペース'] = (paceProbabilities['スローペース'] ?? 0) - 0.3;
+    } else if (nigeCount == 0 && frontRunnersRatio < 0.2) {
+      paceProbabilities['ハイペース'] = (paceProbabilities['ハイペース'] ?? 0) - 0.3;
+      paceProbabilities['スローペース'] = (paceProbabilities['スローペース'] ?? 0) + 0.3;
+    }
+
+    // 5. 過去レースの傾向に応じてさらに確率を調整
     final totalPastRaces = pastRaceResults.length;
-
-    if (totalPastRaces > 0) {
-      if (paceCounts['ハイ']! / totalPastRaces >= 0.7) {
-        finalPrediction = 'ハイペース';
-      } else if (paceCounts['スロー']! / totalPastRaces >= 0.7) {
-        finalPrediction = 'スローペース';
-      }
+    if (totalPastRaces > 5) { // 十分なデータ数がある場合のみ
+      final pastHighPaceRatio = (pastPaceCounts['ハイ'] ?? 0) / totalPastRaces;
+      final pastSlowPaceRatio = (pastPaceCounts['スロー'] ?? 0) / totalPastRaces;
+      paceProbabilities['ハイペース'] = (paceProbabilities['ハイペース'] ?? 0) + (pastHighPaceRatio - 0.33) * 0.5;
+      paceProbabilities['スローペース'] = (paceProbabilities['スローペース'] ?? 0) + (pastSlowPaceRatio - 0.33) * 0.5;
     }
 
-    if (frontRunners >= (horses.length / 2)) {
-      finalPrediction =
-      paceCounts['ハイ']! > paceCounts['スロー']! ? 'ハイペース' : 'ミドルからハイ';
-    } else if (nigeCount == 0 && frontRunners <= 2) {
-      finalPrediction =
-      paceCounts['スロー']! > paceCounts['ハイ']! ? 'スローペース' : 'スローからミドル';
+    // 6. 確率の合計が1になるように正規化
+    final totalProbability = paceProbabilities.values.reduce((a, b) => a + b);
+    if (totalProbability > 0) {
+      paceProbabilities.updateAll((key, value) => (value / totalProbability).clamp(0.0, 1.0));
     } else {
-      finalPrediction = 'ミドルペース';
+      // 予期せぬエラーで合計が0になった場合は均等割りにフォールバック
+      paceProbabilities = {'ハイペース': 0.33, 'ミドルペース': 0.34, 'スローペース': 0.33};
     }
 
-    if (nigeCount >= 2 && frontRunners > (horses.length * 0.4)) {
-      finalPrediction = 'ハイペース';
-    } else if (nigeCount == 1 && frontRunners > (horses.length * 0.4)) {
-      finalPrediction = 'ミドルからハイ';
-    } else if (nigeCount == 0 && frontRunners <= 1) {
-      finalPrediction = 'スローペース';
-    } else if (nigeCount == 0 && frontRunners <= 3) {
-      finalPrediction = 'スローからミドル';
-    } else {
-      finalPrediction = 'ミドルペース';
-    }
+    // 最終的なキー名を調整
+    final finalProbabilities = {
+      'ハイペース': paceProbabilities['ハイペース']!,
+      'ミドルペース': paceProbabilities['ミドルペース']!,
+      'スローペース': paceProbabilities['スローペース']!,
+    };
 
-    return RacePacePrediction(predictedPace: finalPrediction);
+    return RacePacePrediction(paceProbabilities: finalProbabilities);
   }
 
 
@@ -102,6 +109,7 @@ class RaceAnalyzer {
       PredictionRaceData raceData,
       Map<String, List<HorseRaceRecord>> allPastRecords,
       List<String> cornersToPredict,
+      Map<String, JockeyStats> allJockeyStats,
       ) async {
     final dbHelper = DatabaseHelper();
     final venueCode = venueCodeMap[raceData.venue];
@@ -136,7 +144,9 @@ class RaceAnalyzer {
       final oikomiRate = distribution['追い込み'] ?? 0.0;
 
       if ((nigeRate + senkoRate + sashiRate + oikomiRate) > 0) {
-        initialPositionScore = (nigeRate * 1.0) + (senkoRate * 2.0) + (sashiRate * 3.5) + (oikomiRate * 4.5);
+        initialPositionScore =
+            (nigeRate * 1.0) + (senkoRate * 2.0) + (sashiRate * 3.5) +
+                (oikomiRate * 4.5);
       } else {
         final style = horse.legStyleProfile?.primaryStyle ?? '不明';
         switch (style) {
@@ -156,6 +166,14 @@ class RaceAnalyzer {
             initialPositionScore = 2.5;
         }
       }
+      // 騎手要因による補正
+      final jockeyStats = allJockeyStats[horse.jockeyId];
+      if (jockeyStats != null && jockeyStats.courseStats != null &&
+          jockeyStats.courseStats!.raceCount > 2) {
+        // 当該コースの複勝率をスコアに反映（平均15%を基準とする）
+        final courseShowRate = jockeyStats.courseStats!.showRate / 100.0;
+        initialPositionScore -= (courseShowRate - 0.15) * 0.5; // 影響度は小さめに設定
+      }
 
       final earlySpeedScore =
       AptitudeAnalyzer.evaluateEarlySpeedFit(horse, raceData, pastRecords);
@@ -163,10 +181,12 @@ class RaceAnalyzer {
 
       // コース特性による補正
       if (coursePreset != null) {
-        if (coursePreset.keyPoints.contains('内枠有利') && horse.gateNumber <= 2) {
+        if (coursePreset.keyPoints.contains('内枠有利') &&
+            horse.gateNumber <= 2) {
           initialPositionScore -= 0.2; // 内枠ボーナス
         }
-        if (coursePreset.keyPoints.contains('外枠不利') && horse.gateNumber >= 7) {
+        if (coursePreset.keyPoints.contains('外枠不利') &&
+            horse.gateNumber >= 7) {
           initialPositionScore += 0.2; // 外枠ペナルティ
         }
       }
@@ -183,6 +203,8 @@ class RaceAnalyzer {
     }).toList();
 
     final development = <String, String>{};
+    final predictedPace = raceData.racePacePrediction?.predictedPace ??
+        'ミドルペース';
 
     simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
     if (cornersToPredict.contains('1-2コーナー')) {
@@ -191,11 +213,12 @@ class RaceAnalyzer {
 
     if (cornersToPredict.contains('3コーナー')) {
       for (final horse in simHorses) {
-        if (horse.positionScore < 2.5 && horse.staminaScore < 75.0) {
-          horse.positionScore += 0.2;
+        // ペースによる影響
+        if (predictedPace.contains('ハイ') && horse.staminaScore < 70.0) {
+          horse.positionScore += 0.25; // ハイペースでスタミナがない馬は後退
         }
         if (horse.positionScore >= 2.5 && horse.staminaScore > 80.0) {
-          horse.positionScore -= 0.1;
+          horse.positionScore -= 0.1; // 差し・追込でスタミナがある馬は進出開始
         }
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
@@ -204,20 +227,32 @@ class RaceAnalyzer {
 
     if (cornersToPredict.contains('4コーナー')) {
       for (final horse in simHorses) {
+        // ペースによる影響
+        double kickFactor = 1.5;
+        if (predictedPace.contains('スロー')) {
+          kickFactor = 2.0; // スローなら瞬発力の影響を大きく
+        } else if (predictedPace.contains('ハイ')) {
+          kickFactor = 1.0; // ハイペースなら瞬発力の影響を小さく
+        }
+
         // コース特性による補正
         if (coursePreset != null) {
           if (coursePreset.straightLength > 450) { // 長い直線
-            horse.positionScore -= (horse.finishingKickScore / 100.0) * 1.8; // 瞬発力の影響を大きく
+            horse.positionScore -=
+                (horse.finishingKickScore / 100.0) * kickFactor * 1.2;
           } else if (coursePreset.straightLength < 330) { // 短い直線
-            horse.positionScore -= (horse.finishingKickScore / 100.0) * 1.2; // 瞬発力の影響を小さく
+            horse.positionScore -=
+                (horse.finishingKickScore / 100.0) * kickFactor * 0.8;
             if (horse.positionScore < 3.0 && horse.finishingKickScore < 75.0) {
               horse.positionScore += 0.4; // 前の馬はさらに粘りやすく
             }
           } else {
-            horse.positionScore -= (horse.finishingKickScore / 100.0) * 1.5;
+            horse.positionScore -=
+                (horse.finishingKickScore / 100.0) * kickFactor;
           }
         } else {
-          horse.positionScore -= (horse.finishingKickScore / 100.0) * 1.5;
+          horse.positionScore -=
+              (horse.finishingKickScore / 100.0) * kickFactor;
         }
 
 
