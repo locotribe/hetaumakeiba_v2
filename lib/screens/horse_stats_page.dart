@@ -11,6 +11,7 @@ import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/matchup_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
+import 'package:hetaumakeiba_v2/screens/condition_based_analysis_page.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -42,7 +43,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadInitialData();
   }
 
@@ -227,7 +228,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     return Column(
       children: [
@@ -247,6 +247,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             Tab(text: '個別成績'),
             Tab(text: '対戦成績'),
             Tab(text: 'コンビ成績'),
+            Tab(text: '好走条件'),
           ],
           labelColor: Colors.blue,
           unselectedLabelColor: Colors.black,
@@ -307,6 +308,18 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         _buildIndividualStatsTab(),
         _buildMatchupStatsTab(),
         _buildJockeyComboStatsTab(),
+        ConditionBasedAnalysisPage(
+          raceData: PredictionRaceData(
+            raceId: widget.raceId,
+            raceName: widget.raceName,
+            raceDate: '',
+            venue: '',
+            raceNumber: '',
+            shutubaTableUrl: '',
+            raceGrade: '',
+            horses: widget.horses,
+          ),
+        ),
       ],
     );
   }
