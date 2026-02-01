@@ -24,6 +24,9 @@ class RankSummaryDisplay {
   final String weightRange;      // 例: "460kg〜480kg"
   final String carriedWeightRange; // 例: "54.0kg〜56.0kg"
   final String venueList;        // 実績のある開催地（例: "東京, 中山"）
+  final String legStyleSummary;    // 脚質サマリー (例: "逃(1) 先(2)")
+  final String directionSummary;   // 回りサマリー (例: "右(3)")
+  final String trackConditionSummary; // 馬場サマリー (例: "良(2)")
   final List<PastRaceWithMatchup> detailedRaces; // タップ時に表示する詳細リスト
 
   RankSummaryDisplay({
@@ -33,6 +36,9 @@ class RankSummaryDisplay {
     required this.weightRange,
     required this.carriedWeightRange,
     required this.venueList,
+    required this.legStyleSummary,
+    required this.directionSummary,
+    required this.trackConditionSummary,
     required this.detailedRaces,
   });
 }

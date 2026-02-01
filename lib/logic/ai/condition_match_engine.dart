@@ -3,6 +3,7 @@
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 
 /// 特定の着順グループにおける数値範囲を保持するモデル
 class ConditionRange {
@@ -113,6 +114,85 @@ class ConditionMatchEngine {
     }
 
     return range;
+  }
+
+  /// レース詳細を集計して表示用のサマリー文字列（脚質、回り、馬場）を生成する
+  static Map<String, String> calculateSummaries(List<HorseRaceRecord> records) {
+    if (records.isEmpty) {
+      return {
+        'legStyle': '',
+        'direction': '',
+        'trackCondition': '',
+      };
+    }
+
+    final Map<String, int> legStyleCounts = {};
+    final Map<String, int> directionCounts = {};
+    final Map<String, int> conditionCounts = {};
+
+    for (var record in records) {
+      // 1. 脚質集計
+      final style = LegStyleAnalyzer.analyzeSingleRaceStyle(record);
+      if (style != '不明') {
+        String shortStyle = style;
+        switch (style) {
+          case '逃げ':
+            shortStyle = '逃';
+            break;
+          case '先行':
+            shortStyle = '先';
+            break;
+          case '差し':
+            shortStyle = '差';
+            break;
+          case '追い込み':
+            shortStyle = '追';
+            break;
+          case 'マクリ':
+            shortStyle = 'マ';
+            break;
+        }
+        legStyleCounts[shortStyle] = (legStyleCounts[shortStyle] ?? 0) + 1;
+      }
+
+      // 2. 回り集計
+      // 開催地名から数字を除去 (例: "2東京4" -> "東京")
+      final venueName = record.venue.replaceAll(RegExp(r'[0-9]'), '');
+      if (venueName.isNotEmpty) {
+        String direction = '右'; // デフォルト
+        if (['東京', '中京', '新潟'].contains(venueName)) {
+          direction = '左';
+        }
+        directionCounts[direction] = (directionCounts[direction] ?? 0) + 1;
+      }
+
+      // 3. 馬場状態集計
+      // (例: "良", "稍重", "重", "不良")
+      final condition = record.trackCondition;
+      if (condition.isNotEmpty) {
+        String shortCond = condition;
+        if (condition == '稍重') shortCond = '稍';
+        if (condition == '不良') shortCond = '不';
+        conditionCounts[shortCond] = (conditionCounts[shortCond] ?? 0) + 1;
+      }
+    }
+
+    // 文字列生成ヘルパー
+    String buildSummary(Map<String, int> counts, List<String> order) {
+      final List<String> parts = [];
+      for (var key in order) {
+        if (counts.containsKey(key) && counts[key]! > 0) {
+          parts.add('$key(${counts[key]})');
+        }
+      }
+      return parts.join(' ');
+    }
+
+    return {
+      'legStyle': buildSummary(legStyleCounts, ['逃', '先', '差', '追', 'マ']),
+      'direction': buildSummary(directionCounts, ['右', '左']),
+      'trackCondition': buildSummary(conditionCounts, ['良', '稍', '重', '不']),
+    };
   }
 
   /// 特定のレースにおける今回の出走メンバーとの対戦成績をスキャンする

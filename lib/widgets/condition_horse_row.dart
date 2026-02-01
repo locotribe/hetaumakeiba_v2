@@ -76,8 +76,17 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
     );
   }
 
-  /// 着順別のサマリーセル（範囲表示）
+  /// 着順別のサマリーセル（範囲表示と内訳）
   Widget _buildSummaryCell(String label, RankSummaryDisplay summary, bool isSelected) {
+    // 共通のテキストスタイル定義
+    const leftTextStyle = TextStyle(fontSize: 11);
+    final rightTextStyle = TextStyle(fontSize: 10, color: Colors.grey.shade700);
+    // ラベル用のスタイル（右側の項目名）
+    final rightLabelStyle = TextStyle(fontSize: 10, color: Colors.grey.shade500, fontWeight: FontWeight.bold);
+
+    const iconColor = Colors.grey;
+    const iconSize = 12.0;
+
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -93,10 +102,12 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
           border: Border.all(color: isSelected ? Colors.blue : Colors.grey.shade300),
           borderRadius: BorderRadius.circular(4.0),
         ),
-        constraints: const BoxConstraints(minWidth: 100),
+        // 文字数が多い場合でも切れないよう、幅を280に拡張
+        width: 280,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ヘッダー: 着順と回数
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -105,9 +116,95 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
               ],
             ),
             const Divider(height: 8),
-            ConditionRangeText(label: '距離', value: summary.distanceRange, icon: Icons.straighten),
-            ConditionRangeText(label: '体重', value: summary.weightRange, icon: Icons.monitor_weight),
-            ConditionRangeText(label: '斤量', value: summary.carriedWeightRange, icon: Icons.fitness_center),
+
+            // 1行目: [距離Icon] データ | [脚質] データ
+            Row(
+              children: [
+                // 左側：距離
+                Expanded(
+                  flex: 5, // 左側を少し広めに確保
+                  child: Row(
+                    children: [
+                      Text("距離", style: rightLabelStyle),
+                      const SizedBox(width: 4),
+                      Expanded(child: Text(summary.distanceRange, style: leftTextStyle, overflow: TextOverflow.visible)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 右側：脚質
+                Expanded(
+                  flex: 4,
+                  child: Row(
+                    children: [
+                      Text("脚質", style: rightLabelStyle), // テキストに変更
+                      const SizedBox(width: 4),
+                      Expanded(child: Text(summary.legStyleSummary, style: rightTextStyle, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+
+            // 2行目: [体重Icon] データ | [回り] データ
+            Row(
+              children: [
+                // 左側：体重
+                Expanded(
+                  flex: 5,
+                  child: Row(
+                    children: [
+                      Text("体重", style: rightLabelStyle),
+                      const SizedBox(width: 4),
+                      Expanded(child: Text(summary.weightRange, style: leftTextStyle, overflow: TextOverflow.visible)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 右側：回り
+                Expanded(
+                  flex: 4,
+                  child: Row(
+                    children: [
+                      Text("回り", style: rightLabelStyle), // テキストに変更
+                      const SizedBox(width: 4),
+                      Expanded(child: Text(summary.directionSummary, style: rightTextStyle, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+
+            // 3行目: [斤量Icon] データ | [馬場] データ
+            Row(
+              children: [
+                // 左側：斤量
+                Expanded(
+                  flex: 5,
+                  child: Row(
+                    children: [
+                      Text("斤量", style: rightLabelStyle),
+                      const SizedBox(width: 4),
+                      Expanded(child: Text(summary.carriedWeightRange, style: leftTextStyle, overflow: TextOverflow.visible)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 右側：馬場
+                Expanded(
+                  flex: 4,
+                  child: Row(
+                    children: [
+                      Text("馬場", style: rightLabelStyle), // テキストに変更
+                      const SizedBox(width: 4),
+                      Expanded(child: Text(summary.trackConditionSummary, style: rightTextStyle, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

@@ -58,6 +58,9 @@ class _ConditionBasedAnalysisPageState extends State<ConditionBasedAnalysisPage>
           if (records.isNotEmpty) {
             final range = ConditionMatchEngine.calculateRange(records, widget.raceData.raceDate);
 
+            // ▼ 追加: 脚質・回り・馬場のサマリー文字列を計算
+            final summaryResults = ConditionMatchEngine.calculateSummaries(records);
+
             // 詳細リストの作成（対戦相手スキャンを含む）
             final detailedRaces = records.map((record) {
               final matchup = ConditionMatchEngine.scanMatchups(
@@ -77,6 +80,12 @@ class _ConditionBasedAnalysisPageState extends State<ConditionBasedAnalysisPage>
               weightRange: range.maxWeight != null ? '${range.minWeight}kg〜${range.maxWeight}kg' : '-',
               carriedWeightRange: range.maxCarriedWeight != null ? '${range.minCarriedWeight}kg〜${range.maxCarriedWeight}kg' : '-',
               venueList: records.map((r) => r.venue.replaceAll(RegExp(r'\d'), '')).toSet().join(', '),
+
+              // ▼ 追加: 計算結果をコンストラクタに渡す
+              legStyleSummary: summaryResults['legStyle'] ?? '',
+              directionSummary: summaryResults['direction'] ?? '',
+              trackConditionSummary: summaryResults['trackCondition'] ?? '',
+
               detailedRaces: detailedRaces,
             );
           }

@@ -149,6 +149,70 @@ class LegStyleAnalyzer {
     );
   }
 
+  /// 1レース分の脚質を判定して返す（外部呼び出し用）
+  static String analyzeSingleRaceStyle(HorseRaceRecord record) {
+    final positions = record.cornerPassage
+        .split('-')
+        .map((p) => int.tryParse(p))
+        .toList();
+    final horseCount = int.tryParse(record.numberOfHorses);
+    final agari = double.tryParse(record.agari);
+
+    if (horseCount == null ||
+        horseCount == 0 ||
+        agari == null ||
+        positions.length < 2 ||
+        positions.contains(null)) {
+      return "不明";
+    }
+
+    double startPositionRate = 0;
+    double finalPositionRate = 0;
+    double positionGain = 0;
+    double makuriIndex = 0;
+    double longMakuriIndex = 0;
+
+    if (positions.length == 4) {
+      startPositionRate = positions[0]! / horseCount;
+      finalPositionRate = positions[3]! / horseCount;
+      positionGain = (positions[0]! - positions[3]!) / horseCount;
+      makuriIndex = (positions[2]! - positions[3]!) / horseCount;
+      longMakuriIndex = (positions[1]! - positions[3]!) / horseCount;
+    } else if (positions.length == 3) {
+      startPositionRate = positions[0]! / horseCount;
+      finalPositionRate = positions[2]! / horseCount;
+      positionGain = (positions[0]! - positions[2]!) / horseCount;
+      makuriIndex = (positions[1]! - positions[2]!) / horseCount;
+    } else if (positions.length == 2) {
+      startPositionRate = positions[0]! / horseCount;
+      finalPositionRate = positions[1]! / horseCount;
+      positionGain = (positions[0]! - positions[1]!) / horseCount;
+    }
+
+    final cornerCount = positions.length;
+
+    if (cornerCount == 4) {
+      if (longMakuriIndex > 0.4 || makuriIndex > 0.3) {
+        return 'マクリ';
+      }
+    }
+
+    if (startPositionRate <= 0.15 && finalPositionRate <= 0.2) {
+      return '逃げ';
+    }
+    if (startPositionRate <= 0.4 && positionGain.abs() < 0.2) {
+      return '先行';
+    }
+    if (finalPositionRate >= 0.8 && agari <= 34.5) {
+      return '追い込み';
+    }
+    if (positionGain > 0.15) {
+      return '差し';
+    }
+
+    return '先行';
+  }
+
   static String _getTentativeLegStyle(_RaceActionProfile profile, int cornerCount) {
     if (cornerCount == 4) {
       if (profile.longMakuriIndex > 0.4 || profile.makuriIndex > 0.3) {
