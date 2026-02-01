@@ -152,6 +152,39 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
         weatherCounts[race.record.weather] = (weatherCounts[race.record.weather] ?? 0) + 1;
       }
     }
+
+    // 6. グレード別集計 (G1-G2-G3-OP-条件) [追加箇所]
+    int g1Count = 0;
+    int g2Count = 0;
+    int g3Count = 0;
+    int opCount = 0;
+    int conditionCount = 0;
+
+    for (var race in summary.detailedRaces) {
+      final raceName = race.record.raceName;
+      if (raceName.contains('(GI)')) {
+        g1Count++;
+      } else if (raceName.contains('(GII)')) {
+        g2Count++;
+      } else if (raceName.contains('(GIII)')) {
+        g3Count++;
+      } else if (raceName.contains('OP') || raceName.contains('L)')) {
+        opCount++;
+      } else {
+        conditionCount++;
+      }
+    }
+    // 表示形式: G1【0】 G2【0】...
+// カウントが0より大きいグレードのみを表示リストに追加
+    List<String> parts = [];
+    if (g1Count > 0) parts.add('G1【$g1Count】');
+    if (g2Count > 0) parts.add('G2【$g2Count】');
+    if (g3Count > 0) parts.add('G3【$g3Count】');
+    if (opCount > 0) parts.add('OP【$opCount】');
+    if (conditionCount > 0) parts.add('条件【$conditionCount】');
+
+    // 存在するグレードのみを全角スペースで結合して表示文字列を作成
+    final gradeDistribution = parts.join('　');
     // ▲▲▲ 集計終了 ▲▲▲
 
     return GestureDetector(
@@ -179,6 +212,15 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                // 追加: グレード別内訳表示
+                Text(
+                  gradeDistribution,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black87,       // グレーから黒に変更して視認性アップ
+                    fontWeight: FontWeight.w900, // boldよりもさらに太い「Heavy/Black」ウェイトを指定
+                  ),
+                ),
                 RichText(
                   text: TextSpan(
                     style: const TextStyle(fontSize: 11, color: Colors.black87),
