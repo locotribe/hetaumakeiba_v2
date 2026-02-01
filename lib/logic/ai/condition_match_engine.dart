@@ -230,4 +230,17 @@ class ConditionMatchEngine {
     if (matchups.isEmpty) return null;
     return RaceMatchupContext(raceId: targetRaceId, matchups: matchups);
   }
+
+  /// 【追加】範囲表示用の文字列を生成するヘルパー
+  /// minとmaxが同じ場合は単一の値を返す
+  static String formatRange(num? min, num? max, String unit) {
+    if (min == null || max == null) {
+      return '-';
+    }
+    if (min == max) {
+      return '$min$unit';
+    } else {
+      return '$min$unit〜$max$unit';
+    }
+  }
 }

@@ -76,12 +76,14 @@ class _ConditionBasedAnalysisPageState extends State<ConditionBasedAnalysisPage>
             summaries[rankLabel] = RankSummaryDisplay(
               rankLabel: rankLabel,
               count: records.length,
-              distanceRange: range.maxDistance != null ? '${range.minDistance?.toInt()}m〜${range.maxDistance?.toInt()}m' : '-',
-              weightRange: range.maxWeight != null ? '${range.minWeight}kg〜${range.maxWeight}kg' : '-',
-              carriedWeightRange: range.maxCarriedWeight != null ? '${range.minCarriedWeight}kg〜${range.maxCarriedWeight}kg' : '-',
+              distanceRange: ConditionMatchEngine.formatRange(
+                  range.minDistance?.toInt(), range.maxDistance?.toInt(), 'm'),
+              weightRange: ConditionMatchEngine.formatRange(
+                  range.minWeight, range.maxWeight, 'kg'),
+              carriedWeightRange: ConditionMatchEngine.formatRange(
+                  range.minCarriedWeight, range.maxCarriedWeight, 'kg'),
               venueList: records.map((r) => r.venue.replaceAll(RegExp(r'\d'), '')).toSet().join(', '),
 
-              // ▼ 追加: 計算結果をコンストラクタに渡す
               legStyleSummary: summaryResults['legStyle'] ?? '',
               directionSummary: summaryResults['direction'] ?? '',
               trackConditionSummary: summaryResults['trackCondition'] ?? '',
