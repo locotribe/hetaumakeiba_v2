@@ -1,49 +1,94 @@
 // lib/widgets/condition_match_chips.dart
 
 import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/logic/ai/condition_match_engine.dart'; // MatchupBrief型のため
 
-/// 対戦結果（先着・敗北）を視覚的に表示するカラーチップ
-class MatchupResultChip extends StatelessWidget {
-  final String opponentName;
-  final String opponentRank;
-  final bool isWin;
+/// 対戦結果（先着・敗北）を詳細な行形式で表示するウィジェット
+class MatchupResultRow extends StatelessWidget {
+  final MatchupBrief matchup;
 
-  const MatchupResultChip({
+  const MatchupResultRow({
     super.key,
-    required this.opponentName,
-    required this.opponentRank,
-    required this.isWin,
+    required this.matchup,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 1.0),
-      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
-      decoration: BoxDecoration(
-        color: isWin ? Colors.red.withAlpha(40) : Colors.blue.withAlpha(40),
-        border: Border.all(
-          color: isWin ? Colors.red : Colors.blue,
-          width: 0.5,
-        ),
-        borderRadius: BorderRadius.circular(4.0),
-      ),
+    final detailStyle = TextStyle(
+      fontSize: 11,
+      color: Colors.grey.shade800,
+      fontFamily: 'Roboto', // 数字が見やすいフォントを指定（環境による）
+    );
+
+    // 勝敗による色設定
+    final iconColor = matchup.isWin ? Colors.red : Colors.blue;
+    final iconData = matchup.isWin ? Icons.arrow_downward : Icons.arrow_upward;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            isWin ? Icons.arrow_upward : Icons.arrow_downward,
-            size: 10,
-            color: isWin ? Colors.red : Colors.blue,
-          ),
-          const SizedBox(width: 2),
-          Text(
-            '$opponentName(${opponentRank}着)',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: isWin ? Colors.red.shade900 : Colors.blue.shade900,
+          // 1. 勝敗アイコン
+          Icon(iconData, size: 12, color: iconColor),
+          const SizedBox(width: 4),
+
+          // 2. 相手馬名
+          SizedBox(
+            width: 110,
+            child: Text(
+              matchup.opponentName,
+              style: detailStyle.copyWith(fontWeight: FontWeight.bold),
             ),
+          ),
+
+          // 3. 相手の着順
+          SizedBox(
+            width: 35,
+            child: Text(
+              '${matchup.opponentRank}着',
+              style: detailStyle,
+              textAlign: TextAlign.center,
+            ),
+          ),
+
+          // 4. 着差
+          SizedBox(
+            width: 40,
+            child: Text(
+              matchup.margin,
+              style: detailStyle,
+              textAlign: TextAlign.right,
+            ),
+          ),
+
+          // 5. タイム差 (秒付き)
+          SizedBox(
+            width: 45,
+            child: Text(
+              matchup.timeDiff == '-' ? '-' : '${matchup.timeDiff}s',
+              style: detailStyle.copyWith(
+                  color: matchup.isWin ? Colors.red.shade700 : Colors.blue.shade700
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ),
+
+          // 6. 相手馬番
+          SizedBox(
+            width: 35,
+            child: Text(
+              '${matchup.opponentHorseNumber}番',
+              style: detailStyle,
+              textAlign: TextAlign.right,
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // 7. 枠順比較
+          Text(
+            matchup.relativeGate,
+            style: detailStyle.copyWith(fontSize: 10, color: Colors.grey.shade600),
           ),
         ],
       ),

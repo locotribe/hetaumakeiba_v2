@@ -27,12 +27,22 @@ class MatchupBrief {
   final String opponentRank;
   final bool isWin;
 
+  // 新規追加フィールド
+  final String margin;              // 着差 (例: "1/2", "0.1"など)
+  final String timeDiff;            // タイム差 (例: "-0.2", "+0.5")
+  final String opponentHorseNumber; // 相手の馬番
+  final String relativeGate;        // 枠順比較 (例: "内枠", "外枠", "同枠")
+
   MatchupBrief({
     required this.opponentName,
     required this.opponentHorseId,
     required this.myRank,
     required this.opponentRank,
     required this.isWin,
+    this.margin = '-',
+    this.timeDiff = '-',
+    this.opponentHorseNumber = '-',
+    this.relativeGate = '-',
   });
 }
 
@@ -109,8 +119,6 @@ class ConditionMatchEngine {
         range.minCarriedWeight = range.minCarriedWeight == null ? cw : (cw < range.minCarriedWeight! ? cw : range.minCarriedWeight);
         range.maxCarriedWeight = range.maxCarriedWeight == null ? cw : (cw > range.maxCarriedWeight! ? cw : range.maxCarriedWeight);
       }
-
-      // レース間隔 (前走データが必要なため、ここではロジックの枠組みのみ定義)
     }
 
     return range;
@@ -136,27 +144,16 @@ class ConditionMatchEngine {
       if (style != '不明') {
         String shortStyle = style;
         switch (style) {
-          case '逃げ':
-            shortStyle = '逃';
-            break;
-          case '先行':
-            shortStyle = '先';
-            break;
-          case '差し':
-            shortStyle = '差';
-            break;
-          case '追い込み':
-            shortStyle = '追';
-            break;
-          case 'マクリ':
-            shortStyle = 'マ';
-            break;
+          case '逃げ': shortStyle = '逃'; break;
+          case '先行': shortStyle = '先'; break;
+          case '差し': shortStyle = '差'; break;
+          case '追い込み': shortStyle = '追'; break;
+          case 'マクリ': shortStyle = 'マ'; break;
         }
         legStyleCounts[shortStyle] = (legStyleCounts[shortStyle] ?? 0) + 1;
       }
 
       // 2. 回り集計
-      // 開催地名から数字を除去 (例: "2東京4" -> "東京")
       final venueName = record.venue.replaceAll(RegExp(r'[0-9]'), '');
       if (venueName.isNotEmpty) {
         String direction = '右'; // デフォルト
@@ -167,7 +164,6 @@ class ConditionMatchEngine {
       }
 
       // 3. 馬場状態集計
-      // (例: "良", "稍重", "重", "不良")
       final condition = record.trackCondition;
       if (condition.isNotEmpty) {
         String shortCond = condition;
@@ -177,7 +173,6 @@ class ConditionMatchEngine {
       }
     }
 
-    // 文字列生成ヘルパー
     String buildSummary(Map<String, int> counts, List<String> order) {
       final List<String> parts = [];
       for (var key in order) {
@@ -205,6 +200,15 @@ class ConditionMatchEngine {
   }) {
     final List<MatchupBrief> matchups = [];
 
+    // 自分の過去走データを取得（タイム比較用）
+    HorseRaceRecord? myRecord;
+    try {
+      final myRecords = allHorsesPastRecords[myHorseId] ?? [];
+      myRecord = myRecords.firstWhere((r) => r.raceId == targetRaceId);
+    } catch (_) {
+      // 自分のデータが見つからない場合はタイム差計算不可
+    }
+
     for (var opponent in currentRaceMembers) {
       if (opponent.horseId == myHorseId) continue;
 
@@ -215,12 +219,49 @@ class ConditionMatchEngine {
         final myRankInt = int.tryParse(myRank) ?? 999;
         final opRankInt = int.tryParse(opponentPastRecord.rank) ?? 999;
 
+        // --- 追加計算ロジック ---
+
+        // 1. タイム差計算
+        String timeDiffStr = '-';
+        if (myRecord != null) {
+          final myTime = _parseTime(myRecord.time);
+          final opTime = _parseTime(opponentPastRecord.time);
+          if (myTime != null && opTime != null) {
+            final diff = myTime - opTime;
+            // 自分が勝った場合、タイムは自分の方が小さいのでマイナスになるはず
+            // 表示形式: "-0.2" (0.2秒勝ち), "+0.5" (0.5秒負け)
+            final sign = diff > 0 ? '+' : '';
+            timeDiffStr = '$sign${diff.toStringAsFixed(1)}';
+          }
+        }
+
+        // 2. 枠順比較
+        String relativeGateStr = '-';
+        if (myRecord != null) {
+          final myFrame = int.tryParse(myRecord.frameNumber);
+          final opFrame = int.tryParse(opponentPastRecord.frameNumber);
+          if (myFrame != null && opFrame != null) {
+            if (myFrame < opFrame) {
+              relativeGateStr = '内枠';
+            } else if (myFrame > opFrame) {
+              relativeGateStr = '外枠';
+            } else {
+              relativeGateStr = '同枠';
+            }
+          }
+        }
+
         matchups.add(MatchupBrief(
           opponentName: opponent.horseName,
           opponentHorseId: opponent.horseId,
           myRank: myRank,
           opponentRank: opponentPastRecord.rank,
           isWin: myRankInt < opRankInt,
+          // 新規項目の設定
+          margin: opponentPastRecord.margin.isNotEmpty ? opponentPastRecord.margin : '-',
+          timeDiff: timeDiffStr,
+          opponentHorseNumber: opponentPastRecord.horseNumber,
+          relativeGate: relativeGateStr,
         ));
       } catch (_) {
         // 対戦なし
@@ -231,8 +272,26 @@ class ConditionMatchEngine {
     return RaceMatchupContext(raceId: targetRaceId, matchups: matchups);
   }
 
+  /// タイム文字列（"1:33.4" または "58.2"）を秒（double）に変換するヘルパー
+  static double? _parseTime(String timeStr) {
+    if (timeStr.isEmpty) return null;
+    try {
+      final parts = timeStr.split(':');
+      if (parts.length == 2) {
+        // 分:秒.ミリ秒
+        final min = double.parse(parts[0]);
+        final sec = double.parse(parts[1]);
+        return min * 60 + sec;
+      } else {
+        // 秒.ミリ秒
+        return double.parse(timeStr);
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// 【追加】範囲表示用の文字列を生成するヘルパー
-  /// minとmaxが同じ場合は単一の値を返す
   static String formatRange(num? min, num? max, String unit) {
     if (min == null || max == null) {
       return '-';

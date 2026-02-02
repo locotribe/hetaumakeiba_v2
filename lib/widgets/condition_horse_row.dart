@@ -89,13 +89,10 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
   }
 
   /// 着順別のサマリーセル
-  /// データを詳細リストから直接集計し、RichTextで強調表示する
   Widget _buildSummaryCell(String label, RankSummaryDisplay summary, bool isSelected) {
     const leftTextStyle = TextStyle(fontSize: 11);
     final rightTextStyle = TextStyle(fontSize: 10, color: Colors.grey.shade700);
     final rightLabelStyle = TextStyle(fontSize: 10, color: Colors.grey.shade500, fontWeight: FontWeight.bold);
-
-    // ▼▼▼ 集計ロジック (詳細データから直接算出) ▼▼▼
 
     // 1. 脚質の集計
     final Map<String, int> legStyleCounts = {};
@@ -153,7 +150,7 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
       }
     }
 
-    // 6. グレード別集計 (G1-G2-G3-OP-条件) [追加箇所]
+    // 6. グレード別集計
     int g1Count = 0;
     int g2Count = 0;
     int g3Count = 0;
@@ -174,8 +171,7 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
         conditionCount++;
       }
     }
-    // 表示形式: G1【0】 G2【0】...
-// カウントが0より大きいグレードのみを表示リストに追加
+
     List<String> parts = [];
     if (g1Count > 0) parts.add('G1【$g1Count】');
     if (g2Count > 0) parts.add('G2【$g2Count】');
@@ -183,9 +179,7 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
     if (opCount > 0) parts.add('OP【$opCount】');
     if (conditionCount > 0) parts.add('条件【$conditionCount】');
 
-    // 存在するグレードのみを全角スペースで結合して表示文字列を作成
     final gradeDistribution = parts.join('　');
-    // ▲▲▲ 集計終了 ▲▲▲
 
     return GestureDetector(
       onTap: () {
@@ -202,7 +196,6 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
           border: Border.all(color: isSelected ? Colors.blue : Colors.grey.shade300),
           borderRadius: BorderRadius.circular(4.0),
         ),
-        // 縦4行構成に合わせて幅を調整 (少し狭くしても入るように設計)
         width: 340,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -212,13 +205,12 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                // 追加: グレード別内訳表示
                 Text(
                   gradeDistribution,
                   style: const TextStyle(
                     fontSize: 11,
-                    color: Colors.black87,       // グレーから黒に変更して視認性アップ
-                    fontWeight: FontWeight.w900, // boldよりもさらに太い「Heavy/Black」ウェイトを指定
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
                 RichText(
@@ -238,7 +230,7 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
             ),
             const Divider(height: 8),
 
-            // 1行目: 開催 | 距離
+            // 各集計行
             Row(
               children: [
                 Expanded(
@@ -261,8 +253,6 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
               ],
             ),
             const SizedBox(height: 4),
-
-            // 2行目: 馬場 | 脚質
             Row(
               children: [
                 Expanded(
@@ -285,8 +275,6 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
               ],
             ),
             const SizedBox(height: 4),
-
-            // 3行目: 天候 | 人気
             Row(
               children: [
                 Expanded(
@@ -309,11 +297,8 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
               ],
             ),
             const SizedBox(height: 4),
-
-            // 4行目: 回り | 斤量 | 体重
             Row(
               children: [
-                // 回り (少し狭く)
                 Expanded(
                   flex: 2,
                   child: Row(children: [
@@ -323,7 +308,6 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
                   ]),
                 ),
                 const SizedBox(width: 4),
-                // 斤量
                 Expanded(
                   flex: 3,
                   child: Row(children: [
@@ -333,7 +317,6 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
                   ]),
                 ),
                 const SizedBox(width: 4),
-                // 体重
                 Expanded(
                   flex: 3,
                   child: Row(children: [
@@ -504,19 +487,24 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
             ),
           ),
 
+// --- 対戦成績リスト (着順昇順で並び替えて表示) ---
           if (pastRace.matchupContext != null && pastRace.matchupContext!.matchups.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4.0, left: 4.0),
-              child: Wrap(
-                spacing: 4.0,
-                runSpacing: 2.0,
-                children: pastRace.matchupContext!.matchups.map((m) {
-                  return MatchupResultChip(
-                    opponentName: m.opponentName,
-                    opponentRank: m.opponentRank,
-                    isWin: m.isWin,
-                  );
-                }).toList(),
+              child: Column(
+                children: () {
+                  // リストをコピーして着順(数値)でソート
+                  final sortedMatchups = List.of(pastRace.matchupContext!.matchups)
+                    ..sort((a, b) {
+                      final rankA = int.tryParse(a.opponentRank) ?? 999;
+                      final rankB = int.tryParse(b.opponentRank) ?? 999;
+                      return rankA.compareTo(rankB);
+                    });
+
+                  return sortedMatchups.map((m) {
+                    return MatchupResultRow(matchup: m);
+                  }).toList();
+                }(),
               ),
             ),
         ],
