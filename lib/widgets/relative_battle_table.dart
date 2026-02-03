@@ -24,9 +24,9 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
   // 表示するペース列の管理
   final Set<RacePace> _visiblePaces = {};
 
-  // ソート状態の管理
-  int _sortColumnIndex = 0;
-  bool _sortAscending = true;
+  // ソート状態の管理（デフォルトは総合勝率）
+  int _sortColumnIndex = 1; // 馬名(0)の次、総合勝率(1)をデフォルトソートとする
+  bool _sortAscending = false; // 降順（高い順）
 
   @override
   void initState() {
@@ -34,24 +34,21 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     _runSimulation();
   }
 
-  /// シミュレーションの実行
   Future<void> _runSimulation() async {
-    // UIスレッドをブロックしないよう少し遅延させる
     await Future.delayed(Duration.zero);
-
     final calculator = RelativeBattleCalculator();
-    // Logic側ですべてのパターンの計算が行われる
     final results = calculator.runSimulation(widget.horses, iterations: 100);
 
     if (mounted) {
       setState(() {
         _results = results;
+        // 初期ソート: 総合勝率（降順）
+        _results!.sort((a, b) => b.winRate.compareTo(a.winRate));
         _isLoading = false;
       });
     }
   }
 
-  /// ソート処理
   void _sort<T>(Comparable<T> Function(RelativeEvaluationResult d) getField, int columnIndex, bool ascending) {
     if (_results == null) return;
 
@@ -66,57 +63,35 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     });
   }
 
-  /// ★追加: リスト内での順位を取得する（同値は同順位とする）
-  /// [value] 判定したい値
-  /// [getField] リスト内の各要素から値を抽出する関数
-  /// [descending] trueなら「大きいほうが上位」、falseなら「小さいほうが上位（人気など）」
+  // 順位取得ヘルパー
   int _getRankInList<T extends Comparable>(T value, T Function(RelativeEvaluationResult) getField, {bool descending = true}) {
     if (_results == null || _results!.isEmpty) return 999;
-
-    // 値のリストを作成してソート
     final values = _results!.map((e) => getField(e)).toList();
-
-    // null排除（念のため）
     values.removeWhere((v) => v == null);
-
     if (descending) {
-      values.sort((a, b) => b.compareTo(a)); // 降順
+      values.sort((a, b) => b.compareTo(a));
     } else {
-      values.sort((a, b) => a.compareTo(b)); // 昇順
+      values.sort((a, b) => a.compareTo(b));
     }
-
-    // 自分の値が何番目にあるか探す（0-indexed なので +1 する）
-    // indexOfは最初に見つかったインデックスを返すため、同値なら同じ順位になる
     return values.indexOf(value) + 1;
   }
 
-  /// ★追加: 順位に応じた背景色を取得する
+  // 背景色取得ヘルパー
   Color? _getRankColor(int rank) {
     switch (rank) {
-      case 1:
-        return Colors.red.withOpacity(0.3); // 1位: 赤
-      case 2:
-        return Colors.deepOrange.withOpacity(0.3); // 2位: 濃いオレンジ
-      case 3:
-        return Colors.orange.withOpacity(0.3); // 3位: 薄いオレンジ
-      case 4:
-        return Colors.lime.withOpacity(0.4); // 4位: 濃い黄色（ライム）
-      case 5:
-        return Colors.yellow.withOpacity(0.3); // 5位: 薄い黄色
-      default:
-        return null; // 6位以下: 無色
+      case 1: return Colors.red.withOpacity(0.3);
+      case 2: return Colors.deepOrange.withOpacity(0.3);
+      case 3: return Colors.orange.withOpacity(0.3);
+      case 4: return Colors.lime.withOpacity(0.4);
+      case 5: return Colors.yellow.withOpacity(0.3);
+      default: return null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_results == null || _results!.isEmpty) {
-      return const Center(child: Text("データがありません"));
-    }
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_results == null || _results!.isEmpty) return const Center(child: Text("データがありません"));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,33 +107,21 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
               FilterChip(
                 label: const Text("S (スロー)"),
                 selected: _visiblePaces.contains(RacePace.slow),
-                onSelected: (selected) {
-                  setState(() {
-                    selected ? _visiblePaces.add(RacePace.slow) : _visiblePaces.remove(RacePace.slow);
-                  });
-                },
+                onSelected: (selected) => setState(() => selected ? _visiblePaces.add(RacePace.slow) : _visiblePaces.remove(RacePace.slow)),
                 visualDensity: VisualDensity.compact,
                 labelStyle: const TextStyle(fontSize: 11),
               ),
               FilterChip(
                 label: const Text("M (ミドル)"),
                 selected: _visiblePaces.contains(RacePace.middle),
-                onSelected: (selected) {
-                  setState(() {
-                    selected ? _visiblePaces.add(RacePace.middle) : _visiblePaces.remove(RacePace.middle);
-                  });
-                },
+                onSelected: (selected) => setState(() => selected ? _visiblePaces.add(RacePace.middle) : _visiblePaces.remove(RacePace.middle)),
                 visualDensity: VisualDensity.compact,
                 labelStyle: const TextStyle(fontSize: 11),
               ),
               FilterChip(
                 label: const Text("H (ハイ)"),
                 selected: _visiblePaces.contains(RacePace.high),
-                onSelected: (selected) {
-                  setState(() {
-                    selected ? _visiblePaces.add(RacePace.high) : _visiblePaces.remove(RacePace.high);
-                  });
-                },
+                onSelected: (selected) => setState(() => selected ? _visiblePaces.add(RacePace.high) : _visiblePaces.remove(RacePace.high)),
                 visualDensity: VisualDensity.compact,
                 labelStyle: const TextStyle(fontSize: 11),
               ),
@@ -166,7 +129,6 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
           ),
         ),
 
-        // テーブル本体
         Expanded(
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
@@ -189,28 +151,32 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
 
   List<DataColumn> _buildColumns() {
     List<DataColumn> columns = [
-      DataColumn(
-        label: const Text('順位', style: TextStyle(fontWeight: FontWeight.bold)),
-        numeric: true,
-        onSort: (idx, asc) => _sort((r) => r.rank, idx, asc),
-      ),
-      DataColumn(
-        label: const Text('人気', style: TextStyle(fontWeight: FontWeight.bold)),
-        numeric: true,
-        onSort: (idx, asc) => _sort((r) => r.popularity ?? 999, idx, asc),
-      ),
+      // 1. 馬名 (固定)
       DataColumn(
         label: const Text('馬名', style: TextStyle(fontWeight: FontWeight.bold)),
         onSort: (idx, asc) => _sort((r) => r.horseName, idx, asc),
       ),
+      // 2. 総合勝率 (実質的な順位)
       DataColumn(
         label: const Text('総合勝率', style: TextStyle(fontWeight: FontWeight.bold)),
         numeric: true,
         onSort: (idx, asc) => _sort((r) => r.winRate, idx, asc),
       ),
+      // 3. 人気
+      DataColumn(
+        label: const Text('人気', style: TextStyle(fontWeight: FontWeight.bold)),
+        numeric: true,
+        onSort: (idx, asc) => _sort((r) => r.popularity ?? 999, idx, asc),
+      ),
+      // 4. ★追加: オッズ
+      DataColumn(
+        label: const Text('オッズ', style: TextStyle(fontWeight: FontWeight.bold)),
+        numeric: true,
+        onSort: (idx, asc) => _sort((r) => r.odds, idx, asc),
+      ),
     ];
 
-    // ペース別カラムの追加
+    // ペース別カラム
     if (_visiblePaces.contains(RacePace.slow)) {
       columns.add(DataColumn(
         label: const Text('S勝率', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
@@ -259,39 +225,37 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
   }
 
   DataRow _buildRow(RelativeEvaluationResult result) {
-    // 各項目の順位を計算（同値考慮）
-
-    // 総合勝率ランク（高い順）
+    // ランク計算
     final winRateRank = _getRankInList(result.winRate, (r) => r.winRate, descending: true);
-
-    // 人気ランク（低い順）
     final popRank = _getRankInList(result.popularity ?? 999, (r) => r.popularity ?? 999, descending: false);
-
-    // 逆転期待度ランク（高い順）
     final revRank = _getRankInList(result.reversalScore, (r) => r.reversalScore, descending: true);
-
-    // 基礎能力ランク（高い順）
     final baseRank = _getRankInList(result.factorScores['base'] ?? 0, (r) => r.factorScores['base'] ?? 0, descending: true);
-
-    // 妙味ランク（高い順）
     final valueRank = _getRankInList(result.factorScores['value'] ?? 0, (r) => r.factorScores['value'] ?? 0, descending: true);
 
+    // ★ オッズのスタイル判定 (10.0倍未満なら赤太字)
+    final bool isRedOdds = result.odds < 10.0 && result.odds > 0;
+    final TextStyle oddsStyle = isRedOdds
+        ? const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)
+        : const TextStyle(fontWeight: FontWeight.normal, color: Colors.black);
 
     List<DataCell> cells = [
+      // 1. 馬名
+      DataCell(Text(result.horseName)),
+      // 2. 総合勝率 (順位列の代わり)
       DataCell(
-        Center(
+        Container(
+          color: _getRankColor(winRateRank),
+          alignment: Alignment.centerRight,
           child: Text(
-            '${result.rank}位',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: result.rank <= 3 ? Colors.red : Colors.black,
-            ),
+            '${(result.winRate * 100).toStringAsFixed(1)}%',
+            style: TextStyle(fontWeight: winRateRank <= 3 ? FontWeight.bold : FontWeight.normal),
           ),
         ),
       ),
+      // 3. 人気
       DataCell(
         Container(
-          color: _getRankColor(popRank), // 人気順の色分け
+          color: _getRankColor(popRank),
           alignment: Alignment.center,
           child: Text(
             result.popularity != null ? '${result.popularity}人' : '-',
@@ -299,27 +263,22 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
           ),
         ),
       ),
-      DataCell(Text(result.horseName)),
+      // 4. ★追加: オッズ (背景色なし、赤文字判定のみ)
       DataCell(
         Container(
-          color: _getRankColor(winRateRank), // 総合勝率の色分け
           alignment: Alignment.centerRight,
           child: Text(
-            '${(result.winRate * 100).toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontWeight: winRateRank <= 3 ? FontWeight.bold : FontWeight.normal,
-            ),
+            result.odds > 0 ? result.odds.toStringAsFixed(1) : '-',
+            style: oddsStyle,
           ),
         ),
       ),
     ];
 
-    // ペース別セルの追加
+    // ペース別セル
     if (_visiblePaces.contains(RacePace.slow)) {
       double rate = result.scenarioWinRates[RacePace.slow] ?? 0.0;
-      // スロー勝率ランク
       final sRank = _getRankInList(rate, (r) => r.scenarioWinRates[RacePace.slow] ?? 0.0, descending: true);
-
       cells.add(DataCell(
         Container(
           color: _getRankColor(sRank),
@@ -333,9 +292,7 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     }
     if (_visiblePaces.contains(RacePace.middle)) {
       double rate = result.scenarioWinRates[RacePace.middle] ?? 0.0;
-      // ミドル勝率ランク
       final mRank = _getRankInList(rate, (r) => r.scenarioWinRates[RacePace.middle] ?? 0.0, descending: true);
-
       cells.add(DataCell(
         Container(
           color: _getRankColor(mRank),
@@ -349,9 +306,7 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     }
     if (_visiblePaces.contains(RacePace.high)) {
       double rate = result.scenarioWinRates[RacePace.high] ?? 0.0;
-      // ハイ勝率ランク
       final hRank = _getRankInList(rate, (r) => r.scenarioWinRates[RacePace.high] ?? 0.0, descending: true);
-
       cells.add(DataCell(
         Container(
           color: _getRankColor(hRank),
@@ -368,29 +323,34 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     cells.addAll([
       DataCell(
         Container(
-          color: _getRankColor(revRank), // 逆転期待度の色分け
+          color: _getRankColor(revRank),
           alignment: Alignment.center,
           child: Text(result.reversalScore.toStringAsFixed(1)),
         ),
       ),
       DataCell(
         Container(
-          color: _getRankColor(baseRank), // 基礎能力の色分け
+          color: _getRankColor(baseRank),
           alignment: Alignment.center,
           child: Text((result.factorScores['base'] ?? 0).toStringAsFixed(0)),
         ),
       ),
       DataCell(
         Container(
-          color: _getRankColor(valueRank), // 妙味の色分け
+          color: _getRankColor(valueRank),
           alignment: Alignment.center,
-          child: Text((result.factorScores['value'] ?? 0).toStringAsFixed(1)),
+          child: Text((result.factorScores['value'] ?? 0).toStringAsFixed(0)), // 整数で表示
         ),
       ),
       DataCell(
-        Text(
-          result.evaluationComment,
-          style: const TextStyle(fontSize: 12),
+        // 短評は横幅制限なし（スクロール前提）
+        ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 200),
+          child: Text(
+            result.evaluationComment,
+            style: const TextStyle(fontSize: 12),
+            softWrap: true,
+          ),
         ),
       ),
     ]);

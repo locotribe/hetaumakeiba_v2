@@ -18,48 +18,50 @@ class RelativeEvaluationResult {
   /// 現在の人気
   final int? popularity;
 
+  /// ★追加: 単勝オッズ (UI表示および計算用)
+  final double odds;
+
   /// シミュレーション勝率 (0.0 - 1.0)
   final double winRate;
 
   /// 相対順位 (1位〜)
   final int rank;
 
-  /// 逆転期待度スコア (正の値ほど格上を倒す可能性が高い)
+  /// 逆転期待度スコア
   final double reversalScore;
 
-  /// 信頼度/安定度 (0.0 - 1.0, 分散の逆数などで算出)
+  /// 信頼度/安定度
   final double confidence;
 
-  /// 自動生成された評価短評 (例: "距離短縮で有利")
+  /// 自動生成された評価短評
   final String evaluationComment;
 
-  /// 各評価要因の寄与度 (SHAP値に近いもの)
-  /// Key: 'base', 'distance', 'course', 'gate', 'pace', 'value'
+  /// 各評価要因の寄与度
   final Map<String, double> factorScores;
 
-  /// ★追加: ペース別シミュレーション勝率
+  /// ペース別シミュレーション勝率
   final Map<RacePace, double> scenarioWinRates;
 
-  /// ★追加: ペース別シミュレーション順位
+  /// ペース別シミュレーション順位
   final Map<RacePace, int> scenarioRanks;
 
   RelativeEvaluationResult({
     required this.horseId,
     required this.horseName,
     this.popularity,
+    required this.odds, // ★追加
     required this.winRate,
     required this.rank,
     required this.reversalScore,
     required this.confidence,
     required this.evaluationComment,
     required this.factorScores,
-    this.scenarioWinRates = const {}, // ★追加 (デフォルト値あり)
-    this.scenarioRanks = const {},    // ★追加 (デフォルト値あり)
+    this.scenarioWinRates = const {},
+    this.scenarioRanks = const {},
   });
 
-  /// デバッグ用文字列
   @override
   String toString() {
-    return '$rank位 $horseName (勝率: ${(winRate * 100).toStringAsFixed(1)}%) - $evaluationComment';
+    return '$rank位 $horseName (勝率: ${(winRate * 100).toStringAsFixed(1)}%)';
   }
 }
