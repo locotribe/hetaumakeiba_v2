@@ -9,10 +9,10 @@ import '../models/relative_evaluation_model.dart';
 class RelativeBattleCalculator {
   final Random _random = Random();
 
-  /// メインメソッド: シミュレーションを実行して結果リストを返す
+  /// メインメソッド: 総合・各ペースのシミュレーションを一括実行して結果リストを返す
   List<RelativeEvaluationResult> runSimulation(
       List<PredictionHorseDetail> horses, {
-        int iterations = 100, // 試行回数
+        int iterations = 100, // 各シナリオの試行回数
       }) {
     // 馬が1頭以下の場合はシミュレーション不可
     if (horses.length < 2) return [];
@@ -20,28 +20,83 @@ class RelativeBattleCalculator {
     // 1. 各馬の静的な基礎データを準備
     final List<_HorseStaticData> staticDataList = horses.map((h) => _prepareStaticData(h)).toList();
 
-    // 2. モンテカルロ・シミュレーション
-    final winCounts = {for (var h in horses) h.horseId: 0};
-    // 要因分析用のスコア累積
+    // 2. 各シナリオを実行
+    // A. 総合（ペース動的判定）
+    final overallResult = _runScenario(staticDataList, iterations, null);
+    // B. スロー固定
+    final slowResult = _runScenario(staticDataList, iterations, RacePace.slow);
+    // C. ミドル固定
+    final middleResult = _runScenario(staticDataList, iterations, RacePace.middle);
+    // D. ハイ固定
+    final highResult = _runScenario(staticDataList, iterations, RacePace.high);
+
+    // 3. 結果のマージ
+    // 総合順位のリストをベースに、各シナリオの結果を詰め込む
+    List<RelativeEvaluationResult> results = [];
+
+    for (var baseRes in overallResult) {
+      // 各シナリオでの該当馬のデータを探す
+      final slowRes = slowResult.firstWhere((r) => r.horseId == baseRes.horseId);
+      final middleRes = middleResult.firstWhere((r) => r.horseId == baseRes.horseId);
+      final highRes = highResult.firstWhere((r) => r.horseId == baseRes.horseId);
+
+      // ペース別結果マップを作成
+      final Map<RacePace, double> scenarioWinRates = {
+        RacePace.slow: slowRes.winRate,
+        RacePace.middle: middleRes.winRate,
+        RacePace.high: highRes.winRate,
+      };
+
+      final Map<RacePace, int> scenarioRanks = {
+        RacePace.slow: slowRes.rank,
+        RacePace.middle: middleRes.rank,
+        RacePace.high: highRes.rank,
+      };
+
+      // 最終結果オブジェクトを生成（マージ）
+      results.add(RelativeEvaluationResult(
+        horseId: baseRes.horseId,
+        horseName: baseRes.horseName,
+        popularity: baseRes.popularity,
+        winRate: baseRes.winRate,
+        rank: baseRes.rank,
+        reversalScore: baseRes.reversalScore,
+        confidence: baseRes.confidence,
+        evaluationComment: baseRes.evaluationComment,
+        factorScores: baseRes.factorScores,
+        scenarioWinRates: scenarioWinRates, // ★追加
+        scenarioRanks: scenarioRanks,       // ★追加
+      ));
+    }
+
+    // 念のため総合順位で再ソート
+    results.sort((a, b) => a.rank.compareTo(b.rank));
+
+    return results;
+  }
+
+  /// 1つのシナリオ（指定ペースまたは動的）を実行する
+  List<RelativeEvaluationResult> _runScenario(
+      List<_HorseStaticData> staticDataList,
+      int iterations,
+      RacePace? forcedPace, // nullなら動的判定
+      ) {
+    final winCounts = {for (var h in staticDataList) h.horseId: 0};
     final scoreAccumulator = {
-      for (var h in horses)
+      for (var h in staticDataList)
         h.horseId: {'base': 0.0, 'style': 0.0, 'pace': 0.0, 'aptitude': 0.0}
     };
 
     for (int i = 0; i < iterations; i++) {
-      _runSingleIteration(staticDataList, winCounts, scoreAccumulator);
+      _runSingleIteration(staticDataList, winCounts, scoreAccumulator, forcedPace);
     }
 
-    // 3. 結果の集計
+    // 結果の集計（既存ロジックと同じ）
     List<RelativeEvaluationResult> results = [];
-
-    // 勝利数順にソート
     var sortedEntries = winCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    // ★修正: 1回のシミュレーションでの最大勝利数（自分以外の全馬と対戦するため）
-    final int maxWinsPerIteration = horses.length - 1;
-    // ★修正: 分母は「試行回数 × 1回あたりの最大勝利数」
+    final int maxWinsPerIteration = staticDataList.length - 1;
     final int totalMatchups = iterations * maxWinsPerIteration;
 
     for (int i = 0; i < sortedEntries.length; i++) {
@@ -50,39 +105,39 @@ class RelativeBattleCalculator {
       final winCount = entry.value;
       final staticData = staticDataList.firstWhere((d) => d.horseId == horseId);
 
-      // ★修正: 勝率計算の正規化 (0除算防止)
       final winRate = totalMatchups > 0 ? winCount / totalMatchups : 0.0;
-
-      // 平均スコアの算出（表示用）
       final acc = scoreAccumulator[horseId]!;
       final factorScores = {
         'base': acc['base']! / iterations,
-        'style': acc['style']! / iterations, // 脚質適性・質
-        'pace': acc['pace']! / iterations,   // 展開利
-        'aptitude': acc['aptitude']! / iterations, // コース・距離適性
-        'value': staticData.expectedValue, // ★修正: 正しい期待値をセット
+        'style': acc['style']! / iterations,
+        'pace': acc['pace']! / iterations,
+        'aptitude': acc['aptitude']! / iterations,
+        'value': staticData.expectedValue,
       };
 
-      // 短評と逆転スコアの生成
       final analysis = _analyzeFactors(factorScores, winRate, i + 1);
 
       results.add(RelativeEvaluationResult(
         horseId: horseId,
         horseName: staticData.horseName,
-        popularity: staticData.popularity, // ★追加: 人気情報をセット
+        popularity: staticData.popularity,
         winRate: winRate,
         rank: i + 1,
         reversalScore: analysis.reversalScore,
         confidence: _calculateConfidence(winRate, iterations),
         evaluationComment: analysis.comment,
         factorScores: factorScores,
+        // ここでは空のマップを渡す（マージ元になるため）
+        scenarioWinRates: {},
+        scenarioRanks: {},
       ));
     }
     return results;
   }
 
-  /// 静的データの準備（ループ外で計算できるもの）
+  /// 静的データの準備（変更なし）
   _HorseStaticData _prepareStaticData(PredictionHorseDetail horse) {
+    // 既存の実装をそのまま利用
     // 1. 基礎能力 (Base Ability)
     double baseAbility = 50.0;
     if (horse.overallScore != null) {
@@ -107,10 +162,8 @@ class RelativeBattleCalculator {
       aptitudeScore += (winRate * 30.0);
     }
 
-    // ★修正: 期待値（妙味）の動的計算
+    // 期待値（妙味）の動的計算
     double expectedValue = 0.0;
-
-    // 最新のオッズを取得 (effectiveOdds優先、なければodds)
     double? currentOdds;
     if (horse.effectiveOdds != null) {
       currentOdds = double.tryParse(horse.effectiveOdds!);
@@ -118,14 +171,10 @@ class RelativeBattleCalculator {
       currentOdds = horse.odds;
     }
 
-    // オッズがあり、かつ基礎能力がある場合、その場で簡易的に期待値を再計算
     if (currentOdds != null && currentOdds > 0) {
-      // 簡易期待値 = 推定勝率係数 * オッズ
-      // baseAbilityが50の場合、係数0.5。オッズが2.0倍なら 0.5 * 2.0 = 1.0 (標準)
       double estimatedWinRate = (baseAbility / 100.0);
       expectedValue = estimatedWinRate * currentOdds;
     }
-    // 上記で計算できず、DBに保存された値があればそれを使う
     else if (horse.expectedValue != null) {
       expectedValue = horse.expectedValue!;
     }
@@ -133,19 +182,20 @@ class RelativeBattleCalculator {
     return _HorseStaticData(
       horseId: horse.horseId,
       horseName: horse.horseName,
-      popularity: horse.popularity, // ★追加
+      popularity: horse.popularity,
       baseAbility: baseAbility,
       aptitudeScore: aptitudeScore,
-      expectedValue: expectedValue, // ★追加
+      expectedValue: expectedValue,
       legStyleProfile: horse.legStyleProfile,
     );
   }
 
-  /// 1回分のシミュレーション（動的展開生成）
+  /// 1回分のシミュレーション（動的展開生成 or 強制指定）
   void _runSingleIteration(
       List<_HorseStaticData> staticDataList,
       Map<String, int> winCounts,
       Map<String, Map<String, double>> scoreAccumulator,
+      RacePace? forcedPace, // ★追加: 強制ペース
       ) {
     // A. 各馬の「今回の脚質」を決定
     final Map<String, String> currentStyles = {};
@@ -176,10 +226,16 @@ class RelativeBattleCalculator {
       }
     }
 
-    // B. ペース判定
-    _PaceType pace = _PaceType.middle;
-    if (nigeCount <= 1) pace = _PaceType.slow;
-    else if (nigeCount >= 3) pace = _PaceType.high;
+    // B. ペース判定 (強制指定があればそれを使う)
+    RacePace pace; // ★修正: _PaceType -> RacePace
+    if (forcedPace != null) {
+      pace = forcedPace;
+    } else {
+      // 動的判定
+      pace = RacePace.middle;
+      if (nigeCount <= 1) pace = RacePace.slow;
+      else if (nigeCount >= 3) pace = RacePace.high;
+    }
 
     // C. 各馬の戦闘力算出
     final Map<String, double> currentStrengths = {};
@@ -196,17 +252,19 @@ class RelativeBattleCalculator {
       }
       score += styleQualityBonus;
 
-      // C-2. 展開補正
+      // C-2. 展開補正 (RacePace enumを使用)
       double paceBonus = 0.0;
-      if (pace == _PaceType.slow) {
+      if (pace == RacePace.slow) {
         if (style == '逃げ') paceBonus += 15.0;
         else if (style == '先行') paceBonus += 5.0;
         else if (style == '追い込み') paceBonus -= 5.0;
-      } else if (pace == _PaceType.high) {
+      } else if (pace == RacePace.high) {
         if (style == '逃げ') paceBonus -= 10.0;
         else if (style == '差し') paceBonus += 5.0;
         else if (style == '追い込み') paceBonus += 10.0;
       }
+      // Middleの場合は補正なし（または微調整）
+
       score += paceBonus;
 
       // ランダムなゆらぎ
@@ -245,16 +303,14 @@ class RelativeBattleCalculator {
     }
   }
 
-  /// 結果分析
+  /// 結果分析（変更なし）
   _AnalysisResult _analyzeFactors(Map<String, double> scores, double winRate, int rank) {
     String comment = "";
-    // ★修正: 逆転スコアに「妙味」も含める
     double reversal = scores['pace']! + scores['style']! + (scores['value'] ?? 0.0);
 
-    // ★修正: 勝率の基準を正規化後の値に合わせて調整
     if (winRate > 0.8) {
       comment = "盤石";
-    } else if ((scores['value'] ?? 0.0) > 1.2) { // 期待値が1.2(120%)を超えたら
+    } else if ((scores['value'] ?? 0.0) > 1.2) {
       comment = "妙味十分";
     } else if (scores['pace']! > 5.0) {
       comment = "展開利あり";
@@ -281,19 +337,19 @@ class RelativeBattleCalculator {
 class _HorseStaticData {
   final String horseId;
   final String horseName;
-  final int? popularity; // ★追加
+  final int? popularity;
   final double baseAbility;
   final double aptitudeScore;
-  final double expectedValue; // ★追加: 期待値
+  final double expectedValue;
   final LegStyleProfile? legStyleProfile;
 
   _HorseStaticData({
     required this.horseId,
     required this.horseName,
-    this.popularity, // ★追加
+    this.popularity,
     required this.baseAbility,
     required this.aptitudeScore,
-    required this.expectedValue, // ★追加
+    required this.expectedValue,
     this.legStyleProfile,
   });
 }
@@ -304,4 +360,4 @@ class _AnalysisResult {
   _AnalysisResult(this.comment, this.reversalScore);
 }
 
-enum _PaceType { slow, middle, high }
+// _PaceType enumは削除し、lib/models/relative_evaluation_model.dart の RacePace を使用する

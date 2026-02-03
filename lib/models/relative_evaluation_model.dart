@@ -1,5 +1,12 @@
 // lib/models/relative_evaluation_model.dart
 
+/// レースのペース定義
+enum RacePace {
+  slow,
+  middle,
+  high
+}
+
 /// 相対評価シミュレーションの結果を保持するモデル
 class RelativeEvaluationResult {
   /// 評価対象の馬ID
@@ -8,7 +15,7 @@ class RelativeEvaluationResult {
   /// 馬名
   final String horseName;
 
-  /// 現在の人気 (★追加)
+  /// 現在の人気
   final int? popularity;
 
   /// シミュレーション勝率 (0.0 - 1.0)
@@ -30,16 +37,24 @@ class RelativeEvaluationResult {
   /// Key: 'base', 'distance', 'course', 'gate', 'pace', 'value'
   final Map<String, double> factorScores;
 
+  /// ★追加: ペース別シミュレーション勝率
+  final Map<RacePace, double> scenarioWinRates;
+
+  /// ★追加: ペース別シミュレーション順位
+  final Map<RacePace, int> scenarioRanks;
+
   RelativeEvaluationResult({
     required this.horseId,
     required this.horseName,
-    this.popularity, // ★追加
+    this.popularity,
     required this.winRate,
     required this.rank,
     required this.reversalScore,
     required this.confidence,
     required this.evaluationComment,
     required this.factorScores,
+    this.scenarioWinRates = const {}, // ★追加 (デフォルト値あり)
+    this.scenarioRanks = const {},    // ★追加 (デフォルト値あり)
   });
 
   /// デバッグ用文字列
