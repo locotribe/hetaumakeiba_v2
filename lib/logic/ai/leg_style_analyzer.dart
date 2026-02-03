@@ -4,16 +4,20 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 
 class LegStyleProfile {
   final String primaryStyle;
-  final Map<String, double> styleDistribution;
+  final Map<String, double> styleDistribution; // 脚質分布（頻度 %）
+  final Map<String, double> styleWinRates;     // ★追加: 脚質別勝率（質 %）
 
   LegStyleProfile({
     required this.primaryStyle,
     required this.styleDistribution,
+    this.styleWinRates = const {}, // ★追加: 既存コードへの影響を防ぐためデフォルト値を設定
   });
+
   Map<String, dynamic> toJson() {
     return {
       'primaryStyle': primaryStyle,
       'styleDistribution': styleDistribution,
+      'styleWinRates': styleWinRates, // ★追加
     };
   }
 
@@ -21,20 +25,29 @@ class LegStyleProfile {
     final Map<String, double> distribution = (json['styleDistribution'] as Map<String, dynamic>).map(
           (key, value) => MapEntry(key, (value as num).toDouble()),
     );
+
+    // ★追加: 古いJSONデータには styleWinRates がない可能性があるため、nullチェックを行う
+    final Map<String, double> winRates = json['styleWinRates'] != null
+        ? (json['styleWinRates'] as Map<String, dynamic>).map(
+          (key, value) => MapEntry(key, (value as num).toDouble()),
+    )
+        : {};
+
     return LegStyleProfile(
       primaryStyle: json['primaryStyle'] as String,
       styleDistribution: distribution,
+      styleWinRates: winRates,
     );
   }
 }
 
 class _RaceActionProfile {
-  final double startPositionRate; // 1コーナーの相対的な位置取り
-  final double finalPositionRate; // 4コーナーの相対的な位置取り
-  final double positionGain; // 1コーナーから4コーナーにかけての順位変動
-  final double makuriIndex; // 3コーナーから4コーナーへの順位変動
-  final double longMakuriIndex; // 2コーナーから4コーナーへの順位変動
-  final double agariTime; // 上がり3Fタイム
+  final double startPositionRate;
+  final double finalPositionRate;
+  final double positionGain;
+  final double makuriIndex;
+  final double longMakuriIndex;
+  final double agariTime;
 
   _RaceActionProfile({
     required this.startPositionRate,
@@ -49,11 +62,11 @@ class _RaceActionProfile {
 class LegStyleAnalyzer {
   static LegStyleProfile getRunningStyle(List<HorseRaceRecord> records) {
     if (records.isEmpty) {
-      return LegStyleProfile(primaryStyle: "不明", styleDistribution: {});
+      return LegStyleProfile(primaryStyle: "不明", styleDistribution: {}, styleWinRates: {});
     }
 
-    final List<String> tentativeStyles = [];
-    final List<_RaceActionProfile> profiles = [];
+    // 脚質判定結果と、そのレースでの着順をペアで保持するリスト
+    final List<Map<String, dynamic>> validRaceData = [];
 
     for (final record in records) {
       final positions = record.cornerPassage
@@ -102,20 +115,34 @@ class LegStyleAnalyzer {
         longMakuriIndex: longMakuriIndex,
         agariTime: agari,
       );
-      profiles.add(profile);
-      tentativeStyles.add(_getTentativeLegStyle(profile, positions.length));
+
+      final style = _getTentativeLegStyle(profile, positions.length);
+      final rank = int.tryParse(record.rank);
+
+      validRaceData.add({
+        'style': style,
+        'rank': rank,
+      });
     }
 
-    if (tentativeStyles.isEmpty) {
-      return LegStyleProfile(primaryStyle: "不明", styleDistribution: {});
+    if (validRaceData.isEmpty) {
+      return LegStyleProfile(primaryStyle: "不明", styleDistribution: {}, styleWinRates: {});
     }
 
     final Map<String, int> styleCounts = {};
-    for (final style in tentativeStyles) {
+    final Map<String, int> styleWinCounts = {}; // 脚質ごとの勝利数
+
+    for (final data in validRaceData) {
+      final style = data['style'] as String;
+      final rank = data['rank'] as int?;
+
       styleCounts[style] = (styleCounts[style] ?? 0) + 1;
+      if (rank == 1) {
+        styleWinCounts[style] = (styleWinCounts[style] ?? 0) + 1;
+      }
     }
 
-    final totalRaces = tentativeStyles.length;
+    final totalRaces = validRaceData.length;
 
     final Map<String, double> styleDistribution = {
       '逃げ': (styleCounts['逃げ'] ?? 0) / totalRaces,
@@ -123,6 +150,16 @@ class LegStyleAnalyzer {
       '差し': (styleCounts['差し'] ?? 0) / totalRaces,
       '追い込み': (styleCounts['追い込み'] ?? 0) / totalRaces,
     };
+
+    // ★追加: 勝率計算 (その脚質をとった回数のうち、勝った割合)
+    final Map<String, double> styleWinRates = {};
+    styleCounts.forEach((style, count) {
+      if (count > 0) {
+        styleWinRates[style] = (styleWinCounts[style] ?? 0) / count;
+      } else {
+        styleWinRates[style] = 0.0;
+      }
+    });
 
     String primaryStyle;
     final makuriRate = (styleCounts['マクリ'] ?? 0) / totalRaces;
@@ -139,17 +176,18 @@ class LegStyleAnalyzer {
       if (topStyleEntry.value < 0.5 && hasFrontStyle && hasBackStyle) {
         primaryStyle = '自在';
       } else {
-        primaryStyle = topStyleEntry.key; // 最も多い脚質
+        primaryStyle = topStyleEntry.key;
       }
     }
 
     return LegStyleProfile(
       primaryStyle: primaryStyle,
       styleDistribution: styleDistribution,
+      styleWinRates: styleWinRates, // ★追加
     );
   }
 
-  /// 1レース分の脚質を判定して返す（外部呼び出し用）
+  /// 1レース分の脚質を判定して返す（外部呼び出し用） - 変更なし
   static String analyzeSingleRaceStyle(HorseRaceRecord record) {
     final positions = record.cornerPassage
         .split('-')
@@ -213,6 +251,7 @@ class LegStyleAnalyzer {
     return '先行';
   }
 
+  // 内部ロジック - 変更なし
   static String _getTentativeLegStyle(_RaceActionProfile profile, int cornerCount) {
     if (cornerCount == 4) {
       if (profile.longMakuriIndex > 0.4 || profile.makuriIndex > 0.3) {

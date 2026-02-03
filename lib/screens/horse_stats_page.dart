@@ -12,6 +12,7 @@ import 'package:hetaumakeiba_v2/models/matchup_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/screens/condition_based_analysis_page.dart';
+import 'package:hetaumakeiba_v2/widgets/relative_battle_table.dart'; // 相対評価テーブル用ウィジェット
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -43,7 +44,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadInitialData();
   }
 
@@ -243,11 +244,13 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         // TabBar
         TabBar(
           controller: _tabController,
+          isScrollable: true, // タブが増えるため、スクロール可能にすると安全です
           tabs: const [
             Tab(text: '個別成績'),
             Tab(text: '対戦成績'),
             Tab(text: 'コンビ成績'),
             Tab(text: '好走条件'),
+            Tab(text: '相対評価'),
           ],
           labelColor: Colors.blue,
           unselectedLabelColor: Colors.black,
@@ -320,6 +323,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             horses: widget.horses,
           ),
         ),
+        RelativeBattleTable(horses: widget.horses),
       ],
     );
   }

@@ -79,6 +79,7 @@ class PredictionHorseDetail {
   final String trainerName;
   final String trainerAffiliation;
   double? odds;
+  final String? effectiveOdds; // ★追加: 計算用オッズ（文字列）
   int? popularity;
   String? horseWeight;
   UserMark? userMark;
@@ -109,6 +110,7 @@ class PredictionHorseDetail {
     required this.trainerName,
     required this.trainerAffiliation,
     this.odds,
+    this.effectiveOdds, // ★追加
     this.popularity,
     this.horseWeight,
     this.userMark,
@@ -142,6 +144,7 @@ class PredictionHorseDetail {
       trainerAffiliation: detail.trainerAffiliation,
       horseWeight: detail.horseWeight,
       odds: detail.odds,
+      effectiveOdds: null, // 初期生成時はnull
       popularity: detail.popularity,
       isScratched: detail.isScratched,
     );
@@ -160,6 +163,7 @@ class PredictionHorseDetail {
       'trainerName': trainerName,
       'trainerAffiliation': trainerAffiliation,
       'odds': odds,
+      'effectiveOdds': effectiveOdds, // ★追加
       'popularity': popularity,
       'horseWeight': horseWeight,
       'isScratched': isScratched,
@@ -191,6 +195,7 @@ class PredictionHorseDetail {
       trainerName: json['trainerName'] as String,
       trainerAffiliation: json['trainerAffiliation'] as String,
       odds: (json['odds'] as num?)?.toDouble(),
+      effectiveOdds: json['effectiveOdds'] as String?, // ★追加
       popularity: json['popularity'] as int?,
       horseWeight: json['horseWeight'] as String?,
       isScratched: json['isScratched'] as bool,
