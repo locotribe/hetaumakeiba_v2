@@ -72,12 +72,25 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         ? int.tryParse(raceResult.raceId.substring(raceResult.raceId.length - 2))?.toString() ?? ''
         : '';
 
+    // レースIDから開催場所(venue)を特定するロジック
+    String venueName = '';
+    if (raceResult.raceId.length >= 12) {
+      final placeCode = raceResult.raceId.substring(4, 6);
+      venueName = racecourseDict[placeCode] ?? '';
+    }
+
+    if (venueName.isEmpty) {
+      venueName = racecourseDict.entries.firstWhere(
+              (e) => raceResult.raceInfo.contains(e.value),
+          orElse: () => const MapEntry("", "")
+      ).value;
+    }
 
     return PredictionRaceData(
       raceId: raceResult.raceId,
       raceName: raceResult.raceTitle,
       raceDate: raceResult.raceDate,
-      venue: racecourseDict.entries.firstWhere((e) => raceResult.raceInfo.contains(e.value), orElse: () => const MapEntry("", "")).value,
+      venue: venueName,
       raceNumber: raceNumber,
       shutubaTableUrl: 'https://db.netkeiba.com/race/${raceResult.raceId}',
       raceGrade: raceResult.raceGrade,
@@ -108,7 +121,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _predictionRaceData = shutubaCache.predictionRaceData;
         _raceResult = dbResult;
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(dbResult != null ? 2 : 0);
+        // ★修正: 結果がある場合は「レース結果(5)」へ。なければ「出馬表(0)」へ
+        _tabController.animateTo(dbResult != null ? 5 : 0);
       });
       return;
     }
@@ -118,7 +132,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _raceResult = dbResult;
         _predictionRaceData = _createPredictionDataFromRaceResult(dbResult);
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(2);
+        // ★修正: 既に結果があるなら「レース結果(5)」へ移動
+        _tabController.animateTo(5);
       });
       return;
     }
@@ -162,7 +177,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         setState(() {
           _raceResult = result;
           _status = RaceStatus.resultConfirmed;
-          _tabController.animateTo(1);
+          // ★修正: 取得完了後、自動的に「レース結果(5)」へ移動
+          _tabController.animateTo(5);
         });
       }
     } catch (e) {
@@ -185,13 +201,13 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           controller: _tabController,
           isScrollable: true,
           tabs: const [
-            Tab(text: '出馬表'),
-            Tab(text: '過去分析'),
-            Tab(text: '出走馬分析'),
-            Tab(text: '騎手特性'),
-            Tab(text: 'AI分析'),
-            Tab(text: 'レース結果'),
-            Tab(text: 'AI分析結果'),
+            Tab(text: '出馬表'),     // 0
+            Tab(text: '過去分析'),   // 1
+            Tab(text: '出走馬分析'), // 2
+            Tab(text: '騎手特性'),   // 3
+            Tab(text: 'AI分析'),     // 4
+            Tab(text: 'レース結果'), // 5
+            Tab(text: 'AI分析結果'), // 6
           ],
         ),
       ),
@@ -211,6 +227,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               children: [
                 ShutubaTablePage(raceId: widget.raceId),
                 const Center(child: CircularProgressIndicator()),
+                const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
@@ -243,7 +260,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                 raceId: widget.raceId,
                 raceName: _predictionRaceData!.raceName,
                 horses: _predictionRaceData!.horses,
-                raceData: _predictionRaceData!, // ★修正: raceData全体を渡す
+                raceData: _predictionRaceData!,
               )
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),

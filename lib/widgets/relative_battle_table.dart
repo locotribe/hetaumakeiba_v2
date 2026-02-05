@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 
 class RelativeBattleTable extends StatefulWidget {
   final List<PredictionHorseDetail> horses;
@@ -25,6 +26,7 @@ class RelativeBattleTable extends StatefulWidget {
 
 class _RelativeBattleTableState extends State<RelativeBattleTable> {
   List<RelativeEvaluationResult>? _results;
+  Map<String, JockeyStats>? _jockeyStats;
   bool _isLoading = true;
 
   final Set<RacePace> _visiblePaces = {};
@@ -69,10 +71,50 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     if (mounted) {
       setState(() {
         _results = results;
+        _jockeyStats = jockeyStats;
         _results!.sort((a, b) => b.winRate.compareTo(a.winRate));
         _isLoading = false;
       });
     }
+  }
+
+// ★追加: 場所を確実に特定するメソッド
+  String _resolveVenue(PredictionRaceData? data) {
+    if (data == null) return '';
+
+    // 1. データに場所が入っていればそれを使う
+    if (data.venue.isNotEmpty) return data.venue;
+
+    // 2. レースIDから抽出 (例: 202505... -> 05 -> 東京)
+    if (data.raceId.length >= 12) {
+      final code = data.raceId.substring(4, 6);
+      // racecourseDict は logic/parse.dart に定義されています。
+      // 未インポートの場合は import 'package:hetaumakeiba_v2/logic/parse.dart'; を追加してください
+      if (racecourseDict.containsKey(code)) {
+        return racecourseDict[code]!;
+      }
+    }
+
+    // 3. 詳細テキストから抽出 (例: "1回 東京 4日目")
+    final details = data.raceDetails1 ?? '';
+    if (details.isNotEmpty) {
+      for (final val in racecourseDict.values) {
+        if (details.contains(val)) {
+          return val;
+        }
+      }
+    }
+
+    return '';
+  }
+
+  // ★追加: 距離抽出メソッド
+  String _extractDistance(String raceInfo) {
+    final distanceMatch = RegExp(r'(芝|ダ|障)[^0-9]*?(\d+)m').firstMatch(raceInfo);
+    if (distanceMatch != null) {
+      return '${distanceMatch.group(1)}${distanceMatch.group(2)}m';
+    }
+    return '';
   }
 
   void _sort<T>(Comparable<T> Function(RelativeEvaluationResult d) getField, int columnIndex, bool ascending) {
@@ -112,37 +154,94 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     }
   }
 
+// ダイアログ表示メソッド
   void _showJockeyDetails(BuildContext context, RelativeEvaluationResult result) {
     final details = result.jockeyDetails;
     if (details == null) return;
 
-    // コース情報の生成 (例: "京都 芝3000m 集計")
+    // コース情報の生成
     String courseInfo = "全場成績";
-    if (widget.raceData != null) {
-      final String venue = widget.raceData!.venue;
-      final String detail = widget.raceData!.raceDetails1 ?? "";
+    String venueName = "";
+    String distanceStr = "";
 
-      if (venue.isNotEmpty || detail.isNotEmpty) {
-        // 空白で連結して整形
-        courseInfo = "$venue $detail 集計".trim();
+    if (widget.raceData != null) {
+      // 以前定義した _resolveVenue メソッドを使用
+      venueName = _resolveVenue(widget.raceData);
+      // 以前定義した _extractDistance メソッドを使用
+      distanceStr = _extractDistance(widget.raceData!.raceDetails1 ?? "");
+
+      if (venueName.isNotEmpty && distanceStr.isNotEmpty) {
+        courseInfo = "$venueName$distanceStr 実績";
+      } else if (venueName.isNotEmpty) {
+        courseInfo = "$venueName 実績";
+      } else if (distanceStr.isNotEmpty) {
+        courseInfo = "$distanceStr 実績";
       }
     }
 
+    // 騎手データの取得
+    JockeyStats? fullStats;
+    if (_jockeyStats != null) {
+      try {
+        final horse = widget.horses.firstWhere((h) => h.horseName == result.horseName);
+        fullStats = _jockeyStats![horse.jockeyId];
+      } catch (_) {}
+    }
+
+    List<Widget> content = [];
+
+    // --- 【上段】本コース実績セクション ---
+    // ここで使用するデータ(cs)は JockeyStatsModel 由来のため、
+    // winRate 等は既にパーセント値(例: 18.6)になっています。 => *100 不要
+    if (venueName.isNotEmpty && distanceStr.isNotEmpty) {
+      content.add(Text("【本コース ($venueName$distanceStr)】",
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)));
+
+      if (fullStats != null && fullStats.courseStats != null && fullStats.courseStats!.raceCount > 0) {
+        final cs = fullStats.courseStats!;
+
+        // 着度数の正しい計算 (累積値から算出)
+        final win = cs.winCount;
+        final second = cs.placeCount - cs.winCount;
+        final third = cs.showCount - cs.placeCount;
+        final unplaced = cs.raceCount - cs.showCount;
+        final record = "$win-$second-$third-$unplaced";
+
+        content.add(_detailRow("着度数", record));
+        // ★修正: cs.winRate は既にパーセント値なのでそのまま表示
+        content.add(_detailRow("勝率", "${cs.winRate.toStringAsFixed(1)}%"));
+        content.add(_detailRow("連対率", "${cs.placeRate.toStringAsFixed(1)}%"));
+        content.add(_detailRow("複勝率", "${cs.showRate.toStringAsFixed(1)}%"));
+      } else {
+        content.add(_detailRow("着度数", "0-0-0-0"));
+        content.add(_detailRow("勝率", "0.0%"));
+        content.add(_detailRow("連対率", "0.0%"));
+        content.add(_detailRow("複勝率", "0.0%"));
+      }
+      content.add(const Divider());
+    }
+
+    // --- 【下段】評価採用データセクション ---
+    // ここで使用するデータ(details)は RelativeBattleCalculator 由来のため、
+    // winRate 等は比率(例: 0.186)になっています。 => *100 必要
+    content.add(const Text("【評価採用データ】", style: TextStyle(fontWeight: FontWeight.bold)));
+    content.add(_detailRow("採用元", details['source']));
+    content.add(_detailRow("騎乗回数", "${details['raceCount']}回"));
+
+    // ★修正: details['winRate'] は比率なので、100倍してパーセント表示にする
+    content.add(_detailRow("勝率", "${(details['winRate'] * 100).toStringAsFixed(1)}%"));
+    content.add(_detailRow("ボーナス", details['bonus'].toString()));
+
     _showScoreDetailsDialog(
         context,
-        // 引数名はhorseNameですが、表示ロジック上はメインタイトルなので騎手名を渡します
         horseName: '${details['jockeyName']} 騎手',
-        // サブタイトルにコース情報を渡します
         subTitle: courseInfo,
         score: details['score'] as int,
-        content: [
-          _detailRow("採用データ", details['source']),
-          _detailRow("騎乗回数", "${details['raceCount']}回"),
-          _detailRow("勝率", "${(details['winRate'] * 100).toStringAsFixed(1)}%"),
-          _detailRow("ボーナス", details['bonus']),
-        ]
+        content: content
     );
   }
+
+// lib/widgets/relative_battle_table.dart
 
   void _showCompatibilityDetails(BuildContext context, RelativeEvaluationResult result) {
     final details = result.compatibilityDetails;
@@ -162,8 +261,12 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
             : [
           _detailRow("コンビ結成", "継続"),
           _detailRow("騎乗回数", "${details['rideCount']}回"),
+
+          // 勝率は小数のため *100 が必要（そのまま）
           _detailRow("コンビ勝率", "${(details['winRate'] * 100).toStringAsFixed(1)}%"),
-          _detailRow("連対率", "${(details['placeRate'] * 100).toStringAsFixed(1)}%"),
+
+          // ★修正箇所: 連対率は既にパーセント値のため *100 を削除
+          _detailRow("連対率", "${details['placeRate'].toStringAsFixed(1)}%"),
         ]
     );
   }

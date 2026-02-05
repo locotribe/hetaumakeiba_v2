@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_first_scraper_service.dart';
+import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
 
 /// netkeiba.comからレース結果の詳細をスクレイピングすることに特化したサービスクラスです。
 class RaceResultScraperService {
@@ -83,7 +84,8 @@ class RaceResultScraperService {
         final cornerPassages = _parseCornerPassages(document);
         final lapTimes = _parseLapTimes(document);
 
-        return RaceResult(
+        // ★修正: データを返す前にRepository経由で保存する
+        final result = RaceResult(
           raceId: raceId,
           raceTitle: raceTitle,
           raceInfo: raceInfo,
@@ -94,6 +96,11 @@ class RaceResultScraperService {
           cornerPassages: cornerPassages,
           lapTimes: lapTimes,
         );
+
+        // 作成したリポジトリを使って保存（既存データとの整合性チェック含む）
+        await RaceDataRepository().saveRaceResult(result);
+
+        return result;
       } else {
         final firstUrl = 'https://race.netkeiba.com/race/result.html?race_id=$raceId';
         return await RaceResultFirstScraperService.scrapeRaceDetails(firstUrl);

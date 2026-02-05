@@ -12,6 +12,8 @@ import 'dart:convert';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
+// ★追加: リポジトリのインポート
+import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
 
 class ScraperService {
 
@@ -92,6 +94,7 @@ class ScraperService {
 
         final shutubaRaceDetails = await scrapeShutubaPageDetails(raceId);
         if (shutubaRaceDetails != null) {
+          // ※FeaturedRaceの保存も本来Repositoryに移動すべきですが、今回は主要データ整合性を優先し既存維持
           await dbHelper.insertOrUpdateFeaturedRace(shutubaRaceDetails);
           featuredRaces.add(shutubaRaceDetails);
         }
@@ -185,9 +188,10 @@ class ScraperService {
           }
           print('競走馬データ取得/更新中... Horse ID: $horseId');
           final newRecords = await HorsePerformanceScraperService.scrapeHorsePerformance(horseId);
-          for (final record in newRecords) {
-            await dbHelper.insertOrUpdateHorsePerformance(record);
-          }
+
+          // ★修正: リポジトリ経由で保存（一括保存）
+          await RaceDataRepository().saveHorsePerformanceList(newRecords);
+
           await Future.delayed(const Duration(milliseconds: 500));
         }
       }

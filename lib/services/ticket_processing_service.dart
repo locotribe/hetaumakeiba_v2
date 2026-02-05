@@ -12,9 +12,13 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
+// ★追加: リポジトリのインポート
+import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
 
 class TicketProcessingService {
   final DatabaseHelper _dbHelper;
+  // ★追加: リポジトリのインスタンス
+  final RaceDataRepository _repository = RaceDataRepository();
 
   TicketProcessingService({required DatabaseHelper dbHelper}) : _dbHelper = dbHelper;
 
@@ -32,8 +36,9 @@ class TicketProcessingService {
           timestamp: DateTime.now(),
           parsedDataJson: json.encode(parsedData),
         );
-        await _dbHelper.insertQrData(qrDataToSave);
 
+        // ★修正: リポジトリ経由で保存
+        await _repository.saveQrData(qrDataToSave);
 
         savedListKey.currentState?.reloadData();
       } else {
@@ -66,10 +71,16 @@ class TicketProcessingService {
       final String? raceId = RaceResultScraperService.getRaceIdFromUrl(raceUrl);
 
       if (raceId != null) {
+        // ここでの既存チェックは「スクレイピングするかどうか」の判断用なのでDB直接参照でOK
+        // ただし保存はRepositoryを使う
         final existingRaceResult = await dbHelper.getRaceResult(raceId);
+
         if (existingRaceResult == null) {
+          // ★修正: スクレイピングサービス内ですでにRepository保存が行われるようになったため
+          // ここでの戻り値は確認用だが、二重保存を防ぐために insertOrUpdateRaceResult の呼び出しは削除してよい
+          // しかし、念のためサービスが保存することを前提に、ここでは呼び出しのみ行う
           final raceResult = await RaceResultScraperService.scrapeRaceDetails(raceUrl);
-          await dbHelper.insertOrUpdateRaceResult(raceResult);
+          // Note: RaceResultScraperService内で saveRaceResult が呼ばれているはず
 
           for (final horse in raceResult.horseResults) {
             final latestRecord =
@@ -103,7 +114,7 @@ class TicketProcessingService {
             lastScraped: DateTime.now(),
             distance: '',
             conditions: '',
-            weight: '', // これらの情報はexistingRaceResultから取得することも可能
+            weight: '',
             raceDetails1: existingRaceResult.raceInfo,
             raceDetails2: existingRaceResult.raceGrade,
           );

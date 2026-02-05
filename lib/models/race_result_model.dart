@@ -66,6 +66,12 @@ class RaceResult {
     "cornerPassages": List<dynamic>.from(cornerPassages.map((x) => x)),
     "lapTimes": List<dynamic>.from(lapTimes.map((x) => x)),
   };
+  /// データが「詳細版（確定情報）」かどうかを判定する
+  /// 払い戻し情報が含まれていれば「詳細」とみなす
+  bool get isDetailed {
+    // 払い戻し情報が空でなければ詳細データとみなす
+    return refunds.isNotEmpty;
+  }
 }
 
 /// 出走馬1頭ごとの成績を保持するクラス

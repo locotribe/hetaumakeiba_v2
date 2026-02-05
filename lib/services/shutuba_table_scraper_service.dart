@@ -4,6 +4,8 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
+// ★追加: リポジトリのインポート
+import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
 
 class ShutubaTableScraperService {
   Future<PredictionRaceData> scrapeAllData(String raceId) async {
@@ -22,7 +24,7 @@ class ShutubaTableScraperService {
       initialUrlRequest: URLRequest(url: url),
       initialSettings: InAppWebViewSettings(
         userAgent:
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5.37.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/5.37.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5.37.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/5.37.36",
         javaScriptEnabled: true,
         loadsImagesAutomatically: false,
         blockNetworkImage: true,
@@ -31,9 +33,13 @@ class ShutubaTableScraperService {
         if (completer.isCompleted) return;
         try {
           final result =
-              await controller.evaluateJavascript(source: _getScrapingJs());
+          await controller.evaluateJavascript(source: _getScrapingJs());
           if (result != null) {
             final data = _parseScrapedData(result, raceId);
+
+            // ★追加: 取得した出馬表データをRepository経由で保存
+            await RaceDataRepository().saveShutubaData(data);
+
             completer.complete(data);
           } else {
             completer.completeError(
@@ -78,7 +84,7 @@ class ShutubaTableScraperService {
       initialUrlRequest: URLRequest(url: url),
       initialSettings: InAppWebViewSettings(
         userAgent:
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5.37.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/5.37.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5.37.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/5.37.36",
         javaScriptEnabled: true,
         loadsImagesAutomatically: false,
         blockNetworkImage: true,
@@ -87,7 +93,7 @@ class ShutubaTableScraperService {
         if (completer.isCompleted) return;
         try {
           final result =
-              await controller.evaluateJavascript(source: _getScrapingJs());
+          await controller.evaluateJavascript(source: _getScrapingJs());
           if (result != null) {
             final data = _parseScrapedData(result, raceId);
             final horses = data.horses.map((h) {
@@ -141,7 +147,7 @@ class ShutubaTableScraperService {
 
     final String raceName = jsonData["raceName"] ?? "";
     final String raceGrade =
-        _getGradeTypeText(jsonData["raceGradeClass"] ?? "");
+    _getGradeTypeText(jsonData["raceGradeClass"] ?? "");
     final String raceData01 = jsonData["raceData01"] ?? "";
     final String raceData02 = jsonData["raceData02"] ?? "";
     final List<dynamic> horsesData = jsonData["horses"] ?? [];
@@ -161,7 +167,7 @@ class ShutubaTableScraperService {
 
     final List<PredictionHorseDetail> horses = horsesData.map((horseData) {
       final Map<String, dynamic> horseMap =
-          Map<String, dynamic>.from(horseData);
+      Map<String, dynamic>.from(horseData);
       final trainerText = horseMap['厩舎'] ?? '';
       String trainerAffiliation = '';
       String trainerName = trainerText;
