@@ -14,16 +14,22 @@ class JockeyAnalysisService {
     final Map<String, JockeyStats> analysisResults = {};
 
     String? currentCourseKey;
-    if (raceData != null && raceData.raceDetails1 != null) {
+    // ★修正: raceDataが存在する場合にコース特定を試みる
+    if (raceData != null) {
       String venue = '';
+      // ★修正: raceDetails1ではなく、venueプロパティから開催場名を探す
+      // raceData.venue (例: "1回東京1日目") に "東京" が含まれているかチェック
       for (final entry in racecourseDict.entries) {
-        if (raceData.raceDetails1!.contains(entry.value)) {
+        if (raceData.venue.contains(entry.value)) {
           venue = entry.value;
           break;
         }
       }
 
-      final distance = _extractDistance(raceData.raceDetails1!);
+      // 距離情報は引き続き raceDetails1 から取得
+      final String details = raceData.raceDetails1 ?? '';
+      final distance = _extractDistance(details);
+
       if (venue.isNotEmpty && distance.isNotEmpty) {
         currentCourseKey = '$venue $distance';
       }

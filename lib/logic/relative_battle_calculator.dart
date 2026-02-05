@@ -2,7 +2,12 @@
 
 import 'dart:math';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/stats_analyzer.dart'; // ★追加
 import '../models/relative_evaluation_model.dart';
 
 /// 相対評価シミュレーションを実行する計算クラス
@@ -13,10 +18,17 @@ class RelativeBattleCalculator {
   List<RelativeEvaluationResult> runSimulation(
       List<PredictionHorseDetail> horses, {
         int iterations = 100,
+        Map<String, JockeyStats>? jockeyStats,
+        Map<String, List<HorseRaceRecord>>? horsePerformanceMap,
       }) {
     if (horses.length < 2) return [];
 
-    final List<_HorseStaticData> staticDataList = horses.map((h) => _prepareStaticData(h)).toList();
+    // ★今回のレースの総頭数を取得 (パーセンテージ計算用)
+    int totalHorses = horses.length;
+
+    final List<_HorseStaticData> staticDataList = horses
+        .map((h) => _prepareStaticData(h, totalHorses, jockeyStats, horsePerformanceMap))
+        .toList();
 
     // 各シナリオを実行
     final overallResult = _runScenario(staticDataList, iterations, null);
@@ -69,7 +81,7 @@ class RelativeBattleCalculator {
         valueScore = (roi * 100) + gapBonus;
       }
 
-      // ★刷新: 3ブロック構成の動的コメント生成
+      // コメント生成
       String comment = _generateRichComment(
         winRate: winRate,
         valueScore: valueScore,
@@ -96,6 +108,9 @@ class RelativeBattleCalculator {
           ...baseRes.factorScores,
           'value': valueScore,
         },
+        jockeyDetails: staticData.jockeyDetails,
+        compatibilityDetails: staticData.compatibilityDetails,
+        gateDetails: staticData.gateDetails, // ★追加
         scenarioWinRates: scenarioWinRates,
         scenarioRanks: scenarioRanks,
       ));
@@ -105,10 +120,9 @@ class RelativeBattleCalculator {
     return results;
   }
 
-// ===========================================================================
-  // ★ プロフェッショナル短評生成エンジン (3ブロック構成)
   // ===========================================================================
-
+  // ★ プロフェッショナル短評生成エンジン
+  // ===========================================================================
   String _generateRichComment({
     required double winRate,
     required double valueScore,
@@ -120,168 +134,59 @@ class RelativeBattleCalculator {
     required double odds,
     required LegStyleProfile? legStyleProfile,
   }) {
-    // 1. ブロック①: 主語・特徴 (Who/What)
-    // ★修正: 引数に aiRank を追加しました
     String part1 = _selectSubjectPhrase(legStyleProfile, popularity, winRate, aptitudeScore, aiRank);
-
-    // 2. ブロック②: 条件・展開 (If/When)
     String part2 = _selectConditionPhrase(bestPace, reversalScore, valueScore, winRate, odds);
-
-    // 3. ブロック③: 結論 (Action)
     String part3 = _selectConclusionPhrase(winRate, valueScore, reversalScore, popularity);
-
-    // 文脈結合
     return "$part1、$part2、$part3";
   }
 
-  /// ブロック①選択ロジック
-  // ★修正: 引数定義に int aiRank を追加しました
   String _selectSubjectPhrase(LegStyleProfile? profile, int popularity, double winRate, double aptitudeScore, int aiRank) {
-    // 穴馬判定 (人気薄だがAI評価が高い)
-    // ここで aiRank を使用するため、引数が必要でした
-    if (popularity > 5 && (winRate > 0.15 || aiRank <= 3)) {
-      return _getRandom(_subjectAnauma);
-    }
-    // コース巧者
-    if (aptitudeScore >= 15.0) {
-      return _getRandom(_subjectCourseSpecialist);
-    }
-    // 脚質ベース
+    if (popularity > 5 && (winRate > 0.15 || aiRank <= 3)) return _getRandom(_subjectAnauma);
+    if (aptitudeScore >= 15.0) return _getRandom(_subjectCourseSpecialist);
     String style = profile?.primaryStyle ?? '自在';
     if (style == '逃げ') return _getRandom(_subjectNige);
     if (style == '先行') return _getRandom(_subjectSenko);
     if (style == '差し' || style == '追い込み') return _getRandom(_subjectSashi);
-
-    // デフォルト
     return "自在性に富んだ取り口を見せ";
   }
 
-  /// ブロック②選択ロジック
   String _selectConditionPhrase(RacePace? bestPace, double reversal, double value, double winRate, double odds) {
-    // 逆転・展開待ち (最優先)
     if (reversal >= 20.0) {
       if (bestPace == RacePace.high) return _getRandom(_conditionHighPace);
       if (bestPace == RacePace.slow) return _getRandom(_conditionSlowPace);
     }
-    // 妙味 (オッズの歪み)
-    if (value >= 150.0 || (value >= 100.0 && odds >= 10.0)) {
-      return _getRandom(_conditionValue);
-    }
-    // 能力上位 (勝率が高い)
-    if (winRate >= 0.40) {
-      return _getRandom(_conditionAbility);
-    }
-    // デフォルト (展開不問など)
+    if (value >= 150.0 || (value >= 100.0 && odds >= 10.0)) return _getRandom(_conditionValue);
+    if (winRate >= 0.40) return _getRandom(_conditionAbility);
     return "展開に左右されない強みがあり";
   }
 
-  /// ブロック③選択ロジック
   String _selectConclusionPhrase(double winRate, double value, double reversal, int popularity) {
-    // 危険な人気馬
-    if (popularity <= 3 && winRate < 0.15) {
-      return _getRandom(_conclusionDanger);
-    }
-    // 鉄板
-    if (winRate >= 0.40) {
-      return _getRandom(_conclusionIronclad);
-    }
-    // 一発逆転
-    if (reversal >= 25.0 || (value >= 200.0 && winRate < 0.2)) {
-      return _getRandom(_conclusionDarkHorse);
-    }
-    // 相手候補 (デフォルト)
-    if (winRate >= 0.15) {
-      return _getRandom(_conclusionContender);
-    }
-    // 厳しい
+    if (popularity <= 3 && winRate < 0.15) return _getRandom(_conclusionDanger);
+    if (winRate >= 0.40) return _getRandom(_conclusionIronclad);
+    if (reversal >= 25.0 || (value >= 200.0 && winRate < 0.2)) return _getRandom(_conclusionDarkHorse);
+    if (winRate >= 0.15) return _getRandom(_conclusionContender);
     return "静観するのが賢明でしょう。";
   }
 
   String _getRandom(List<String> list) => list[_random.nextInt(list.length)];
 
-  // --- 語彙データベース (Internal Data Only) ---
+  // --- 語彙データベース ---
+  static const _subjectNige = ["テンの速さを最大限に活かし", "果敢にハナを奪うスタイルで", "単騎マイペースの逃げなら", "自慢の快速を武器に主導権を握り", "自分のリズムで逃げられれば", "強引にでもハナを叩く構えで", "行き脚の良さはメンバー随一で", "淀みない流れを作る快速馬で", "先手を奪って主導権を渡さず", "ハナを奪う形がベストの構成で"];
+  static const _subjectSenko = ["好位のインで脚を溜め", "安定感ある取り口が武器で", "番手から抜け出す競馬が板につき", "隙のない立ち回りが持ち味で", "先団の直後で機を伺い", "好位で流れに乗る形が理想で", "器用な脚を使える先行タイプで", "先団の一角で流れに乗れば", "好位から安定した伸びを見せ", "経済コースを立ち回れる器用さがあり"];
+  static const _subjectSashi = ["メンバー随一の末脚を誇り", "後方から虎視眈々と展開を伺い", "直線の切れ味を最大の武器に", "終い確実に脚を使うタイプで", "鋭い決め手を秘めており", "展開が嵌まった時の爆発力は凄まじく", "大外から豪快に脚を伸ばして", "溜めれば溜めるだけ伸びるタイプで", "混戦を切り裂くような末脚で", "自慢の瞬発力をフルに活かし"];
+  static const _subjectAnauma = ["実績面では見劣りするものの", "人気ほどの能力差は感じられず", "マークが薄くなるここは不気味で", "伏兵的存在ながら地力は秘めており", "潜在的な指数は上位に匹敵し", "配当的な旨味を感じさせる一頭で", "虎視眈々と波乱を狙う一角で", "隠れた実力馬として警戒が必要", "人気薄が予想される今回こそが買いで", "指数面では上位と互角の評価で"];
+  static const _subjectCourseSpecialist = ["この舞台を庭にしており", "得意の条件に戻って一変が期待でき", "コース相性抜群で不安要素は少なく", "特定の距離で無類の強さを発揮し", "舞台適性の高さは証明済みで", "小回りコースでの立ち回りが巧みで", "この条件なら能力全開が可能で", "コース実績がメンバー中で抜けており"];
+  static const _conditionSlowPace = ["息の入るスローな流れになれば", "前が止まらない展開が味方し", "上がり勝負の決め手比べになれば", "瞬発力が要求される展開こそ理想で", "ペースが落ち着いて余力が残れば", "ヨーイドンの競馬に持ち込めれば", "逃げ馬不在の楽な流れが予想され", "後続に脚を使わせないスローなら", "緩い流れを味方に早め先頭を奪えば", "極端な上がり勝負がこの馬に合い"];
+  static const _conditionHighPace = ["前が激流に巻き込まれれば", "前崩れの展開利を後方から得て", "タフな消耗戦になれば浮上し", "息の入らない厳しいラップになれば", "淀みのない流れで底力が問われ", "オーバーペースで前が脱落する中", "ハイペースを中団で死守できれば", "厳しい流れを経験してきた強みがあり", "激しい先行争いを尻目に脚を溜め", "バテ合いの展開で持ち前の粘りを発揮"];
+  static const _conditionValue = ["実力に対し完全に過小評価されており", "配当妙味はメンバー中No.1で", "オッズ的な旨味が非常に大きく", "単勝期待値が極めて高いデータを示し", "盲点となっている今が絶好の狙い目", "複勝圏内の確実性はオッズ以上で", "穴党なら見逃せない魅力的な数値で", "期待値重視の戦略なら外せない一頭", "リスク・リターンのバランスが秀逸で", "伏兵ながら指数的には単穴以上の評価"];
+  static const _conditionAbility = ["地力は明らかに一枚上で", "ここでは能力が完全に抜けており", "死角らしい死角は見当たらず", "順当なら負けられない実力馬で", "指数的には圧倒的な優位に立ち", "どんな展開になっても対応できる", "凡走する姿が想像しにくい安定感で", "メンバー構成を見渡しても隙はなく", "圧倒的な指数が示す通り実力は本物", "ここは盤石の態勢で挑める一戦"];
+  static const _conclusionIronclad = ["勝ち負け必至です。", "軸として最も信頼できます。", "中心視して間違いありません。", "首位争いの筆頭候補です。", "堂々の主役を務めます。", "信頼度はメンバー中随一。", "順当に白星を掴むでしょう。", "勝利への最短距離にいます。", "盤石の軸馬として指名します。", "迷わず中心に据えるべき一頭。"];
+  static const _conclusionContender = ["連対候補として押さえるべき。", "相手には必ず入れておきたい一頭。", "3着なら十分に圏内です。", "圏内への食い込みは濃厚です。", "ヒモ穴として注意を払いたい。", "連下の一角として軽視禁物。", "善戦以上の期待がかかります。", "馬券内には拾っておきたい。", "相手なりに走る堅実さを信頼。", "手広く買うなら外せぬ一頭。"];
+  static const _conclusionDarkHorse = ["波乱の主役になり得ます。", "一発大駆けの魅力十分です。", "頭まで突き抜けるシーンも。", "爆発力は上位を脅かす存在。", "高配当のキーマンはこの馬。", "大番狂わせを期待させる一頭。", "穴党なら迷わず狙いたい。", "突き抜ければ高配当必至。", "展開次第で主役に躍り出る。", "面白い穴馬として推奨します。"];
+  static const _conclusionDanger = ["全幅の信頼は置けません。", "静観するのが賢明でしょう。", "リスクの方が大きい評価です。", "今回は評価を下げるのが妥当。", "過信は禁物の危うさがあり。", "人気先行の感が否めません。", "今回は苦戦が予想されます。", "馬券的な妙味は薄いと判断。", "見送る勇気も必要な一頭。", "過剰人気に対する懸念あり。"];
 
-  // ①主語：逃げ
-  static const _subjectNige = [
-    "テンの速さを最大限に活かし", "果敢にハナを奪うスタイルで", "単騎マイペースの逃げなら", "自慢の快速を武器に主導権を握り",
-    "自分のリズムで逃げられれば", "強引にでもハナを叩く構えで", "行き脚の良さはメンバー随一で", "淀みない流れを作る快速馬で",
-    "先手を奪って主導権を渡さず", "ハナを奪う形がベストの構成で"
-  ];
-  // ①主語：先行
-  static const _subjectSenko = [
-    "好位のインで脚を溜め", "安定感ある取り口が武器で", "番手から抜け出す競馬が板につき", "隙のない立ち回りが持ち味で",
-    "先団の直後で機を伺い", "好位で流れに乗る形が理想で", "器用な脚を使える先行タイプで", "先団の一角で流れに乗れば",
-    "好位から安定した伸びを見せ", "経済コースを立ち回れる器用さがあり"
-  ];
-  // ①主語：差し・追込
-  static const _subjectSashi = [
-    "メンバー随一の末脚を誇り", "後方から虎視眈々と展開を伺い", "直線の切れ味を最大の武器に", "終い確実に脚を使うタイプで",
-    "鋭い決め手を秘めており", "展開が嵌まった時の爆発力は凄まじく", "大外から豪快に脚を伸ばして", "溜めれば溜めるだけ伸びるタイプで",
-    "混戦を切り裂くような末脚で", "自慢の瞬発力をフルに活かし"
-  ];
-  // ①主語：穴馬（人気薄・高評価）
-  static const _subjectAnauma = [
-    "実績面では見劣りするものの", "人気ほどの能力差は感じられず", "マークが薄くなるここは不気味で", "伏兵的存在ながら地力は秘めており",
-    "潜在的な指数は上位に匹敵し", "配当的な旨味を感じさせる一頭で", "虎視眈々と波乱を狙う一角で", "隠れた実力馬として警戒が必要",
-    "人気薄が予想される今回こそが買いで", "指数面では上位と互角の評価で"
-  ];
-  // ①主語：コース巧者
-  static const _subjectCourseSpecialist = [
-    "この舞台を庭にしており", "得意の条件に戻って一変が期待でき", "コース相性抜群で不安要素は少なく", "特定の距離で無類の強さを発揮し",
-    "舞台適性の高さは証明済みで", "小回りコースでの立ち回りが巧みで", "この条件なら能力全開が可能で", "コース実績がメンバー中で抜けており"
-  ];
+  // --- メイン処理 ---
 
-  // ②条件：スロー（瞬発力）
-  static const _conditionSlowPace = [
-    "息の入るスローな流れになれば", "前が止まらない展開が味方し", "上がり勝負の決め手比べになれば", "瞬発力が要求される展開こそ理想で",
-    "ペースが落ち着いて余力が残れば", "ヨーイドンの競馬に持ち込めれば", "逃げ馬不在の楽な流れが予想され", "後続に脚を使わせないスローなら",
-    "緩い流れを味方に早め先頭を奪えば", "極端な上がり勝負がこの馬に合い"
-  ];
-  // ②条件：ハイ（消耗戦）
-  static const _conditionHighPace = [
-    "前が激流に巻き込まれれば", "前崩れの展開利を後方から得て", "タフな消耗戦になれば浮上し", "息の入らない厳しいラップになれば",
-    "淀みのない流れで底力が問われ", "オーバーペースで前が脱落する中", "ハイペースを中団で死守できれば", "厳しい流れを経験してきた強みがあり",
-    "激しい先行争いを尻目に脚を溜め", "バテ合いの展開で持ち前の粘りを発揮"
-  ];
-  // ②条件：妙味（オッズ）
-  static const _conditionValue = [
-    "実力に対し完全に過小評価されており", "配当妙味はメンバー中No.1で", "オッズ的な旨味が非常に大きく", "単勝期待値が極めて高いデータを示し",
-    "盲点となっている今が絶好の狙い目", "複勝圏内の確実性はオッズ以上で", "穴党なら見逃せない魅力的な数値で", "期待値重視の戦略なら外せない一頭",
-    "リスク・リターンのバランスが秀逸で", "伏兵ながら指数的には単穴以上の評価"
-  ];
-  // ②条件：能力上位
-  static const _conditionAbility = [
-    "地力は明らかに一枚上で", "ここでは能力が完全に抜けており", "死角らしい死角は見当たらず", "順当なら負けられない実力馬で",
-    "指数的には圧倒的な優位に立ち", "どんな展開になっても対応できる", "凡走する姿が想像しにくい安定感で", "メンバー構成を見渡しても隙はなく",
-    "圧倒的な指数が示す通り実力は本物", "ここは盤石の態勢で挑める一戦"
-  ];
-
-  // ③結論：鉄板
-  static const _conclusionIronclad = [
-    "勝ち負け必至です。", "軸として最も信頼できます。", "中心視して間違いありません。", "首位争いの筆頭候補です。",
-    "堂々の主役を務めます。", "信頼度はメンバー中随一。", "順当に白星を掴むでしょう。", "勝利への最短距離にいます。",
-    "盤石の軸馬として指名します。", "迷わず中心に据えるべき一頭。"
-  ];
-  // ③結論：相手候補
-  static const _conclusionContender = [
-    "連対候補として押さえるべき。", "相手には必ず入れておきたい一頭。", "3着なら十分に圏内です。", "圏内への食い込みは濃厚です。",
-    "ヒモ穴として注意を払いたい。", "連下の一角として軽視禁物。", "善戦以上の期待がかかります。", "馬券内には拾っておきたい。",
-    "相手なりに走る堅実さを信頼。", "手広く買うなら外せぬ一頭。"
-  ];
-  // ③結論：一発逆転
-  static const _conclusionDarkHorse = [
-    "波乱の主役になり得ます。", "一発大駆けの魅力十分です。", "頭まで突き抜けるシーンも。", "爆発力は上位を脅かす存在。",
-    "高配当のキーマンはこの馬。", "大番狂わせを期待させる一頭。", "穴党なら迷わず狙いたい。", "突き抜ければ高配当必至。",
-    "展開次第で主役に躍り出る。", "面白い穴馬として推奨します。"
-  ];
-  // ③結論：危険
-  static const _conclusionDanger = [
-    "全幅の信頼は置けません。", "静観するのが賢明でしょう。", "リスクの方が大きい評価です。", "今回は評価を下げるのが妥当。",
-    "過信は禁物の危うさがあり。", "人気先行の感が否めません。", "今回は苦戦が予想されます。", "馬券的な妙味は薄いと判断。",
-    "見送る勇気も必要な一頭。", "過剰人気に対する懸念あり。"
-  ];
-
-  // --- 既存メソッド（変更なし） ---
   List<RelativeEvaluationResult> _runScenario(
       List<_HorseStaticData> staticDataList,
       int iterations,
@@ -290,7 +195,15 @@ class RelativeBattleCalculator {
     final winCounts = {for (var h in staticDataList) h.horseId: 0};
     final scoreAccumulator = {
       for (var h in staticDataList)
-        h.horseId: {'base': 0.0, 'style': 0.0, 'pace': 0.0, 'aptitude': 0.0}
+        h.horseId: {
+          'base': 0.0,
+          'style': 0.0,
+          'pace': 0.0,
+          'aptitude': 0.0,
+          'jockey': 0.0,
+          'compatibility': 0.0,
+          'gate': 0.0, // ★追加
+        }
     };
 
     for (int i = 0; i < iterations; i++) {
@@ -318,6 +231,9 @@ class RelativeBattleCalculator {
         'style': acc['style']! / iterations,
         'pace': acc['pace']! / iterations,
         'aptitude': acc['aptitude']! / iterations,
+        'jockey': acc['jockey']! / iterations,
+        'compatibility': acc['compatibility']! / iterations,
+        'gate': acc['gate']! / iterations, // ★追加
       };
 
       results.add(RelativeEvaluationResult(
@@ -331,6 +247,9 @@ class RelativeBattleCalculator {
         confidence: _calculateConfidence(winRate, iterations),
         evaluationComment: "",
         factorScores: factorScores,
+        jockeyDetails: staticData.jockeyDetails,
+        compatibilityDetails: staticData.compatibilityDetails,
+        gateDetails: staticData.gateDetails, // ★追加
         scenarioWinRates: {},
         scenarioRanks: {},
       ));
@@ -338,7 +257,12 @@ class RelativeBattleCalculator {
     return results;
   }
 
-  _HorseStaticData _prepareStaticData(PredictionHorseDetail horse) {
+  _HorseStaticData _prepareStaticData(
+      PredictionHorseDetail horse,
+      int totalHorses, // ★追加
+      Map<String, JockeyStats>? jockeyStats,
+      Map<String, List<HorseRaceRecord>>? horsePerformanceMap,
+      ) {
     double baseAbility = 50.0;
     if (horse.overallScore != null) {
       baseAbility = horse.overallScore!;
@@ -361,6 +285,118 @@ class RelativeBattleCalculator {
       aptitudeScore += (winRate * 30.0);
     }
 
+    // --- 騎手評価 ---
+    double jockeyScore = 0.0;
+    Map<String, dynamic> jDetails = {
+      'jockeyName': horse.jockey,
+      'source': 'データなし',
+      'raceCount': 0,
+      'winRate': 0.0,
+      'score': 0,
+      'bonus': 'なし',
+    };
+
+    if (jockeyStats != null && jockeyStats.containsKey(horse.jockeyId)) {
+      final stats = jockeyStats[horse.jockeyId]!;
+      final bool useCourseStats = (stats.courseStats != null && stats.courseStats!.raceCount >= 2);
+      final FactorStats targetStats = useCourseStats ? stats.courseStats! : stats.overallStats;
+
+      if (targetStats.raceCount > 0) {
+        double rawWinRate = targetStats.winRate;
+        double winRateRatio = (rawWinRate > 1.0) ? rawWinRate / 100.0 : rawWinRate;
+        double baseScore = winRateRatio * 100.0;
+        double confidence = 0.5 + ((targetStats.raceCount / 20.0).clamp(0.0, 0.5));
+        jockeyScore = baseScore * confidence;
+        if (useCourseStats) jockeyScore += 10.0;
+        if (jockeyScore > 50.0) jockeyScore = 50.0;
+
+        jDetails = {
+          'jockeyName': horse.jockey,
+          'source': useCourseStats ? 'コース実績' : '通算実績',
+          'raceCount': targetStats.raceCount,
+          'winRate': winRateRatio,
+          'score': jockeyScore.round(),
+          'bonus': useCourseStats ? 'コース適性あり (+10)' : 'なし',
+        };
+      }
+    }
+
+    // --- コンビ相性評価 ---
+    double compatibilityScore = 0.0;
+    Map<String, dynamic> cDetails = {
+      'isFirstRide': true,
+      'rideCount': 0,
+      'winRate': 0.0,
+      'placeRate': 0.0,
+      'score': 0,
+    };
+
+    // --- ★追加: 枠順評価 & 傾向データ取得 ---
+    double gateScore = 0.0;
+    Map<String, dynamic> gDetails = {
+      'gateNumber': horse.horseNumber,
+      'isDetermined': false,
+      'tendency': <String, dynamic>{}, // 過去の内中外傾向
+      'score': 0,
+    };
+    Map<String, Map<String, double>> gateTendency = {}; // 生データ
+
+    if (horsePerformanceMap != null && horsePerformanceMap.containsKey(horse.horseId)) {
+      final records = horsePerformanceMap[horse.horseId]!;
+
+      // 1. コンビ評価
+      final comboStats = HorseStatsAnalyzer.analyzeJockeyCombo(
+        currentJockeyId: horse.jockeyId,
+        performanceRecords: records,
+        raceResults: {},
+      );
+
+      if (!comboStats.isFirstRide) {
+        double rawWinRate = comboStats.winRate;
+        double winRateRatio = (rawWinRate > 1.0) ? rawWinRate / 100.0 : rawWinRate;
+        double winScore = winRateRatio * 40.0;
+        double countBonus = (comboStats.rideCount * 1.5).clamp(0.0, 15.0);
+        double confidence = (comboStats.rideCount / 5.0).clamp(0.5, 1.0);
+        compatibilityScore = (winScore * confidence) + countBonus;
+        if (compatibilityScore > 50.0) compatibilityScore = 50.0;
+        cDetails = {
+          'isFirstRide': false,
+          'rideCount': comboStats.rideCount,
+          'winRate': winRateRatio,
+          'placeRate': comboStats.placeRate,
+          'score': compatibilityScore.round(),
+        };
+      }
+
+      // 2. 枠順傾向の取得
+      gateTendency = StatsAnalyzer.analyzeGateTendency(pastRecords: records);
+
+      // 今回の馬番が決まっている場合のみスコア計算
+      if (horse.horseNumber > 0 && totalHorses > 0) {
+        double posRatio = horse.horseNumber / totalHorses;
+        String zone = 'outer';
+        if (posRatio <= 0.33) zone = 'inner';
+        else if (posRatio <= 0.66) zone = 'middle';
+
+        // 該当ゾーンの勝率を取得
+        double zoneWinRate = gateTendency[zone]?['winRate'] ?? 0.0;
+        double zoneCount = gateTendency[zone]?['count'] ?? 0.0;
+
+        // スコアリング (勝率ベース + 信頼度)
+        double baseGateScore = zoneWinRate * 50.0; // 勝率40%なら20点
+        double confidence = (zoneCount / 5.0).clamp(0.0, 1.0); // 5戦以上で信頼
+        gateScore = baseGateScore * confidence;
+
+        gDetails = {
+          'gateNumber': horse.horseNumber,
+          'isDetermined': true,
+          'zone': zone, // 'inner', 'middle', 'outer'
+          'tendency': gateTendency,
+          'score': gateScore.round(),
+        };
+      }
+    }
+
     double? currentOdds;
     if (horse.effectiveOdds != null) {
       currentOdds = double.tryParse(horse.effectiveOdds!);
@@ -370,10 +406,18 @@ class RelativeBattleCalculator {
 
     return _HorseStaticData(
       horseId: horse.horseId,
+      horseNumber: horse.horseNumber, // ★追加
       horseName: horse.horseName,
       popularity: horse.popularity,
       baseAbility: baseAbility,
       aptitudeScore: aptitudeScore,
+      jockeyScore: jockeyScore,
+      compatibilityScore: compatibilityScore,
+      gateScore: gateScore, // ★追加
+      jockeyDetails: jDetails,
+      compatibilityDetails: cDetails,
+      gateDetails: gDetails, // ★追加
+      gateTendency: gateTendency, // ★追加
       currentOdds: currentOdds,
       legStyleProfile: horse.legStyleProfile,
     );
@@ -394,7 +438,6 @@ class RelativeBattleCalculator {
         double rand = _random.nextDouble();
         double cumulative = 0.0;
         bool determined = false;
-
         final dist = horse.legStyleProfile!.styleDistribution;
         for (var style in ['逃げ', '先行', '差し', '追い込み']) {
           cumulative += (dist[style] ?? 0.0);
@@ -422,7 +465,9 @@ class RelativeBattleCalculator {
     final Map<String, double> currentStrengths = {};
 
     for (var horse in staticDataList) {
-      double score = horse.baseAbility + horse.aptitudeScore;
+      // 基礎スコア合計
+      double score = horse.baseAbility + horse.aptitudeScore +
+          horse.jockeyScore + horse.compatibilityScore + horse.gateScore;
 
       double styleQualityBonus = 0.0;
       final style = currentStyles[horse.horseId]!;
@@ -451,20 +496,51 @@ class RelativeBattleCalculator {
       scoreAccumulator[horse.horseId]!['style'] = scoreAccumulator[horse.horseId]!['style']! + styleQualityBonus;
       scoreAccumulator[horse.horseId]!['pace'] = scoreAccumulator[horse.horseId]!['pace']! + paceBonus;
       scoreAccumulator[horse.horseId]!['aptitude'] = scoreAccumulator[horse.horseId]!['aptitude']! + horse.aptitudeScore;
+      scoreAccumulator[horse.horseId]!['jockey'] = scoreAccumulator[horse.horseId]!['jockey']! + horse.jockeyScore;
+      scoreAccumulator[horse.horseId]!['compatibility'] = scoreAccumulator[horse.horseId]!['compatibility']! + horse.compatibilityScore;
+      scoreAccumulator[horse.horseId]!['gate'] = scoreAccumulator[horse.horseId]!['gate']! + horse.gateScore;
     }
 
+    // 総当たり戦
     for (int i = 0; i < staticDataList.length; i++) {
       for (int j = i + 1; j < staticDataList.length; j++) {
-        String idA = staticDataList[i].horseId;
-        String idB = staticDataList[j].horseId;
-        double strA = currentStrengths[idA]!;
-        double strB = currentStrengths[idB]!;
+        var horseA = staticDataList[i];
+        var horseB = staticDataList[j];
+
+        double strA = currentStrengths[horseA.horseId]!;
+        double strB = currentStrengths[horseB.horseId]!;
+
+        // ★追加: 相対位置補正 (Relative Position Logic)
+        // 馬番が確定している場合のみ発動
+        if (horseA.horseNumber > 0 && horseB.horseNumber > 0) {
+          // AがBより内側にいる場合
+          if (horseA.horseNumber < horseB.horseNumber) {
+            // Aの内枠勝率が高ければ有利 (ボーナス)
+            double innerWinRate = horseA.gateTendency['inner']?['winRate'] ?? 0.0;
+            if (innerWinRate > 0.2) strA += (innerWinRate * 5.0); // 最大5点程度
+
+            // Bの外枠勝率が低ければBは不利 (A有利)
+            double outerWinRate = horseB.gateTendency['outer']?['winRate'] ?? 0.0;
+            if (outerWinRate < 0.1) strB -= 2.0;
+          }
+          // AがBより外側にいる場合
+          else {
+            // Aの外枠勝率が高ければ有利
+            double outerWinRate = horseA.gateTendency['outer']?['winRate'] ?? 0.0;
+            if (outerWinRate > 0.2) strA += (outerWinRate * 5.0);
+
+            // Bの内枠勝率が低ければBは不利
+            double innerWinRate = horseB.gateTendency['inner']?['winRate'] ?? 0.0;
+            if (innerWinRate < 0.1) strB -= 2.0;
+          }
+        }
+
         double probA = 1 / (1 + exp(-(strA - strB) / 15.0));
 
         if (_random.nextDouble() < probA) {
-          winCounts[idA] = (winCounts[idA] ?? 0) + 1;
+          winCounts[horseA.horseId] = (winCounts[horseA.horseId] ?? 0) + 1;
         } else {
-          winCounts[idB] = (winCounts[idB] ?? 0) + 1;
+          winCounts[horseB.horseId] = (winCounts[horseB.horseId] ?? 0) + 1;
         }
       }
     }
@@ -478,19 +554,35 @@ class RelativeBattleCalculator {
 
 class _HorseStaticData {
   final String horseId;
+  final int horseNumber; // ★追加
   final String horseName;
   final int? popularity;
   final double baseAbility;
   final double aptitudeScore;
+  final double jockeyScore;
+  final double compatibilityScore;
+  final double gateScore; // ★追加
+  final Map<String, dynamic> jockeyDetails;
+  final Map<String, dynamic> compatibilityDetails;
+  final Map<String, dynamic> gateDetails; // ★追加
+  final Map<String, Map<String, double>> gateTendency; // ★追加
   final double? currentOdds;
   final LegStyleProfile? legStyleProfile;
 
   _HorseStaticData({
     required this.horseId,
+    required this.horseNumber, // ★追加
     required this.horseName,
     this.popularity,
     required this.baseAbility,
     required this.aptitudeScore,
+    required this.jockeyScore,
+    required this.compatibilityScore,
+    required this.gateScore, // ★追加
+    required this.jockeyDetails,
+    required this.compatibilityDetails,
+    required this.gateDetails, // ★追加
+    required this.gateTendency, // ★追加
     this.currentOdds,
     this.legStyleProfile,
   });

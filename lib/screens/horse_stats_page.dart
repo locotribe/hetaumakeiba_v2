@@ -12,18 +12,20 @@ import 'package:hetaumakeiba_v2/models/matchup_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/screens/condition_based_analysis_page.dart';
-import 'package:hetaumakeiba_v2/widgets/relative_battle_table.dart'; // 相対評価テーブル用ウィジェット
+import 'package:hetaumakeiba_v2/widgets/relative_battle_table.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
   final String raceName;
   final List<PredictionHorseDetail> horses;
+  final PredictionRaceData? raceData; // ★修正: Optionalで受け取る
 
   const HorseStatsPage({
     super.key,
     required this.raceId,
     required this.raceName,
     required this.horses,
+    this.raceData, // ★修正: コンストラクタに追加
   });
 
   @override
@@ -241,10 +243,9 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
               tooltip: 'データを更新',
             ),
           ),
-        // TabBar
         TabBar(
           controller: _tabController,
-          isScrollable: true, // タブが増えるため、スクロール可能にすると安全です
+          isScrollable: true,
           tabs: const [
             Tab(text: '個別成績'),
             Tab(text: '対戦成績'),
@@ -323,7 +324,11 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             horses: widget.horses,
           ),
         ),
-        RelativeBattleTable(horses: widget.horses),
+        // ★修正: raceDataを渡す
+        RelativeBattleTable(
+          horses: widget.horses,
+          raceData: widget.raceData,
+        ),
       ],
     );
   }
@@ -383,7 +388,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     const double cellWidth = 50.0;
     const double cellHeight = 50.0;
     const double headerHeight = 50.0;
-    const double totalCellWidth = 70.0; // 集計列の幅
+    const double totalCellWidth = 70.0;
 
     final Map<String, Map<String, int>> horseTotals = {};
     for (final horseA in widget.horses) {
@@ -428,7 +433,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(height: headerHeight), // 左上の空セル
+                Container(height: headerHeight),
                 ...widget.horses.map((horse) {
                   return Container(
                     height: cellHeight,

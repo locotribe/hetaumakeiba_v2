@@ -243,6 +243,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                 raceId: widget.raceId,
                 raceName: _predictionRaceData!.raceName,
                 horses: _predictionRaceData!.horses,
+                raceData: _predictionRaceData!, // ★修正: raceData全体を渡す
               )
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),

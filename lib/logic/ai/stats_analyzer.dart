@@ -8,25 +8,21 @@ import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
 
 class StatsAnalyzer {
   /// コース種別・距離が完全に一致する過去レースを分析する
-  static ComplexAptitudeStats analyzeDistanceCourseAptitude({ // ← メソッド名を変更
+  static ComplexAptitudeStats analyzeDistanceCourseAptitude({
     required PredictionRaceData raceData,
     required List<HorseRaceRecord> pastRecords,
   }) {
-    // 1. 今回のレース条件を解析
     final raceInfo = raceData.raceDetails1 ?? '';
     if (raceInfo.isEmpty) return ComplexAptitudeStats();
 
-    // コース種別 (芝/ダート/障害)
     final String currentTrackType = raceInfo.startsWith('障')
         ? '障'
         : (raceInfo.startsWith('ダ') ? 'ダ' : '芝');
-    // 距離
     final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceInfo);
     final String currentDistance = distanceMatch?.group(1) ?? '';
 
     if (currentDistance.isEmpty) return ComplexAptitudeStats();
 
-    // 2. 条件に一致する過去レースをフィルタリング (馬場状態の条件を削除)
     final List<HorseRaceRecord> filteredRecords = pastRecords.where((record) {
       final String recordTrackType = record.distance.startsWith('障')
           ? '障'
@@ -38,7 +34,6 @@ class StatsAnalyzer {
           recordDistance == currentDistance;
     }).toList();
 
-    // 3. 成績を集計 (ここから下は変更なし)
     if (filteredRecords.isEmpty) {
       return ComplexAptitudeStats();
     }
@@ -68,7 +63,53 @@ class StatsAnalyzer {
     );
   }
 
-  /// タイム文字列（例: "1:58.2"）を秒数（例: 118.2）に変換する
+  /// ★追加: 枠順傾向の分析 (パーセンテージ区分)
+  /// 戻り値: {'inner': {winRate: 0.2, count: 5}, 'middle': ..., 'outer': ...}
+  static Map<String, Map<String, double>> analyzeGateTendency({
+    required List<HorseRaceRecord> pastRecords,
+  }) {
+    int innerCount = 0, innerWin = 0;
+    int middleCount = 0, middleWin = 0;
+    int outerCount = 0, outerWin = 0;
+
+    for (final record in pastRecords) {
+      final rank = int.tryParse(record.rank);
+      final horseNum = int.tryParse(record.horseNumber);
+      final totalHorses = int.tryParse(record.numberOfHorses);
+
+      if (rank == null || horseNum == null || totalHorses == null || totalHorses == 0) continue;
+
+      // 位置率 (Position Ratio)
+      final double ratio = horseNum / totalHorses;
+
+      if (ratio <= 0.33) {
+        innerCount++;
+        if (rank == 1) innerWin++;
+      } else if (ratio <= 0.66) {
+        middleCount++;
+        if (rank == 1) middleWin++;
+      } else {
+        outerCount++;
+        if (rank == 1) outerWin++;
+      }
+    }
+
+    return {
+      'inner': {
+        'count': innerCount.toDouble(),
+        'winRate': innerCount > 0 ? innerWin / innerCount : 0.0,
+      },
+      'middle': {
+        'count': middleCount.toDouble(),
+        'winRate': middleCount > 0 ? middleWin / middleCount : 0.0,
+      },
+      'outer': {
+        'count': outerCount.toDouble(),
+        'winRate': outerCount > 0 ? outerWin / outerCount : 0.0,
+      },
+    };
+  }
+
   static double? _parseTimeToSeconds(String timeStr) {
     if (timeStr.isEmpty) return null;
     final parts = timeStr.split(':');
@@ -86,18 +127,15 @@ class StatsAnalyzer {
     return null;
   }
 
-  /// 今回のレースと同一競馬場・同一距離の過去レースから持ち時計（ベストタイム）を算出する
   static BestTimeStats? analyzeBestTime({
     required PredictionRaceData raceData,
     required List<HorseRaceRecord> pastRecords,
   }) {
-    // 1. 今回のレース条件を特定
     final venueName = raceData.venue;
     final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceData.raceDetails1 ?? '');
     if (distanceMatch == null) return null;
     final currentDistance = distanceMatch.group(1)!;
 
-    // 2. 条件に一致する過去レースをフィルタリング
     final relevantRecords = pastRecords.where((record) {
       final recordVenueMatch = record.venue.contains(venueName);
       final recordDistance = record.distance.replaceAll(RegExp(r'[^0-9]'), '');
@@ -106,7 +144,6 @@ class StatsAnalyzer {
 
     if (relevantRecords.isEmpty) return null;
 
-    // 3. 最速タイムを持つレコードを特定
     HorseRaceRecord? bestTimeRecord;
     double minTimeInSeconds = double.infinity;
 
@@ -120,7 +157,6 @@ class StatsAnalyzer {
 
     if (bestTimeRecord == null) return null;
 
-    // 4. 結果をBestTimeStatsモデルに格納して返す
     return BestTimeStats(
       timeInSeconds: minTimeInSeconds,
       formattedTime: bestTimeRecord.time,
@@ -130,7 +166,6 @@ class StatsAnalyzer {
     );
   }
 
-  /// 過去レースから最速の上がり3ハロンタイムを分析する
   static FastestAgariStats? analyzeFastestAgari({
     required List<HorseRaceRecord> pastRecords,
   }) {
@@ -158,7 +193,6 @@ class StatsAnalyzer {
     );
   }
 
-  /// 馬場適性を分析し、評価ラベルを返す
   static String analyzeTrackAptitude({
     required List<HorseRaceRecord> pastRecords,
   }) {
@@ -173,23 +207,23 @@ class StatsAnalyzer {
     }
 
     final double goodTrackShowRate = goodTrackRaces.isEmpty
-        ? -1.0 // 良馬場経験がない場合は比較対象外
+        ? -1.0
         : goodTrackRaces.where((r) => (int.tryParse(r.rank) ?? 99) <= 3).length / goodTrackRaces.length;
 
     final double heavyTrackShowRate =
         heavyTrackRaces.where((r) => (int.tryParse(r.rank) ?? 99) <= 3).length / heavyTrackRaces.length;
 
-    if (goodTrackShowRate < 0) { // 良馬場経験なしで道悪経験あり
+    if (goodTrackShowRate < 0) {
       if (heavyTrackShowRate >= 0.5) return '道悪巧者 ◎';
       return '平均的 〇';
     }
 
     if (heavyTrackShowRate >= goodTrackShowRate + 0.1) {
-      return '道悪巧者 ◎'; // 良馬場より複勝率が10%以上高い
+      return '道悪巧者 ◎';
     } else if (heavyTrackShowRate >= goodTrackShowRate - 0.1) {
-      return '平均的 〇'; // 悪化が10%未満
+      return '平均的 〇';
     } else {
-      return '道悪不得手 ✕'; // 10%以上悪化
+      return '道悪不得手 ✕';
     }
   }
 }
