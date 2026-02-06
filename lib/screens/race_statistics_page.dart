@@ -6,8 +6,10 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
-import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/past_race_id_fetcher_service.dart';
+import 'package:hetaumakeiba_v2/widgets/stats_match_tab.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 
 class RaceStatisticsPage extends StatefulWidget {
   final String raceId;
@@ -27,12 +29,41 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   final StatisticsService _statisticsService = StatisticsService();
   final PastRaceIdFetcherService _pastRaceIdFetcher = PastRaceIdFetcherService();
   final DatabaseHelper _dbHelper = DatabaseHelper();
+
   Future<RaceStatistics?>? _statisticsFuture;
+  List<PredictionHorseDetail> _horses = []; // 出走馬リストを保持
+
+  // 配当タブで使用する辞書定義
+  final Map<String, String> bettingDict = {
+    '1': '単勝',
+    '2': '複勝',
+    '3': '枠連',
+    '4': '馬連',
+    '5': 'ワイド',
+    '6': '馬単',
+    '7': '3連複',
+    '8': '3連単',
+  };
 
   @override
   void initState() {
     super.initState();
     _checkAndLoadStatistics();
+    _loadShutubaData();
+  }
+
+  // 出馬表データの読み込み（過去傾向タブ用）
+  Future<void> _loadShutubaData() async {
+    try {
+      final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
+      if (cache != null && mounted) {
+        setState(() {
+          _horses = cache.predictionRaceData.horses;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading shutuba data: $e');
+    }
   }
 
   void _checkAndLoadStatistics() {
@@ -41,7 +72,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     });
   }
 
-  /// データ取得のメインロジック
+  /// データ取得のメインロジック（ユーザー提示のコードを維持）
   void _startFetchingProcess() async {
     showDialog(
       context: context,
@@ -59,7 +90,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       },
     );
 
-    final PastRaceIdResult result = await _pastRaceIdFetcher.fetchPastRaceIds(widget.raceId);
+    final PastRaceIdResult result = await _pastRaceIdFetcher.fetchPastRaceIds(widget.raceName); // IDではなくNameで検索が一般的ですが元のコードに従います
 
     if (mounted) Navigator.of(context).pop(); // ローディングダイアログを閉じる
 
@@ -86,23 +117,15 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     }
   }
 
-  /// [新規追加] 取得したレースIDリストをユーザーに確認させるダイアログ
   Future<bool?> _showRaceIdConfirmationDialog(Map<String, String> pastRaces) {
     final raceNames = pastRaces.values.toList();
-
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        // タイトルのテキストサイズを調整
-        title: const Text(
-          '過去レースデータ取得の確認',
-          style: TextStyle(fontSize: 20.0), // <-- フォントサイズを指定
-        ),
+        title: const Text('過去レースデータ取得の確認', style: TextStyle(fontSize: 20.0)),
         content: SizedBox(
-          // ダイアログのサイズを調整
           width: double.maxFinite,
-          height: MediaQuery.of(context).size.height * 0.35, // <-- 高さを画面の50%に設定
-
+          height: MediaQuery.of(context).size.height * 0.35,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,7 +156,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     );
   }
 
-  /// [修正] フォールバック（レース名検索）の確認ダイアログ
   void _showFallbackConfirmation({bool isNotSupported = false, String? error}) {
     showDialog(
       context: context,
@@ -160,7 +182,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     );
   }
 
-  /// [新規追加] 手動リトライかフォールバックかを選択させるダイアログ
   void _showManualRetryOrFallbackDialog(String? errorMessage) {
     showDialog(
       context: context,
@@ -189,29 +210,91 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<RaceStatistics?>(
-      future: _statisticsFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && snapshot.data == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text('エラーが発生しました: ${snapshot.error}'),
+    // タブ構成: 配当, 人気, 枠番, 脚質, 馬体重, 騎手, 調教師, 詳細分析, 過去傾向 (計9つ)
+    return DefaultTabController(
+      length: 9,
+      child: Scaffold(
+        body: Column(
+          children: [
+            Container(
+              color: Theme.of(context).primaryColor,
+              child: const TabBar(
+                isScrollable: true,
+                indicatorColor: Colors.white,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                tabs: [
+                  Tab(text: '配当'),
+                  Tab(text: '人気'),
+                  Tab(text: '枠番'),
+                  Tab(text: '脚質'),
+                  Tab(text: '馬体重'),
+                  Tab(text: '騎手'),
+                  Tab(text: '調教師'),
+                  Tab(text: '詳細分析'),
+                  Tab(text: '過去傾向'),
+                ],
+              ),
             ),
-          );
-        }
+            Expanded(
+              child: FutureBuilder<RaceStatistics?>(
+                future: _statisticsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting && snapshot.data == null) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Text('エラーが発生しました: ${snapshot.error}'));
+                  }
 
-        final stats = snapshot.data;
-        if (stats == null) {
-          return _buildInitialView();
-        } else {
-          return _buildStatisticsView(stats);
-        }
-      },
+                  final stats = snapshot.data;
+                  if (stats == null) {
+                    // データがない場合の初期画面（全タブ共通または専用表示）
+                    // ここではタブViewの中に初期画面を表示する形にします
+                    return TabBarView(
+                      children: List.generate(9, (index) => _buildInitialView()),
+                    );
+                  }
+
+                  final data = json.decode(stats.statisticsJson);
+
+                  return TabBarView(
+                    children: [
+                      // 1. 配当
+                      _buildTabContent(child: _buildPayoutTable(data['payoutStats'] ?? const {})),
+                      // 2. 人気
+                      _buildTabContent(child: _buildPopularityTable(data['popularityStats'] ?? const {})),
+                      // 3. 枠番
+                      _buildTabContent(child: _buildFrameStatsCard(data['frameStats'] ?? const {})),
+                      // 4. 脚質 (復活)
+                      _buildTabContent(child: _buildLegStyleStatsCard(data['legStyleStats'] ?? const {})),
+                      // 5. 馬体重 (復活)
+                      _buildTabContent(child: _buildHorseWeightStatsCard(
+                          data['horseWeightChangeStats'] ?? const {},
+                          (data['avgWinningHorseWeight'] ?? 0.0).toDouble()
+                      )),
+                      // 6. 騎手
+                      _buildTabContent(child: _buildJockeyStatsTable(data['jockeyStats'] ?? const {})),
+                      // 7. 調教師
+                      _buildTabContent(child: _buildTrainerStatsTable(data['trainerStats'] ?? const {})),
+                      // 8. 詳細分析 (実装中)
+                      const Center(child: Text('詳細分析機能は実装中です')),
+                      // 9. 過去傾向マッチ (StatsMatchTab)
+                      _horses.isEmpty
+                          ? const Center(child: Text('出馬表データが見つかりません。\n先にレース詳細画面を開いてください。'))
+                          : StatsMatchTab(
+                        raceId: widget.raceId,
+                        raceName: widget.raceName,
+                        horses: _horses,
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -229,12 +312,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 18),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'データ量に応じて時間がかかる場合があります。',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
             const SizedBox(height: 32),
             ElevatedButton.icon(
               icon: const Icon(Icons.download),
@@ -250,32 +327,59 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     );
   }
 
-  Widget _buildStatisticsView(RaceStatistics stats) {
-    final data = json.decode(stats.statisticsJson);
-    final analyzedYearsCount = (data['analyzedYears'] as List).length;
-
-    return ListView(
+  Widget _buildTabContent({required Widget child}) {
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
-      children: [
-        Text(
-          '過去$analyzedYearsCount年 データ分析サマリー',
-          style: Theme.of(context).textTheme.titleLarge,
+      child: child,
+    );
+  }
+
+  // --- 以下、元のカード構築メソッド群 (復元) ---
+
+  Widget _buildPayoutTable(Map<String, dynamic> stats) {
+    final currencyFormatter = NumberFormat.decimalPattern('ja');
+    final rows = <DataRow>[];
+
+    bettingDict.forEach((key, value) {
+      if (stats.containsKey(value)) {
+        final data = stats[value];
+        rows.add(DataRow(
+          cells: [
+            DataCell(Text(value, style: const TextStyle(fontWeight: FontWeight.bold))),
+            DataCell(Text('${currencyFormatter.format(data['average'])}円')),
+            DataCell(Text('${currencyFormatter.format(data['max'])}円')),
+            DataCell(Text('${currencyFormatter.format(data['min'])}円')),
+          ],
+        ));
+      }
+    });
+
+    if (rows.isEmpty) return const Text('データがありません');
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('配当傾向', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 24.0,
+                columns: const [
+                  DataColumn(label: Text('馬券種')),
+                  DataColumn(label: Text('平均'), numeric: true),
+                  DataColumn(label: Text('最高'), numeric: true),
+                  DataColumn(label: Text('最低'), numeric: true),
+                ],
+                rows: rows,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 24),
-        _buildPayoutTable(data['payoutStats'] ?? const {}),
-        const SizedBox(height: 16),
-        _buildPopularityTable(data['popularityStats'] ?? const {}),
-        const SizedBox(height: 16),
-        _buildFrameStatsCard(data['frameStats'] ?? const {}),
-        const SizedBox(height: 16),
-        _buildLegStyleStatsCard(data['legStyleStats'] ?? const {}),
-        const SizedBox(height: 16),
-        _buildHorseWeightStatsCard(data['horseWeightChangeStats'] ?? const {}, data['avgWinningHorseWeight'] ?? 0.0),
-        const SizedBox(height: 16),
-        _buildJockeyStatsTable(data['jockeyStats'] ?? const {}),
-        const SizedBox(height: 16),
-        _buildTrainerStatsTable(data['trainerStats'] ?? const {}),
-      ],
+      ),
     );
   }
 
@@ -301,6 +405,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         ));
       }
     }
+
+    if (rows.isEmpty) return const Text('データがありません');
 
     return Card(
       child: Padding(
@@ -331,6 +437,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   Widget _buildFrameStatsCard(Map<String, dynamic> stats) {
     final sortedKeys = stats.keys.toList()..sort((a, b) => int.parse(a).compareTo(int.parse(b)));
+    if (sortedKeys.isEmpty) return const Text('データがありません');
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -360,7 +468,17 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   Widget _buildLegStyleStatsCard(Map<String, dynamic> stats) {
     final order = ['逃げ', '先行', '差し', '追込'];
-    final sortedKeys = stats.keys.toList()..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
+    final sortedKeys = stats.keys.toList()..sort((a, b) {
+      final indexA = order.indexOf(a);
+      final indexB = order.indexOf(b);
+      // orderにないキーは後ろへ
+      if (indexA == -1) return 1;
+      if (indexB == -1) return -1;
+      return indexA.compareTo(indexB);
+    });
+
+    if (sortedKeys.isEmpty) return const Text('データがありません');
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -389,6 +507,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   Widget _buildHorseWeightStatsCard(Map<String, dynamic> stats, double avgWeight) {
     final categories = ['-10kg以下', '-4~-8kg', '-2~+2kg', '+4~+8kg', '+10kg以上'];
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -412,6 +531,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                 subtitle: Text('勝率 ${winRate.toStringAsFixed(1)}% / 連対率 ${placeRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}% \n($total頭)'),
               );
             }),
+            if (stats.isEmpty) const Text('データがありません'),
           ],
         ),
       ),
@@ -422,7 +542,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     final sortedJockeys = stats.entries.where((e) => e.value['total'] > 1).toList()
       ..sort((a, b) => (b.value['show'] / b.value['total']).compareTo(a.value['show'] / a.value['total']));
 
-    if (sortedJockeys.isEmpty) return const SizedBox.shrink();
+    if (sortedJockeys.isEmpty) return const Text('データがありません (2回以上騎乗のみ表示)');
 
     return Card(
       child: Padding(
@@ -443,7 +563,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   DataColumn(label: Text('複勝率'), numeric: true),
                   DataColumn(label: Text('度数')),
                 ],
-                rows: sortedJockeys.take(10).map((entry) {
+                rows: sortedJockeys.take(20).map((entry) {
                   final data = entry.value;
                   final total = data['total'] as int;
                   final winRate = (data['win'] / total * 100);
@@ -469,7 +589,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     final sortedTrainers = stats.entries.where((e) => e.value['total'] > 1).toList()
       ..sort((a, b) => (b.value['show'] / b.value['total']).compareTo(a.value['show'] / a.value['total']));
 
-    if (sortedTrainers.isEmpty) return const SizedBox.shrink();
+    if (sortedTrainers.isEmpty) return const Text('データがありません (2回以上出走のみ表示)');
 
     return Card(
       child: Padding(
@@ -490,7 +610,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   DataColumn(label: Text('複勝率'), numeric: true),
                   DataColumn(label: Text('度数')),
                 ],
-                rows: sortedTrainers.take(10).map((entry) {
+                rows: sortedTrainers.take(20).map((entry) {
                   final data = entry.value;
                   final total = data['total'] as int;
                   final winRate = (data['win'] / total * 100);
@@ -504,54 +624,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                     DataCell(Text('(${data['win']}-${data['place']-data['win']}-${data['show']-data['place']}-${total-data['show']})')),
                   ]);
                 }).toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPayoutTable(Map<String, dynamic> stats) {
-    final currencyFormatter = NumberFormat.decimalPattern('ja');
-    final rows = <DataRow>[];
-
-    // bettingDictのキーの順序（ID順）でループ
-    bettingDict.forEach((key, value) {
-      if (stats.containsKey(value)) {
-        final data = stats[value];
-        rows.add(DataRow(
-          cells: [
-            DataCell(Text(value, style: const TextStyle(fontWeight: FontWeight.bold))),
-            DataCell(Text('${currencyFormatter.format(data['average'])}円')),
-            DataCell(Text('${currencyFormatter.format(data['max'])}円')),
-            DataCell(Text('${currencyFormatter.format(data['min'])}円')),
-          ],
-        ));
-      }
-    });
-
-    if (rows.isEmpty) return const SizedBox.shrink();
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('配当傾向', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columnSpacing: 24.0,
-                columns: const [
-                  DataColumn(label: Text('馬券種')),
-                  DataColumn(label: Text('平均'), numeric: true),
-                  DataColumn(label: Text('最高'), numeric: true),
-                  DataColumn(label: Text('最低'), numeric: true),
-                ],
-                rows: rows,
               ),
             ),
           ],

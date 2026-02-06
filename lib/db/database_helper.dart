@@ -1067,4 +1067,60 @@ class DatabaseHelper {
     }
     return null;
   }
+
+  // ---------------------------------------------------------------------------
+  // Step 1: 過去10年マッチング機能用 追加メソッド
+  // ---------------------------------------------------------------------------
+
+  /// レース名の一部（例："東京新聞杯"）で race_results テーブルを検索し、
+  /// 該当する List<RaceResult> を返します。
+  Future<List<RaceResult>> searchRaceResultsByName(String partialName) async {
+    final db = await database;
+
+    // race_results テーブルから全レコードを取得
+    final maps = await db.query('race_results');
+
+    final List<RaceResult> matches = [];
+
+    for (final map in maps) {
+      final jsonStr = map['race_result_json'] as String?;
+      if (jsonStr != null && jsonStr.isNotEmpty) {
+        try {
+          // JSON文字列から RaceResult オブジェクトを復元
+          final result = raceResultFromJson(jsonStr);
+
+          // レース名に検索キーワードが含まれているか判定
+          if (result.raceTitle.contains(partialName)) {
+            matches.add(result);
+          }
+        } catch (e) {
+          print('Error parsing race result in searchRaceResultsByName: $e');
+        }
+      }
+    }
+
+    return matches;
+  }
+
+  /// 馬IDを指定して、DBから戦績リストを取得します。
+  Future<List<HorseRaceRecord>> getHorseRaceRecords(String horseId) async {
+    // 既存のメソッドを利用して同じ機能を返す
+    return getHorsePerformanceRecords(horseId);
+  }
+
+  /// 取得した戦績リストをDBに一括保存します。
+  Future<void> insertHorseRaceRecords(List<HorseRaceRecord> records) async {
+    final db = await database;
+    final batch = db.batch();
+
+    for (var record in records) {
+      batch.insert(
+        'horse_performance',
+        record.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
+    await batch.commit(noResult: true);
+  }
 }
