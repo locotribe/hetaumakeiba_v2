@@ -10,6 +10,7 @@ import 'package:hetaumakeiba_v2/services/past_race_id_fetcher_service.dart';
 import 'package:hetaumakeiba_v2/widgets/stats_match_tab.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/widgets/detailed_analysis_tab.dart';
 
 class RaceStatisticsPage extends StatefulWidget {
   final String raceId;
@@ -278,7 +279,13 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                       // 7. 調教師
                       _buildTabContent(child: _buildTrainerStatsTable(data['trainerStats'] ?? const {})),
                       // 8. 詳細分析 (実装中)
-                      const Center(child: Text('詳細分析機能は実装中です')),
+                      _horses.isEmpty
+                          ? const Center(child: Text('出馬表データが見つかりません。'))
+                          : DetailedAnalysisTab(
+                        raceId: widget.raceId,
+                        raceName: widget.raceName,
+                        horses: _horses,
+                      ),
                       // 9. 過去傾向マッチ (StatsMatchTab)
                       _horses.isEmpty
                           ? const Center(child: Text('出馬表データが見つかりません。\n先にレース詳細画面を開いてください。'))
