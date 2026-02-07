@@ -2,7 +2,7 @@
     description: "競馬データ管理アプリ"
     publish_to: 'none'
 
-    version: 12.86.0+1
+    version: 12.86.1+1
 
     environment:
         sdk: '>=3.0.0 <4.0.0'

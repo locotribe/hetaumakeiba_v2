@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/formation_analysis_model.dart';
 import 'package:hetaumakeiba_v2/logic/ai/formation_analysis_engine.dart';
+// Intlパッケージがあれば使うが、なければ自前フォーマット
 
 class DetailedAnalysisTab extends StatefulWidget {
   final String raceId;
@@ -52,6 +53,7 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
       final result = _engine.analyze(
         pastRaces: pastRaces,
         currentHorses: widget.horses,
+        totalBudget: 10000, // 予算1万円で計算
       );
 
       if (mounted) {
@@ -81,17 +83,12 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 【新規追加】 注釈バナーを一番上に配置
           _buildDisclaimerBanner(),
           const SizedBox(height: 16),
 
-
-
-          // 1. 基本フォーメーション (Fixed)
           _buildBasicFormationCard(_result!),
           const SizedBox(height: 16),
 
-          // 2. AI戦術 (Dynamic)
           _buildStrategyCard(_result!),
           const SizedBox(height: 16),
 
@@ -108,7 +105,8 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
 
           const SizedBox(height: 16),
           const Text('🎯 AI厳選買い目リスト', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          Text('${_result!.strategyName}に基づく上位チケット', style: TextStyle(fontSize: 12, color: Colors.blue[800], fontWeight: FontWeight.bold)),
+          // 追加: 予算表示
+          Text('予算1万円での傾斜配分例 (${_result!.betType})', style: TextStyle(fontSize: 12, color: Colors.blue[800], fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
 
           if (_result!.chaosHorses.isNotEmpty) ...[
@@ -124,13 +122,13 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
 
   // --- Widgets ---
 
-  // 新規追加: 注意書きバナー
+  // (中略: バナーやカード系は変更なし)
   Widget _buildDisclaimerBanner() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.amber.shade50, // 注意を引く薄い黄色
+        color: Colors.amber.shade50,
         border: Border.all(color: Colors.amber.shade300),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -141,14 +139,7 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
             children: [
               Icon(Icons.info_outline, color: Colors.amber.shade900, size: 20),
               const SizedBox(width: 8),
-              Text(
-                '数字の読み方と本機能について',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.amber.shade900,
-                  fontSize: 14,
-                ),
-              ),
+              Text('数字の読み方と本機能について', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade900, fontSize: 14)),
             ],
           ),
           const SizedBox(height: 8),
@@ -156,7 +147,7 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
             '❶ 数字はすべて「人気順」です\n'
                 '   (例: ① → 1番人気) ※馬番ではありません\n'
                 '❷ これは予想ではありません\n'
-                '   過去の着順の人気から算出した統計です。\n'
+                '   過去の波形を楽しむ「統計パズル」です。\n'
                 '   馬の能力や調子は考慮されていません。',
             style: TextStyle(fontSize: 12, height: 1.5, color: Colors.black87),
           ),
@@ -165,7 +156,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
     );
   }
 
-  // 新規: 基本フォーメーションカード
   Widget _buildBasicFormationCard(FormationAnalysisResult result) {
     return Card(
       elevation: 2,
@@ -175,13 +165,7 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
-              children: [
-                Icon(Icons.looks_one, color: Colors.green),
-                SizedBox(width: 8),
-                Text('基本フォーメーション (1-2-5)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ],
-            ),
+            const Row(children: [Icon(Icons.looks_one, color: Colors.green), SizedBox(width: 8), Text('基本フォーメーション (1-2-5)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
             const SizedBox(height: 4),
             const Text('迷ったらコレ。点数を絞った王道の形です。', style: TextStyle(fontSize: 12, color: Colors.grey)),
             const Divider(),
@@ -196,45 +180,24 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
     );
   }
 
-  // AI戦略カード
   Widget _buildStrategyCard(FormationAnalysisResult result) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.indigo.shade900, Colors.indigo.shade700],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: LinearGradient(colors: [Colors.indigo.shade900, Colors.indigo.shade700], begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.psychology, color: Colors.white, size: 20),
-              SizedBox(width: 8),
-              Text('AI戦術眼 (Tactical Eye)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            ],
-          ),
+          const Row(children: [Icon(Icons.psychology, color: Colors.white, size: 20), SizedBox(width: 8), Text('AI戦術眼 (Tactical Eye)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
           const SizedBox(height: 12),
-          Text(
-            result.strategyName,
-            style: const TextStyle(color: Colors.amberAccent, fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          Text(
-            '推奨: ${result.betType} / 推定${result.estimatedPoints}点',
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
+          Text(result.strategyName, style: const TextStyle(color: Colors.amberAccent, fontSize: 20, fontWeight: FontWeight.bold)),
+          Text('推奨: ${result.betType} / 推定${result.estimatedPoints}点', style: const TextStyle(color: Colors.white, fontSize: 12)),
           const SizedBox(height: 8),
-          Text(
-            result.strategyReason,
-            style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
-          ),
+          Text(result.strategyReason, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
           const SizedBox(height: 12),
-          // 戦略の中身を表示
           if (result.strategyName.contains("BOX"))
             _buildFormationRow("BOX対象", result.strategyRank1, Colors.white.withOpacity(0.2))
           else ...[
@@ -257,12 +220,7 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(width: 60, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-          Expanded(
-            child: Text(
-              candidates.map((c) => '$c人').join(', '), // "人"をつける
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-            ),
-          ),
+          Expanded(child: Text(candidates.map((c) => '$c人').join(', '), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
         ],
       ),
     );
@@ -276,19 +234,9 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            Column(
-              children: [
-                const Text('足切りライン (90%)', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                Text('${result.standardOddsLine.toStringAsFixed(1)}倍', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
-              ],
-            ),
+            Column(children: [const Text('足切りライン (90%)', style: TextStyle(fontSize: 12, color: Colors.grey)), Text('${result.standardOddsLine.toStringAsFixed(1)}倍', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue))]),
             const Icon(Icons.filter_alt, color: Colors.grey),
-            Column(
-              children: [
-                const Text('有効対象馬', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                Text('${result.validHorseCount}頭', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
-            ),
+            Column(children: [const Text('有効対象馬', style: TextStyle(fontSize: 12, color: Colors.grey)), Text('${result.validHorseCount}頭', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))]),
           ],
         ),
       ),
@@ -298,19 +246,11 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
   Widget _buildChaosOptionCard(FormationAnalysisResult result) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.red.shade200),
-      ),
+      decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red.shade200)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red),
-            SizedBox(width: 8),
-            Text('特異データ (Chaos Option)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-          ]),
+          const Row(children: [Icon(Icons.warning_amber_rounded, color: Colors.red), SizedBox(width: 8), Text('特異データ (Chaos Option)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red))]),
           const SizedBox(height: 4),
           const Text('過去に大穴実績あり。夢を追うなら紐に追加してください。', style: TextStyle(fontSize: 12)),
           const Divider(color: Colors.red),
@@ -368,8 +308,9 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
     );
   }
 
+  // リストの修正: 推奨金額を表示
   Widget _buildTicketList(FormationAnalysisResult result) {
-    final displayTickets = result.tickets.take(30).toList();
+    final displayTickets = result.tickets.take(30).toList(); // 上位30件
 
     if (displayTickets.isEmpty) {
       return const Center(child: Text('条件に合致する買い目がありませんでした。', textAlign: TextAlign.center));
@@ -383,6 +324,7 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
         final ticket = displayTickets[index];
         final maxWeight = result.tickets.first.weight > 0 ? result.tickets.first.weight : 1.0;
         final ratio = ticket.weight / maxWeight;
+        final betAmount = result.budgetAllocation[ticket] ?? 100;
 
         return Card(
           elevation: 1,
@@ -397,13 +339,21 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
             ),
             title: Row(
               children: [
-                // 数字に「人」をつける
                 Text(
                   '${ticket.popularities[0]}人→${ticket.popularities[1]}人→${ticket.popularities[2]}人',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
                 const Spacer(),
-                Text('Exp: ${ticket.weight.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                // 金額表示
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Text('¥$betAmount', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+                ),
               ],
             ),
             subtitle: Column(

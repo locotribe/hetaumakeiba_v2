@@ -26,17 +26,20 @@ class FormationAnalysisResult {
   // AI戦術メタデータ
   final String strategyName;   // 例: "4頭BOX (混戦)"
   final String strategyReason; // 例: "上位が拮抗..."
-  final String betType;        // "3連単" or "3連複" (BOX点数調整用)
+  final String betType;        // "3連単" or "3連複"
   final int estimatedPoints;   // 推定点数
+
+  // 資金配分 (Ticket -> 推奨金額) ※予算10,000円想定
+  final Map<FormationTicket, int> budgetAllocation;
 
   FormationAnalysisResult({
     required this.frequencyMatrix,
-    required this.basicRank1,    // 追加
-    required this.basicRank2,    // 追加
-    required this.basicRank3,    // 追加
-    required this.strategyRank1, // 名前変更 (旧rank1Candidates)
-    required this.strategyRank2, // 名前変更
-    required this.strategyRank3, // 名前変更
+    required this.basicRank1,
+    required this.basicRank2,
+    required this.basicRank3,
+    required this.strategyRank1,
+    required this.strategyRank2,
+    required this.strategyRank3,
     required this.tickets,
     required this.standardOddsLine,
     required this.maxOddsLine,
@@ -44,8 +47,9 @@ class FormationAnalysisResult {
     required this.validHorseCount,
     required this.strategyName,
     required this.strategyReason,
-    required this.betType,       // 追加
-    required this.estimatedPoints, // 追加
+    required this.betType,
+    required this.estimatedPoints,
+    required this.budgetAllocation, // 追加
   });
 }
 
