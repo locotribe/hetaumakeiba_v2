@@ -9,16 +9,67 @@ import 'package:intl/intl.dart';
 typedef InitialData = (List<String> dates, RaceSchedule? schedule);
 
 class RaceScheduleScraperService {
-  Future<InitialData> fetchInitialData(DateTime representativeDate) async {
+  /// 週の初期データを取得する
+  /// [onProgress] : 進捗状況をUIに通知するコールバック
+  Future<InitialData> fetchInitialData(
+      DateTime representativeDate, {
+        Function(String)? onProgress,
+      }) async {
+    // 1. まずは代表日（通常は日曜日）をチェック
+    if (onProgress != null) {
+      onProgress('${DateFormat('M/d').format(representativeDate)}の開催情報を確認中...');
+    }
+
+    var (dates, schedule) = await _scrapeDataForDate(representativeDate);
+
+    // データが見つかれば、通常通り即終了（高速化のため）
+    if (dates.isNotEmpty) {
+      return (dates, schedule);
+    }
+
+    // 2. 日曜日にデータがない場合（変則日程や延期の可能性）
+    // 土曜日から月曜日まで遡って全てチェックし、見つかった日付を全て統合する
+    final Set<String> allFoundDates = {};
+    RaceSchedule? bestSchedule;
+
+    // 日曜日はチェック済みなので、1日前（土曜）から6日前（月曜）までループ
+    for (int i = 1; i <= 6; i++) {
+      final targetDate = representativeDate.subtract(Duration(days: i));
+
+      if (onProgress != null) {
+        onProgress('${DateFormat('M/d').format(targetDate)}の開催情報を確認中...');
+      }
+
+      final result = await _scrapeDataForDate(targetDate);
+      final foundDates = result.$1;
+      final foundSchedule = result.$2;
+
+      if (foundDates.isNotEmpty) {
+        allFoundDates.addAll(foundDates);
+        // スケジュールは「最初に見つかったもの（＝日付が新しいもの）」または「任意のもの」を保持
+        // ここでは、データがある日のスケジュールを一つ確保しておく
+        bestSchedule ??= foundSchedule;
+      }
+    }
+
+    // 見つかった全ての日付リストを昇順にソートして返す
+    final sortedDates = allFoundDates.toList()..sort();
+    return (sortedDates, bestSchedule);
+  }
+
+  /// 指定した日付のスクレイピングを実行する内部メソッド
+  Future<InitialData> _scrapeDataForDate(DateTime date) async {
     final completer = Completer<InitialData>();
-    final url = WebUri(generateRaceListUrl(representativeDate));
+    final url = WebUri(generateRaceListUrl(date));
     HeadlessInAppWebView? headlessWebView;
 
-    // タイムアウトを25秒に設定
+    // タイムアウト用タイマー
     final timer = Timer(const Duration(seconds: 25), () {
       if (!completer.isCompleted) {
-        completer.completeError("Initial data fetching timed out for $url");
-        headlessWebView?.dispose();
+        print("Scraping timed out for $url");
+        // タイムアウト時は空データを返して次の日付へ進ませる
+        if (headlessWebView != null) headlessWebView!.dispose();
+        completer.complete((<String>[], null));
       }
     });
 
@@ -31,19 +82,14 @@ class RaceScheduleScraperService {
         loadsImagesAutomatically: false,
         blockNetworkImage: true,
       ),
-
-      // WebViewのレンダラープロセスクラッシュを検知するコールバック
       onRenderProcessGone: (controller, detail) async {
         if (!completer.isCompleted) {
-          completer.completeError(
-              "WebView renderer process crashed during initial fetch.");
+          completer.complete((<String>[], null));
         }
       },
-
       onLoadStop: (controller, url) async {
         if (completer.isCompleted) return;
         try {
-          // レース一覧コンテナが表示されるまで最大10秒待機
           const String checkElementSelector = "div.RaceList_Body";
           const int maxRetries = 20;
           const Duration retryDelay = Duration(milliseconds: 500);
@@ -60,23 +106,21 @@ class RaceScheduleScraperService {
             await Future.delayed(retryDelay);
           }
 
-          // タイムアウトした場合
+          // コンテンツがなくても、NoData_Commentがあれば正常な空ページとみなして続行
+          // （タブ情報だけ取得できる可能性があるため）
           if (!isContentLoaded) {
-            // 開催情報がない週（正常な空ページ）かどうかを確認
             final noRaceMessageExists = await controller.evaluateJavascript(source: """
               (function() { return document.querySelector('.NoData_Comment') != null; })();
             """);
-            if (noRaceMessageExists == true) {
-              completer.complete((<String>[], null)); // 開催なしとして正常完了
+
+            // 本当に何もない（読み込み失敗）場合は空を返す
+            if (noRaceMessageExists != true) {
+              completer.complete((<String>[], null));
               return;
             }
-            completer.completeError("Scraping timed out: Page content '$checkElementSelector' did not appear.");
-            return;
           }
 
-          // ページ描画を確認後、スクレイピング実行
-          final result =
-          await controller.evaluateJavascript(source: _getScrapingScript());
+          final result = await controller.evaluateJavascript(source: _getScrapingScript());
 
           if (result == null) {
             completer.complete((<String>[], null));
@@ -84,41 +128,40 @@ class RaceScheduleScraperService {
           }
 
           final decodedResult = json.decode(result);
-          final List<String> dates =
-          List<String>.from(decodedResult['dates'] ?? []);
+          final List<String> dates = List<String>.from(decodedResult['dates'] ?? []);
           final List<dynamic> scheduleData = decodedResult['schedule'] ?? [];
 
-          RaceSchedule? schedule =
-          _parseScheduleData(scheduleData, representativeDate);
-
+          RaceSchedule? schedule = _parseScheduleData(scheduleData, date);
           completer.complete((dates, schedule));
+
         } catch (e) {
-          if (!completer.isCompleted) completer.completeError(e);
+          if (!completer.isCompleted) completer.complete((<String>[], null));
         }
       },
       onReceivedError: (controller, request, error) {
-        if (!completer.isCompleted) completer.completeError(error.description);
+        if (!completer.isCompleted) completer.complete((<String>[], null));
       },
     );
+
     try {
       await headlessWebView.run();
       return await completer.future;
     } catch (e) {
-      print("Error in fetchInitialData for $url: $e");
+      print("Error in _scrapeDataForDate for $url: $e");
       return (<String>[], null);
     } finally {
       timer.cancel();
-      await headlessWebView.dispose();
+      if (headlessWebView != null) await headlessWebView.dispose();
     }
   }
 
   Future<RaceSchedule?> scrapeRaceSchedule(DateTime date) async {
+    // 既存のメソッドはそのまま維持（_scrapeDataForDateとロジックは似ているが戻り値が違うため）
+    // ※必要であればここもリファクタリング可能ですが、今回は「取得方法を変えない」方針に従い維持します。
     final completer = Completer<RaceSchedule?>();
     final url = WebUri(generateRaceListUrl(date));
-
     HeadlessInAppWebView? headlessWebView;
 
-    // タイムアウトを25秒に設定
     final timer = Timer(const Duration(seconds: 25), () {
       if (!completer.isCompleted) {
         completer.completeError("Scraping timed out after 25 seconds for $url");
@@ -135,19 +178,14 @@ class RaceScheduleScraperService {
         loadsImagesAutomatically: false,
         blockNetworkImage: true,
       ),
-
-      // WebViewのレンダラープロセスクラッシュを検知するコールバック
       onRenderProcessGone: (controller, detail) async {
         if (!completer.isCompleted) {
-          completer.completeError(
-              "WebView renderer process crashed. The page is too complex or unstable.");
+          completer.completeError("WebView renderer process crashed.");
         }
       },
-
       onLoadStop: (controller, url) async {
         if (completer.isCompleted) return;
         try {
-          // レース一覧コンテナが表示されるまで最大10秒待機
           const String checkElementSelector = "div.RaceList_Body";
           const int maxRetries = 20;
           const Duration retryDelay = Duration(milliseconds: 500);
@@ -176,7 +214,6 @@ class RaceScheduleScraperService {
             return;
           }
 
-          // ページ描画を確認後、スクレイピング実行
           final result = await controller.evaluateJavascript(
               source: _getScrapingScript(isInitial: false));
 

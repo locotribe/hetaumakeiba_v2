@@ -34,10 +34,41 @@ class StatisticsService {
 
     final statistics = _calculateStatistics(pastResults);
 
+    // ★追加: 分析対象レースのメタデータリストを作成
+    final analyzedRacesList = pastResults.map((result) {
+      // 1着馬の名前を取得（勝馬がいない場合は空文字）
+      String winner = '';
+      final firstPlace = result.horseResults.firstWhere(
+              (h) => h.rank == '1',
+          orElse: () => HorseResult(
+              rank: '', frameNumber: '', horseNumber: '', horseName: '', horseId: '',
+              sexAndAge: '', weightCarried: '', jockeyName: '', jockeyId: '',
+              time: '', margin: '', cornerRanking: '', agari: '', odds: '',
+              popularity: '', horseWeight: '', trainerName: '', trainerAffiliation: '',
+              ownerName: '', prizeMoney: ''
+          ) // ダミー
+      );
+      if (firstPlace.horseName.isNotEmpty) {
+        winner = firstPlace.horseName;
+      }
+
+      return {
+        'raceId': result.raceId,
+        'date': result.raceDate,
+        'raceName': result.raceTitle,
+        'raceInfo': result.raceInfo, // 距離や馬場状態など
+        'winner': winner,
+      };
+    }).toList();
+
+    // 日付の新しい順にソート
+    analyzedRacesList.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+
     final statsToSave = RaceStatistics(
       raceId: raceId,
       raceName: raceName,
       statisticsJson: json.encode(statistics),
+      analyzedRacesJson: json.encode(analyzedRacesList), // ★追加
       lastUpdatedAt: DateTime.now(),
     );
 

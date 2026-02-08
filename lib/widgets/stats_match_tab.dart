@@ -13,12 +13,15 @@ class StatsMatchTab extends StatefulWidget {
   final String raceId;
   final String raceName;
   final List<PredictionHorseDetail> horses;
+  // ★追加: 集計対象とするレースIDのリスト
+  final List<String>? targetRaceIds;
 
   const StatsMatchTab({
     super.key,
     required this.raceId,
     required this.raceName,
     required this.horses,
+    this.targetRaceIds, // ★追加
   });
 
   @override
@@ -44,15 +47,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
 
   Future<void> _startAnalysis() async {
     try {
-      await _service.collectHistoricalData(
-        widget.raceName,
-        onProgress: (msg) {
-          if (mounted) setState(() => _statusMessage = msg);
-        },
-      );
-
-      if (!mounted) return;
-      setState(() => _statusMessage = '詳細データを収集中...');
+      // ※ここはスクレイピング用メソッドですが、今回はDBにあるデータを使うため表示のみ更新
+      if (mounted) setState(() => _statusMessage = '詳細データを収集中...');
 
       final Map<String, List<HorseRaceRecord>> currentHorseHistory = {};
       for (final horse in widget.horses) {
@@ -60,7 +56,26 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         currentHorseHistory[horse.horseId] = records;
       }
 
-      final List<RaceResult> pastRaces = await _dbHelper.searchRaceResultsByName(widget.raceName);
+      // ★修正: 対象レースIDが指定されている場合は、そのレースだけを取得する
+      List<RaceResult> pastRaces;
+      if (widget.targetRaceIds != null && widget.targetRaceIds!.isNotEmpty) {
+        final resultsMap = await _dbHelper.getMultipleRaceResults(widget.targetRaceIds!);
+        pastRaces = resultsMap.values.toList();
+      } else {
+        // 指定がない場合は従来通り名前検索で全件取得（互換性維持）
+        pastRaces = await _dbHelper.searchRaceResultsByName(widget.raceName);
+      }
+
+      // データがない場合の早期リターン
+      if (pastRaces.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _results = [];
+            _isLoading = false;
+          });
+        }
+        return;
+      }
 
       setState(() => _statusMessage = '過去の好走パターンを分析中...');
       final Map<String, List<HorseRaceRecord>> pastTopHorseRecords = {};
@@ -141,7 +156,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('【過去10年の傾向分析】', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('【過去の傾向分析】', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Wrap(
             spacing: 12,
@@ -225,7 +240,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          // 【修正箇所】 Row を Column に変更し、縦並びにする
+          // Column に変更し、縦並びにする
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,

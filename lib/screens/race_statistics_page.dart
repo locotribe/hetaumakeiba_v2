@@ -11,6 +11,9 @@ import 'package:hetaumakeiba_v2/widgets/stats_match_tab.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/widgets/detailed_analysis_tab.dart';
+import 'package:hetaumakeiba_v2/services/scraper_service.dart';
+import 'package:hetaumakeiba_v2/widgets/past_race_selection_dialog.dart';
+import 'package:hetaumakeiba_v2/widgets/analyzed_races_tab.dart';
 
 class RaceStatisticsPage extends StatefulWidget {
   final String raceId;
@@ -73,136 +76,90 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     });
   }
 
-  /// データ取得のメインロジック（ユーザー提示のコードを維持）
+  /// データ取得のメインロジック
   void _startFetchingProcess() async {
+    // ローディング表示
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 24),
-              Text("過去レースを検索中..."),
-            ],
-          ),
-        );
+        return const Center(child: CircularProgressIndicator());
       },
     );
 
-    final PastRaceIdResult result = await _pastRaceIdFetcher.fetchPastRaceIds(widget.raceName); // IDではなくNameで検索が一般的ですが元のコードに従います
+    // 1. 踏み台経由でDB一覧を取得
+    final PastRaceIdResult result = await _pastRaceIdFetcher.fetchPastRaceIds(widget.raceId, widget.raceName);
 
-    if (mounted) Navigator.of(context).pop(); // ローディングダイアログを閉じる
+    if (mounted) Navigator.of(context).pop(); // ローディングを閉じる
 
-    switch (result.status) {
-      case FetchStatus.success:
-        final bool? confirmed = await _showRaceIdConfirmationDialog(result.pastRaces);
-        if (confirmed == true && mounted) {
-          setState(() {
-            _statisticsFuture = _statisticsService.processAndSaveRaceStatisticsByIds(
-              raceId: widget.raceId,
-              raceName: widget.raceName,
-              pastRaceIds: result.pastRaces.keys.toList(),
-            );
-          });
-        }
-        break;
-      case FetchStatus.pageNotSupported:
-      case FetchStatus.empty:
-        if (mounted) _showFallbackConfirmation(isNotSupported: true);
-        break;
-      case FetchStatus.temporaryError:
-        if (mounted) _showManualRetryOrFallbackDialog(result.message);
-        break;
+    if (result.status == FetchStatus.temporaryError) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラーが発生しました: ${result.message}')),
+        );
+      }
+      return;
+    }
+
+    // 2. 選択・確認ダイアログを表示
+    if (mounted) {
+      final List<PastRaceItem>? selectedItems = await showDialog<List<PastRaceItem>>(
+        context: context,
+        barrierDismissible: false, // キャンセルボタンでのみ閉じれるようにする
+        builder: (context) => PastRaceSelectionDialog(
+          initialResult: result,
+          defaultSearchText: widget.raceName,
+        ),
+      );
+
+      // 3. ユーザーが取得開始を選択した場合
+      if (selectedItems != null && selectedItems.isNotEmpty) {
+        final List<String> idsToFetch = selectedItems.map((e) => e.raceId).toList();
+
+        setState(() {
+          // 選択されたIDだけで再分析・保存を行う
+          _statisticsFuture = _statisticsService.processAndSaveRaceStatisticsByIds(
+            raceId: widget.raceId,
+            raceName: widget.raceName,
+            pastRaceIds: idsToFetch,
+          );
+        });
+      }
     }
   }
 
-  Future<bool?> _showRaceIdConfirmationDialog(Map<String, String> pastRaces) {
-    final raceNames = pastRaces.values.toList();
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('過去レースデータ取得の確認', style: TextStyle(fontSize: 20.0)),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: MediaQuery.of(context).size.height * 0.35,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('${pastRaces.length}件の過去レースが見つかりました。\nこれらのレースデータを取得しますか？'),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: raceNames.length,
-                  itemBuilder: (context, index) => Text('⫸✅ ${raceNames[index]}'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('キャンセル'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('取得開始'),
-          ),
-        ],
-      ),
-    );
+  /// 再取得ボタン用のメソッド
+  /// 既存の _startFetchingProcess を呼び出してダイアログを開く
+  void _refetchDetailedData() {
+    _startFetchingProcess();
   }
 
-  void _showFallbackConfirmation({bool isNotSupported = false, String? error}) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isNotSupported ? 'レースIDでの検索非対応' : 'レースIDでの検索失敗'),
-        content: Text(
-            isNotSupported
-                ? 'このレースは重賞ではないため、レースIDによる過去データ検索に対応していません。\n\n代わりにレース名「${widget.raceName}」で検索しますか？\n（精度が低下する場合があります）'
-                : 'エラーが発生しました。\n$error\n\n代わりにレース名「${widget.raceName}」で検索しますか？\n（精度が低下する場合があります）'
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('キャンセル')),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              setState(() {
-                _statisticsFuture = _statisticsService.processAndSaveRaceStatistics(widget.raceId, widget.raceName);
-              });
-            },
-            child: const Text('レース名で検索'),
+  /// データ不足時に表示する再取得促進ビュー
+  Widget _buildRefetchView(String title) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange),
+          const SizedBox(height: 16),
+          Text(
+            '$titleを表示するための\n詳細データが保存されていません。',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16),
           ),
-        ],
-      ),
-    );
-  }
-
-  void _showManualRetryOrFallbackDialog(String? errorMessage) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('データ取得エラー'),
-        content: Text('通信エラーによりデータの取得に失敗しました。\n詳細: $errorMessage'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _showFallbackConfirmation(error: errorMessage);
-            },
-            child: const Text('レース名で検索'),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _refetchDetailedData,
+            icon: const Icon(Icons.refresh),
+            label: const Text('詳細データを再取得して更新'),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _startFetchingProcess();
-            },
-            child: const Text('もう一度試す'),
+          const SizedBox(height: 12),
+          const Text(
+            '※再取得時に不要なレースのチェックを外すことで除外できます',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ],
       ),
@@ -211,9 +168,9 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // タブ構成: 配当, 人気, 枠番, 脚質, 馬体重, 騎手, 調教師, 詳細分析, 過去傾向 (計9つ)
+    // タブ構成: 配当, 人気, 枠番, 脚質, 馬体重, 騎手, 調教師, 詳細分析, 過去傾向, 対象レース (計10つ)
     return DefaultTabController(
-      length: 9,
+      length: 10,
       child: Scaffold(
         body: Column(
           children: [
@@ -234,6 +191,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   Tab(text: '調教師'),
                   Tab(text: '詳細分析'),
                   Tab(text: '過去傾向'),
+                  Tab(text: '対象レース'), // ★追加
                 ],
               ),
             ),
@@ -250,10 +208,9 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
                   final stats = snapshot.data;
                   if (stats == null) {
-                    // データがない場合の初期画面（全タブ共通または専用表示）
-                    // ここではタブViewの中に初期画面を表示する形にします
+                    // データがない場合の初期画面
                     return TabBarView(
-                      children: List.generate(9, (index) => _buildInitialView()),
+                      children: List.generate(10, (index) => _buildInitialView()),
                     );
                   }
 
@@ -267,9 +224,9 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                       _buildTabContent(child: _buildPopularityTable(data['popularityStats'] ?? const {})),
                       // 3. 枠番
                       _buildTabContent(child: _buildFrameStatsCard(data['frameStats'] ?? const {})),
-                      // 4. 脚質 (復活)
+                      // 4. 脚質
                       _buildTabContent(child: _buildLegStyleStatsCard(data['legStyleStats'] ?? const {})),
-                      // 5. 馬体重 (復活)
+                      // 5. 馬体重
                       _buildTabContent(child: _buildHorseWeightStatsCard(
                           data['horseWeightChangeStats'] ?? const {},
                           (data['avgWinningHorseWeight'] ?? 0.0).toDouble()
@@ -278,7 +235,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                       _buildTabContent(child: _buildJockeyStatsTable(data['jockeyStats'] ?? const {})),
                       // 7. 調教師
                       _buildTabContent(child: _buildTrainerStatsTable(data['trainerStats'] ?? const {})),
-                      // 8. 詳細分析 (実装中)
+                      // 8. 詳細分析
                       _horses.isEmpty
                           ? const Center(child: Text('出馬表データが見つかりません。'))
                           : DetailedAnalysisTab(
@@ -286,13 +243,42 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                         raceName: widget.raceName,
                         horses: _horses,
                       ),
-                      // 9. 過去傾向マッチ (StatsMatchTab)
+                      // 9. 過去傾向マッチ
                       _horses.isEmpty
                           ? const Center(child: Text('出馬表データが見つかりません。\n先にレース詳細画面を開いてください。'))
                           : StatsMatchTab(
                         raceId: widget.raceId,
                         raceName: widget.raceName,
                         horses: _horses,
+                        // ★追加: 選択されたレースIDのリストを渡す
+                        targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
+                      ),
+                      // 10. 対象レース
+                      stats.analyzedRacesList.isEmpty
+                          ? _buildRefetchView('対象レース一覧')
+                          : Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _refetchDetailedData,
+                                icon: const Icon(Icons.edit),
+                                label: const Text('対象レースを再選択・更新'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange.shade100,
+                                  foregroundColor: Colors.brown,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: AnalyzedRacesTab(
+                              analyzedRaces: stats.analyzedRacesList,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   );
@@ -317,7 +303,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             const Text(
               '過去10年分のレースデータを取得しますか？',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18),
+              style: const TextStyle(fontSize: 18),
             ),
             const SizedBox(height: 32),
             ElevatedButton.icon(
@@ -341,7 +327,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     );
   }
 
-  // --- 以下、元のカード構築メソッド群 (復元) ---
+  // --- 以下、元のカード構築メソッド群 (変更なし) ---
 
   Widget _buildPayoutTable(Map<String, dynamic> stats) {
     final currencyFormatter = NumberFormat.decimalPattern('ja');

@@ -57,7 +57,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 1,
+      version: 3,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
@@ -197,6 +197,7 @@ class DatabaseHelper {
             raceId TEXT PRIMARY KEY,
             raceName TEXT NOT NULL,
             statisticsJson TEXT NOT NULL,
+            analyzedRacesJson TEXT,
             lastUpdatedAt TEXT NOT NULL
           )
         ''');
@@ -246,6 +247,27 @@ class DatabaseHelper {
         await _createCoursePresetsTable(db);
         // course_presets テーブルに初期データを投入
         await _initCoursePresets(db);
+      },
+      // ★修正: 既存ユーザー向けのマイグレーション処理を安全化
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          try {
+            // race_statisticsテーブルに analyzedRacesJson カラムを追加
+            await db.execute('ALTER TABLE race_statistics ADD COLUMN analyzedRacesJson TEXT');
+          } catch (e) {
+            print('Migration error (v1->v2): $e');
+            // カラム重複エラー等は無視して続行
+          }
+        }
+        if (oldVersion < 3) {
+          try {
+            // shutubaHorsesJsonカラムを追加
+            await db.execute('ALTER TABLE featured_races ADD COLUMN shutubaHorsesJson TEXT');
+          } catch (e) {
+            // エラーログ: "duplicate column name: shutubaHorsesJson" が出ても無視する
+            print('Migration error (v2->v3): $e - Assuming column already exists.');
+          }
+        }
       },
     );
   }

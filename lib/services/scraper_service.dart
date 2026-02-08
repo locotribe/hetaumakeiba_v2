@@ -461,4 +461,45 @@ class ScraperService {
       return [];
     }
   }
+  /// DB検索結果ページ（HTML）からレース一覧情報を抽出する
+  /// 戻り値: {raceId, date, venue, raceName, distance} のリスト
+  static List<Map<String, String>> scrapeRaceIdListFromDbPage(String htmlContent) {
+    final document = html.parse(htmlContent);
+    final List<Map<String, String>> results = [];
+
+    final rows = document.querySelectorAll('table.race_table_01 tr');
+    // ヘッダー行を除外するために1から開始
+    for (var i = 1; i < rows.length; i++) {
+      final cells = rows[i].querySelectorAll('td');
+      if (cells.length < 7) continue;
+
+      try {
+        // 1列目: 開催日 (例: 2025/01/26)
+        final date = _safeGetText(cells[0]);
+        // 2列目: 開催場 (例: 1中山9)
+        final venue = _safeGetText(cells[1]);
+        // 5列目: レース名とID
+        final raceNameElement = cells[4].querySelector('a');
+        final raceName = raceNameElement != null ? _safeGetText(raceNameElement) : '';
+        final href = raceNameElement?.attributes['href'];
+        final raceId = href != null ? RaceResultScraperService.getRaceIdFromUrl(href) : '';
+        // 7列目: 距離 (例: 芝2000)
+        final distance = _safeGetText(cells[6]);
+
+        if (raceId != null && raceId.isNotEmpty) {
+          results.add({
+            'raceId': raceId,
+            'date': date,
+            'venue': venue,
+            'raceName': raceName,
+            'distance': distance,
+          });
+        }
+      } catch (e) {
+        print('[ERROR] DB検索結果の行解析エラー: $e');
+        continue;
+      }
+    }
+    return results;
+  }
 }

@@ -19,7 +19,7 @@ class RaceSchedulePage extends StatefulWidget {
 class RaceSchedulePageState extends State<RaceSchedulePage>
     with TickerProviderStateMixin {
   final RaceScheduleScraperService _scraperService =
-      RaceScheduleScraperService();
+  RaceScheduleScraperService();
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   bool _isLoading = false;
@@ -81,23 +81,23 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       // cachedDateStrings（yyyyMMdd形式）をyyyy-MM-dd形式に変換
       final scheduleDateKeys = cachedDateStrings
           .map((ds) {
-            try {
-              final year = int.parse(ds.substring(0, 4));
-              final month = int.parse(ds.substring(4, 6));
-              final day = int.parse(ds.substring(6, 8));
-              return DateFormat('yyyy-MM-dd')
-                  .format(DateTime(year, month, day));
-            } catch (e) {
-              return null;
-            }
-          })
+        try {
+          final year = int.parse(ds.substring(0, 4));
+          final month = int.parse(ds.substring(4, 6));
+          final day = int.parse(ds.substring(6, 8));
+          return DateFormat('yyyy-MM-dd')
+              .format(DateTime(year, month, day));
+        } catch (e) {
+          return null;
+        }
+      })
           .where((d) => d != null)
           .cast<String>()
           .toList();
 
       // Week Cacheの日付リストを使ってDBからスケジュールを取得
       final schedulesFromDb =
-          await _dbHelper.getMultipleRaceSchedules(scheduleDateKeys);
+      await _dbHelper.getMultipleRaceSchedules(scheduleDateKeys);
 
       if (schedulesFromDb.isNotEmpty) {
         schedulesFromDb.values.forEach(_checkRaceStatusesForSchedule);
@@ -116,9 +116,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     // Week Cacheが存在しない場合の処理 (これ以降は既存のロジックとほぼ同じ)
     final weekDateStrings =
-        _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
+    _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
     final schedulesFromDb =
-        await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
+    await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
     if (schedulesFromDb.isNotEmpty) {
       schedulesFromDb.values.forEach(_checkRaceStatusesForSchedule);
       if (mounted) {
@@ -129,8 +129,18 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
 
     try {
+      // ★修正箇所: 進捗表示用のコールバックを追加
       final (liveDateStrings, initialSchedule) =
-          await _scraperService.fetchInitialData(representativeDate);
+      await _scraperService.fetchInitialData(
+        representativeDate,
+        onProgress: (status) {
+          if (mounted) {
+            setState(() {
+              _loadingMessage = status;
+            });
+          }
+        },
+      );
 
       if (liveDateStrings.isNotEmpty) {
         await _dbHelper.insertOrUpdateWeekCache(weekKey, liveDateStrings);
@@ -173,15 +183,15 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     _availableDates = yyyymmddStrings
         .map((ds) {
-          try {
-            final year = int.parse(ds.substring(0, 4));
-            final month = int.parse(ds.substring(4, 6));
-            final day = int.parse(ds.substring(6, 8));
-            return DateFormat('yyyy-MM-dd').format(DateTime(year, month, day));
-          } catch (e) {
-            return null;
-          }
-        })
+      try {
+        final year = int.parse(ds.substring(0, 4));
+        final month = int.parse(ds.substring(4, 6));
+        final day = int.parse(ds.substring(6, 8));
+        return DateFormat('yyyy-MM-dd').format(DateTime(year, month, day));
+      } catch (e) {
+        return null;
+      }
+    })
         .where((d) => d != null)
         .cast<String>()
         .toList();
@@ -193,7 +203,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         .indexOf(DateFormat('yyyy-MM-dd').format(_weekDates.last));
     if (initialIndex == -1)
       initialIndex =
-          _availableDates.isNotEmpty ? _availableDates.length - 1 : 0;
+      _availableDates.isNotEmpty ? _availableDates.length - 1 : 0;
 
     _tabController = TabController(
       initialIndex: initialIndex,
@@ -415,40 +425,40 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
             onPressed: _isLoading || _loadingTabs.isNotEmpty
                 ? null
                 : () => _calculateWeek(
-                    _currentDate.subtract(const Duration(days: 7))),
+                _currentDate.subtract(const Duration(days: 7))),
           ),
           Expanded(
             child: canShowTabs
                 ? TabBar(
-                    controller: _tabController,
-                    isScrollable: true,
-                    indicatorColor: Colors.blue.shade100,
-                    labelColor: Colors.blue,
-                    unselectedLabelColor: Colors.black,
-                    tabs: _availableDates.map((dateStr) {
-                      final date =
-                          DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
-                      final dayOfWeek = _raceSchedules[dateStr]?.dayOfWeek ??
-                          DateFormat.E('ja').format(date);
-                      return Tab(
-                          text:
-                              '${DateFormat('M/d').format(date)}($dayOfWeek)');
-                    }).toList(),
-                  )
+              controller: _tabController,
+              isScrollable: true,
+              indicatorColor: Colors.blue.shade100,
+              labelColor: Colors.blue,
+              unselectedLabelColor: Colors.black,
+              tabs: _availableDates.map((dateStr) {
+                final date =
+                DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
+                final dayOfWeek = _raceSchedules[dateStr]?.dayOfWeek ??
+                    DateFormat.E('ja').format(date);
+                return Tab(
+                    text:
+                    '${DateFormat('M/d').format(date)}($dayOfWeek)');
+              }).toList(),
+            )
                 : Center(
-                    child: Text(
-                      '${formatter.format(weekStart)} 〜 ${formatter.format(weekEnd)}',
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
+              child: Text(
+                '${formatter.format(weekStart)} 〜 ${formatter.format(weekEnd)}',
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.arrow_forward_ios),
             onPressed: _isLoading || _loadingTabs.isNotEmpty
                 ? null
                 : () =>
-                    _calculateWeek(_currentDate.add(const Duration(days: 7))),
+                _calculateWeek(_currentDate.add(const Duration(days: 7))),
           ),
         ],
       ),
@@ -498,16 +508,16 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                               return InkWell(
                                 onTap: isRaceSet
                                     ? () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => RacePage(
-                                              raceId: race.raceId,
-                                              raceDate: schedule.date,
-                                            ),
-                                          ),
-                                        );
-                                      }
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => RacePage(
+                                        raceId: race.raceId,
+                                        raceDate: schedule.date,
+                                      ),
+                                    ),
+                                  );
+                                }
                                     : null,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -518,7 +528,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                               color: Colors.grey.shade300))),
                                   child: Row(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment.center,
+                                    CrossAxisAlignment.center,
                                     children: [
                                       Container(
                                         width: 40,
@@ -529,7 +539,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                               ? Colors.redAccent
                                               : Colors.blueAccent,
                                           borderRadius:
-                                              BorderRadius.circular(4.0),
+                                          BorderRadius.circular(4.0),
                                         ),
                                         child: Center(
                                           child: Text(
@@ -546,7 +556,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                          CrossAxisAlignment.start,
                                           children: [
                                             Row(
                                               children: [
@@ -556,13 +566,13 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       fontWeight:
-                                                          FontWeight.bold,
+                                                      FontWeight.bold,
                                                       color: isRaceSet
                                                           ? Colors.black
                                                           : Colors.grey,
                                                     ),
                                                     overflow:
-                                                        TextOverflow.ellipsis,
+                                                    TextOverflow.ellipsis,
                                                   ),
                                                 ),
                                                 const SizedBox(width: 8),
@@ -577,8 +587,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                                       color: getGradeColor(
                                                           race.grade),
                                                       borderRadius:
-                                                          BorderRadius.circular(
-                                                              8),
+                                                      BorderRadius.circular(
+                                                          8),
                                                     ),
                                                     child: Text(
                                                       race.grade,
@@ -586,7 +596,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                                           fontSize: 10,
                                                           color: Colors.white,
                                                           fontWeight:
-                                                              FontWeight.bold),
+                                                          FontWeight.bold),
                                                     ),
                                                   ),
                                               ],
