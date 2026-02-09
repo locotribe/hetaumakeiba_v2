@@ -14,6 +14,7 @@ import 'package:hetaumakeiba_v2/widgets/detailed_analysis_tab.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/widgets/past_race_selection_dialog.dart';
 import 'package:hetaumakeiba_v2/widgets/analyzed_races_tab.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart'; // ★追加
 
 class RaceStatisticsPage extends StatefulWidget {
   final String raceId;
@@ -56,18 +57,79 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     _loadShutubaData();
   }
 
-  // 出馬表データの読み込み（過去傾向タブ用）
+// 出馬表データの読み込み（過去傾向タブ用）
+  // 修正: キャッシュがない場合は過去のレース結果から復元を試みる
   Future<void> _loadShutubaData() async {
     try {
+      // 1. まず出馬表キャッシュを確認（未来～直近のレース）
       final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
       if (cache != null && mounted) {
         setState(() {
           _horses = cache.predictionRaceData.horses;
         });
+        return;
+      }
+
+      // 2. キャッシュがない場合、確定したレース結果を探す（過去のレース）
+      final RaceResult? result = await _dbHelper.getRaceResult(widget.raceId);
+      if (result != null && mounted) {
+        // 結果データから表示用データへ変換
+        final convertedHorses = _convertResultsToDetails(result.horseResults);
+        setState(() {
+          _horses = convertedHorses;
+        });
       }
     } catch (e) {
       debugPrint('Error loading shutuba data: $e');
     }
+  }
+
+  /// 結果データ(HorseResult)を表示用データ(PredictionHorseDetail)に変換するヘルパー
+  List<PredictionHorseDetail> _convertResultsToDetails(List<HorseResult> results) {
+    return results.map((res) {
+      // 数値変換処理（エラーハンドリング含む）
+      final int hNum = int.tryParse(res.horseNumber) ?? 0;
+      final int fNum = int.tryParse(res.frameNumber) ?? 0;
+      final double weight = double.tryParse(res.weightCarried) ?? 57.0;
+      final double? oddsVal = double.tryParse(res.odds);
+      final int? popVal = int.tryParse(res.popularity);
+
+      // 出走取消判定: 順位が数値でない場合は取消・除外等の可能性が高い
+      final bool isScratched = int.tryParse(res.rank) == null;
+
+      return PredictionHorseDetail(
+        horseId: res.horseId,
+        horseNumber: hNum,
+        gateNumber: fNum,
+        horseName: res.horseName,
+        sexAndAge: res.sexAndAge,
+        jockey: res.jockeyName,
+        jockeyId: res.jockeyId,
+        carriedWeight: weight,
+        trainerName: res.trainerName,
+        trainerAffiliation: res.trainerAffiliation,
+        horseWeight: res.horseWeight,
+        odds: oddsVal,
+        popularity: popVal,
+        isScratched: isScratched,
+        // 以下のフィールドは結果データからは取得できないため null または初期値
+        userMark: null,
+        userMemo: res.userMemo,
+        effectiveOdds: null,
+        predictionScore: null,
+        conditionFit: null,
+        distanceCourseAptitudeStats: null,
+        trackAptitudeLabel: null,
+        bestTimeStats: null,
+        fastestAgariStats: null,
+        overallScore: null,
+        expectedValue: null,
+        legStyleProfile: null,
+        previousHorseWeight: null,
+        previousJockey: null,
+        ownerName: res.ownerName,
+      );
+    }).toList();
   }
 
   void _checkAndLoadStatistics() {
