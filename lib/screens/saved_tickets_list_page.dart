@@ -591,6 +591,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                     builder: (_) => RacePage(
                       raceId: item.raceId,
                       raceDate: item.raceResult!.raceDate,
+                      qrData: item.qrData,
                     ),
                   ),
                 );

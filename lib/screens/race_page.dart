@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
@@ -20,11 +21,13 @@ enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
 class RacePage extends StatefulWidget {
   final String raceId;
   final String raceDate;
+  final QrData? qrData;
 
   const RacePage({
     super.key,
     required this.raceId,
     required this.raceDate,
+    this.qrData,
   });
 
   @override
@@ -278,7 +281,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               )
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),
-            RaceResultPage(raceId: widget.raceId, qrData: null),
+            RaceResultPage(raceId: widget.raceId, qrData: widget.qrData),
             AiPredictionResultPage(raceId: widget.raceId),
           ],
         );
