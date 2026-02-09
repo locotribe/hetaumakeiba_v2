@@ -458,9 +458,48 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
   Widget _buildMonthBanner() {
     if (_selectedMonth == null) return const SizedBox.shrink();
+
+    // --- 集計ロジック開始 ---
+    int totalCount = _filteredTicketItems.length;
+    int hitCount = 0;
+    int totalPurchase = 0;
+    int totalPayout = 0;
+
+    for (final item in _filteredTicketItems) {
+      if (item.hitResult?.isHit == true) {
+        hitCount++;
+      }
+      totalPurchase += (item.parsedTicket['合計金額'] as int? ?? 0);
+      totalPayout += (item.hitResult?.totalPayout ?? 0) + (item.hitResult?.totalRefund ?? 0);
+    }
+
+    final balance = totalPayout - totalPurchase;
+    final hitRate = totalCount > 0 ? (hitCount / totalCount) * 100 : 0.0;
+    final hitRateStr = hitRate.toStringAsFixed(1);
+
+    // 金額フォーマット用ヘルパー (例: 1,234)
+    String formatMoney(int amount) {
+      return amount.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    }
+
+    // 統計行表示用ヘルパー
+    Widget buildStatRow(String label, String value) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+          const SizedBox(width: 4),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+        ],
+      );
+    }
+    // --- 集計ロジック終了 ---
+
     final englishMonth = _englishMonths[_selectedMonth! - 1];
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF1A4314),
         gradient: const LinearGradient(
@@ -469,9 +508,17 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           end: Alignment.centerRight,
         ),
         borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
+          // 左カラム：月表示
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -489,6 +536,57 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 child: Text(
                   englishMonth,
                   style: const TextStyle(color: Color(0xFF1A4314), fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+
+          const Spacer(),
+
+          // 中央カラム：枚数・的中率（縦並び）
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              buildStatRow('購入', '$totalCount枚'),
+              buildStatRow('的中', '$hitCount枚'),
+              buildStatRow('的中率', '$hitRateStr%'),
+            ],
+          ),
+
+          const SizedBox(width: 16),
+
+          // 右カラム：金額・収支（縦並び）
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '購入 ¥${formatMoney(totalPurchase)}',
+                style: const TextStyle(color: Colors.white70, fontSize: 10),
+              ),
+              Text(
+                '払戻 ¥${formatMoney(totalPayout)}',
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 2),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: balance >= 0 ? Colors.white.withOpacity(0.1) : Colors.red.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                  border: Border.all(
+                      color: balance >= 0 ? Colors.yellowAccent : Colors.white30,
+                      width: 0.5
+                  ),
+                ),
+                child: Text(
+                  '${balance >= 0 ? '+' : ''}¥${formatMoney(balance)}',
+                  style: TextStyle(
+                    color: balance >= 0 ? Colors.yellowAccent : Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
