@@ -1,6 +1,7 @@
 // lib/widgets/stats_match_tab.dart
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
@@ -9,12 +10,32 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/services/historical_match_service.dart';
 import 'package:hetaumakeiba_v2/logic/ai/historical_match_engine.dart';
 
+// 類似度データを保持するクラス
+class SimilarityData {
+  final String horseName;
+  final double similarity; // 0-100
+  final String rank;
+  final String popularity;
+  final String raceName;
+  final String raceDate;
+
+  SimilarityData({
+    required this.horseName,
+    required this.similarity,
+    required this.rank,
+    required this.popularity,
+    required this.raceName,
+    required this.raceDate,
+  });
+}
+
 class StatsMatchTab extends StatefulWidget {
   final String raceId;
   final String raceName;
   final List<PredictionHorseDetail> horses;
+  // 集計対象とするレースIDのリスト
   final List<String>? targetRaceIds;
-  // ★追加: 比較対象（予想時）のデータリスト。これがある場合は結果分析モードとして動作
+  // 比較対象（予想時）のデータリスト。これがある場合は結果分析モードとして動作
   final List<PredictionHorseDetail>? comparisonTargets;
 
   const StatsMatchTab({
@@ -23,7 +44,7 @@ class StatsMatchTab extends StatefulWidget {
     required this.raceName,
     required this.horses,
     this.targetRaceIds,
-    this.comparisonTargets, // ★追加
+    this.comparisonTargets,
   });
 
   @override
@@ -38,10 +59,14 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
   bool _isLoading = true;
   String _statusMessage = 'データ準備中...';
   List<HistoricalMatchModel> _results = [];
-  // ★追加: 予想データの分析結果を保持するマップ (Key: horseId)
+  // 予想データの分析結果を保持するマップ (Key: horseId)
   Map<String, HistoricalMatchModel> _predictionResultMap = {};
   TrendSummary? _summary;
   String? _errorMessage;
+
+  // 類似度分析の結果保持用
+  Map<String, List<SimilarityData>> _similarityAllMatches = {};
+  Map<String, SimilarityData?> _similarityBestFirstPlace = {};
 
   @override
   void initState() {
@@ -51,22 +76,21 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
 
   Future<void> _startAnalysis() async {
     try {
-      // ※ここはスクレイピング用メソッドですが、今回はDBにあるデータを使うため表示のみ更新
       if (mounted) setState(() => _statusMessage = '詳細データを収集中...');
 
+      // 1. 今回の出走馬の履歴を取得
       final Map<String, List<HorseRaceRecord>> currentHorseHistory = {};
       for (final horse in widget.horses) {
         final records = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
         currentHorseHistory[horse.horseId] = records;
       }
 
-      // ★修正: 対象レースIDが指定されている場合は、そのレースだけを取得する
+      // 2. 過去レース情報を取得
       List<RaceResult> pastRaces;
       if (widget.targetRaceIds != null && widget.targetRaceIds!.isNotEmpty) {
         final resultsMap = await _dbHelper.getMultipleRaceResults(widget.targetRaceIds!);
         pastRaces = resultsMap.values.toList();
       } else {
-        // 指定がない場合は従来通り名前検索で全件取得（互換性維持）
         pastRaces = await _dbHelper.searchRaceResultsByName(widget.raceName);
       }
 
@@ -81,12 +105,16 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         return;
       }
 
+      // 3. 過去の上位馬の履歴を取得
+      // (類似度計算でローテーションを使うために先に取得)
       setState(() => _statusMessage = '過去の好走パターンを分析中...');
       final Map<String, List<HorseRaceRecord>> pastTopHorseRecords = {};
 
       for (final race in pastRaces) {
         for (final horse in race.horseResults) {
           final rank = int.tryParse(horse.rank ?? '');
+          // 3着以内、または類似度比較のためになるべく多くのデータを取ると精度が上がるが
+          // パフォーマンスとの兼ね合いで一旦「3着以内」とする
           if (rank != null && rank <= 3 && horse.horseId.isNotEmpty) {
             if (!pastTopHorseRecords.containsKey(horse.horseId)) {
               final records = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
@@ -96,6 +124,81 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         }
       }
 
+      // 4. 類似度分析ロジックの実行
+      final Map<String, List<SimilarityData>> tempSimilarityAllMatches = {};
+      final Map<String, SimilarityData?> tempSimilarityBestFirstPlace = {};
+
+      // 今回のレース日付を「今日」として仮定 (予想など未来の日付の場合もあるため)
+      final today = DateTime.now();
+      final todayStr = DateFormat('yyyy/MM/dd').format(today);
+
+      for (final currentHorse in widget.horses) {
+        List<SimilarityData> matches = [];
+        SimilarityData? bestFirstPlaceMatch;
+        double bestFirstPlaceScore = -1.0;
+
+        // 今回の馬の前走レース名を取得
+        final curHistory = currentHorseHistory[currentHorse.horseId];
+        final curPrevRaceName = _getPreviousRaceName(curHistory, todayStr);
+
+        for (final race in pastRaces) {
+          for (final pastHorse in race.horseResults) {
+            // 過去馬の前走レース名を取得
+            // pastTopHorseRecordsにあればそれを使う(なければnull)
+            final pastHistory = pastTopHorseRecords[pastHorse.horseId];
+            final pastPrevRaceName = _getPreviousRaceName(pastHistory, race.raceDate);
+
+            // 類似度計算 (ローテ情報を含めて渡す)
+            final score = _calculateSimilarity(
+              currentHorse,
+              pastHorse,
+              curPrevRaceName,
+              pastPrevRaceName,
+            );
+
+            // 1着馬の中でベストスコアを探す
+            if (pastHorse.rank == '1') {
+              if (score > bestFirstPlaceScore) {
+                bestFirstPlaceScore = score;
+                bestFirstPlaceMatch = SimilarityData(
+                  horseName: pastHorse.horseName,
+                  similarity: score,
+                  rank: pastHorse.rank,
+                  popularity: pastHorse.popularity,
+                  raceName: race.raceTitle,
+                  raceDate: race.raceDate,
+                );
+              }
+            }
+
+            // 50%以上ならリストに追加 (全着順対象)
+            if (score >= 50.0) {
+              matches.add(SimilarityData(
+                horseName: pastHorse.horseName,
+                similarity: score,
+                rank: pastHorse.rank,
+                popularity: pastHorse.popularity,
+                raceName: race.raceTitle,
+                raceDate: race.raceDate,
+              ));
+            }
+          }
+        }
+
+        // 類似度順にソート
+        matches.sort((a, b) => b.similarity.compareTo(a.similarity));
+
+        tempSimilarityAllMatches[currentHorse.horseId] = matches;
+
+        // 1着馬の類似度が50%未満なら「該当なし(null)」とする
+        if (bestFirstPlaceScore < 50.0) {
+          tempSimilarityBestFirstPlace[currentHorse.horseId] = null;
+        } else {
+          tempSimilarityBestFirstPlace[currentHorse.horseId] = bestFirstPlaceMatch;
+        }
+      }
+
+      // 5. HistoricalMatchEngineによる分析 (既存ロジック)
       final analysisResult = _engine.analyze(
         currentHorses: widget.horses,
         pastRaces: pastRaces,
@@ -103,7 +206,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         pastTopHorseRecords: pastTopHorseRecords,
       );
 
-      // ★追加: 比較対象(予想データ)がある場合、そちらも分析してスコアを算出しておく
+      // 比較対象(予想データ)の分析
       if (widget.comparisonTargets != null && widget.comparisonTargets!.isNotEmpty) {
         final predictionAnalysis = _engine.analyze(
           currentHorses: widget.comparisonTargets!,
@@ -121,6 +224,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         setState(() {
           _results = analysisResult['results'] as List<HistoricalMatchModel>;
           _summary = analysisResult['summary'] as TrendSummary?;
+          _similarityAllMatches = tempSimilarityAllMatches;
+          _similarityBestFirstPlace = tempSimilarityBestFirstPlace;
           _isLoading = false;
         });
       }
@@ -132,6 +237,121 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         });
       }
     }
+  }
+
+  /// 類似度計算メソッド
+  /// 要素: 性齢, 馬体重, 斤量, ローテーション(レース名一致)
+  double _calculateSimilarity(
+      PredictionHorseDetail current,
+      HorseResult past,
+      String? curPrevRaceName,
+      String? pastPrevRaceName,
+      ) {
+    double totalScore = 0;
+    int count = 0;
+
+    // 1. 性齢
+    final curSex = current.sexAndAge.isNotEmpty ? current.sexAndAge.substring(0, 1) : '';
+    final pastSex = past.sexAndAge.isNotEmpty ? past.sexAndAge.substring(0, 1) : '';
+    if (curSex.isNotEmpty && pastSex.isNotEmpty) {
+      if (curSex == pastSex) totalScore += 100;
+      count++;
+    }
+
+    final curAge = int.tryParse(current.sexAndAge.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    final pastAge = int.tryParse(past.sexAndAge.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    if (curAge > 0 && pastAge > 0) {
+      final diff = (curAge - pastAge).abs();
+      double score = 0;
+      if (diff == 0) score = 100;
+      else if (diff == 1) score = 80;
+      else if (diff == 2) score = 50;
+      totalScore += score;
+      count++;
+    }
+
+    // 2. 馬体重
+    final curWeightStr = current.horseWeight?.split('(').first ?? '';
+    final pastWeightStr = past.horseWeight.split('(').first;
+    final curWeight = int.tryParse(curWeightStr) ?? 0;
+    final pastWeight = int.tryParse(pastWeightStr) ?? 0;
+    if (curWeight > 0 && pastWeight > 0) {
+      final diff = (curWeight - pastWeight).abs();
+      // 20kg差で50点になるような計算: score = 100 - (diff * 2.5)
+      double score = 100 - (diff * 2.5);
+      totalScore += score < 0 ? 0 : score;
+      count++;
+    }
+
+    // 3. 斤量
+    final pastCarried = double.tryParse(past.weightCarried) ?? 0.0;
+    if (current.carriedWeight > 0 && pastCarried > 0) {
+      final diff = (current.carriedWeight - pastCarried).abs();
+      // 1kg差で85点、3kg差で55点くらい: score = 100 - (diff * 15)
+      double score = 100 - (diff * 15);
+      totalScore += score < 0 ? 0 : score;
+      count++;
+    }
+
+    // 4. ローテーション (レース名)
+    // 両方のデータがある場合のみ計算に含める
+    if (curPrevRaceName != null && pastPrevRaceName != null && curPrevRaceName.isNotEmpty && pastPrevRaceName.isNotEmpty) {
+      // 文字列の部分一致などで判定 (表記揺れ吸収のため)
+      // 例: "神戸新聞杯" と "神戸新聞杯(G2)"
+      if (curPrevRaceName.contains(pastPrevRaceName) || pastPrevRaceName.contains(curPrevRaceName)) {
+        totalScore += 100;
+      } else {
+        totalScore += 0;
+      }
+      count++;
+    }
+
+    if (count == 0) return 0.0;
+    return totalScore / count;
+  }
+
+  // --- 以下、日付計算・履歴取得用ヘルパー ---
+
+  /// 文字列日付をDateTimeに変換
+  DateTime? _parseDate(String dateStr) {
+    try {
+      // "2023年10月24日" 形式
+      if (dateStr.contains('年')) {
+        return DateFormat('yyyy年M月d日').parse(dateStr);
+      }
+      // "2023/10/24" 形式
+      if (dateStr.contains('/')) {
+        return DateFormat('yyyy/MM/dd').parse(dateStr);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// 指定された基準日より「前」の最新のレース名を取得
+  String? _getPreviousRaceName(List<HorseRaceRecord>? history, String referenceDateStr) {
+    if (history == null || history.isEmpty) return null;
+
+    final referenceDate = _parseDate(referenceDateStr);
+    if (referenceDate == null) return null;
+
+    // 履歴を日付降順（新しい順）にソート
+    final sortedHistory = List<HorseRaceRecord>.from(history);
+    sortedHistory.sort((a, b) {
+      final da = _parseDate(a.date) ?? DateTime(1900);
+      final db = _parseDate(b.date) ?? DateTime(1900);
+      return db.compareTo(da);
+    });
+
+    // 基準日より前にある最初のレコードを探す
+    for (final record in sortedHistory) {
+      final recDate = _parseDate(record.date);
+      if (recDate != null && recDate.isBefore(referenceDate)) {
+        return record.raceName;
+      }
+    }
+    return null;
   }
 
   @override
@@ -212,12 +432,12 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     final isComparisonMode = widget.comparisonTargets != null;
 
     return DataTable(
-      headingRowColor: WidgetStateProperty.all(Colors.grey[100]), // FlutterのバージョンによってはMaterialStateProperty
+      headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
       columnSpacing: 20,
       columns: [
-        // 結果分析モードなら「着順/印」カラムを表示
         if (isComparisonMode) const DataColumn(label: Text('着順/印')),
         const DataColumn(label: Text('馬名')),
+        const DataColumn(label: Text('類似馬(1着)')),
         const DataColumn(label: Text('総合シンクロ')),
         const DataColumn(label: Text('人気妙味')),
         const DataColumn(label: Text('信頼度(格)')),
@@ -228,7 +448,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         // 予想データの対応データを取得
         final predictionItem = _predictionResultMap[item.horseId];
 
-        // 予想データから印を取得 (widget.comparisonTargetsから検索)
+        // 予想データから印を取得
         String? userMark;
         if (isComparisonMode && widget.comparisonTargets != null) {
           final target = widget.comparisonTargets!.firstWhere(
@@ -236,7 +456,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
               orElse: () => widget.comparisonTargets![0] // ダミー
           );
           if (target.horseId == item.horseId) {
-            userMark = target.userMark?.mark; // ★修正済: markType -> mark
+            userMark = target.userMark?.mark;
           }
         }
 
@@ -245,13 +465,11 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         if (isComparisonMode) {
           final currentHorse = widget.horses.firstWhere((h) => h.horseId == item.horseId, orElse: () => widget.horses[0]);
           if (currentHorse.horseId == item.horseId) {
-            // RaceStatisticsPageでの変換時にpopularityに着順(Int)を入れる運用
             rankStr = currentHorse.popularity != null ? '${currentHorse.popularity}着' : '-';
           }
         }
 
         return DataRow(cells: [
-          // 着順/印 セル
           if (isComparisonMode)
             DataCell(Row(
               children: [
@@ -270,7 +488,9 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
               ],
             )),
           DataCell(Text(item.horseName, style: const TextStyle(fontWeight: FontWeight.bold))),
-          // スコアセルに差分情報を渡す
+          // 類似馬(1着)セル
+          DataCell(_buildSimilarityCell(item.horseId, item.horseName)),
+
           DataCell(_buildTotalScoreCell(item.totalScore, maxScore, predictionItem?.totalScore)),
           DataCell(InkWell(
             onTap: () => _showPopularityDetailDialog(context, item),
@@ -280,11 +500,88 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
             ),
           )),
           DataCell(_buildRotationCell(item)),
-          // 馬体重セルに差分情報を渡す
           DataCell(_buildWeightDetailCell(item, predictionItem)),
           DataCell(_buildFrameDetailCell(item)),
         ]);
       }).toList(),
+    );
+  }
+
+  // 類似馬セル構築
+  Widget _buildSimilarityCell(String horseId, String horseName) {
+    final bestMatch = _similarityBestFirstPlace[horseId];
+
+    // 50%以上の1着馬がいない場合
+    if (bestMatch == null) {
+      return InkWell(
+        onTap: () => _showSimilarityDetailDialog(context, horseName, horseId),
+        child: const Text('該当なし', style: TextStyle(color: Colors.grey, fontSize: 12)),
+      );
+    }
+
+    return InkWell(
+      onTap: () => _showSimilarityDetailDialog(context, horseName, horseId),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(bestMatch.horseName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue)),
+          Text('類似度:${bestMatch.similarity.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+        ],
+      ),
+    );
+  }
+
+  // 類似馬詳細ダイアログ
+  void _showSimilarityDetailDialog(BuildContext context, String horseName, String horseId) {
+    final matches = _similarityAllMatches[horseId] ?? [];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('$horseName の類似馬分析\n(類似度50%以上)', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: matches.isEmpty
+                ? const Center(child: Text('条件を満たす類似馬はいませんでした。'))
+                : ListView.builder(
+              itemCount: matches.length,
+              itemBuilder: (context, index) {
+                final data = matches[index];
+                final isFirst = data.rank == '1';
+
+                return Card(
+                  color: isFirst ? Colors.yellow.shade50 : null,
+                  child: ListTile(
+                    dense: true,
+                    title: Row(
+                      children: [
+                        Text(data.horseName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        const Spacer(),
+                        Text('${data.similarity.toStringAsFixed(0)}%', style: TextStyle(
+                            color: data.similarity >= 80 ? Colors.red : Colors.blue,
+                            fontWeight: FontWeight.bold
+                        )),
+                      ],
+                    ),
+                    subtitle: Text(
+                      '${data.raceName} (${data.raceDate.split('年').first})\n'
+                          '${data.popularity}番人気 → ${data.rank}着',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    trailing: isFirst ? const Icon(Icons.emoji_events, color: Colors.amber) : null,
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('閉じる')),
+          ],
+        );
+      },
     );
   }
 
@@ -298,124 +595,6 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       case '☆': return Colors.yellow[700]!;
       default: return Colors.grey;
     }
-  }
-
-  Widget _buildPopularityCell(HistoricalMatchModel item) {
-    Color color = Colors.black;
-    if (item.popularityScore >= 90) color = Colors.red;
-    else if (item.popularityScore <= 40) color = Colors.blue;
-
-    // 短い診断名だけを表示 (S:お宝馬 など)
-    return Row(
-      children: [
-        Text(item.popDiagnosis, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
-        const SizedBox(width: 4),
-        const Icon(Icons.info_outline, size: 14, color: Colors.grey),
-      ],
-    );
-  }
-
-  void _showPopularityDetailDialog(BuildContext context, HistoricalMatchModel item) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          // Column に変更し、縦並びにする
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(item.horseName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: Colors.blueGrey, borderRadius: BorderRadius.circular(4)),
-                child: Text(
-                  '累積指数: ${item.valueIndex >= 0 ? "+" : ""}${item.valueIndex.toStringAsFixed(1)}',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 350,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. AIによる解説 (自然言語)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue[100]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(children: [Icon(Icons.psychology, size: 16, color: Colors.blue), SizedBox(width: 4), Text('AI診断', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))]),
-                      const SizedBox(height: 4),
-                      Text(item.valueReasoning, style: const TextStyle(fontSize: 13, height: 1.4)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text('▼ 過去レース分析 (人気 vs 着順)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                const Divider(),
-
-                // 2. 履歴リスト (矢印付き)
-                Expanded(
-                  child: item.recentHistory.isEmpty
-                      ? const Center(child: Text('過去データがありません'))
-                      : ListView.builder(
-                    itemCount: item.recentHistory.length,
-                    itemBuilder: (context, index) {
-                      final rec = item.recentHistory[index];
-                      final pop = int.tryParse(rec.popularity) ?? 0;
-                      final rank = int.tryParse(rec.rank) ?? 0;
-                      if (pop == 0 || rank == 0) return const SizedBox.shrink();
-
-                      final diff = pop - rank;
-                      IconData icon;
-                      Color color;
-
-                      if (diff >= 5) { icon = Icons.arrow_upward; color = Colors.red; }
-                      else if (diff >= 1) { icon = Icons.north_east; color = Colors.orange; }
-                      else if (diff == 0) { icon = Icons.arrow_forward; color = Colors.grey; }
-                      else if (diff >= -3) { icon = Icons.south_east; color = Colors.blue; }
-                      else { icon = Icons.arrow_downward; color = Colors.blue[900]!; }
-
-                      return ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [Text(rec.date.split('/').sublist(1).join('/'), style: const TextStyle(fontSize: 10))],
-                        ),
-                        title: Text(rec.raceName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        subtitle: Text('${rec.popularity}人 → ${rec.rank}着', style: const TextStyle(fontSize: 12)),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(diff > 0 ? '+${diff}Gap' : '${diff}Gap', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
-                            const SizedBox(width: 8),
-                            Icon(icon, color: color),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('閉じる')),
-          ],
-        );
-      },
-    );
   }
 
   // --- 既存のセル構築メソッド ---
@@ -528,6 +707,121 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         SizedBox(width: 40, child: Text('${item.frameScore.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14))),
         Row(mainAxisSize: MainAxisSize.min, children: [Text('${item.positionZone}目', style: const TextStyle(fontSize: 12)), const SizedBox(width: 4), Text('(${item.gateNumber}番)', style: const TextStyle(fontSize: 11, color: Colors.grey))]),
       ],
+    );
+  }
+
+  // 人気妙味セルのロジック
+  Widget _buildPopularityCell(HistoricalMatchModel item) {
+    Color color = Colors.black;
+    if (item.popularityScore >= 90) color = Colors.red;
+    else if (item.popularityScore <= 40) color = Colors.blue;
+
+    return Row(
+      children: [
+        Text(item.popDiagnosis, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+        const SizedBox(width: 4),
+        const Icon(Icons.info_outline, size: 14, color: Colors.grey),
+      ],
+    );
+  }
+
+  // 人気詳細ダイアログ
+  void _showPopularityDetailDialog(BuildContext context, HistoricalMatchModel item) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(item.horseName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: Colors.blueGrey, borderRadius: BorderRadius.circular(4)),
+                child: Text(
+                  '累積指数: ${item.valueIndex >= 0 ? "+" : ""}${item.valueIndex.toStringAsFixed(1)}',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 350,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue[100]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(children: [Icon(Icons.psychology, size: 16, color: Colors.blue), SizedBox(width: 4), Text('AI診断', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))]),
+                      const SizedBox(height: 4),
+                      Text(item.valueReasoning, style: const TextStyle(fontSize: 13, height: 1.4)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('▼ 過去レース分析 (人気 vs 着順)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                const Divider(),
+                Expanded(
+                  child: item.recentHistory.isEmpty
+                      ? const Center(child: Text('過去データがありません'))
+                      : ListView.builder(
+                    itemCount: item.recentHistory.length,
+                    itemBuilder: (context, index) {
+                      final rec = item.recentHistory[index];
+                      final pop = int.tryParse(rec.popularity) ?? 0;
+                      final rank = int.tryParse(rec.rank) ?? 0;
+                      if (pop == 0 || rank == 0) return const SizedBox.shrink();
+
+                      final diff = pop - rank;
+                      IconData icon;
+                      Color color;
+
+                      if (diff >= 5) { icon = Icons.arrow_upward; color = Colors.red; }
+                      else if (diff >= 1) { icon = Icons.north_east; color = Colors.orange; }
+                      else if (diff == 0) { icon = Icons.arrow_forward; color = Colors.grey; }
+                      else if (diff >= -3) { icon = Icons.south_east; color = Colors.blue; }
+                      else { icon = Icons.arrow_downward; color = Colors.blue[900]!; }
+
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [Text(rec.date.split('/').sublist(1).join('/'), style: const TextStyle(fontSize: 10))],
+                        ),
+                        title: Text(rec.raceName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        subtitle: Text('${rec.popularity}人 → ${rec.rank}着', style: const TextStyle(fontSize: 12)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(diff > 0 ? '+${diff}Gap' : '${diff}Gap', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+                            const SizedBox(width: 8),
+                            Icon(icon, color: color),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('閉じる')),
+          ],
+        );
+      },
     );
   }
 }
