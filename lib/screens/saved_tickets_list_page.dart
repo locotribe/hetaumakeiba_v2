@@ -14,26 +14,9 @@ import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
-
-class TicketListItem {
-  final String raceId; // 新しいアーキテクチャで必要なraceId
-  final QrData qrData;
-  final Map<String, dynamic> parsedTicket;
-  final RaceResult? raceResult;
-  final HitResult? hitResult;
-  final String displayTitle;
-  final String displaySubtitle;
-
-  TicketListItem({
-    required this.raceId,
-    required this.qrData,
-    required this.parsedTicket,
-    this.raceResult,
-    this.hitResult,
-    required this.displayTitle,
-    required this.displaySubtitle,
-  });
-}
+import 'package:hetaumakeiba_v2/models/ticket_list_item.dart';
+import 'package:hetaumakeiba_v2/logic/ticket_aggregator.dart';
+import 'package:hetaumakeiba_v2/logic/ticket_data_logic.dart';
 
 class SavedTicketsListPage extends StatefulWidget {
   const SavedTicketsListPage({super.key});
@@ -56,6 +39,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
   bool _isLoading = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final TicketDataLogic _ticketLogic = TicketDataLogic();
 
   static const List<String> _englishMonths = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -82,7 +66,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     if (!mounted) return;
     setState(() { _isLoading = true; });
 
-    // ★★★ ここからが修正箇所 ★★★
     final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       setState(() {
@@ -97,92 +80,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       return;
     }
 
-    final allQrData = await _dbHelper.getAllQrData(userId);
-    // ★★★ ここまでが修正箇所 ★★★
-    final List<TicketListItem> tempItems = [];
-    for (final qrData in allQrData) {
-      try {
-        final parsedTicket = jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>;
-        if (parsedTicket.isEmpty) continue;
+    final finalItems = await _ticketLogic.fetchAndProcessTickets(userId);
 
-        final url = generateNetkeibaUrl(
-          year: parsedTicket['年'].toString(),
-          racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
-          round: parsedTicket['回'].toString(),
-          day: parsedTicket['日'].toString(),
-          race: parsedTicket['レース'].toString(),
-        );
-        final raceId = RaceResultScraperService.getRaceIdFromUrl(url)!;
-        final raceResult = await _dbHelper.getRaceResult(raceId);
-
-        HitResult? hitResult;
-        if (raceResult != null) {
-          hitResult = HitChecker.check(parsedTicket: parsedTicket, raceResult: raceResult);
-        }
-
-        tempItems.add(TicketListItem(
-          raceId: raceId, // raceIdを保持
-          qrData: qrData, parsedTicket: parsedTicket, raceResult: raceResult, hitResult: hitResult,
-          displayTitle: '', displaySubtitle: '',
-        ));
-      } catch (e) {
-        print('購入履歴のデータ処理中にエラーが発生しました: ${qrData.id} - $e');
-      }
-    }
-
-    final Map<String, int> duplicateCounter = {};
-    for (final item in tempItems) {
-      final key = _generatePurchaseKey(item.parsedTicket);
-      duplicateCounter[key] = (duplicateCounter[key] ?? 0) + 1;
-    }
-    final Map<String, int> currentDuplicateIndex = {};
-    final List<TicketListItem> finalItems = [];
-    for (final item in tempItems) {
-      String title;
-      if (item.raceResult != null) {
-        title = item.raceResult!.raceTitle;
-      } else {
-        final venue = item.parsedTicket['開催場'] ?? '不明';
-        final raceNum = item.parsedTicket['レース'] ?? '??';
-        title = '$venue ${raceNum}R';
-      }
-      String purchaseMethodDisplay = item.parsedTicket['方式'] ?? '';
-      if (purchaseMethodDisplay == 'ながし') {
-        final purchaseContents = item.parsedTicket['購入内容'] as List<dynamic>?;
-        if (purchaseContents != null && purchaseContents.isNotEmpty) {
-          final firstPurchase = purchaseContents.first as Map<String, dynamic>;
-          purchaseMethodDisplay = firstPurchase['ながし種別'] as String? ?? purchaseMethodDisplay;
-          if (firstPurchase.containsKey('マルチ') && firstPurchase['マルチ'] == 'あり') {
-            purchaseMethodDisplay += 'マルチ';
-          }
-        }
-      }
-      final purchaseDetails = (item.parsedTicket['購入内容'] as List).map((p) => bettingDict[p['式別']] ?? '').where((name) => name.isNotEmpty).toSet().join(', ');
-      String line2 = '$purchaseDetails $purchaseMethodDisplay';
-      final key = _generatePurchaseKey(item.parsedTicket);
-      if (duplicateCounter[key]! > 1) {
-        final index = (currentDuplicateIndex[key] ?? 0) + 1;
-        line2 += ' ($index)';
-        currentDuplicateIndex[key] = index;
-      }
-      final line3 = _formatPurchaseSummary(item.parsedTicket['購入内容'] as List<dynamic>);
-      final combinedSubtitle = '$line2\n$line3';
-
-      finalItems.add(TicketListItem(
-        raceId: item.raceId, // raceIdを保持
-        qrData: item.qrData, parsedTicket: item.parsedTicket, raceResult: item.raceResult,
-        hitResult: item.hitResult, displayTitle: title, displaySubtitle: combinedSubtitle,
-      ));
-    }
-
-    finalItems.sort((a, b) {
-      final dateA = a.raceResult?.raceDate;
-      final dateB = b.raceResult?.raceDate;
-      if (dateA == null && dateB == null) return 0;
-      if (dateA == null) return 1;
-      if (dateB == null) return -1;
-      return dateB.compareTo(dateA);
-    });
     _allTicketItems = finalItems;
 
     final newMonthsWithData = <int, Set<int>>{};
@@ -255,56 +154,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         }
       }).toList();
     });
-  }
-
-  String _formatPurchaseSummary(List<dynamic> purchases) {
-    if (purchases.isEmpty) return '';
-    try {
-      final firstPurchase = purchases.first as Map<String, dynamic>;
-      final ticketTypeId = firstPurchase['式別'] as String?; // 式別を取得
-      final ticketType = bettingDict[ticketTypeId] ?? '';
-      final amount = firstPurchase['購入金額'] ?? 0;
-      String horseNumbersStr = '';
-      if (firstPurchase.containsKey('all_combinations')) {
-        final combinations = firstPurchase['all_combinations'] as List;
-        if (combinations.isNotEmpty) {
-          // 式別に応じて区切り文字を変更
-          final separator = (ticketType == '馬単' || ticketType == '3連単') ? '→' : '-';
-          horseNumbersStr = (combinations.first as List).join(separator);
-        }
-      }
-      String summary = '$horseNumbersStr / $amount円';
-      if (purchases.length > 1 || (firstPurchase.containsKey('all_combinations') && (firstPurchase['all_combinations'] as List).length > 1)) {
-        summary += ' ...他';
-      }
-      return summary;
-    } catch (e) {
-      print('Error in _formatPurchaseSummary: $e');
-      return '購入内容の表示に失敗しました';
-    }
-  }
-
-  String _generatePurchaseKey(Map<String, dynamic> parsedTicket) {
-    try {
-      final url = generateNetkeibaUrl(
-        year: parsedTicket['年'].toString(),
-        racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
-        round: parsedTicket['回'].toString(),
-        day: parsedTicket['日'].toString(),
-        race: parsedTicket['レース'].toString(),
-      );
-      final raceId = RaceResultScraperService.getRaceIdFromUrl(url)!;
-      final purchaseMethod = parsedTicket['方式'] ?? '';
-      final purchaseDetails = (parsedTicket['購入内容'] as List);
-      final detailsString = purchaseDetails.map((p) {
-        final detailMap = p as Map<String, dynamic>;
-        final sortedKeys = detailMap.keys.toList()..sort();
-        return sortedKeys.map((key) => '$key:${detailMap[key]}').join(';');
-      }).join('|');
-      return '$raceId-$purchaseMethod-$detailsString';
-    } catch (e) {
-      return parsedTicket['QR'] ?? parsedTicket.toString();
-    }
   }
 
   Future<void> _deleteAllData() async {
@@ -459,25 +308,10 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   Widget _buildMonthBanner() {
     if (_selectedMonth == null) return const SizedBox.shrink();
 
-    // --- 集計ロジック開始 ---
-    int totalCount = _filteredTicketItems.length;
-    int hitCount = 0;
-    int totalPurchase = 0;
-    int totalPayout = 0;
+    // Use TicketAggregator
+    final stats = TicketAggregator.calculateMonthlyStats(_filteredTicketItems);
 
-    for (final item in _filteredTicketItems) {
-      if (item.hitResult?.isHit == true) {
-        hitCount++;
-      }
-      totalPurchase += (item.parsedTicket['合計金額'] as int? ?? 0);
-      totalPayout += (item.hitResult?.totalPayout ?? 0) + (item.hitResult?.totalRefund ?? 0);
-    }
-
-    final balance = totalPayout - totalPurchase;
-    final hitRate = totalCount > 0 ? (hitCount / totalCount) * 100 : 0.0;
-    final hitRateStr = hitRate.toStringAsFixed(1);
-
-    // 金額フォーマット用ヘルパー (例: 1,234)
+    // 金額フォーマット用ヘルパー
     String formatMoney(int amount) {
       return amount.toString().replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
@@ -494,7 +328,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         ],
       );
     }
-    // --- 集計ロジック終了 ---
 
     final englishMonth = _englishMonths[_selectedMonth! - 1];
 
@@ -548,9 +381,9 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              buildStatRow('購入', '$totalCount枚'),
-              buildStatRow('的中', '$hitCount枚'),
-              buildStatRow('的中率', '$hitRateStr%'),
+              buildStatRow('購入', '${stats.totalCount}枚'),
+              buildStatRow('的中', '${stats.hitCount}枚'),
+              buildStatRow('的中率', '${stats.hitRate.toStringAsFixed(1)}%'),
             ],
           ),
 
@@ -562,28 +395,28 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                '購入 ¥${formatMoney(totalPurchase)}',
+                '購入 ¥${formatMoney(stats.totalPurchase)}',
                 style: const TextStyle(color: Colors.white70, fontSize: 10),
               ),
               Text(
-                '払戻 ¥${formatMoney(totalPayout)}',
+                '払戻 ¥${formatMoney(stats.totalPayout)}',
                 style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 2),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
-                  color: balance >= 0 ? Colors.white.withOpacity(0.1) : Colors.red.withOpacity(0.3),
+                  color: stats.balance >= 0 ? Colors.white.withOpacity(0.1) : Colors.red.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(2),
                   border: Border.all(
-                      color: balance >= 0 ? Colors.yellowAccent : Colors.white30,
+                      color: stats.balance >= 0 ? Colors.yellowAccent : Colors.white30,
                       width: 0.5
                   ),
                 ),
                 child: Text(
-                  '${balance >= 0 ? '+' : ''}¥${formatMoney(balance)}',
+                  '${stats.balance >= 0 ? '+' : ''}¥${formatMoney(stats.balance)}',
                   style: TextStyle(
-                    color: balance >= 0 ? Colors.yellowAccent : Colors.white,
+                    color: stats.balance >= 0 ? Colors.yellowAccent : Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
