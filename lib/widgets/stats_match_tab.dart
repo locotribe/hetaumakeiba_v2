@@ -13,15 +13,17 @@ class StatsMatchTab extends StatefulWidget {
   final String raceId;
   final String raceName;
   final List<PredictionHorseDetail> horses;
-  // ★追加: 集計対象とするレースIDのリスト
   final List<String>? targetRaceIds;
+  // ★追加: 比較対象（予想時）のデータリスト。これがある場合は結果分析モードとして動作
+  final List<PredictionHorseDetail>? comparisonTargets;
 
   const StatsMatchTab({
     super.key,
     required this.raceId,
     required this.raceName,
     required this.horses,
-    this.targetRaceIds, // ★追加
+    this.targetRaceIds,
+    this.comparisonTargets, // ★追加
   });
 
   @override
@@ -36,6 +38,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
   bool _isLoading = true;
   String _statusMessage = 'データ準備中...';
   List<HistoricalMatchModel> _results = [];
+  // ★追加: 予想データの分析結果を保持するマップ (Key: horseId)
+  Map<String, HistoricalMatchModel> _predictionResultMap = {};
   TrendSummary? _summary;
   String? _errorMessage;
 
@@ -98,6 +102,20 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         currentHorseHistory: currentHorseHistory,
         pastTopHorseRecords: pastTopHorseRecords,
       );
+
+      // ★追加: 比較対象(予想データ)がある場合、そちらも分析してスコアを算出しておく
+      if (widget.comparisonTargets != null && widget.comparisonTargets!.isNotEmpty) {
+        final predictionAnalysis = _engine.analyze(
+          currentHorses: widget.comparisonTargets!,
+          pastRaces: pastRaces,
+          currentHorseHistory: currentHorseHistory, // 履歴データは共有
+          pastTopHorseRecords: pastTopHorseRecords,
+        );
+        final predList = predictionAnalysis['results'] as List<HistoricalMatchModel>;
+        _predictionResultMap = {for (var e in predList) e.horseId: e};
+      } else {
+        _predictionResultMap.clear();
+      }
 
       if (mounted) {
         setState(() {
@@ -190,21 +208,70 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       maxScore = _results.map((e) => e.totalScore).reduce((a, b) => a > b ? a : b);
     }
 
+    // 比較モードかどうか
+    final isComparisonMode = widget.comparisonTargets != null;
+
     return DataTable(
-      headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
+      headingRowColor: WidgetStateProperty.all(Colors.grey[100]), // FlutterのバージョンによってはMaterialStateProperty
       columnSpacing: 20,
-      columns: const [
-        DataColumn(label: Text('馬名')),
-        DataColumn(label: Text('総合シンクロ')),
-        DataColumn(label: Text('人気妙味')),
-        DataColumn(label: Text('信頼度(格)')),
-        DataColumn(label: Text('馬体重')),
-        DataColumn(label: Text('枠順')),
+      columns: [
+        // 結果分析モードなら「着順/印」カラムを表示
+        if (isComparisonMode) const DataColumn(label: Text('着順/印')),
+        const DataColumn(label: Text('馬名')),
+        const DataColumn(label: Text('総合シンクロ')),
+        const DataColumn(label: Text('人気妙味')),
+        const DataColumn(label: Text('信頼度(格)')),
+        const DataColumn(label: Text('馬体重')),
+        const DataColumn(label: Text('枠順')),
       ],
       rows: _results.map((item) {
+        // 予想データの対応データを取得
+        final predictionItem = _predictionResultMap[item.horseId];
+
+        // 予想データから印を取得 (widget.comparisonTargetsから検索)
+        String? userMark;
+        if (isComparisonMode && widget.comparisonTargets != null) {
+          final target = widget.comparisonTargets!.firstWhere(
+                  (h) => h.horseId == item.horseId,
+              orElse: () => widget.comparisonTargets![0] // ダミー
+          );
+          if (target.horseId == item.horseId) {
+            userMark = target.userMark?.mark; // ★修正済: markType -> mark
+          }
+        }
+
+        // 着順データの取得
+        String? rankStr;
+        if (isComparisonMode) {
+          final currentHorse = widget.horses.firstWhere((h) => h.horseId == item.horseId, orElse: () => widget.horses[0]);
+          if (currentHorse.horseId == item.horseId) {
+            // RaceStatisticsPageでの変換時にpopularityに着順(Int)を入れる運用
+            rankStr = currentHorse.popularity != null ? '${currentHorse.popularity}着' : '-';
+          }
+        }
+
         return DataRow(cells: [
+          // 着順/印 セル
+          if (isComparisonMode)
+            DataCell(Row(
+              children: [
+                if (rankStr != null)
+                  Text(rankStr, style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 4),
+                if (userMark != null)
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _getMarkColor(userMark),
+                    ),
+                    child: Text(userMark, style: const TextStyle(color: Colors.white, fontSize: 10)),
+                  ),
+              ],
+            )),
           DataCell(Text(item.horseName, style: const TextStyle(fontWeight: FontWeight.bold))),
-          DataCell(_buildTotalScoreCell(item.totalScore, maxScore)),
+          // スコアセルに差分情報を渡す
+          DataCell(_buildTotalScoreCell(item.totalScore, maxScore, predictionItem?.totalScore)),
           DataCell(InkWell(
             onTap: () => _showPopularityDetailDialog(context, item),
             child: Padding(
@@ -213,11 +280,24 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
             ),
           )),
           DataCell(_buildRotationCell(item)),
-          DataCell(_buildWeightDetailCell(item)),
+          // 馬体重セルに差分情報を渡す
+          DataCell(_buildWeightDetailCell(item, predictionItem)),
           DataCell(_buildFrameDetailCell(item)),
         ]);
       }).toList(),
     );
+  }
+
+  // 印の色ヘルパー
+  Color _getMarkColor(String mark) {
+    switch (mark) {
+      case '◎': return Colors.red;
+      case '○': return Colors.blue;
+      case '▲': return Colors.green;
+      case '△': return Colors.orange;
+      case '☆': return Colors.yellow[700]!;
+      default: return Colors.grey;
+    }
   }
 
   Widget _buildPopularityCell(HistoricalMatchModel item) {
@@ -355,7 +435,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     );
   }
 
-  Widget _buildTotalScoreCell(double score, double maxScore) {
+  Widget _buildTotalScoreCell(double score, double maxScore, [double? prevScore]) {
     Color color;
     String rank;
     if (score >= maxScore && score > 0) { rank = 'S'; color = Colors.red; }
@@ -366,26 +446,64 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     else if (score >= 50) { rank = 'E'; color = Colors.indigo; }
     else { rank = 'F'; color = Colors.grey; }
 
+    // 差分計算
+    String? diffStr;
+    Color diffColor = Colors.grey;
+    if (prevScore != null) {
+      final diff = score - prevScore;
+      if (diff != 0) {
+        diffStr = diff > 0 ? '(+${diff.toStringAsFixed(0)})' : '(${diff.toStringAsFixed(0)})';
+        diffColor = diff > 0 ? Colors.red : Colors.blue;
+      }
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(width: 45, child: Text('${score.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 16))),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('${score.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 16)),
+            if (diffStr != null)
+              Text(diffStr, style: TextStyle(fontSize: 10, color: diffColor, fontWeight: FontWeight.bold)),
+          ],
+        ),
         const SizedBox(width: 8),
         Container(width: 24, height: 20, alignment: Alignment.center, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)), child: Text(rank, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))),
       ],
     );
   }
 
-  Widget _buildWeightDetailCell(HistoricalMatchModel item) {
+  Widget _buildWeightDetailCell(HistoricalMatchModel item, [HistoricalMatchModel? prevItem]) {
     final diff = item.weightDiff;
     Color color = Colors.black;
     if (item.weightScore >= 90) color = Colors.red;
     else if (item.weightScore >= 80) color = Colors.orange[800]!;
+
+    // スコア差分
+    String? scoreDiffStr;
+    if (prevItem != null) {
+      final sd = item.weightScore - prevItem.weightScore;
+      if (sd != 0) {
+        scoreDiffStr = sd > 0 ? '+${sd.toStringAsFixed(0)}' : '${sd.toStringAsFixed(0)}';
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        SizedBox(width: 40, child: Text('${item.weightScore.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14))),
+        Row(
+          children: [
+            SizedBox(width: 30, child: Text('${item.weightScore.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14))),
+            if (scoreDiffStr != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: Text('($scoreDiffStr)', style: TextStyle(fontSize: 10, color: (double.tryParse(scoreDiffStr) ?? 0) > 0 ? Colors.red : Colors.blue)),
+              ),
+          ],
+        ),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [

@@ -38,6 +38,12 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   Future<RaceStatistics?>? _statisticsFuture;
   List<PredictionHorseDetail> _horses = []; // 出走馬リストを保持
 
+  // ★追加: 結果分析用のデータとフラグ
+  List<PredictionHorseDetail>? _resultHorses;
+  bool _hasCacheData = false;
+  // 結果分析タブを表示するかどうかの判定
+  bool get _showResultTab => _hasCacheData && _resultHorses != null;
+
   // 配当タブで使用する辞書定義
   final Map<String, String> bettingDict = {
     '1': '単勝',
@@ -57,27 +63,34 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     _loadShutubaData();
   }
 
-// 出馬表データの読み込み（過去傾向タブ用）
-  // 修正: キャッシュがない場合は過去のレース結果から復元を試みる
+// 出馬表データの読み込み
   Future<void> _loadShutubaData() async {
     try {
-      // 1. まず出馬表キャッシュを確認（未来～直近のレース）
+      // 1. まず出馬表キャッシュを確認（未来～直近のレース / 予想データ）
       final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
-      if (cache != null && mounted) {
-        setState(() {
-          _horses = cache.predictionRaceData.horses;
-        });
-        return;
+      if (cache != null) {
+        _horses = cache.predictionRaceData.horses;
+        _hasCacheData = true;
+      } else {
+        _hasCacheData = false;
       }
 
-      // 2. キャッシュがない場合、確定したレース結果を探す（過去のレース）
+      // 2. 確定したレース結果を確認（過去のレース / 結果データ）
       final RaceResult? result = await _dbHelper.getRaceResult(widget.raceId);
-      if (result != null && mounted) {
-        // 結果データから表示用データへ変換
-        final convertedHorses = _convertResultsToDetails(result.horseResults);
-        setState(() {
-          _horses = convertedHorses;
-        });
+      if (result != null) {
+        // 結果分析タブ用に、RankをPopularityにマッピングして変換
+        _resultHorses = _convertResultsToDetails(result.horseResults, useRankAsPopularity: true);
+
+        // キャッシュがない（過去レースを初めて開いた）場合
+        if (!_hasCacheData) {
+          _horses = _convertResultsToDetails(result.horseResults, useRankAsPopularity: false);
+        }
+      } else {
+        _resultHorses = null;
+      }
+
+      if (mounted) {
+        setState(() {});
       }
     } catch (e) {
       debugPrint('Error loading shutuba data: $e');
@@ -85,16 +98,25 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   }
 
   /// 結果データ(HorseResult)を表示用データ(PredictionHorseDetail)に変換するヘルパー
-  List<PredictionHorseDetail> _convertResultsToDetails(List<HorseResult> results) {
+  /// [useRankAsPopularity]: trueの場合、着順(Rank)をPopularityに入れて「結果分析」で着順表示に使う
+  List<PredictionHorseDetail> _convertResultsToDetails(List<HorseResult> results, {bool useRankAsPopularity = false}) {
     return results.map((res) {
-      // 数値変換処理（エラーハンドリング含む）
       final int hNum = int.tryParse(res.horseNumber) ?? 0;
       final int fNum = int.tryParse(res.frameNumber) ?? 0;
       final double weight = double.tryParse(res.weightCarried) ?? 57.0;
       final double? oddsVal = double.tryParse(res.odds);
-      final int? popVal = int.tryParse(res.popularity);
 
-      // 出走取消判定: 順位が数値でない場合は取消・除外等の可能性が高い
+      // 人気・着順の処理
+      int? popVal;
+      if (useRankAsPopularity) {
+        // 結果分析用: RankをPopularityフィールドに入れる
+        popVal = int.tryParse(res.rank);
+      } else {
+        // 予想Fallback用: そのまま人気を入れる
+        popVal = int.tryParse(res.popularity);
+      }
+
+      // 出走取消判定
       final bool isScratched = int.tryParse(res.rank) == null;
 
       return PredictionHorseDetail(
@@ -112,22 +134,10 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         odds: oddsVal,
         popularity: popVal,
         isScratched: isScratched,
-        // 以下のフィールドは結果データからは取得できないため null または初期値
         userMark: null,
         userMemo: res.userMemo,
-        effectiveOdds: null,
-        predictionScore: null,
-        conditionFit: null,
-        distanceCourseAptitudeStats: null,
-        trackAptitudeLabel: null,
-        bestTimeStats: null,
-        fastestAgariStats: null,
-        overallScore: null,
-        expectedValue: null,
-        legStyleProfile: null,
-        previousHorseWeight: null,
-        previousJockey: null,
         ownerName: res.ownerName,
+        // 他の予想系フィールドはnull
       );
     }).toList();
   }
@@ -230,30 +240,35 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // タブ構成: 配当, 人気, 枠番, 脚質, 馬体重, 騎手, 調教師, 詳細分析, 過去傾向, 対象レース (計10つ)
+    // タブ構成: 結果分析タブがあれば11個、なければ10個
     return DefaultTabController(
-      length: 10,
+      // ★修正: タブ数が変わるためKeyを設定し、条件に応じて長さを変更
+      key: ValueKey(_showResultTab),
+      length: _showResultTab ? 11 : 10,
       child: Scaffold(
         body: Column(
           children: [
             Container(
               color: Theme.of(context).primaryColor,
-              child: const TabBar(
+              child: TabBar(
                 isScrollable: true,
                 indicatorColor: Colors.white,
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white70,
+                // ★修正: constを削除し、条件分岐でタブを追加
                 tabs: [
-                  Tab(text: '配当'),
-                  Tab(text: '人気'),
-                  Tab(text: '枠番'),
-                  Tab(text: '脚質'),
-                  Tab(text: '馬体重'),
-                  Tab(text: '騎手'),
-                  Tab(text: '調教師'),
-                  Tab(text: '詳細分析'),
-                  Tab(text: '過去傾向'),
-                  Tab(text: '対象レース'), // ★追加
+                  const Tab(text: '配当'),
+                  const Tab(text: '人気'),
+                  const Tab(text: '枠番'),
+                  const Tab(text: '脚質'),
+                  const Tab(text: '馬体重'),
+                  const Tab(text: '騎手'),
+                  const Tab(text: '調教師'),
+                  const Tab(text: '人気分析'),
+                  const Tab(text: '傾向分析'),
+                  // ★追加: 結果分析タブ
+                  if (_showResultTab) const Tab(text: '結果分析'),
+                  const Tab(text: '分析対象'),
                 ],
               ),
             ),
@@ -272,7 +287,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   if (stats == null) {
                     // データがない場合の初期画面
                     return TabBarView(
-                      children: List.generate(10, (index) => _buildInitialView()),
+                      children: List.generate(_showResultTab ? 11 : 10, (index) => _buildInitialView()),
                     );
                   }
 
@@ -305,19 +320,27 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                         raceName: widget.raceName,
                         horses: _horses,
                       ),
-                      // 9. 過去傾向マッチ
+                      // 9. 傾向マッチ (予想データ)
                       _horses.isEmpty
                           ? const Center(child: Text('出馬表データが見つかりません。\n先にレース詳細画面を開いてください。'))
                           : StatsMatchTab(
                         raceId: widget.raceId,
                         raceName: widget.raceName,
                         horses: _horses,
-                        // ★追加: 選択されたレースIDのリストを渡す
                         targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                       ),
-                      // 10. 対象レース
+                      // ★追加: 結果分析タブ (結果データ)
+                      if (_showResultTab)
+                        StatsMatchTab(
+                          raceId: widget.raceId,
+                          raceName: widget.raceName,
+                          horses: _resultHorses!, // 結果データ
+                          targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
+                          comparisonTargets: _horses, // 比較対象(予想データ)
+                        ),
+                      // 10. 分析対象
                       stats.analyzedRacesList.isEmpty
-                          ? _buildRefetchView('対象レース一覧')
+                          ? _buildRefetchView('分析対象レース一覧')
                           : Column(
                         children: [
                           Padding(
@@ -327,7 +350,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                               child: ElevatedButton.icon(
                                 onPressed: _refetchDetailedData,
                                 icon: const Icon(Icons.edit),
-                                label: const Text('対象レースを再選択・更新'),
+                                label: const Text('分析対象レースを再選択・更新'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.orange.shade100,
                                   foregroundColor: Colors.brown,
@@ -389,7 +412,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     );
   }
 
-  // --- 以下、元のカード構築メソッド群 (変更なし) ---
 
   Widget _buildPayoutTable(Map<String, dynamic> stats) {
     final currencyFormatter = NumberFormat.decimalPattern('ja');
