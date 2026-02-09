@@ -85,7 +85,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         currentHorseHistory[horse.horseId] = records;
       }
 
-      // 2. 過去レース情報を取得
+      // 2. 過去レース情報を取得（比較対象のレース群）
       List<RaceResult> pastRaces;
       if (widget.targetRaceIds != null && widget.targetRaceIds!.isNotEmpty) {
         final resultsMap = await _dbHelper.getMultipleRaceResults(widget.targetRaceIds!);
@@ -106,15 +106,12 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       }
 
       // 3. 過去の上位馬の履歴を取得
-      // (類似度計算でローテーションを使うために先に取得)
       setState(() => _statusMessage = '過去の好走パターンを分析中...');
       final Map<String, List<HorseRaceRecord>> pastTopHorseRecords = {};
 
       for (final race in pastRaces) {
         for (final horse in race.horseResults) {
           final rank = int.tryParse(horse.rank ?? '');
-          // 3着以内、または類似度比較のためになるべく多くのデータを取ると精度が上がるが
-          // パフォーマンスとの兼ね合いで一旦「3着以内」とする
           if (rank != null && rank <= 3 && horse.horseId.isNotEmpty) {
             if (!pastTopHorseRecords.containsKey(horse.horseId)) {
               final records = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
@@ -128,27 +125,40 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       final Map<String, List<SimilarityData>> tempSimilarityAllMatches = {};
       final Map<String, SimilarityData?> tempSimilarityBestFirstPlace = {};
 
-      // 今回のレース日付を「今日」として仮定 (予想など未来の日付の場合もあるため)
-      final today = DateTime.now();
-      final todayStr = DateFormat('yyyy/MM/dd').format(today);
+      // 基準日を「対象レースの開催日」にする
+      String targetRaceDateStr;
+
+      // まず結果データ(RaceResult)から日付を探す
+      final targetResult = await _dbHelper.getRaceResult(widget.raceId);
+      if (targetResult != null) {
+        targetRaceDateStr = targetResult.raceDate;
+      } else {
+        // なければ出馬表キャッシュ(ShutubaTableCache)から日付を探す
+        final targetCache = await _dbHelper.getShutubaTableCache(widget.raceId);
+        if (targetCache != null) {
+          targetRaceDateStr = targetCache.predictionRaceData.raceDate;
+        } else {
+          // それでもなければ（稀なケース）、今日の日付をフォールバックとして使う
+          targetRaceDateStr = DateFormat('yyyy/MM/dd').format(DateTime.now());
+        }
+      }
 
       for (final currentHorse in widget.horses) {
         List<SimilarityData> matches = [];
         SimilarityData? bestFirstPlaceMatch;
         double bestFirstPlaceScore = -1.0;
 
-        // 今回の馬の前走レース名を取得
+        // 今回の馬の前走レース名を取得（対象レースの日付を基準にする）
         final curHistory = currentHorseHistory[currentHorse.horseId];
-        final curPrevRaceName = _getPreviousRaceName(curHistory, todayStr);
+        final curPrevRaceName = _getPreviousRaceName(curHistory, targetRaceDateStr);
 
         for (final race in pastRaces) {
           for (final pastHorse in race.horseResults) {
-            // 過去馬の前走レース名を取得
-            // pastTopHorseRecordsにあればそれを使う(なければnull)
+            // 過去馬の前走レース名を取得（その過去レースの日付を基準にする）
             final pastHistory = pastTopHorseRecords[pastHorse.horseId];
             final pastPrevRaceName = _getPreviousRaceName(pastHistory, race.raceDate);
 
-            // 類似度計算 (ローテ情報を含めて渡す)
+            // 類似度計算
             final score = _calculateSimilarity(
               currentHorse,
               pastHorse,
@@ -171,7 +181,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
               }
             }
 
-            // 50%以上ならリストに追加 (全着順対象)
+            // 50%以上ならリストに追加
             if (score >= 50.0) {
               matches.add(SimilarityData(
                 horseName: pastHorse.horseName,
@@ -190,7 +200,6 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
 
         tempSimilarityAllMatches[currentHorse.horseId] = matches;
 
-        // 1着馬の類似度が50%未満なら「該当なし(null)」とする
         if (bestFirstPlaceScore < 50.0) {
           tempSimilarityBestFirstPlace[currentHorse.horseId] = null;
         } else {
@@ -198,7 +207,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         }
       }
 
-      // 5. HistoricalMatchEngineによる分析 (既存ロジック)
+      // 5. HistoricalMatchEngineによる分析
       final analysisResult = _engine.analyze(
         currentHorses: widget.horses,
         pastRaces: pastRaces,
@@ -211,7 +220,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         final predictionAnalysis = _engine.analyze(
           currentHorses: widget.comparisonTargets!,
           pastRaces: pastRaces,
-          currentHorseHistory: currentHorseHistory, // 履歴データは共有
+          currentHorseHistory: currentHorseHistory,
           pastTopHorseRecords: pastTopHorseRecords,
         );
         final predList = predictionAnalysis['results'] as List<HistoricalMatchModel>;
@@ -277,7 +286,6 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     final pastWeight = int.tryParse(pastWeightStr) ?? 0;
     if (curWeight > 0 && pastWeight > 0) {
       final diff = (curWeight - pastWeight).abs();
-      // 20kg差で50点になるような計算: score = 100 - (diff * 2.5)
       double score = 100 - (diff * 2.5);
       totalScore += score < 0 ? 0 : score;
       count++;
@@ -287,17 +295,14 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     final pastCarried = double.tryParse(past.weightCarried) ?? 0.0;
     if (current.carriedWeight > 0 && pastCarried > 0) {
       final diff = (current.carriedWeight - pastCarried).abs();
-      // 1kg差で85点、3kg差で55点くらい: score = 100 - (diff * 15)
       double score = 100 - (diff * 15);
       totalScore += score < 0 ? 0 : score;
       count++;
     }
 
     // 4. ローテーション (レース名)
-    // 両方のデータがある場合のみ計算に含める
     if (curPrevRaceName != null && pastPrevRaceName != null && curPrevRaceName.isNotEmpty && pastPrevRaceName.isNotEmpty) {
-      // 文字列の部分一致などで判定 (表記揺れ吸収のため)
-      // 例: "神戸新聞杯" と "神戸新聞杯(G2)"
+      // 文字列の部分一致判定
       if (curPrevRaceName.contains(pastPrevRaceName) || pastPrevRaceName.contains(curPrevRaceName)) {
         totalScore += 100;
       } else {
@@ -310,9 +315,9 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     return totalScore / count;
   }
 
-  // --- 以下、日付計算・履歴取得用ヘルパー ---
+  // --- 以下、ヘルパー ---
 
-  /// 文字列日付をDateTimeに変換
+  /// 文字列日付をDateTimeに変換 (ソート用に使用)
   DateTime? _parseDate(String dateStr) {
     try {
       // "2023年10月24日" 形式

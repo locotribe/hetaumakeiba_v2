@@ -313,12 +313,14 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                       // 7. 調教師
                       _buildTabContent(child: _buildTrainerStatsTable(data['trainerStats'] ?? const {})),
                       // 8. 詳細分析
-                      _horses.isEmpty
-                          ? const Center(child: Text('出馬表データが見つかりません。'))
+                      // 修正: 過去の統計データ(IDリスト)を渡して、常に一定の過去傾向を表示する
+                      stats.analyzedRacesList.isEmpty
+                          ? const Center(child: Text('分析データがありません。'))
                           : DetailedAnalysisTab(
                         raceId: widget.raceId,
                         raceName: widget.raceName,
-                        horses: _horses,
+                        horses: _horses, // 現在の馬データ(名前マッピング用)
+                        targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                       ),
                       // 9. 傾向マッチ (予想データ)
                       _horses.isEmpty

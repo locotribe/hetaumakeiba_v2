@@ -11,13 +11,16 @@ import 'package:hetaumakeiba_v2/logic/ai/formation_analysis_engine.dart';
 class DetailedAnalysisTab extends StatefulWidget {
   final String raceId;
   final String raceName;
+  // ★変更: 今回の馬データに加えて、統計対象のレースIDリストを受け取る
   final List<PredictionHorseDetail> horses;
+  final List<String> targetRaceIds;
 
   const DetailedAnalysisTab({
     super.key,
     required this.raceId,
     required this.raceName,
     required this.horses,
+    required this.targetRaceIds,
   });
 
   @override
@@ -40,7 +43,15 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
 
   Future<void> _analyze() async {
     try {
-      final List<RaceResult> pastRaces = await _dbHelper.searchRaceResultsByName(widget.raceName);
+      List<RaceResult> pastRaces = [];
+
+      // ★修正: ターゲットIDがある場合はそれを使用し、なければ名前検索（互換性）
+      if (widget.targetRaceIds.isNotEmpty) {
+        final resultsMap = await _dbHelper.getMultipleRaceResults(widget.targetRaceIds);
+        pastRaces = resultsMap.values.toList();
+      } else {
+        pastRaces = await _dbHelper.searchRaceResultsByName(widget.raceName);
+      }
 
       if (pastRaces.isEmpty) {
         setState(() {
@@ -50,6 +61,7 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
         return;
       }
 
+      // 分析ロジックは以前と同じエンジンを使用（UIを維持するため）
       final result = _engine.analyze(
         pastRaces: pastRaces,
         currentHorses: widget.horses,
@@ -105,7 +117,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
 
           const SizedBox(height: 16),
           const Text('🎯 AI厳選買い目リスト', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          // 追加: 予算表示
           Text('予算1万円での傾斜配分例 (${_result!.betType})', style: TextStyle(fontSize: 12, color: Colors.blue[800], fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
 
@@ -120,9 +131,8 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
     );
   }
 
-  // --- Widgets ---
+  // --- Widgets (元のファイルを維持) ---
 
-  // (中略: バナーやカード系は変更なし)
   Widget _buildDisclaimerBanner() {
     return Container(
       width: double.infinity,
@@ -308,9 +318,8 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
     );
   }
 
-  // リストの修正: 推奨金額を表示
   Widget _buildTicketList(FormationAnalysisResult result) {
-    final displayTickets = result.tickets.take(30).toList(); // 上位30件
+    final displayTickets = result.tickets.take(30).toList();
 
     if (displayTickets.isEmpty) {
       return const Center(child: Text('条件に合致する買い目がありませんでした。', textAlign: TextAlign.center));
@@ -344,7 +353,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
                 const Spacer(),
-                // 金額表示
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
