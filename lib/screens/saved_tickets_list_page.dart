@@ -20,6 +20,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   List<TicketListItem> _allTicketItems = [];
   List<TicketListItem> _filteredTicketItems = [];
 
+  bool _isYearSummaryExpanded = false;
+
   int? _selectedYear;
   int? _selectedMonth;
   Map<int, Set<int>> _monthsWithData = {};
@@ -168,6 +170,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           child: Column(
             children: [
               _buildYearSelector(),
+              _buildYearlySummaryPanel(),
               const SizedBox(height: 16),
               _buildMonthSelector(),
               const SizedBox(height: 16),
@@ -200,6 +203,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           if (newYear != _selectedYear) {
             setState(() {
               _selectedYear = newYear;
+              _isYearSummaryExpanded = false; // 年が変わったら閉じる（または維持でも可）
               _filterTickets();
             });
           }
@@ -208,27 +212,56 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           final year = _baseYear + (index - _initialPage);
           final isSelected = (year == _selectedYear);
 
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 6.0),
-            decoration: BoxDecoration(
-              color: isSelected ? activeColor : Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: isSelected ? [
-                BoxShadow(
-                  color: activeColor.withValues(alpha: 0.5),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ] : [],
-            ),
-            child: Center(
-              child: Text(
-                '$year年',
-                style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black87,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
+          return GestureDetector(
+            // ★追加: 選択中の年をタップでパネル開閉
+            onTap: () {
+              if (isSelected) {
+                setState(() {
+                  _isYearSummaryExpanded = !_isYearSummaryExpanded;
+                });
+              } else {
+                // 選択されていない年をタップした場合はその年に移動
+                _pageController.animateToPage(
+                  index,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              }
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 6.0),
+              decoration: BoxDecoration(
+                color: isSelected ? activeColor : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: isSelected ? [
+                  BoxShadow(
+                    color: activeColor.withValues(alpha: 0.5),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ] : [],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '$year年',
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black87,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  // ★追加: 開閉を示すアイコン（選択中のみ表示）
+                  if (isSelected) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      _isYearSummaryExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ],
+                ],
               ),
             ),
           );
@@ -618,6 +651,284 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           },
         ),
       ),
+    );
+  }
+
+// ★修正: 年次集計パネル（アイコンなし・項目順序修正版）
+  Widget _buildYearlySummaryPanel() {
+    if (!_isYearSummaryExpanded || _selectedYear == null) return const SizedBox.shrink();
+
+    // 1. データ集計
+    final yearlyItems = _allTicketItems.where((item) {
+      if (item.raceDate.isEmpty) return false;
+      try {
+        final dateParts = item.raceDate.split(RegExp(r'[年月日]'));
+        final year = int.parse(dateParts[0]);
+        return year == _selectedYear;
+      } catch (e) {
+        return false;
+      }
+    }).toList();
+
+    if (yearlyItems.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        width: double.infinity,
+        color: Colors.white70,
+        child: const Text('データがありません', textAlign: TextAlign.center),
+      );
+    }
+
+    // 変数初期化
+    int totalPurchase = 0;
+    int totalPayout = 0;
+    int totalTicketCount = yearlyItems.length;
+
+    // レース単位集計用マップ
+    Map<String, int> racePurchaseMap = {};
+    Map<String, int> racePayoutMap = {};
+    Map<String, String> raceNameMap = {};
+    Set<String> hitRaces = {};
+
+    for (final item in yearlyItems) {
+      final purchase = item.parsedTicket['合計金額'] as int? ?? 0;
+      totalPurchase += purchase;
+
+      // レース毎の購入額加算
+      racePurchaseMap[item.raceId] = (racePurchaseMap[item.raceId] ?? 0) + purchase;
+
+      // レース名保持
+      if (!raceNameMap.containsKey(item.raceId)) {
+        raceNameMap[item.raceId] = item.displayTitle.isNotEmpty ? item.displayTitle : item.raceName;
+      }
+
+      if (item.raceResult != null) {
+        final payout = (item.hitResult?.totalPayout ?? 0) + (item.hitResult?.totalRefund ?? 0);
+        totalPayout += payout;
+
+        // レース毎の払戻額加算
+        racePayoutMap[item.raceId] = (racePayoutMap[item.raceId] ?? 0) + payout;
+
+        // 的中レース判定
+        if ((item.hitResult?.isHit ?? false) || (item.hitResult?.totalRefund ?? 0) > 0) {
+          hitRaces.add(item.raceId);
+        }
+      }
+    }
+
+    // レース単位での最大値算出
+    int maxPayoutAmount = 0;
+    String maxPayoutRaceName = '-';
+    int maxProfitAmount = -999999999;
+    String maxProfitRaceName = '-';
+    bool hasProfitRace = false;
+
+    for (final raceId in racePurchaseMap.keys) {
+      final purchase = racePurchaseMap[raceId]!;
+      final payout = racePayoutMap[raceId] ?? 0;
+      final profit = payout - purchase;
+
+      // 最高払戻
+      if (payout > maxPayoutAmount) {
+        maxPayoutAmount = payout;
+        maxPayoutRaceName = raceNameMap[raceId] ?? '-';
+      }
+
+      // 最高プラス収支 (利益が出ていて最大のもの)
+      if (profit > 0 && profit > maxProfitAmount) {
+        maxProfitAmount = profit;
+        maxProfitRaceName = raceNameMap[raceId] ?? '-';
+        hasProfitRace = true;
+      }
+    }
+
+    final balance = totalPayout - totalPurchase;
+    final balanceColor = balance >= 0 ? Colors.blue.shade700 : Colors.red.shade700;
+
+    // 効率指標
+    final purchaseRaceCount = racePurchaseMap.length;
+    final hitRaceCount = hitRaces.length;
+    final recoveryRate = totalPurchase > 0 ? (totalPayout / totalPurchase * 100) : 0.0;
+    final hitRate = purchaseRaceCount > 0 ? (hitRaceCount / purchaseRaceCount * 100) : 0.0;
+
+    // 平均購入額
+    final avgPurchase = purchaseRaceCount > 0 ? (totalPurchase / purchaseRaceCount).floor() : 0;
+
+    // ヘルパー関数
+    String fmt(int val) => val.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+    final labelStyle = TextStyle(color: Colors.grey.shade600, fontSize: 11);
+
+    // 2. UI構築
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        children: [
+          // 【上段：メイン指標】
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('年間収支', style: labelStyle),
+                    Text('${balance >= 0 ? '+' : ''}¥${fmt(balance)}',
+                        style: TextStyle(color: balanceColor, fontWeight: FontWeight.bold, fontSize: 20)),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('購入:', style: labelStyle),
+                        Text('¥${fmt(totalPurchase)}', style: const TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('払戻:', style: labelStyle),
+                        Text('¥${fmt(totalPayout)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 16),
+
+          // 【中段1：最高払戻】(元の行)
+          if (maxPayoutAmount > 0) ...[
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
+                  child: Text('最高払戻', style: TextStyle(fontSize: 10, color: Colors.grey.shade800, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(maxPayoutRaceName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12))),
+                Text('¥${fmt(maxPayoutAmount)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87)),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+
+          // 【中段2：基本データ】(元の行)
+          Row(
+            children: [
+              _buildSummaryItem('購入レース数', '$purchaseRaceCount', 'R'),
+              const Spacer(),
+              Container(width: 1, height: 20, color: Colors.grey.shade300),
+              const Spacer(),
+              _buildSummaryItem('馬券購入枚数', '$totalTicketCount', '枚'),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // 【中段3：今回追加 (平均購入額・最高プラス収支)】
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 平均購入額
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('平均購入額', style: labelStyle),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text('¥${fmt(avgPurchase)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text('/R', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // 最高プラス収支
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('最高プラス収支', style: labelStyle),
+                    if (hasProfitRace) ...[
+                      Text(maxProfitRaceName,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11)),
+                      Text('+¥${fmt(maxProfitAmount)}',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue.shade700)),
+                    ] else
+                      const Text('-', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // 【下段：効率指標】
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildEfficiencyItem('回収率', '${recoveryRate.toStringAsFixed(1)}%', recoveryRate >= 100),
+                Container(width: 1, height: 20, color: Colors.grey.shade300),
+                _buildEfficiencyItem('的中率', '${hitRate.toStringAsFixed(1)}%', false),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryItem(String label, String value, String unit) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(unit, style: const TextStyle(fontSize: 10)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEfficiencyItem(String label, String value, bool isPositive) {
+    return Row(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+        const SizedBox(width: 8),
+        Text(value, style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: isPositive ? Colors.red : Colors.black87, // 競馬では回収率100%超えは赤字で強調することが多い
+        )),
+      ],
     );
   }
 }
