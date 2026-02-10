@@ -1,18 +1,9 @@
 // lib/screens/saved_tickets_list_page.dart
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
-import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
-import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
-import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/main.dart';
-import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
 import 'package:hetaumakeiba_v2/models/ticket_list_item.dart';
 import 'package:hetaumakeiba_v2/logic/ticket_aggregator.dart';
@@ -66,14 +57,13 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     if (!mounted) return;
     setState(() { _isLoading = true; });
 
-    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+    final userId = localUserId;
     if (userId == null) {
       setState(() {
         _isLoading = false;
         _allTicketItems = [];
         _filteredTicketItems = [];
       });
-      // オプション：ユーザーにエラーメッセージを表示
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ユーザー情報の取得に失敗しました。')),
       );
@@ -86,9 +76,10 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
     final newMonthsWithData = <int, Set<int>>{};
     for (final item in _allTicketItems) {
-      if (item.raceResult?.raceDate != null && item.raceResult!.raceDate.isNotEmpty) {
+      // 修正: item.raceResult?.raceDate ではなく item.raceDate を使用
+      if (item.raceDate.isNotEmpty) {
         try {
-          final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
+          final dateParts = item.raceDate.split(RegExp(r'[年月日]'));
           final year = int.parse(dateParts[0]);
           final month = int.parse(dateParts[1]);
           if (newMonthsWithData.containsKey(year)) {
@@ -97,7 +88,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             newMonthsWithData[year] = {month};
           }
         } catch (e) {
-          print('日付の解析エラー: ${item.raceResult!.raceDate}');
+          print('日付の解析エラー: ${item.raceDate}');
         }
       }
     }
@@ -106,9 +97,10 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     if (_allTicketItems.isNotEmpty) {
       if (_selectedYear == null || _selectedMonth == null) {
         final latestItem = _allTicketItems.first;
-        if(latestItem.raceResult != null && latestItem.raceResult!.raceDate.isNotEmpty) {
+        // 修正: item.raceResult への依存を排除
+        if(latestItem.raceDate.isNotEmpty) {
           try {
-            final dateParts = latestItem.raceResult!.raceDate.split(RegExp(r'[年月日]'));
+            final dateParts = latestItem.raceDate.split(RegExp(r'[年月日]'));
             _selectedYear = int.parse(dateParts[0]);
             _selectedMonth = int.parse(dateParts[1]);
             _baseYear = DateTime.now().year;
@@ -143,9 +135,10 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     }
     setState(() {
       _filteredTicketItems = _allTicketItems.where((item) {
-        if (item.raceResult == null || item.raceResult!.raceDate.isEmpty) return false;
+        // 修正: raceResultのチェックではなく、raceDateのチェックに変更
+        if (item.raceDate.isEmpty) return false;
         try {
-          final dateParts = item.raceResult!.raceDate.split(RegExp(r'[年月日]'));
+          final dateParts = item.raceDate.split(RegExp(r'[年月日]'));
           final year = int.parse(dateParts[0]);
           final month = int.parse(dateParts[1]);
           return year == _selectedYear && month == _selectedMonth;
@@ -430,108 +423,201 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   }
 
   Widget _buildTicketList() {
-    return ListView.builder(
-      itemCount: _filteredTicketItems.length,
-      itemBuilder: (context, index) {
-        final item = _filteredTicketItems[index];
-        final totalAmount = item.parsedTicket['合計金額'] as int? ?? 0;
-        final isHit = item.hitResult?.isHit ?? false;
-        final payout = item.hitResult?.totalPayout ?? 0;
-        final refund = item.hitResult?.totalRefund ?? 0;
-        final balance = (payout + refund) - totalAmount;
+    // レースIDごとにグループ化
+    final Map<String, List<TicketListItem>> groupedItems = {};
+    for (final item in _filteredTicketItems) {
+      if (groupedItems.containsKey(item.raceId)) {
+        groupedItems[item.raceId]!.add(item);
+      } else {
+        groupedItems[item.raceId] = [item];
+      }
+    }
 
-        return Dismissible(
-          key: ValueKey(item.qrData.id),
-          direction: DismissDirection.endToStart,
-          confirmDismiss: (direction) async {
-            return await showDialog<bool>(
-              context: context,
-              builder: (BuildContext context) {
-                return AlertDialog(
-                  title: const Text('削除の確認'),
-                  content: const Text('この項目を本当に削除しますか？'),
-                  actions: <Widget>[
-                    TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('キャンセル')),
-                    TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('削除', style: TextStyle(color: Colors.red))),
-                  ],
-                );
-              },
-            ) ?? false;
-          },
-          onDismissed: (direction) async {
-            final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
-            if (userId == null) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('エラー: ログイン状態を確認できませんでした。')),
-                );
-                reloadData();
-              }
-              return;
-            }
-            await _dbHelper.deleteQrData(item.qrData.id!, userId);
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('「${item.displayTitle}」を削除しました。')));
-              reloadData();
-            }
-          },
-          background: Container(
-            color: Colors.red,
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: const Icon(Icons.delete, color: Colors.white),
-          ),
-          child: Card(
-            color: isHit ? Colors.red.shade50 : null,
-            margin: const EdgeInsets.symmetric(vertical: 8.0),
-            elevation: 2.0,
-            child: ListTile(
-              isThreeLine: true,
-              title: Text(item.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(item.displaySubtitle),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('$totalAmount円', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54, height: 1.2)),
-                  if (item.raceResult != null) ...[
-                    RichText(
-                      text: TextSpan(
-                        style: TextStyle(fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily),
-                        children: <TextSpan>[
-                          TextSpan(text: '${payout + refund}円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isHit ? Colors.green.shade700 : Colors.black, height: 1.2)),
-                          if (refund > 0)
-                            TextSpan(text: ' (返$refund)', style: const TextStyle(fontSize: 11, color: Colors.black54, height: 1.1)),
-                        ],
-                      ),
-                    ),
-                    Text('${balance >= 0 ? '+' : ''}$balance円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: balance > 0 ? Colors.blue.shade700 : (balance < 0 ? Colors.red.shade700 : Colors.black), height: 1.2)),
-                  ] else
-                    const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
-              ),
-              onTap: () async {
-                if (item.raceResult?.raceDate == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('レースの日付情報がありません。')),
-                  );
-                  return;
-                }
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => RacePage(
-                      raceId: item.raceId,
-                      raceDate: item.raceResult!.raceDate,
-                      qrData: item.qrData,
-                    ),
-                  ),
-                );
-                reloadData();
-              },
-            ),
+    // グループ（レース）のリストを作成
+    final List<List<TicketListItem>> groups = groupedItems.values.toList();
+
+    return ListView.builder(
+      itemCount: groups.length,
+      itemBuilder: (context, index) {
+        final group = groups[index];
+
+        // グループ内のアイテム数が1つの場合は、そのままカードを表示
+        if (group.length == 1) {
+          return _buildSingleTicketCard(group.first);
+        }
+
+        // 複数枚ある場合はフォルダ（ExpansionTile）表示
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 4.0),
+          elevation: 2.0,
+          child: ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 0),
+            childrenPadding: EdgeInsets.zero,
+            title: _buildGroupHeader(group),
+            children: group.map((item) {
+              return Container(
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                  color: Colors.grey.shade50, // 階層を深く見せるための背景色
+                ),
+                padding: const EdgeInsets.only(left: 16.0), // インデント
+                child: _buildSingleTicketCard(item, isGroupChild: true),
+              );
+            }).toList(),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildGroupHeader(List<TicketListItem> groupItems) {
+    final firstItem = groupItems.first;
+    final stats = TicketAggregator.calculateMonthlyStats(groupItems);
+
+    // 金額フォーマット用
+    String formatMoney(int amount) {
+      return amount.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    }
+
+    Color balanceColor = stats.balance > 0 ? Colors.blue.shade700 : (stats.balance < 0 ? Colors.red.shade700 : Colors.black);
+    if (stats.totalPayout == 0 && stats.balance < 0) balanceColor = Colors.red.shade700;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          firstItem.displayTitle, // レース名
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('${stats.totalCount}枚購入', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('購入: ${formatMoney(stats.totalPurchase)}円', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                    Text('払戻: ${formatMoney(stats.totalPayout)}円', style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${stats.balance >= 0 ? '+' : ''}${formatMoney(stats.balance)}円',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: balanceColor),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSingleTicketCard(TicketListItem item, {bool isGroupChild = false}) {
+    final totalAmount = item.parsedTicket['合計金額'] as int? ?? 0;
+    final isHit = item.hitResult?.isHit ?? false;
+    final payout = item.hitResult?.totalPayout ?? 0;
+    final refund = item.hitResult?.totalRefund ?? 0;
+    final balance = (payout + refund) - totalAmount;
+
+    return Dismissible(
+      key: ValueKey(item.qrData.id),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (direction) async {
+        return await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('削除の確認'),
+              content: const Text('この項目を本当に削除しますか？'),
+              actions: <Widget>[
+                TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('キャンセル')),
+                TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('削除', style: TextStyle(color: Colors.red))),
+              ],
+            );
+          },
+        ) ?? false;
+      },
+      onDismissed: (direction) async {
+        final userId = localUserId;
+        if (userId == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('エラー: ログイン状態を確認できませんでした。')),
+            );
+            reloadData();
+          }
+          return;
+        }
+        await _dbHelper.deleteQrData(item.qrData.id!, userId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('削除しました')));
+          reloadData(); // データを再読み込みしてグループ構造を更新
+        }
+      },
+      background: Container(
+        color: Colors.red,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      child: Card(
+        // グループ内アイテムの場合はCardの影やマージンを消してリストっぽくする
+        elevation: isGroupChild ? 0 : 2.0,
+        margin: isGroupChild ? EdgeInsets.zero : const EdgeInsets.symmetric(vertical: 8.0),
+        color: isHit ? Colors.red.shade50 : (isGroupChild ? Colors.transparent : null),
+        shape: isGroupChild ? const RoundedRectangleBorder(borderRadius: BorderRadius.zero) : null,
+        child: ListTile(
+          contentPadding: isGroupChild ? const EdgeInsets.fromLTRB(0, 8, 16, 8) : null,
+          isThreeLine: true,
+          title: isGroupChild ? null : Text(item.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)), // グループ内ならタイトル非表示
+          subtitle: Text(item.displaySubtitle),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('$totalAmount円', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54, height: 1.2)),
+              if (item.raceResult != null) ...[
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily),
+                    children: <TextSpan>[
+                      TextSpan(text: '${payout + refund}円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isHit ? Colors.green.shade700 : Colors.black, height: 1.2)),
+                      if (refund > 0)
+                        TextSpan(text: ' (返$refund)', style: const TextStyle(fontSize: 11, color: Colors.black54, height: 1.1)),
+                    ],
+                  ),
+                ),
+                Text('${balance >= 0 ? '+' : ''}$balance円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: balance > 0 ? Colors.blue.shade700 : (balance < 0 ? Colors.red.shade700 : Colors.black), height: 1.2)),
+              ] else
+                const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+          onTap: () async {
+            // ここで item.raceDate をチェックしているため、未来のレースも開けます
+            if (item.raceDate.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('レースの日付情報がありません。')),
+              );
+              return;
+            }
+            await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => RacePage(
+                  raceId: item.raceId,
+                  raceDate: item.raceDate, // item.raceResultではなくitem.raceDateを使用
+                  qrData: item.qrData,
+                ),
+              ),
+            );
+            reloadData();
+          },
+        ),
+      ),
     );
   }
 }
