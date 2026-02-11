@@ -64,9 +64,22 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       _tabController?.removeListener(_handleTabSelection);
       _tabController?.dispose();
       _tabController = null;
+      _raceStatusMap.clear(); // ステータスマップもクリア
     });
 
     _loadDataForWeek();
+  }
+
+  /// スケジュールデータから初期ステータス（確定済みかどうか）を読み込む
+  void _initializeStatusMapFromSchedule(RaceSchedule schedule) {
+    for (final venue in schedule.venues) {
+      for (final race in venue.races) {
+        // DBに保存されていた情報で「確定済み」ならマップに反映
+        if (race.isConfirmed) {
+          _raceStatusMap[race.raceId] = true;
+        }
+      }
+    }
   }
 
   Future<void> _loadDataForWeek() async {
@@ -78,7 +91,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     // Week Cacheが存在する場合の処理
     if (cachedDateStrings != null) {
-      // cachedDateStrings（yyyyMMdd形式）をyyyy-MM-dd形式に変換
       final scheduleDateKeys = cachedDateStrings
           .map((ds) {
         try {
@@ -95,13 +107,14 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           .cast<String>()
           .toList();
 
-      // Week Cacheの日付リストを使ってDBからスケジュールを取得
       final schedulesFromDb =
       await _dbHelper.getMultipleRaceSchedules(scheduleDateKeys);
 
       if (schedulesFromDb.isNotEmpty) {
-        // 並列で実行せず、少し間隔を空けるなど制御したいが、
-        // ここではUI構築優先のためそのまま呼び出す（内部で制限がかかる）
+        // DBから読み込んだ時点で確定情報を反映させる
+        schedulesFromDb.values.forEach(_initializeStatusMapFromSchedule);
+
+        // その後、未確定のものだけチェックに行く
         schedulesFromDb.values.forEach((s) => _checkRaceStatusesForSchedule(s));
       }
 
@@ -122,6 +135,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     final schedulesFromDb =
     await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
     if (schedulesFromDb.isNotEmpty) {
+      schedulesFromDb.values.forEach(_initializeStatusMapFromSchedule);
       schedulesFromDb.values.forEach((s) => _checkRaceStatusesForSchedule(s));
       if (mounted) {
         setState(() {
@@ -146,6 +160,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         }
 
         if (initialSchedule != null) {
+          // 初期ロード時も確定情報を反映
+          _initializeStatusMapFromSchedule(initialSchedule);
           await _dbHelper.insertOrUpdateRaceSchedule(initialSchedule);
           setState(() {
             _raceSchedules[initialSchedule.date] = initialSchedule;
@@ -240,6 +256,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       }
 
       if (schedule != null) {
+        // ロード時に確定情報を復元
+        _initializeStatusMapFromSchedule(schedule);
         await _dbHelper.insertOrUpdateRaceSchedule(schedule);
         _checkRaceStatusesForSchedule(schedule);
       }
@@ -264,50 +282,42 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
   }
 
-  // ★修正箇所: サーバー負荷を軽減し、BANを回避するためのロジック修正
   Future<void> _checkRaceStatusesForSchedule(RaceSchedule schedule) async {
     final now = DateTime.now();
     final todayStr = DateFormat('yyyy-MM-dd').format(now);
     final scheduleDateStr = schedule.date;
 
-    // 未来の日付ならチェック自体スキップ
     if (scheduleDateStr.compareTo(todayStr) > 0) {
       return;
     }
 
     final scheduleDate = DateFormat('yyyy-MM-dd').parse(scheduleDateStr);
-    // 過去日付かどうか
     final isPastDate = scheduleDate.isBefore(DateTime(now.year, now.month, now.day));
-
-    // 時間パース用の正規表現 (例: "15:45発走")
     final timeRegex = RegExp(r'(\d{1,2}):(\d{2})');
 
     for (final venue in schedule.venues) {
       for (final race in venue.races) {
         if (!mounted) return;
 
-        // 1. すでに確定(赤)になっている場合は再チェックしない（無駄な通信削減）
+        // 1. 既に確定している（DBまたはメモリ上で確認済み）場合はスキップ
+        // これにより、再起動後もDBから読まれた isConfirmed=true があれば通信しません
         if (_raceStatusMap[race.raceId] == true) continue;
 
-        // 2. 発走時刻チェック（当日開催の場合）
+        // 2. 発走時刻チェック
         if (!isPastDate) {
-          // detailsから時刻を抽出して、現在時刻より未来ならチェックしない
           final match = timeRegex.firstMatch(race.details);
           if (match != null) {
             final hour = int.parse(match.group(1)!);
             final minute = int.parse(match.group(2)!);
             final raceTime = DateTime(now.year, now.month, now.day, hour, minute);
 
-            // まだ発走時刻になっていない、かつ発走時刻から15分以内でなければスキップ
-            // (レース終了直後すぐに結果が出るわけではないので余裕を見る)
             if (now.isBefore(raceTime)) {
               continue;
             }
           }
         }
 
-        // 3. アクセス制限回避のための遅延（ウェイト）を入れる
-        // 1レースごとに1秒待つことで、人間が操作しているような頻度にする
+        // 3. アクセス制限回避のための遅延
         await Future.delayed(const Duration(milliseconds: 1000));
 
         if (!mounted) return;
@@ -320,6 +330,10 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
             setState(() {
               _raceStatusMap[race.raceId] = true;
             });
+
+            // ★重要: 確定したらデータを更新してDBに保存する
+            race.isConfirmed = true;
+            await _dbHelper.insertOrUpdateRaceSchedule(schedule);
           }
         } catch (e) {
           print('Error checking status for ${race.raceId}: $e');

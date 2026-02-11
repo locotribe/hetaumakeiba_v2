@@ -74,7 +74,7 @@ class SimpleRaceInfo {
   final String raceName;
   final String grade; // G1, G2, OP, 1勝など
   final String details; // "芝右1200m / 15:45発走" など
-  bool isConfirmed;
+  bool isConfirmed; // ★ここを保存できるように修正します
 
   SimpleRaceInfo({
     required this.raceId,
@@ -92,6 +92,8 @@ class SimpleRaceInfo {
       raceName: map['raceName'] as String,
       grade: map['grade'] as String,
       details: map['details'] as String,
+      // ★追加: 保存されたデータから isConfirmed を復元
+      isConfirmed: map['isConfirmed'] == true,
     );
   }
 
@@ -102,6 +104,8 @@ class SimpleRaceInfo {
       'raceName': raceName,
       'grade': grade,
       'details': details,
+      // ★追加: isConfirmed を保存データに含める
+      'isConfirmed': isConfirmed,
     };
   }
 }
