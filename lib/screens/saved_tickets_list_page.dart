@@ -455,6 +455,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     );
   }
 
+// 【修正箇所】_buildTicketList: グループ情報を各カード生成メソッドに渡すように変更
   Widget _buildTicketList() {
     // レースIDごとにグループ化
     final Map<String, List<TicketListItem>> groupedItems = {};
@@ -476,7 +477,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
         // グループ内のアイテム数が1つの場合は、そのままカードを表示
         if (group.length == 1) {
-          return _buildSingleTicketCard(group.first);
+          // ★修正: グループ情報を渡す
+          return _buildSingleTicketCard(group.first, groupItems: group, indexInGroup: 0);
         }
 
         // 複数枚ある場合はフォルダ（ExpansionTile）表示
@@ -487,14 +489,18 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             tilePadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 0),
             childrenPadding: EdgeInsets.zero,
             title: _buildGroupHeader(group),
-            children: group.map((item) {
+            // ★修正: mapのindexを使ってグループ内位置を特定
+            children: group.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final item = entry.value;
               return Container(
                 decoration: BoxDecoration(
                   border: Border(top: BorderSide(color: Colors.grey.shade200)),
                   color: Colors.grey.shade50, // 階層を深く見せるための背景色
                 ),
                 padding: const EdgeInsets.only(left: 16.0), // インデント
-                child: _buildSingleTicketCard(item, isGroupChild: true),
+                // ★修正: グループ情報とインデックスを渡す
+                child: _buildSingleTicketCard(item, isGroupChild: true, groupItems: group, indexInGroup: idx),
               );
             }).toList(),
           ),
@@ -550,7 +556,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     );
   }
 
-  Widget _buildSingleTicketCard(TicketListItem item, {bool isGroupChild = false}) {
+// 【修正箇所】_buildSingleTicketCard: 引数を追加し、onTap時の遷移ロジックを変更
+  Widget _buildSingleTicketCard(TicketListItem item, {bool isGroupChild = false, List<TicketListItem>? groupItems, int indexInGroup = 0}) {
     final totalAmount = item.parsedTicket['合計金額'] as int? ?? 0;
     final isHit = item.hitResult?.isHit ?? false;
     final payout = item.hitResult?.totalPayout ?? 0;
@@ -588,7 +595,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         }
         await _dbHelper.deleteQrData(item.qrData.id!, userId);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('削除しました')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('削除しました')));
           reloadData(); // データを再読み込みしてグループ構造を更新
         }
       },
@@ -631,20 +638,29 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             ],
           ),
           onTap: () async {
-            // ここで item.raceDate をチェックしているため、未来のレースも開けます
             if (item.raceDate.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('レースの日付情報がありません。')),
               );
               return;
             }
+
+            // ★修正: 遷移時に兄弟チケット情報をRouteSettings経由で渡す
+            // RacePageのコンストラクタを変更せずにデータを渡すためのテクニック
+            final siblingQrData = groupItems?.map((e) => e.qrData).toList() ?? [item.qrData];
+            final args = {
+              'siblingTickets': siblingQrData,
+              'initialIndex': indexInGroup,
+            };
+
             await Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => RacePage(
                   raceId: item.raceId,
-                  raceDate: item.raceDate, // item.raceResultではなくitem.raceDateを使用
+                  raceDate: item.raceDate,
                   qrData: item.qrData,
                 ),
+                settings: RouteSettings(arguments: args), // 引数として渡す
               ),
             );
             reloadData();

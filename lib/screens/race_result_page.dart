@@ -20,13 +20,14 @@ import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 
+// 修正: 複数のチケット情報を保持できるように変更
 class PageData {
-  final Map<String, dynamic>? parsedTicket;
+  final List<Map<String, dynamic>> parsedTickets; // 変更: リスト化
   final RaceResult? raceResult;
   final RacePacePrediction? pacePrediction;
 
   PageData({
-    this.parsedTicket,
+    required this.parsedTickets,
     this.raceResult,
     this.pacePrediction,
   });
@@ -49,6 +50,12 @@ class RaceResultPage extends StatefulWidget {
 class _RaceResultPageState extends State<RaceResultPage> {
   late Future<PageData> _pageDataFuture;
   final DatabaseHelper _dbHelper = DatabaseHelper();
+
+  // 修正: 複数枚表示用の変数を追加
+  late PageController _ticketPageController;
+  List<QrData> _qrDataList = [];
+  int _currentTicketIndex = 0;
+  bool _isInitialized = false;
 
   final Map<String, Color> _frameColors = {
     '1': Colors.white,
@@ -74,14 +81,93 @@ class _RaceResultPageState extends State<RaceResultPage> {
   @override
   void initState() {
     super.initState();
+    // 初期化ロジックを didChangeDependencies に移動
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isInitialized) {
+      _initializeData();
+      _isInitialized = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticketPageController.dispose();
+    super.dispose();
+  }
+
+  // 初期データ設定（RouteSettingsからの引数受け取り含む）
+  void _initializeData() {
+    // 遷移元から渡された引数をチェック
+    final args = ModalRoute.of(context)?.settings.arguments;
+    int initialIndex = 0;
+
+    if (args is Map && args.containsKey('siblingTickets')) {
+      // 保存済みリストから遷移した場合
+      final siblingTickets = args['siblingTickets'] as List<QrData>;
+      _qrDataList = siblingTickets;
+      initialIndex = args['initialIndex'] as int? ?? 0;
+    } else {
+      // QR読み取りや直接遷移の場合（単一）
+      if (widget.qrData != null) {
+        _qrDataList = [widget.qrData!];
+      }
+    }
+
+    // データがない場合のフォールバック（通常ありえない）
+    if (_qrDataList.isEmpty && widget.qrData != null) {
+      _qrDataList = [widget.qrData!];
+    }
+
+    _currentTicketIndex = initialIndex;
+    _ticketPageController = PageController(initialPage: initialIndex, viewportFraction: 0.92); // 少し隣が見えるように
     _pageDataFuture = _loadPageData();
+  }
+
+  // ★追加: QRコードの生文字列からレースIDを生成するヘルパーメソッド
+  // parse.dartのロジックに基づき、所定の位置からコードを抽出して連結する
+  String? _generateRaceIdFromQr(String qrContent) {
+    try {
+      if (qrContent.length < 14) return null;
+
+      // parse.dartのイテレータロジックに基づく抽出位置
+      // index 0: format (1 char)
+      // index 1-2: racecourseCode (2 chars)
+      // index 3-4: skip (2 chars)
+      // index 5: alternativeCode (1 char)
+      // index 6-7: year (2 chars)
+      // index 8-9: kai/round (2 chars)
+      // index 10-11: nichime/day (2 chars)
+      // index 12-13: race (2 chars)
+
+      final place = qrContent.substring(1, 3);
+      final year = qrContent.substring(6, 8);
+      final kai = qrContent.substring(8, 10);
+      final nichime = qrContent.substring(10, 12);
+      final race = qrContent.substring(12, 14);
+
+      // 20xx年と仮定してID生成 (YYYY + Place + Kai + Nichime + Race)
+      return "20$year$place$kai$nichime$race";
+    } catch (e) {
+      print('Failed to generate Race ID from QR: $e');
+      return null;
+    }
   }
 
   Future<PageData> _loadPageData() async {
     try {
-      Map<String, dynamic>? parsedTicket;
-      if (widget.qrData != null) {
-        parsedTicket = json.decode(widget.qrData!.parsedDataJson) as Map<String, dynamic>;
+      // 全チケットをパース
+      List<Map<String, dynamic>> parsedTickets = [];
+      for (var qr in _qrDataList) {
+        try {
+          final parsed = json.decode(qr.parsedDataJson) as Map<String, dynamic>;
+          parsedTickets.add(parsed);
+        } catch (e) {
+          print('Error parsing ticket: $e');
+        }
       }
 
       RaceResult? raceResult = await _dbHelper.getRaceResult(widget.raceId);
@@ -110,7 +196,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
               trainerName = parts.sublist(1).join(' ');
             }
           }
-          // 展開予測のためにPredictionHorseDetailのリストを作成（ダミーデータを含む）
+          // 展開予測のためにPredictionHorseDetailのリストを作成
           horseDetailsForPacePrediction.add(
               PredictionHorseDetail(
                 horseId: horseResult.horseId,
@@ -137,14 +223,14 @@ class _RaceResultPageState extends State<RaceResultPage> {
             horseDetailsForPacePrediction, allPastRecords, pastRaceResults);
 
         return PageData(
-          parsedTicket: parsedTicket,
+          parsedTickets: parsedTickets,
           raceResult: raceResult,
           pacePrediction: pacePrediction,
         );
       }
 
       return PageData(
-        parsedTicket: parsedTicket,
+        parsedTickets: parsedTickets,
         raceResult: raceResult,
       );
     } catch (e) {
@@ -167,16 +253,44 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
       final raceId = widget.raceId;
       print('DEBUG: Refreshing race data for raceId: $raceId');
+
+      // 1. レース結果のスクレイピング更新
       final newRaceResult = await RaceResultScraperService.scrapeRaceDetails(
           'https://db.netkeiba.com/race/$raceId'
       );
       await _dbHelper.insertOrUpdateRaceResult(newRaceResult);
-
       await AnalyticsService().updateAggregatesOnResultConfirmed(newRaceResult.raceId, userId);
+
+      // 2. ★修正: DBから同一レースの他の馬券（兄弟馬券）を検索してリストを更新
+      // QRコードの生データからレースIDを生成し、現在のIDと一致するものを抽出する
+      final allQrData = await _dbHelper.getAllQrData(userId);
+      final List<QrData> siblings = [];
+
+      final currentRaceId = widget.raceId;
+
+      for (var qr in allQrData) {
+        // ヘルパーメソッドでID生成
+        final generatedId = _generateRaceIdFromQr(qr.qrCode);
+        if (generatedId == currentRaceId) {
+          siblings.add(qr);
+        }
+      }
+
+      if (siblings.isNotEmpty) {
+        // 既存のリストにあるものは除外して追加（ID重複防止）
+        final existingIds = _qrDataList.map((e) => e.id).toSet();
+        for (var sib in siblings) {
+          if (!existingIds.contains(sib.id)) {
+            _qrDataList.add(sib);
+          }
+        }
+        // ID順にソート（保存順）
+        _qrDataList.sort((a, b) => (a.id ?? 0).compareTo(b.id ?? 0));
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('レース結果を更新しました。')),
+          const SnackBar(content: Text('レース結果と馬券リストを更新しました。')),
         );
       }
     } catch (e) {
@@ -300,28 +414,24 @@ class _RaceResultPageState extends State<RaceResultPage> {
             }
             if (snapshot.hasData) {
               final pageData = snapshot.data!;
-              final parsedTicket = pageData.parsedTicket;
+              final parsedTickets = pageData.parsedTickets;
               final raceResult = pageData.raceResult;
 
-              final hitResult = (parsedTicket != null &&
-                  raceResult != null &&
-                  !raceResult.isIncomplete)
-                  ? HitChecker.check(
-                  parsedTicket: parsedTicket, raceResult: raceResult)
-                  : null;
-
               final Map<String, List<List<int>>> userCombinationsByType = {};
-              if (parsedTicket != null && parsedTicket['購入内容'] != null) {
-                final purchaseDetails = parsedTicket['購入内容'] as List;
-                for (var detail in purchaseDetails) {
-                  final ticketTypeId = detail['式別'] as String?;
-                  if (ticketTypeId != null && detail['all_combinations'] != null) {
-                    userCombinationsByType.putIfAbsent(ticketTypeId, () => []);
 
-                    final combinations = detail['all_combinations'] as List;
-                    for (var c in combinations) {
-                      if (c is List) {
-                        userCombinationsByType[ticketTypeId]!.add(c.cast<int>());
+              // 全チケットの購入情報を集約（払戻表示用）
+              for (var ticket in parsedTickets) {
+                if (ticket['購入内容'] != null) {
+                  final purchaseDetails = ticket['購入内容'] as List;
+                  for (var detail in purchaseDetails) {
+                    final ticketTypeId = detail['式別'] as String?;
+                    if (ticketTypeId != null && detail['all_combinations'] != null) {
+                      userCombinationsByType.putIfAbsent(ticketTypeId, () => []);
+                      final combinations = detail['all_combinations'] as List;
+                      for (var c in combinations) {
+                        if (c is List) {
+                          userCombinationsByType[ticketTypeId]!.add(c.cast<int>());
+                        }
                       }
                     }
                   }
@@ -331,20 +441,37 @@ class _RaceResultPageState extends State<RaceResultPage> {
               return RefreshIndicator(
                 onRefresh: _handleRefresh,
                 child: ListView(
-                  padding: const EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
                   children: [
-                    if (parsedTicket != null)
-                      _buildUserTicketCard(parsedTicket, raceResult, hitResult),
+                    if (parsedTickets.isNotEmpty)
+                    // ★修正: 複数の馬券をPageViewで表示
+                      _buildTicketPageView(parsedTickets, raceResult),
+
                     if (raceResult != null) ...[
                       if (raceResult.isIncomplete)
-                        _buildIncompleteRaceDataCard()
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: _buildIncompleteRaceDataCard(),
+                        )
                       else ...[
-                        _buildRaceInfoCard(raceResult, pageData.pacePrediction),
-                        _buildFullResultsCard(raceResult),
-                        _buildRefundsCard(raceResult, userCombinationsByType),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: _buildRaceInfoCard(raceResult, pageData.pacePrediction),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: _buildFullResultsCard(raceResult),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: _buildRefundsCard(raceResult, userCombinationsByType),
+                        ),
                       ]
                     ] else ...[
-                      _buildNoRaceDataCard(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: _buildNoRaceDataCard(),
+                      ),
                     ]
                   ],
                 ),
@@ -353,6 +480,151 @@ class _RaceResultPageState extends State<RaceResultPage> {
             return const Center(child: Text('データがありません。'));
           },
         ),
+      ],
+    );
+  }
+
+  // ★追加: 馬券のPageViewと収支サマリーを表示
+  Widget _buildTicketPageView(List<Map<String, dynamic>> parsedTickets, RaceResult? raceResult) {
+    // 現在表示中のチケット
+    final currentTicket = parsedTickets.isNotEmpty
+        ? parsedTickets[_currentTicketIndex < parsedTickets.length ? _currentTicketIndex : 0]
+        : null;
+
+    // 現在のチケットの収支計算
+    HitResult? currentHitResult;
+    if (currentTicket != null && raceResult != null && !raceResult.isIncomplete) {
+      currentHitResult = HitChecker.check(parsedTicket: currentTicket, raceResult: raceResult);
+    }
+
+    // レース全体の収支計算
+    int raceTotalPurchase = 0;
+    int raceTotalPayout = 0;
+    int raceTotalRefund = 0;
+
+    for (var ticket in parsedTickets) {
+      final amount = ticket['合計金額'] as int? ?? 0;
+      raceTotalPurchase += amount;
+
+      if (raceResult != null && !raceResult.isIncomplete) {
+        final hit = HitChecker.check(parsedTicket: ticket, raceResult: raceResult);
+        raceTotalPayout += hit.totalPayout;
+        raceTotalRefund += hit.totalRefund;
+      }
+    }
+    final raceBalance = (raceTotalPayout + raceTotalRefund) - raceTotalPurchase;
+
+    return Column(
+      children: [
+        // 1. 馬券イメージ（横スワイプ可能）
+        SizedBox(
+          height: 240, // BettingTicketCardの高さ(230) + マージン
+          child: PageView.builder(
+            controller: _ticketPageController,
+            itemCount: parsedTickets.length,
+            onPageChanged: (index) {
+              setState(() {
+                _currentTicketIndex = index;
+              });
+            },
+            itemBuilder: (context, index) {
+              final ticket = parsedTickets[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: BettingTicketCard(ticketData: ticket, raceResult: raceResult),
+              );
+            },
+          ),
+        ),
+
+        // 2. インジケーター (複数枚ある場合のみ)
+        if (parsedTickets.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(parsedTickets.length, (index) {
+                return Container(
+                  width: 8.0,
+                  height: 8.0,
+                  margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _currentTicketIndex == index ? Colors.blue.shade700 : Colors.grey.shade300,
+                  ),
+                );
+              }),
+            ),
+          ),
+
+        // 3. 表示中チケットの詳細結果（的中情報など）
+        if (currentHitResult != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Column(
+              children: [
+                if (currentHitResult.hitDetails.isNotEmpty) ...[
+                  ...currentHitResult.hitDetails.map((detail) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2.0),
+                      child: Text('🎯 $detail', style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold)),
+                    ),
+                  )),
+                ],
+                if (currentHitResult.refundDetails.isNotEmpty) ...[
+                  ...currentHitResult.refundDetails.map((detail) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2.0),
+                      child: Text('↩️ $detail', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold)),
+                    ),
+                  )),
+                ],
+              ],
+            ),
+          ),
+
+        // 4. レース全体の収支サマリーカード
+        if (raceResult != null && !raceResult.isIncomplete)
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            color: raceBalance > 0 ? Colors.blue.shade50 : (raceBalance < 0 ? Colors.red.shade50 : Colors.white),
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Column(
+                    children: [
+                      const Text('レース合計購入', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      Text('${raceTotalPurchase}円', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      const Text('払戻・返還計', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      Text('${raceTotalPayout + raceTotalRefund}円', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      const Text('レース収支', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      Text(
+                        '${raceBalance >= 0 ? '+' : ''}${raceBalance}円',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: raceBalance > 0 ? Colors.blue.shade800 : (raceBalance < 0 ? Colors.red.shade800 : Colors.black),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
