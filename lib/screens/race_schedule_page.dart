@@ -100,7 +100,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       await _dbHelper.getMultipleRaceSchedules(scheduleDateKeys);
 
       if (schedulesFromDb.isNotEmpty) {
-        schedulesFromDb.values.forEach(_checkRaceStatusesForSchedule);
+        // 並列で実行せず、少し間隔を空けるなど制御したいが、
+        // ここではUI構築優先のためそのまま呼び出す（内部で制限がかかる）
+        schedulesFromDb.values.forEach((s) => _checkRaceStatusesForSchedule(s));
       }
 
       if (mounted) {
@@ -114,13 +116,13 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       return;
     }
 
-    // Week Cacheが存在しない場合の処理 (これ以降は既存のロジックとほぼ同じ)
+    // Week Cacheが存在しない場合の処理
     final weekDateStrings =
     _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
     final schedulesFromDb =
     await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
     if (schedulesFromDb.isNotEmpty) {
-      schedulesFromDb.values.forEach(_checkRaceStatusesForSchedule);
+      schedulesFromDb.values.forEach((s) => _checkRaceStatusesForSchedule(s));
       if (mounted) {
         setState(() {
           _raceSchedules.addAll(schedulesFromDb);
@@ -129,18 +131,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
 
     try {
-      // ★修正箇所: 進捗表示用のコールバックを追加
       final (liveDateStrings, initialSchedule) =
-      await _scraperService.fetchInitialData(
-        representativeDate,
-        onProgress: (status) {
-          if (mounted) {
-            setState(() {
-              _loadingMessage = status;
-            });
-          }
-        },
-      );
+      await _scraperService.fetchInitialData(representativeDate);
 
       if (liveDateStrings.isNotEmpty) {
         await _dbHelper.insertOrUpdateWeekCache(weekKey, liveDateStrings);
@@ -175,7 +167,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   }
 
   void _setupTabs(List<String> yyyymmddStrings) {
-    // 週の範囲でのフィルタリングを削除し、取得した日付をそのまま使用する
     if (yyyymmddStrings.isEmpty) {
       if (mounted) setState(() => _isLoading = false);
       return;
@@ -196,7 +187,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         .cast<String>()
         .toList();
 
-    // 日付順にソートする
     _availableDates.sort();
 
     int initialIndex = _availableDates
@@ -241,19 +231,14 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       if (forceRefresh) {
         schedule = await _scraperService.scrapeRaceSchedule(date);
       } else {
-        // 通常の読み込みロジック
         if (date.isBefore(today)) {
-          // 過去データはまずDBから試みる
           schedule = await _dbHelper.getRaceSchedule(dateString);
-          // DBになければネットワークから取得する
           schedule ??= await _scraperService.scrapeRaceSchedule(date);
         } else {
-          // 未来または今日の日付はネットワークから取得
           schedule = await _scraperService.scrapeRaceSchedule(date);
         }
       }
 
-      // 取得に成功したデータはDBに保存・更新する
       if (schedule != null) {
         await _dbHelper.insertOrUpdateRaceSchedule(schedule);
         _checkRaceStatusesForSchedule(schedule);
@@ -279,27 +264,66 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
   }
 
-  void _checkRaceStatusesForSchedule(RaceSchedule schedule) {
-    final today = DateTime.now();
-    final startOfToday = DateTime(today.year, today.month, today.day);
-    final scheduleDate = DateFormat('yyyy-MM-dd', 'en_US').parse(schedule.date);
+  // ★修正箇所: サーバー負荷を軽減し、BANを回避するためのロジック修正
+  Future<void> _checkRaceStatusesForSchedule(RaceSchedule schedule) async {
+    final now = DateTime.now();
+    final todayStr = DateFormat('yyyy-MM-dd').format(now);
+    final scheduleDateStr = schedule.date;
 
-    if (scheduleDate.isAfter(startOfToday)) {
+    // 未来の日付ならチェック自体スキップ
+    if (scheduleDateStr.compareTo(todayStr) > 0) {
       return;
     }
 
+    final scheduleDate = DateFormat('yyyy-MM-dd').parse(scheduleDateStr);
+    // 過去日付かどうか
+    final isPastDate = scheduleDate.isBefore(DateTime(now.year, now.month, now.day));
+
+    // 時間パース用の正規表現 (例: "15:45発走")
+    final timeRegex = RegExp(r'(\d{1,2}):(\d{2})');
+
     for (final venue in schedule.venues) {
       for (final race in venue.races) {
-        if (_raceStatusMap.containsKey(race.raceId)) continue;
+        if (!mounted) return;
 
-        RaceResultScraperService.isRaceResultConfirmed(race.raceId)
-            .then((isConfirmed) {
-          if (mounted) {
+        // 1. すでに確定(赤)になっている場合は再チェックしない（無駄な通信削減）
+        if (_raceStatusMap[race.raceId] == true) continue;
+
+        // 2. 発走時刻チェック（当日開催の場合）
+        if (!isPastDate) {
+          // detailsから時刻を抽出して、現在時刻より未来ならチェックしない
+          final match = timeRegex.firstMatch(race.details);
+          if (match != null) {
+            final hour = int.parse(match.group(1)!);
+            final minute = int.parse(match.group(2)!);
+            final raceTime = DateTime(now.year, now.month, now.day, hour, minute);
+
+            // まだ発走時刻になっていない、かつ発走時刻から15分以内でなければスキップ
+            // (レース終了直後すぐに結果が出るわけではないので余裕を見る)
+            if (now.isBefore(raceTime)) {
+              continue;
+            }
+          }
+        }
+
+        // 3. アクセス制限回避のための遅延（ウェイト）を入れる
+        // 1レースごとに1秒待つことで、人間が操作しているような頻度にする
+        await Future.delayed(const Duration(milliseconds: 1000));
+
+        if (!mounted) return;
+
+        try {
+          final isConfirmed =
+          await RaceResultScraperService.isRaceResultConfirmed(race.raceId);
+
+          if (mounted && isConfirmed) {
             setState(() {
-              _raceStatusMap[race.raceId] = isConfirmed;
+              _raceStatusMap[race.raceId] = true;
             });
           }
-        });
+        } catch (e) {
+          print('Error checking status for ${race.raceId}: $e');
+        }
       }
     }
   }
@@ -412,7 +436,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     final weekEnd = _weekDates.last;
     final formatter = DateFormat('M/d');
 
-    // タブが利用可能かどうかを判定
     final bool canShowTabs =
         _isDataLoaded && _availableDates.isNotEmpty && _tabController != null;
 
