@@ -23,27 +23,29 @@ class TicketDataLogic {
   Future<List<TicketListItem>> fetchAndProcessTickets(String userId) async {
     final allQrData = await _dbHelper.getAllQrData(userId);
     final List<TicketListItem> tempItems = [];
-    final shutubaScraper = ShutubaTableScraperService();
+    final shutubaScraper = ShutubaTableScraperService(); // インスタンスは維持しますが、このループ内では通信しません
+
+    // ---------------------------------------------------------
+    // Step 0: N+1問題対策 & 高速化のための事前準備
+    // 全QRデータからRaceIDを抽出し、DBにあるデータを一括取得する
+    // ---------------------------------------------------------
+    final Set<String> raceIdsToFetch = {};
+    final Map<int, Map<String, dynamic>> parsedTicketCache = {}; // JSONパース結果の一時保持
+    final Map<int, String> raceIdCache = {}; // RaceIDの一時保持
 
     for (final qrData in allQrData) {
-      // ---------------------------------------------------------
-      // キャッシュチェック (高速化ロジック)
-      // ---------------------------------------------------------
+      // メモリキャッシュにあり、かつ確定済み(RaceResultあり)の場合はスキップ
       if (qrData.id != null && _memoryCache.containsKey(qrData.id)) {
         final cachedItem = _memoryCache[qrData.id]!;
-        // もし「レース結果(RaceResult)」を持っている(=確定済み)なら、
-        // DB問い合わせを行わずキャッシュをそのまま使う
-        if (cachedItem.raceResult != null) {
-          tempItems.add(cachedItem);
-          continue; // 次のループへ（処理スキップ）
-        }
-        // 未確定(raceResult == null)の場合は、レースが終わっている可能性があるため
-        // キャッシュを使わず下の処理へ進み、再チェックを行う
+        if (cachedItem.raceResult != null) continue;
       }
 
       try {
         final parsedTicket = jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>;
         if (parsedTicket.isEmpty) continue;
+        if (qrData.id == null) continue;
+
+        parsedTicketCache[qrData.id!] = parsedTicket;
 
         final url = generateNetkeibaUrl(
           year: parsedTicket['年'].toString(),
@@ -54,23 +56,75 @@ class TicketDataLogic {
         );
         final raceId = RaceResultScraperService.getRaceIdFromUrl(url)!;
 
+        raceIdCache[qrData.id!] = raceId;
+        raceIdsToFetch.add(raceId);
+      } catch (e) {
+        // パースエラー等は無視
+      }
+    }
+
+    // 1. レース結果(RaceResult)の一括取得 [確定済みデータ]
+    final Map<String, RaceResult> batchRaceResults = await _dbHelper.getMultipleRaceResults(raceIdsToFetch.toList());
+
+    // 2. 注目レース(FeaturedRace)の一括取得 [未確定・出馬表データ] (★ここを復元・追加)
+    // ※FeaturedRaceには一括取得メソッドがないため、全件取得してメモリでフィルタリング（件数が数千件程度なら高速）
+    final List<FeaturedRace> allFeaturedRaces = await _dbHelper.getAllFeaturedRaces();
+    final Map<String, FeaturedRace> batchFeaturedRaces = {
+      for (var race in allFeaturedRaces) race.raceId: race
+    };
+
+    // ---------------------------------------------------------
+    // Step 1: メインループ (オブジェクト生成)
+    // ---------------------------------------------------------
+    for (final qrData in allQrData) {
+      // キャッシュチェック
+      if (qrData.id != null && _memoryCache.containsKey(qrData.id)) {
+        final cachedItem = _memoryCache[qrData.id]!;
+        if (cachedItem.raceResult != null) {
+          tempItems.add(cachedItem);
+          continue;
+        }
+      }
+
+      try {
+        // 事前パースデータの利用
+        final parsedTicket = (qrData.id != null && parsedTicketCache.containsKey(qrData.id))
+            ? parsedTicketCache[qrData.id!]!
+            : (jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>);
+
+        if (parsedTicket.isEmpty) continue;
+
+        String raceId;
+        if (qrData.id != null && raceIdCache.containsKey(qrData.id)) {
+          raceId = raceIdCache[qrData.id]!;
+        } else {
+          final url = generateNetkeibaUrl(
+            year: parsedTicket['年'].toString(),
+            racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
+            round: parsedTicket['回'].toString(),
+            day: parsedTicket['日'].toString(),
+            race: parsedTicket['レース'].toString(),
+          );
+          raceId = RaceResultScraperService.getRaceIdFromUrl(url)!;
+        }
+
         String raceDate = '';
         String raceName = '';
 
         // ---------------------------------------------------------
         // ステップ1: レース結果(RaceResult)をDBから探す [確定済み]
         // ---------------------------------------------------------
-        final raceResult = await _dbHelper.getRaceResult(raceId);
+        final raceResult = batchRaceResults[raceId];
         if (raceResult != null) {
           raceDate = raceResult.raceDate;
           raceName = raceResult.raceTitle;
         }
 
         // ---------------------------------------------------------
-        // ステップ2: 結果がない場合、注目レース(FeaturedRace)をDBから探す [キャッシュ]
+        // ステップ2: 結果がない場合、注目レース(FeaturedRace)をDBから探す [未確定・キャッシュ] (★復元)
         // ---------------------------------------------------------
         if (raceDate.isEmpty) {
-          final featuredRace = await _dbHelper.getFeaturedRace(raceId);
+          final featuredRace = batchFeaturedRaces[raceId];
           if (featuredRace != null && featuredRace.raceDate.isNotEmpty) {
             raceDate = featuredRace.raceDate;
             raceName = featuredRace.raceName;
@@ -78,21 +132,13 @@ class TicketDataLogic {
         }
 
         // ---------------------------------------------------------
-        // ステップ3: それでも日付がない場合、Webから出馬表を取得する [最終手段]
+        // ステップ3: Webスクレイピング [通信待ち回避のためスキップ]
         // ---------------------------------------------------------
-        if (raceDate.isEmpty) {
-          try {
-            final predictionData = await shutubaScraper.scrapeAllData(raceId);
-            raceDate = predictionData.raceDate;
-            raceName = predictionData.raceName;
-          } catch (e) {
-            print('出馬表スクレイピングエラー ($raceId): $e');
-          }
-        }
+        // ここでWebアクセスを行うと一覧表示が止まるため、DBにある情報のみで表示を構築します。
+        // DBに保存されていない(一度も詳細を開いていない)未来のレースは日付なしとなりますが、
+        // 「保存した馬券が表示されない」問題はステップ2の復元で解消されます。
 
-        // ---------------------------------------------------------
-        // ステップ4: 日付フォーマットの正規化 (バグ対策)
-        // ---------------------------------------------------------
+        // 日付フォーマットの正規化
         raceDate = _normalizeDate(raceDate);
 
         // 的中判定 (結果がある場合のみ)
@@ -115,7 +161,7 @@ class TicketDataLogic {
 
         tempItems.add(newItem);
 
-        // ★追加: 処理が終わったデータをキャッシュに保存
+        // キャッシュ保存
         if (qrData.id != null) {
           _memoryCache[qrData.id!] = newItem;
         }
