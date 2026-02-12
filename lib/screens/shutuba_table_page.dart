@@ -34,6 +34,7 @@ import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
 import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
 import '../utils/grade_utils.dart';
+import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
 
 enum SortableColumn {
   mark,
@@ -78,6 +79,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   final DatabaseHelper _dbHelper = DatabaseHelper();
   final ShutubaTableScraperService _scraperService = ShutubaTableScraperService();
   final AiPredictionService _predictionService = AiPredictionService();
+  final RaceDataRepository _repository = RaceDataRepository();
   Map<String, double> _overallScores = {};
   Map<String, double> _expectedValues = {};
   Map<String, ConditionFitResult> _conditionFits = {};
@@ -115,43 +117,32 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     try {
       PredictionRaceData? data;
 
+      // 1. 引数で渡されたデータがあればそれを使う
       if (widget.predictionRaceData != null && !refresh) {
         data = widget.predictionRaceData;
       }
+      // 2. レース結果から生成する場合
       else if (widget.raceResult != null && !refresh) {
         data = _createPredictionDataFromRaceResult(widget.raceResult!);
       }
+      // 3. DBキャッシュまたはスクレイピング
       else {
-        final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
-        if (cache != null && !refresh) {
-          data = cache.predictionRaceData;
-          final userId = localUserId;
-          if (userId != null) {
-            final userMarks = await _dbHelper.getAllUserMarksForRace(userId, widget.raceId);
-            final userMemos = await _dbHelper.getMemosForRace(userId, widget.raceId);
-            final marksMap = {for (var mark in userMarks) mark.horseId: mark};
-            final memosMap = {for (var memo in userMemos) memo.horseId: memo};
+        // ★修正: リポジトリ経由で取得（プロフィール結合済みデータを取得できる）
+        data = await _repository.getShutubaData(widget.raceId);
 
-            for (var horse in data.horses) {
-              horse.userMark = marksMap[horse.horseId];
-              horse.userMemo = memosMap[horse.horseId];
-            }
-          }
-        } else {
+        if (data == null || refresh) {
+          // キャッシュがない、または更新要求時はスクレイピング
           data = await _fetchDataWithUserMarks();
           if (data != null) {
-            final newCache = ShutubaTableCache(
-              raceId: widget.raceId,
-              predictionRaceData: data,
-              lastUpdatedAt: DateTime.now(),
-            );
-            await _dbHelper.insertOrUpdateShutubaTableCache(newCache);
+            // リポジトリ経由で保存
+            await _repository.saveShutubaData(data);
           }
         }
       }
 
       if (mounted) {
         if (data != null) {
+          // AIスコアのマッピング (既存処理)
           if (data.horses.any((h) => h.overallScore != null)) {
             _overallScores = {
               for (var h in data.horses)
@@ -172,10 +163,28 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             widget.onDataRefreshed!(data);
           }
         }
+
         setState(() {
           _predictionRaceData = data;
           _isLoading = false;
         });
+
+        // ★追加: プロフィール情報のバックグラウンド同期を実行
+        // 画面が表示された後に、不足しているプロフィールを順次取得して更新する
+        if (data != null) {
+          _repository.syncMissingHorseProfiles(data.horses, (updatedHorseId) async {
+            // コールバック: 1頭保存されるたびに呼ばれる
+            if (!mounted) return;
+
+            // 最新データをDBから再取得して画面に反映
+            final updatedData = await _repository.getShutubaData(widget.raceId);
+            if (updatedData != null && mounted) {
+              setState(() {
+                _predictionRaceData = updatedData;
+              });
+            }
+          });
+        }
       }
     } catch (e) {
       print('出馬表データの読み込みに失敗: $e');

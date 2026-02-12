@@ -58,7 +58,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 4,
+      version: 5,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
@@ -293,10 +293,10 @@ class DatabaseHelper {
           }
         }
         // v3 -> v4 マイグレーション (horse_profilesテーブル追加)
-        if (oldVersion < 4) {
+        if (oldVersion < 5) {
           try {
             await db.execute('''
-              CREATE TABLE horse_profiles(
+              CREATE TABLE IF NOT EXISTS horse_profiles(
                 horseId TEXT PRIMARY KEY,
                 horseName TEXT,
                 birthday TEXT,
@@ -317,8 +317,9 @@ class DatabaseHelper {
                 lastUpdated TEXT
               )
             ''');
+            print('DEBUG: horse_profiles table created or verified.');
           } catch (e) {
-            print('Migration error (v3->v4): $e');
+            print('DEBUG: Migration error (v->v5): $e');
           }
         }
       },
@@ -1202,29 +1203,45 @@ class DatabaseHelper {
   // Step 2: 競走馬プロフィール管理用 追加メソッド
   // ---------------------------------------------------------------------------
 
-  /// 競走馬プロフィールを保存または更新します。
   Future<int> insertOrUpdateHorseProfile(HorseProfile profile) async {
     final db = await database;
-    return await db.insert(
-      'horse_profiles',
-      profile.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      print('DEBUG: DB insertOrUpdateHorseProfile called for ${profile.horseName} (${profile.horseId})');
+      print('DEBUG: Image Path to save: ${profile.ownerImageLocalPath}');
+
+      final result = await db.insert(
+        'horse_profiles',
+        profile.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print('DEBUG: DB insert success. Row ID: $result');
+      return result;
+    } catch (e) {
+      print('DEBUG: [ERROR] DB insertOrUpdateHorseProfile failed: $e');
+      return -1;
+    }
   }
 
   /// 馬IDを指定して競走馬プロフィールを取得します。
   Future<HorseProfile?> getHorseProfile(String horseId) async {
     final db = await database;
-    final maps = await db.query(
-      'horse_profiles',
-      where: 'horseId = ?',
-      whereArgs: [horseId],
-      limit: 1,
-    );
-    if (maps.isNotEmpty) {
-      return HorseProfile.fromMap(maps.first);
+    try {
+      final maps = await db.query(
+        'horse_profiles',
+        where: 'horseId = ?',
+        whereArgs: [horseId],
+        limit: 1,
+      );
+      if (maps.isNotEmpty) {
+        // print('DEBUG: Profile found for $horseId'); // 頻出するためコメントアウト推奨
+        return HorseProfile.fromMap(maps.first);
+      }
+      // print('DEBUG: Profile NOT found for $horseId');
+      return null;
+    } catch (e) {
+      print('DEBUG: [ERROR] getHorseProfile failed: $e');
+      return null;
     }
-    return null;
   }
   /// 出馬表キャッシュを保存または更新します
   Future<void> insertShutubaTableCache(ShutubaTableCache cache) async {

@@ -9,6 +9,8 @@ import '../models/ai_prediction_race_data.dart';
 import '../models/shutuba_table_cache_model.dart';
 import '../models/horse_performance_model.dart';
 import '../models/horse_profile_model.dart';
+// 追加: 新しいサービスをインポート
+import '../services/horse_profile_scraper_service.dart';
 
 /// データの保存を一元管理するリポジトリ
 class RaceDataRepository {
@@ -52,14 +54,52 @@ class RaceDataRepository {
     await dbHelper.insertShutubaTableCache(cache);
   }
 
-  /// ★追加: 競走馬の戦績リストを一括保存する
+  /// 競走馬の戦績リストを一括保存する
   Future<void> saveHorsePerformanceList(List<HorseRaceRecord> records) async {
     await dbHelper.insertHorseRaceRecords(records);
+  }
+
+  /// 出走馬リストを受け取り、プロフィールがない馬のデータをバックグラウンドで取得する
+  /// UI側で「1頭取得するごとに画面更新」ができるよう、コールバック関数を受け取る
+  Future<void> syncMissingHorseProfiles(
+      List<PredictionHorseDetail> horses,
+      Function(String horseId) onProfileUpdated,
+      ) async {
+
+    print('DEBUG: syncMissingHorseProfiles started for ${horses.length} horses.');
+
+    for (final horse in horses) {
+      // 1. DBにプロフィールがあるか確認
+      final existingProfile = await dbHelper.getHorseProfile(horse.horseId);
+
+      // 2. プロフィールがない、または情報が不足している場合に取得
+      if (existingProfile == null || existingProfile.ownerName.isEmpty) {
+        print('DEBUG: Fetching missing profile for: ${horse.horseName} (${horse.horseId})');
+
+        // スクレイピング実行
+        final newProfile = await HorseProfileScraperService.scrapeAndSaveProfile(horse.horseId);
+
+        if (newProfile != null) {
+          print('DEBUG: Profile synced for ${horse.horseId}, calling callback.');
+          onProfileUpdated(horse.horseId);
+        } else {
+          print('DEBUG: Failed to sync profile for ${horse.horseId}');
+        }
+
+        // サーバー負荷軽減のため少し待機
+        await Future.delayed(const Duration(milliseconds: 800));
+      } else {
+        // 既にプロフィールがある場合はログを出さない（ログ過多防止）
+        // print('DEBUG: Profile already exists for ${horse.horseId}');
+      }
+    }
+    print('DEBUG: syncMissingHorseProfiles completed.');
   }
 
   /// 出馬表データ（AI予測用データ含む）を取得する
   Future<PredictionRaceData?> getShutubaData(String raceId) async {
     final cache = await dbHelper.getShutubaTableCache(raceId);
+
     if (cache != null) {
       var data = cache.predictionRaceData;
 
@@ -67,11 +107,11 @@ class RaceDataRepository {
       final List<PredictionHorseDetail> updatedHorses = [];
 
       for (var horse in data.horses) {
-        // DBからプロフィールを取得
+        // 各馬のプロフィール情報をDBから取得
         final profile = await dbHelper.getHorseProfile(horse.horseId);
 
         if (profile != null) {
-          // プロフィール情報がある場合、値をセットした新しいインスタンスを作成
+          // プロフィール情報がある場合、値を更新した新しいインスタンスを作成
           updatedHorses.add(PredictionHorseDetail(
             horseId: horse.horseId,
             horseNumber: horse.horseNumber,
@@ -114,7 +154,7 @@ class RaceDataRepository {
         }
       }
 
-      // PredictionRaceData を再構築して返す
+      // PredictionRaceDataを再構築して返す
       return PredictionRaceData(
         raceId: data.raceId,
         raceName: data.raceName,
