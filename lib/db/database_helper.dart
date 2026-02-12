@@ -19,6 +19,7 @@ import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 import 'package:hetaumakeiba_v2/db/course_presets.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -57,7 +58,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 3,
+      version: 4,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
@@ -247,6 +248,29 @@ class DatabaseHelper {
         await _createCoursePresetsTable(db);
         // course_presets テーブルに初期データを投入
         await _initCoursePresets(db);
+        // 競走馬プロフィールデータテーブルの作成
+        await db.execute('''
+          CREATE TABLE horse_profiles(
+            horseId TEXT PRIMARY KEY,
+            horseName TEXT,
+            birthday TEXT,
+            ownerId TEXT,
+            ownerName TEXT,
+            ownerImageLocalPath TEXT,
+            trainerId TEXT,
+            trainerName TEXT,
+            breederName TEXT,
+            fatherId TEXT,
+            fatherName TEXT,
+            motherId TEXT,
+            motherName TEXT,
+            ffName TEXT,
+            fmName TEXT,
+            mfName TEXT,
+            mmName TEXT,
+            lastUpdated TEXT
+          )
+        ''');
       },
       // ★修正: 既存ユーザー向けのマイグレーション処理を安全化
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -266,6 +290,35 @@ class DatabaseHelper {
           } catch (e) {
             // エラーログ: "duplicate column name: shutubaHorsesJson" が出ても無視する
             print('Migration error (v2->v3): $e - Assuming column already exists.');
+          }
+        }
+        // v3 -> v4 マイグレーション (horse_profilesテーブル追加)
+        if (oldVersion < 4) {
+          try {
+            await db.execute('''
+              CREATE TABLE horse_profiles(
+                horseId TEXT PRIMARY KEY,
+                horseName TEXT,
+                birthday TEXT,
+                ownerId TEXT,
+                ownerName TEXT,
+                ownerImageLocalPath TEXT,
+                trainerId TEXT,
+                trainerName TEXT,
+                breederName TEXT,
+                fatherId TEXT,
+                fatherName TEXT,
+                motherId TEXT,
+                motherName TEXT,
+                ffName TEXT,
+                fmName TEXT,
+                mfName TEXT,
+                mmName TEXT,
+                lastUpdated TEXT
+              )
+            ''');
+          } catch (e) {
+            print('Migration error (v3->v4): $e');
           }
         }
       },
@@ -1144,5 +1197,42 @@ class DatabaseHelper {
     }
 
     await batch.commit(noResult: true);
+  }
+  // ---------------------------------------------------------------------------
+  // Step 2: 競走馬プロフィール管理用 追加メソッド
+  // ---------------------------------------------------------------------------
+
+  /// 競走馬プロフィールを保存または更新します。
+  Future<int> insertOrUpdateHorseProfile(HorseProfile profile) async {
+    final db = await database;
+    return await db.insert(
+      'horse_profiles',
+      profile.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// 馬IDを指定して競走馬プロフィールを取得します。
+  Future<HorseProfile?> getHorseProfile(String horseId) async {
+    final db = await database;
+    final maps = await db.query(
+      'horse_profiles',
+      where: 'horseId = ?',
+      whereArgs: [horseId],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return HorseProfile.fromMap(maps.first);
+    }
+    return null;
+  }
+  /// 出馬表キャッシュを保存または更新します
+  Future<void> insertShutubaTableCache(ShutubaTableCache cache) async {
+    final db = await database;
+    await db.insert(
+      'shutuba_table_cache', // 既存の参照に合わせて単数形
+      cache.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 }

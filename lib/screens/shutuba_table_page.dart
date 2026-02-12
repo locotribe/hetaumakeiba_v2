@@ -48,6 +48,8 @@ enum SortableColumn {
   bestTime,
   fastestAgari,
   legStyle,
+  trainer,
+  owner,
 }
 
 class _PerformanceData {
@@ -670,6 +672,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                               final bAgari = b.fastestAgariStats?.agariInSeconds;
                               comparison = compareNullsLast(aAgari, bAgari);
                               break;
+                            case SortableColumn.trainer:
+                              comparison = a.trainerName.compareTo(b.trainerName);
+                              break;
+                            case SortableColumn.owner:
+                              comparison = compareNullsLast(a.ownerName, b.ownerName);
+                              break;
 
                             default:
                               comparison = a.horseNumber.compareTo(b.horseNumber);
@@ -846,6 +854,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
         DataColumn2(label: const Text('枠\n番'), fixedWidth: 40, onSort: (i, asc) => _onSort(SortableColumn.gateNumber)),
         DataColumn2(label: const Text('馬\n番'), fixedWidth: 40, onSort: (i, asc) => _onSort(SortableColumn.horseNumber)),
+        // ★追加: 勝負服画像の列
+        const DataColumn2(label: Text('服'), fixedWidth: 40),
         DataColumn2(label: const Text('馬名'), fixedWidth: 130, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
         DataColumn2(label: const Text('人気'), fixedWidth: 65, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.popularity)),
         DataColumn2(label: const Text('オッズ'), fixedWidth: 70, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.odds)),
@@ -859,12 +869,27 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         ),
         DataCell(_buildGateNumber(horse.gateNumber)),
         DataCell(_buildHorseNumber(horse.horseNumber, horse.gateNumber)),
+        // ★追加: 勝負服画像セル
+        DataCell(
+          horse.ownerImageLocalPath != null && horse.ownerImageLocalPath!.isNotEmpty
+              ? Center(
+            child: Image.file(
+              File(horse.ownerImageLocalPath!),
+              width: 24,
+              height: 24,
+              errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+            ),
+          )
+              : const SizedBox.shrink(),
+        ),
         DataCell(
           Text(
             horse.horseName,
             style: TextStyle(
               decoration: horse.isScratched ? TextDecoration.lineThrough : null,
+              fontWeight: FontWeight.bold,
             ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         DataCell(Text(horse.popularity?.toString() ?? '--')),
@@ -927,8 +952,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         const DataColumn2(label: Text('騎手'), fixedWidth: 80),
         const DataColumn2(label: Text('前走騎手'), fixedWidth: 80),
         const DataColumn2(label: Text('所属'), fixedWidth: 50),
-        const DataColumn2(label: Text('調教師'), fixedWidth: 80),
-        const DataColumn2(label: Text('馬主'), fixedWidth: 250),
+        // ★修正: 調教師にソート追加
+        DataColumn2(label: const Text('調教師'), fixedWidth: 80, onSort: (i, asc) => _onSort(SortableColumn.trainer)),
+        // ★修正: 馬主にソート追加
+        DataColumn2(label: const Text('馬主'), fixedWidth: 250, onSort: (i, asc) => _onSort(SortableColumn.owner)),
       ],
       horses: horses,
       cellBuilder: (horse) => [

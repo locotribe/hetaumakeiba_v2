@@ -79,7 +79,7 @@ class PredictionHorseDetail {
   final String trainerName;
   final String trainerAffiliation;
   double? odds;
-  final String? effectiveOdds; // ★追加: 計算用オッズ（文字列）
+  final String? effectiveOdds;
   int? popularity;
   String? horseWeight;
   UserMark? userMark;
@@ -96,7 +96,15 @@ class PredictionHorseDetail {
   LegStyleProfile? legStyleProfile;
   String? previousHorseWeight;
   String? previousJockey;
+
+  // ★ここから追加・整理: プロフィール情報
   String? ownerName;
+  String? ownerId;
+  String? ownerImageLocalPath;
+  String? breederName;
+  String? fatherName;
+  String? motherName;
+  // ★ここまで追加
 
   PredictionHorseDetail({
     required this.horseId,
@@ -110,7 +118,7 @@ class PredictionHorseDetail {
     required this.trainerName,
     required this.trainerAffiliation,
     this.odds,
-    this.effectiveOdds, // ★追加
+    this.effectiveOdds,
     this.popularity,
     this.horseWeight,
     this.userMark,
@@ -128,6 +136,12 @@ class PredictionHorseDetail {
     this.previousHorseWeight,
     this.previousJockey,
     this.ownerName,
+    // ★コンストラクタに追加
+    this.ownerId,
+    this.ownerImageLocalPath,
+    this.breederName,
+    this.fatherName,
+    this.motherName,
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
@@ -144,7 +158,7 @@ class PredictionHorseDetail {
       trainerAffiliation: detail.trainerAffiliation,
       horseWeight: detail.horseWeight,
       odds: detail.odds,
-      effectiveOdds: null, // 初期生成時はnull
+      effectiveOdds: null,
       popularity: detail.popularity,
       isScratched: detail.isScratched,
     );
@@ -163,7 +177,7 @@ class PredictionHorseDetail {
       'trainerName': trainerName,
       'trainerAffiliation': trainerAffiliation,
       'odds': odds,
-      'effectiveOdds': effectiveOdds, // ★追加
+      'effectiveOdds': effectiveOdds,
       'popularity': popularity,
       'horseWeight': horseWeight,
       'isScratched': isScratched,
@@ -176,9 +190,15 @@ class PredictionHorseDetail {
       'legStyleProfile': legStyleProfile?.toJson(),
       'previousHorseWeight': previousHorseWeight,
       'previousJockey': previousJockey,
-      'ownerName': ownerName,
       'bestTimeStats': bestTimeStats?.toMap(),
       'fastestAgariStats': fastestAgariStats?.toMap(),
+      // ★JSON出力に追加
+      'ownerName': ownerName,
+      'ownerId': ownerId,
+      'ownerImageLocalPath': ownerImageLocalPath,
+      'breederName': breederName,
+      'fatherName': fatherName,
+      'motherName': motherName,
     };
   }
 
@@ -195,7 +215,7 @@ class PredictionHorseDetail {
       trainerName: json['trainerName'] as String,
       trainerAffiliation: json['trainerAffiliation'] as String,
       odds: (json['odds'] as num?)?.toDouble(),
-      effectiveOdds: json['effectiveOdds'] as String?, // ★追加
+      effectiveOdds: json['effectiveOdds'] as String?,
       popularity: json['popularity'] as int?,
       horseWeight: json['horseWeight'] as String?,
       isScratched: json['isScratched'] as bool,
@@ -216,13 +236,19 @@ class PredictionHorseDetail {
           : null,
       previousHorseWeight: json['previousHorseWeight'] as String?,
       previousJockey: json['previousJockey'] as String?,
-      ownerName: json['ownerName'] as String?,
       bestTimeStats: json['bestTimeStats'] != null
           ? BestTimeStats.fromMap(json['bestTimeStats'] as Map<String, dynamic>)
           : null,
       fastestAgariStats: json['fastestAgariStats'] != null
           ? FastestAgariStats.fromMap(json['fastestAgariStats'] as Map<String, dynamic>)
           : null,
+      // ★JSON読み込みに追加（ownerNameの重複を削除）
+      ownerName: json['ownerName'] as String?,
+      ownerId: json['ownerId'] as String?,
+      ownerImageLocalPath: json['ownerImageLocalPath'] as String?,
+      breederName: json['breederName'] as String?,
+      fatherName: json['fatherName'] as String?,
+      motherName: json['motherName'] as String?,
     );
   }
 }
