@@ -9,12 +9,15 @@ import '../models/ai_prediction_race_data.dart';
 import '../models/shutuba_table_cache_model.dart';
 import '../models/horse_performance_model.dart';
 import '../models/horse_profile_model.dart';
-// 追加: 新しいサービスをインポート
 import '../services/horse_profile_scraper_service.dart';
+// 追加: Managerをインポート
+import '../services/scraping_manager.dart';
 
 /// データの保存を一元管理するリポジトリ
 class RaceDataRepository {
   final dbHelper = DatabaseHelper();
+  // 追加: Managerのインスタンス
+  final ScrapingManager _scrapingManager = ScrapingManager();
 
   /// レース結果を保存する
   Future<void> saveRaceResult(RaceResult newResult) async {
@@ -61,39 +64,41 @@ class RaceDataRepository {
 
   /// 出走馬リストを受け取り、プロフィールがない馬のデータをバックグラウンドで取得する
   /// UI側で「1頭取得するごとに画面更新」ができるよう、コールバック関数を受け取る
+  /// ★修正: Managerを使用してリクエストを直列化・待機させる
   Future<void> syncMissingHorseProfiles(
       List<PredictionHorseDetail> horses,
       Function(String horseId) onProfileUpdated,
       ) async {
 
-    print('DEBUG: syncMissingHorseProfiles started for ${horses.length} horses.');
+    print('DEBUG: syncMissingHorseProfiles started for ${horses.length} horses via Manager.');
 
     for (final horse in horses) {
-      // 1. DBにプロフィールがあるか確認
+      // 1. DBにプロフィールがあるか確認 (ここは同期的にチェックしてOK)
       final existingProfile = await dbHelper.getHorseProfile(horse.horseId);
 
-      // 2. プロフィールがない、または情報が不足している場合に取得
+      // 2. プロフィールがない、または情報が不足している場合に取得リクエストをキューに追加
       if (existingProfile == null || existingProfile.ownerName.isEmpty) {
-        print('DEBUG: Fetching missing profile for: ${horse.horseName} (${horse.horseId})');
 
-        // スクレイピング実行
-        final newProfile = await HorseProfileScraperService.scrapeAndSaveProfile(horse.horseId);
+        // Managerにリクエストを追加
+        _scrapingManager.addRequest(
+            'プロフィール取得: ${horse.horseName}',
+                () async {
+              print('DEBUG: Executing queued profile fetch for: ${horse.horseName} (${horse.horseId})');
 
-        if (newProfile != null) {
-          print('DEBUG: Profile synced for ${horse.horseId}, calling callback.');
-          onProfileUpdated(horse.horseId);
-        } else {
-          print('DEBUG: Failed to sync profile for ${horse.horseId}');
-        }
+              // スクレイピング実行
+              final newProfile = await HorseProfileScraperService.scrapeAndSaveProfile(horse.horseId);
 
-        // サーバー負荷軽減のため少し待機
-        await Future.delayed(const Duration(milliseconds: 800));
-      } else {
-        // 既にプロフィールがある場合はログを出さない（ログ過多防止）
-        // print('DEBUG: Profile already exists for ${horse.horseId}');
+              if (newProfile != null) {
+                print('DEBUG: Profile synced for ${horse.horseId}, calling callback.');
+                // コールバック経由でUIを更新（呼び出し元のsetState等が呼ばれる）
+                onProfileUpdated(horse.horseId);
+              } else {
+                print('DEBUG: Failed to sync profile for ${horse.horseId}');
+              }
+            }
+        );
       }
     }
-    print('DEBUG: syncMissingHorseProfiles completed.');
   }
 
   /// 出馬表データ（AI予測用データ含む）を取得する
@@ -169,5 +174,63 @@ class RaceDataRepository {
       );
     }
     return null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Step 1: 過去10年マッチング機能用 追加メソッド
+  // ---------------------------------------------------------------------------
+
+  /// レース名の一部（例："東京新聞杯"）で race_results テーブルを検索し、
+  /// 該当する List<RaceResult> を返します。
+  Future<List<RaceResult>> searchRaceResultsByName(String partialName) async {
+    final db = await dbHelper.database;
+
+    // race_results テーブルから全レコードを取得
+    final maps = await db.query('race_results');
+
+    final List<RaceResult> matches = [];
+
+    for (final map in maps) {
+      final jsonStr = map['race_result_json'] as String?;
+      if (jsonStr != null && jsonStr.isNotEmpty) {
+        try {
+          // JSON文字列から RaceResult オブジェクトを復元
+          final result = raceResultFromJson(jsonStr);
+
+          // レース名に検索キーワードが含まれているか判定
+          if (result.raceTitle.contains(partialName)) {
+            matches.add(result);
+          }
+        } catch (e) {
+          print('Error parsing race result in searchRaceResultsByName: $e');
+        }
+      }
+    }
+
+    return matches;
+  }
+
+  /// 馬IDを指定して、DBから戦績リストを取得します。
+  Future<List<HorseRaceRecord>> getHorseRaceRecords(String horseId) async {
+    // 既存のメソッドを利用して同じ機能を返す
+    return dbHelper.getHorsePerformanceRecords(horseId);
+  }
+
+  /// 取得した戦績リストをDBに一括保存します。
+  Future<void> insertHorseRaceRecords(List<HorseRaceRecord> records) async {
+    await dbHelper.insertHorseRaceRecords(records);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Step 2: 競走馬プロフィール管理用 追加メソッド
+  // ---------------------------------------------------------------------------
+
+  Future<int> insertOrUpdateHorseProfile(HorseProfile profile) async {
+    return dbHelper.insertOrUpdateHorseProfile(profile);
+  }
+
+  /// 馬IDを指定して競走馬プロフィールを取得します。
+  Future<HorseProfile?> getHorseProfile(String horseId) async {
+    return dbHelper.getHorseProfile(horseId);
   }
 }

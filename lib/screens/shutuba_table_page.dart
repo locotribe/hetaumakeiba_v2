@@ -28,6 +28,7 @@ import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
+import 'package:hetaumakeiba_v2/services/scraping_manager.dart'; // 追加
 import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
 import 'package:hetaumakeiba_v2/screens/ai_comprehensive_prediction_page.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
@@ -117,26 +118,28 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     try {
       PredictionRaceData? data;
 
-      // 1. 引数で渡されたデータがあればそれを使う
-      if (widget.predictionRaceData != null && !refresh) {
+      // ★修正: 引数データよりもDBキャッシュ（プロフィール結合済み）を優先するロジックに変更
+      // 1. まずDBキャッシュを確認する (refresh時はスキップ)
+      if (!refresh) {
+        data = await _repository.getShutubaData(widget.raceId);
+      }
+
+      // 2. DBになければ、引数のデータを使う
+      if (data == null && widget.predictionRaceData != null && !refresh) {
         data = widget.predictionRaceData;
       }
-      // 2. レース結果から生成する場合
-      else if (widget.raceResult != null && !refresh) {
+      // 3. 引数もなければレース結果から生成
+      else if (data == null && widget.raceResult != null && !refresh) {
         data = _createPredictionDataFromRaceResult(widget.raceResult!);
       }
-      // 3. DBキャッシュまたはスクレイピング
-      else {
-        // ★修正: リポジトリ経由で取得（プロフィール結合済みデータを取得できる）
-        data = await _repository.getShutubaData(widget.raceId);
 
-        if (data == null || refresh) {
-          // キャッシュがない、または更新要求時はスクレイピング
-          data = await _fetchDataWithUserMarks();
-          if (data != null) {
-            // リポジトリ経由で保存
-            await _repository.saveShutubaData(data);
-          }
+      // 4. それでもデータがない、または更新要求時はスクレイピング
+      if (data == null || refresh) {
+        // キャッシュがない、または更新要求時はスクレイピング
+        data = await _fetchDataWithUserMarks();
+        if (data != null) {
+          // リポジトリ経由で保存
+          await _repository.saveShutubaData(data);
         }
       }
 
@@ -169,8 +172,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           _isLoading = false;
         });
 
-        // ★追加: プロフィール情報のバックグラウンド同期を実行
-        // 画面が表示された後に、不足しているプロフィールを順次取得して更新する
+        // ★修正: プロフィール情報のバックグラウンド同期を実行
+        // リポジトリがManager経由でリクエストをキューイングするため、メインスレッドはブロックされない
+        // DBから取得したデータであっても、未取得の馬がいればここでチェックされ、キューに追加される
         if (data != null) {
           _repository.syncMissingHorseProfiles(data.horses, (updatedHorseId) async {
             // コールバック: 1頭保存されるたびに呼ばれる
@@ -605,115 +609,158 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ),
           ),
         Expanded(
-            child: Column(
-              children: [
-                ThemedTabBar(
-                  controller: _tabController,
-                  isScrollable: true,
-                  tabs: const [
-                    Tab(text: '出走馬'),
-                    Tab(text: '情報'),
-                    Tab(text: '騎手・調教師'),
-                    Tab(text: '分析'),
-                    Tab(text: '時計'),
-                    Tab(text: '成績'),
-                    Tab(text: 'メモ'),
-                  ],
+          child: Column(
+            children: [
+              ThemedTabBar(
+                controller: _tabController,
+                isScrollable: true,
+                tabs: const [
+                  Tab(text: '出走馬'),
+                  Tab(text: '情報'),
+                  Tab(text: '騎手・調教師'),
+                  Tab(text: '分析'),
+                  Tab(text: '時計'),
+                  Tab(text: '成績'),
+                  Tab(text: 'メモ'),
+                ],
+              ),
+              Expanded(
+                child: Builder(
+                    builder: (context) {
+                      final sortedHorses = List<PredictionHorseDetail>.from(_predictionRaceData!.horses);
+                      sortedHorses.sort((a, b) {
+                        int comparison;
+                        int compareNullsLast(Comparable? valA, Comparable? valB) {
+                          if (valA == null && valB == null) return 0;
+                          if (valA == null) return 1;
+                          if (valB == null) return -1;
+                          return valA.compareTo(valB);
+                        }
+
+                        switch (_sortColumn) {
+                          case SortableColumn.mark:
+                            const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '★': 5, '消': 6};
+                            final aMark = markOrder[a.userMark?.mark] ?? 99;
+                            final bMark = markOrder[b.userMark?.mark] ?? 99;
+                            comparison = aMark.compareTo(bMark);
+                            break;
+                          case SortableColumn.gateNumber:
+                            comparison = a.gateNumber.compareTo(b.gateNumber);
+                            break;
+                          case SortableColumn.horseNumber:
+                            comparison = a.horseNumber.compareTo(b.horseNumber);
+                            break;
+                          case SortableColumn.horseName:
+                            comparison = a.horseName.compareTo(b.horseName);
+                            break;
+                          case SortableColumn.popularity:
+                            comparison = compareNullsLast(a.popularity, b.popularity);
+                            break;
+                          case SortableColumn.odds:
+                            comparison = compareNullsLast(a.odds, b.odds);
+                            break;
+                          case SortableColumn.carriedWeight:
+                            comparison = a.carriedWeight.compareTo(b.carriedWeight);
+                            break;
+                          case SortableColumn.horseWeight:
+                            final aWeight = int.tryParse(a.horseWeight?.split('(').first ?? '');
+                            final bWeight = int.tryParse(b.horseWeight?.split('(').first ?? '');
+                            comparison = compareNullsLast(aWeight, bWeight);
+                            break;
+                          case SortableColumn.overallScore:
+                            final aScore = _overallScores[a.horseId];
+                            final bScore = _overallScores[b.horseId];
+                            comparison = compareNullsLast(aScore, bScore);
+                            break;
+                          case SortableColumn.bestTime:
+                            final aTime = a.bestTimeStats?.timeInSeconds;
+                            final bTime = b.bestTimeStats?.timeInSeconds;
+                            if (aTime == null && bTime == null) comparison = 0;
+                            else if (aTime == null) comparison = 1;
+                            else if (bTime == null) comparison = -1;
+                            else comparison = aTime.compareTo(bTime);
+                            break;
+                          case SortableColumn.fastestAgari:
+                            final aAgari = a.fastestAgariStats?.agariInSeconds;
+                            final bAgari = b.fastestAgariStats?.agariInSeconds;
+                            comparison = compareNullsLast(aAgari, bAgari);
+                            break;
+                          case SortableColumn.trainer:
+                            comparison = a.trainerName.compareTo(b.trainerName);
+                            break;
+                          case SortableColumn.owner:
+                            comparison = compareNullsLast(a.ownerName, b.ownerName);
+                            break;
+
+                          default:
+                            comparison = a.horseNumber.compareTo(b.horseNumber);
+                            break;
+                        }
+                        return _isAscending ? comparison : -comparison;
+                      });
+
+                      return TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildStartersTab(sortedHorses),
+                          _buildInfoTab(sortedHorses),
+                          _buildJockeyTrainerTab(sortedHorses),
+                          _buildAnalysisTab(sortedHorses),
+                          _buildTimeTab(sortedHorses),
+                          _buildPerformanceTab(sortedHorses),
+                          _buildMemoTab(sortedHorses),
+                        ],
+                      );
+                    }
                 ),
-                Expanded(
-                  child: Builder(
-                      builder: (context) {
-                        final sortedHorses = List<PredictionHorseDetail>.from(_predictionRaceData!.horses);
-                        sortedHorses.sort((a, b) {
-                          int comparison;
-                          int compareNullsLast(Comparable? valA, Comparable? valB) {
-                            if (valA == null && valB == null) return 0;
-                            if (valA == null) return 1;
-                            if (valB == null) return -1;
-                            return valA.compareTo(valB);
-                          }
-
-                          switch (_sortColumn) {
-                            case SortableColumn.mark:
-                              const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '★': 5, '消': 6};
-                              final aMark = markOrder[a.userMark?.mark] ?? 99;
-                              final bMark = markOrder[b.userMark?.mark] ?? 99;
-                              comparison = aMark.compareTo(bMark);
-                              break;
-                            case SortableColumn.gateNumber:
-                              comparison = a.gateNumber.compareTo(b.gateNumber);
-                              break;
-                            case SortableColumn.horseNumber:
-                              comparison = a.horseNumber.compareTo(b.horseNumber);
-                              break;
-                            case SortableColumn.horseName:
-                              comparison = a.horseName.compareTo(b.horseName);
-                              break;
-                            case SortableColumn.popularity:
-                              comparison = compareNullsLast(a.popularity, b.popularity);
-                              break;
-                            case SortableColumn.odds:
-                              comparison = compareNullsLast(a.odds, b.odds);
-                              break;
-                            case SortableColumn.carriedWeight:
-                              comparison = a.carriedWeight.compareTo(b.carriedWeight);
-                              break;
-                            case SortableColumn.horseWeight:
-                              final aWeight = int.tryParse(a.horseWeight?.split('(').first ?? '');
-                              final bWeight = int.tryParse(b.horseWeight?.split('(').first ?? '');
-                              comparison = compareNullsLast(aWeight, bWeight);
-                              break;
-                            case SortableColumn.overallScore:
-                              final aScore = _overallScores[a.horseId];
-                              final bScore = _overallScores[b.horseId];
-                              comparison = compareNullsLast(aScore, bScore);
-                              break;
-                            case SortableColumn.bestTime:
-                              final aTime = a.bestTimeStats?.timeInSeconds;
-                              final bTime = b.bestTimeStats?.timeInSeconds;
-                              if (aTime == null && bTime == null) comparison = 0;
-                              else if (aTime == null) comparison = 1;
-                              else if (bTime == null) comparison = -1;
-                              else comparison = aTime.compareTo(bTime);
-                              break;
-                            case SortableColumn.fastestAgari:
-                              final aAgari = a.fastestAgariStats?.agariInSeconds;
-                              final bAgari = b.fastestAgariStats?.agariInSeconds;
-                              comparison = compareNullsLast(aAgari, bAgari);
-                              break;
-                            case SortableColumn.trainer:
-                              comparison = a.trainerName.compareTo(b.trainerName);
-                              break;
-                            case SortableColumn.owner:
-                              comparison = compareNullsLast(a.ownerName, b.ownerName);
-                              break;
-
-                            default:
-                              comparison = a.horseNumber.compareTo(b.horseNumber);
-                              break;
-                          }
-                          return _isAscending ? comparison : -comparison;
-                        });
-
-                        return TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _buildStartersTab(sortedHorses),
-                            _buildInfoTab(sortedHorses),
-                            _buildJockeyTrainerTab(sortedHorses),
-                            _buildAnalysisTab(sortedHorses),
-                            _buildTimeTab(sortedHorses),
-                            _buildPerformanceTab(sortedHorses),
-                            _buildMemoTab(sortedHorses),
-                          ],
-                        );
-                      }
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
+        // ★追加: スクレイピング進捗バー
+        _buildScrapingProgressIndicator(),
       ],
+    );
+  }
+
+  // ★追加: スクレイピング進捗バーのビルドメソッド
+  Widget _buildScrapingProgressIndicator() {
+    return StreamBuilder<ScrapingStatus>(
+      stream: ScrapingManager().statusStream,
+      initialData: ScrapingStatus.idle(),
+      builder: (context, snapshot) {
+        final status = snapshot.data!;
+
+        if (!status.isRunning) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: Colors.blueGrey.shade800,
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${status.currentTaskName} (残り: ${status.queueLength}件)',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
