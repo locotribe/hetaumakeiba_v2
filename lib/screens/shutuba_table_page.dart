@@ -36,6 +36,7 @@ import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
 import '../utils/grade_utils.dart';
 import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
+import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
 
 enum SortableColumn {
   mark,
@@ -927,16 +928,26 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataCell(_buildHorseNumber(horse.horseNumber, horse.gateNumber)),
         // ★追加: 勝負服画像セル
         DataCell(
-          horse.ownerImageLocalPath != null && horse.ownerImageLocalPath!.isNotEmpty
-              ? Center(
-            child: Image.file(
-              File(horse.ownerImageLocalPath!),
-              width: 24,
-              height: 24,
-              errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
-            ),
-          )
-              : const SizedBox.shrink(),
+          FutureBuilder<HorseProfile?>(
+            future: _dbHelper.getHorseProfile(horse.horseId),
+            builder: (context, snapshot) {
+              // データ取得完了かつ、パスが存在する場合のみ画像を表示
+              if (snapshot.connectionState == ConnectionState.done &&
+                  snapshot.hasData &&
+                  snapshot.data!.ownerImageLocalPath.isNotEmpty) {
+                return Center(
+                  child: Image.file(
+                    File(snapshot.data!.ownerImageLocalPath),
+                    width: 24,
+                    height: 24,
+                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                  ),
+                );
+              }
+              // ロード中、または画像がない場合は何も表示しない
+              return const SizedBox.shrink();
+            },
+          ),
         ),
         DataCell(
           Text(

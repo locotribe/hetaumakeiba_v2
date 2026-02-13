@@ -51,9 +51,14 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   void _calculateWeek(DateTime date) {
     if (!mounted) return;
     setState(() {
-      _currentDate = date;
+      // ★変更前: _currentDate = date;
+
+      // ★変更後: 先に月曜日を計算し、_currentDateを「その週の月曜日」に固定（正規化）する
       final int daysToSubtract = date.weekday - 1;
       final DateTime monday = date.subtract(Duration(days: daysToSubtract));
+
+      _currentDate = monday; // 引数のdateではなく、正規化したmondayを保存
+
       _weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
 
       _isDataLoaded = false;
@@ -64,7 +69,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       _tabController?.removeListener(_handleTabSelection);
       _tabController?.dispose();
       _tabController = null;
-      _raceStatusMap.clear(); // ステータスマップもクリア
+      _raceStatusMap.clear();
     });
 
     _loadDataForWeek();
@@ -84,7 +89,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
   Future<void> _loadDataForWeek() async {
     if (!mounted) return;
-
     final representativeDate = _weekDates.last;
     final weekKey = DateFormat('yyyy-MM-dd').format(representativeDate);
     final cachedDateStrings = await _dbHelper.getWeekCache(weekKey);
@@ -188,7 +192,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       return;
     }
 
-    _availableDates = yyyymmddStrings
+    // まずパースして有効な日付文字列リストを作る（既存ロジック）
+    var tempDates = yyyymmddStrings
         .map((ds) {
       try {
         final year = int.parse(ds.substring(0, 4));
@@ -203,8 +208,18 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         .cast<String>()
         .toList();
 
+    // ★追加修正: ここで週の範囲外の日付をフィルタリングする
+    final String weekStartStr = DateFormat('yyyy-MM-dd').format(_weekDates.first); // 月曜日
+    final String weekEndStr = DateFormat('yyyy-MM-dd').format(_weekDates.last);   // 日曜日
+
+    // 文字列比較で範囲内（月曜以上、かつ日曜以下）のものだけを残す
+    _availableDates = tempDates.where((dateStr) {
+      return dateStr.compareTo(weekStartStr) >= 0 && dateStr.compareTo(weekEndStr) <= 0;
+    }).toList();
+
     _availableDates.sort();
 
+    // 以下、初期タブ選択ロジック（既存のまま）
     int initialIndex = _availableDates
         .indexOf(DateFormat('yyyy-MM-dd').format(_weekDates.last));
     if (initialIndex == -1)
