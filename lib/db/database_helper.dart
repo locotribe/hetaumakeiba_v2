@@ -1252,4 +1252,20 @@ class DatabaseHelper {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
+  /// レースIDから開催スケジュール(race_schedules)を検索し、そのレースが含まれる日付を返します。
+  /// scheduleJson内にレースIDが含まれているかをLIKE検索で判定します。
+  Future<String?> getDateFromScheduleByRaceId(String raceId) async {
+    final db = await database;
+    final maps = await db.query(
+      'race_schedules',
+      columns: ['date'],
+      where: 'scheduleJson LIKE ?',
+      whereArgs: ['%$raceId%'],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return maps.first['date'] as String;
+    }
+    return null;
+  }
 }

@@ -13,6 +13,7 @@ import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 
 class TicketDataLogic {
   final DatabaseHelper _dbHelper = DatabaseHelper();
@@ -130,13 +131,69 @@ class TicketDataLogic {
             raceName = featuredRace.raceName;
           }
         }
+        // ---------------------------------------------------------
+        // ステップ3: 情報がない場合、出馬表キャッシュ(ShutubaTableCache)をDBから探す
+        // ---------------------------------------------------------
+        if (raceDate.isEmpty) {
+          final shutubaCache = await _dbHelper.getShutubaTableCache(raceId);
+          if (shutubaCache != null) {
+            // すでにパース済みのデータ(predictionRaceData)から直接取得します
+            final data = shutubaCache.predictionRaceData;
+            if (data.raceDate.isNotEmpty) raceDate = data.raceDate;
+            if (data.raceName.isNotEmpty) raceName = data.raceName;
+          }
+        }
 
         // ---------------------------------------------------------
-        // ステップ3: Webスクレイピング [通信待ち回避のためスキップ]
+        // ステップ4: それでも情報がない場合、開催スケジュール(RaceSchedule)をDBから探す
         // ---------------------------------------------------------
-        // ここでWebアクセスを行うと一覧表示が止まるため、DBにある情報のみで表示を構築します。
-        // DBに保存されていない(一度も詳細を開いていない)未来のレースは日付なしとなりますが、
-        // 「保存した馬券が表示されない」問題はステップ2の復元で解消されます。
+        if (raceDate.isEmpty) {
+          final scheduleDate = await _dbHelper.getDateFromScheduleByRaceId(raceId);
+          if (scheduleDate != null) {
+            raceDate = scheduleDate;
+            // スケジュールからは日付のみ取得（タイトルは後続処理で「開催場+R」として生成されるため問題なし）
+          }
+        }
+
+        // ---------------------------------------------------------
+        // ステップ5: 【最終手段】Webスクレイピング (未知の馬券のみ)
+        // ---------------------------------------------------------
+        // DBのどこにも情報がなく、完全に新規のレースの場合のみWebへ取りに行きます。
+        if (raceDate.isEmpty && raceId.length == 12) {
+          try {
+            // 既存のURLジェネレーターを使用してURLを生成
+            // raceId (12桁): YYYY(4) PP(2) KK(2) DD(2) RR(2)
+            // generateNetkeibaUrlは年を2桁で受け取り "20" を付与するため、raceIdからは下2桁を渡す
+            final year = raceId.substring(2, 4);
+            final place = raceId.substring(4, 6);
+            final kai = raceId.substring(6, 8);
+            final day = raceId.substring(8, 10);
+            final r = raceId.substring(10, 12);
+
+            final dbUrl = generateNetkeibaUrl(
+              year: year,
+              racecourseCode: place,
+              round: kai,
+              day: day,
+              race: r,
+            );
+
+            // Webからレース詳細を取得
+            final fetched = await RaceResultScraperService.scrapeRaceDetails(dbUrl);
+
+            if (fetched.raceDate.isNotEmpty) {
+              raceDate = fetched.raceDate;
+              raceName = fetched.raceTitle;
+
+              // 重要: 取得したデータをDBに保存し、次回以降のロード時間を0秒にします
+              // メソッド名を修正: insertOrUpdateRaceResult
+              await _dbHelper.insertOrUpdateRaceResult(fetched);
+            }
+          } catch (e) {
+            print('新規レース情報のWeb取得に失敗: $raceId - $e');
+            // 失敗時は処理を止めず、表示可能な情報だけでリストを生成します
+          }
+        }
 
         // 日付フォーマットの正規化
         raceDate = _normalizeDate(raceDate);

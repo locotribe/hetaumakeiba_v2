@@ -518,7 +518,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
       children: [
         // 1. 馬券イメージ（横スワイプ可能）
         SizedBox(
-          height: 240, // BettingTicketCardの高さ(230) + マージン
+          height: 240,
           child: PageView.builder(
             controller: _ticketPageController,
             itemCount: parsedTickets.length,
@@ -529,9 +529,34 @@ class _RaceResultPageState extends State<RaceResultPage> {
             },
             itemBuilder: (context, index) {
               final ticket = parsedTickets[index];
+
+              // 的中判定ロジック
+              bool isHit = false;
+              if (raceResult != null && !raceResult.isIncomplete) {
+                final hitResult = HitChecker.check(parsedTicket: ticket, raceResult: raceResult);
+                // 払戻金が発生していれば的中とみなす
+                isHit = hitResult.totalPayout > 0;
+              }
+
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: BettingTicketCard(ticketData: ticket, raceResult: raceResult),
+                child: Stack(
+                  children: [
+                    // 1層目: 馬券カード本体
+                    BettingTicketCard(ticketData: ticket, raceResult: raceResult),
+
+                    // 2層目: 的中画像 (的中時のみ表示)
+                    if (isHit)
+                      Positioned.fill( // ★親のStack領域(馬券カード)いっぱいに広げる
+                        child: IgnorePointer( // タップ操作を透過させる
+                          child: Image.asset(
+                            'assets/images/hit.png',
+                            fit: BoxFit.fill,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               );
             },
           ),
@@ -568,7 +593,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     alignment: Alignment.centerLeft,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2.0),
-                      child: Text('🎯 $detail', style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold)),
+                      child: Text('$detail', style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold)),
                     ),
                   )),
                 ],
@@ -673,53 +698,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUserTicketCard(Map<String, dynamic> parsedTicket, RaceResult? raceResult, HitResult? hitResult) {
-    final totalAmount = parsedTicket['合計金額'] as int? ?? 0;
-
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            BettingTicketCard(ticketData: parsedTicket, raceResult: raceResult),
-            if (hitResult != null) ...[
-              const SizedBox(height: 8),
-              _buildResultRow('払戻合計', '${hitResult.totalPayout}円'),
-              _buildResultRow('返還合計', '${hitResult.totalRefund}円'),
-              _buildResultRow(
-                '収支',
-                '${(hitResult.totalPayout + hitResult.totalRefund - totalAmount) >= 0 ? '+' : ''}${hitResult.totalPayout + hitResult.totalRefund - totalAmount}円',
-                isProfit: true,
-                profit: hitResult.totalPayout + hitResult.totalRefund - totalAmount,
-              ),
-              if (hitResult.hitDetails.isNotEmpty) ...[
-                ...hitResult.hitDetails.map((detail) => Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 2.0, left: 8.0),
-                    child: Text('🎯 $detail', style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold)),
-                  ),
-                )),
-              ],
-              if (hitResult.refundDetails.isNotEmpty) ...[
-                ...hitResult.refundDetails.map((detail) => Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 2.0, left: 8.0),
-                    child: Text('↩️ $detail', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold)),
-                  ),
-                )),
-              ],
-            ],
-          ],
         ),
       ),
     );
@@ -887,27 +865,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
             Icons.rate_review_outlined,
             color: hasReviewMemo ? Colors.orange.shade700 : Colors.grey,
             size: 20,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildResultRow(String label, String value, {bool isProfit = false, int profit = 0}) {
-    Color valueColor = Colors.black87;
-    if (isProfit) {
-      if (profit > 0) valueColor = Colors.blue.shade700;
-      if (profit < 0) valueColor = Colors.red.shade700;
-    }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 15)),
-          Text(
-            value,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: valueColor),
           ),
         ],
       ),
