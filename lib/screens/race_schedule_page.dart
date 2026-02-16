@@ -38,7 +38,11 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   @override
   void initState() {
     super.initState();
-    _calculateWeek(_currentDate);
+    // 矢印操作の基準となる日付は保持しておく
+    _currentDate = DateTime.now();
+
+    // ★修正: 初期ロード時は特定のURL（日付なし）から開始することを明示する
+    _loadDataForWeek(isInitial: true);
   }
 
   @override
@@ -51,14 +55,15 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   void _calculateWeek(DateTime date) {
     if (!mounted) return;
     setState(() {
-      // ★変更前: _currentDate = date;
+      // 1. 渡された日付（日曜基準）をそのままセットする（月曜への強制変換を廃止）
+      _currentDate = date;
 
-      // ★変更後: 先に月曜日を計算し、_currentDateを「その週の月曜日」に固定（正規化）する
+      // 2. カレンダー表示用（月〜日）の計算はローカル変数で行う
+      //    (Dartのweekdayは 月=1 ... 日=7)
       final int daysToSubtract = date.weekday - 1;
       final DateTime monday = date.subtract(Duration(days: daysToSubtract));
 
-      _currentDate = monday; // 引数のdateではなく、正規化したmondayを保存
-
+      // 3. 表示用の日付リストを生成
       _weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
 
       _isDataLoaded = false;
@@ -66,13 +71,18 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       _loadingMessage = '開催日をチェック中...';
       _availableDates.clear();
       _raceSchedules.clear();
-      _tabController?.removeListener(_handleTabSelection);
-      _tabController?.dispose();
-      _tabController = null;
+
+      // タブコントローラーの破棄
+      if (_tabController != null) {
+        _tabController!.removeListener(_handleTabSelection);
+        _tabController!.dispose();
+        _tabController = null;
+      }
       _raceStatusMap.clear();
     });
 
-    _loadDataForWeek();
+    // 4. データ読み込み開始（日付指定あり）
+    _loadDataForWeek(isInitial: false);
   }
 
   /// スケジュールデータから初期ステータス（確定済みかどうか）を読み込む
@@ -87,102 +97,83 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
   }
 
-  Future<void> _loadDataForWeek() async {
-    if (!mounted) return;
-    final representativeDate = _weekDates.last;
-    final weekKey = DateFormat('yyyy-MM-dd').format(representativeDate);
-    final cachedDateStrings = await _dbHelper.getWeekCache(weekKey);
-
-    // Week Cacheが存在する場合の処理
-    if (cachedDateStrings != null) {
-      final scheduleDateKeys = cachedDateStrings
-          .map((ds) {
-        try {
-          final year = int.parse(ds.substring(0, 4));
-          final month = int.parse(ds.substring(4, 6));
-          final day = int.parse(ds.substring(6, 8));
-          return DateFormat('yyyy-MM-dd')
-              .format(DateTime(year, month, day));
-        } catch (e) {
-          return null;
-        }
-      })
-          .where((d) => d != null)
-          .cast<String>()
-          .toList();
-
-      final schedulesFromDb =
-      await _dbHelper.getMultipleRaceSchedules(scheduleDateKeys);
-
-      if (schedulesFromDb.isNotEmpty) {
-        // DBから読み込んだ時点で確定情報を反映させる
-        schedulesFromDb.values.forEach(_initializeStatusMapFromSchedule);
-
-        // その後、未確定のものだけチェックに行く
-        schedulesFromDb.values.forEach((s) => _checkRaceStatusesForSchedule(s));
-      }
-
-      if (mounted) {
-        setState(() {
-          _raceSchedules.addAll(schedulesFromDb);
-          _isDataLoaded = true;
-          _isLoading = false;
-        });
-        _setupTabs(cachedDateStrings);
-      }
-      return;
-    }
-
-    // Week Cacheが存在しない場合の処理
-    final weekDateStrings =
-    _weekDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
-    final schedulesFromDb =
-    await _dbHelper.getMultipleRaceSchedules(weekDateStrings);
-    if (schedulesFromDb.isNotEmpty) {
-      schedulesFromDb.values.forEach(_initializeStatusMapFromSchedule);
-      schedulesFromDb.values.forEach((s) => _checkRaceStatusesForSchedule(s));
-      if (mounted) {
-        setState(() {
-          _raceSchedules.addAll(schedulesFromDb);
-        });
-      }
+  Future<void> _loadDataForWeek({bool isInitial = false}) async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _loadingMessage = '開催スケジュールを確認中...';
+        _raceSchedules.clear();
+      });
     }
 
     try {
-      final (liveDateStrings, initialSchedule) =
-      await _scraperService.fetchInitialData(representativeDate);
+      // ★修正: キャッシュ優先ロジック
+      // 初期ロード以外で、既に週構成(_weekDates)が決まっている場合はキャッシュを確認
+      if (!isInitial && _weekDates.isNotEmpty) {
+        // 週を一意に識別するキー（週の月曜日の日付文字列）を使用
+        final weekKey = DateFormat('yyyyMMdd').format(_weekDates.first);
+        final cachedDates = await _dbHelper.getWeekCache(weekKey);
 
-      if (liveDateStrings.isNotEmpty) {
-        await _dbHelper.insertOrUpdateWeekCache(weekKey, liveDateStrings);
-      }
-
-      if (mounted) {
-        _isDataLoaded = true;
-        if (liveDateStrings.isEmpty && initialSchedule == null) {
-          setState(() => _isLoading = false);
+        if (cachedDates != null && cachedDates.isNotEmpty) {
+          // キャッシュヒット：スクレイピングせずにUI構築へ
+          _setupTabs(cachedDates);
+          if (mounted) {
+            setState(() {
+              _isDataLoaded = true;
+              _isLoading = false;
+            });
+          }
           return;
         }
+      }
 
-        if (initialSchedule != null) {
-          // 初期ロード時も確定情報を反映
-          _initializeStatusMapFromSchedule(initialSchedule);
-          await _dbHelper.insertOrUpdateRaceSchedule(initialSchedule);
+      // ★修正: キャッシュがない、または初期ロードの場合はスクレイピング
+      final (dates, schedule) = await _scraperService.fetchInitialData(
+        isInitial ? null : _currentDate,
+        onProgress: (msg) {
+          if (mounted) setState(() => _loadingMessage = msg);
+        },
+      );
+
+      // データなし（未来の週など）
+      if (dates.isEmpty) {
+        if (mounted) {
           setState(() {
-            _raceSchedules[initialSchedule.date] = initialSchedule;
+            _isLoading = false;
+            _availableDates = [];
+            _isDataLoaded = true; // ロード完了とするがデータなし
           });
-          _checkRaceStatusesForSchedule(initialSchedule);
         }
+        return;
+      }
 
-        _setupTabs(liveDateStrings);
+      _setupTabs(dates);
+
+      // ★追加: 取得した週データをキャッシュに保存
+      if (_weekDates.isNotEmpty) {
+        final weekKey = DateFormat('yyyyMMdd').format(_weekDates.first);
+        await _dbHelper.insertOrUpdateWeekCache(weekKey, dates);
+      }
+
+      if (schedule != null) {
+        _raceSchedules[schedule.date] = schedule;
+        await _dbHelper.insertOrUpdateRaceSchedule(schedule);
+      }
+
+      if (mounted) {
+        setState(() {
+          _isDataLoaded = true;
+          _isLoading = false;
+        });
       }
     } catch (e) {
-      print("Error fetching initial data: $e");
+      print('Error in _loadDataForWeek: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('データ取得エラー: $e')));
+        setState(() {
+          _isLoading = false;
+          _loadingMessage = 'データの取得に失敗しました';
+        });
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -192,39 +183,59 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       return;
     }
 
-    // まずパースして有効な日付文字列リストを作る（既存ロジック）
-    var tempDates = yyyymmddStrings
+    var parsedDates = yyyymmddStrings
         .map((ds) {
       try {
         final year = int.parse(ds.substring(0, 4));
         final month = int.parse(ds.substring(4, 6));
         final day = int.parse(ds.substring(6, 8));
-        return DateFormat('yyyy-MM-dd').format(DateTime(year, month, day));
+        return DateTime(year, month, day);
       } catch (e) {
         return null;
       }
     })
         .where((d) => d != null)
-        .cast<String>()
+        .cast<DateTime>()
         .toList();
 
-    // ★追加修正: ここで週の範囲外の日付をフィルタリングする
-    final String weekStartStr = DateFormat('yyyy-MM-dd').format(_weekDates.first); // 月曜日
-    final String weekEndStr = DateFormat('yyyy-MM-dd').format(_weekDates.last);   // 日曜日
+    if (parsedDates.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
-    // 文字列比較で範囲内（月曜以上、かつ日曜以下）のものだけを残す
-    _availableDates = tempDates.where((dateStr) {
-      return dateStr.compareTo(weekStartStr) >= 0 && dateStr.compareTo(weekEndStr) <= 0;
-    }).toList();
+    parsedDates.sort();
 
-    _availableDates.sort();
+    _availableDates = parsedDates
+        .map((d) => DateFormat('yyyy-MM-dd').format(d))
+        .toList();
 
-    // 以下、初期タブ選択ロジック（既存のまま）
+    // ★修正: 基準日(_currentDate)の正規化
+    // 取得した日付リストの最後の日（日曜、あるいは変則開催の最終日）を基準に、
+    // 強制的に「その週の日曜日」まで補正して_currentDateとする。
+    if (parsedDates.isNotEmpty) {
+      final lastDate = parsedDates.last;
+
+      // 日曜日(7)までの差分を足す（火曜(2)なら+5日、日曜(7)なら+0日）
+      final int daysToAdd = DateTime.sunday - lastDate.weekday;
+      final DateTime targetSunday = lastDate.add(Duration(days: daysToAdd));
+
+      _currentDate = targetSunday;
+
+      // カレンダー表示用の月曜日（日曜から6日前）
+      final DateTime monday = _currentDate.subtract(const Duration(days: 6));
+      _weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
+    }
+
     int initialIndex = _availableDates
-        .indexOf(DateFormat('yyyy-MM-dd').format(_weekDates.last));
-    if (initialIndex == -1)
-      initialIndex =
-      _availableDates.isNotEmpty ? _availableDates.length - 1 : 0;
+        .indexOf(DateFormat('yyyy-MM-dd').format(parsedDates.last));
+
+    if (initialIndex == -1) {
+      initialIndex = _availableDates.isNotEmpty ? _availableDates.length - 1 : 0;
+    }
+
+    if (_tabController != null) {
+      _tabController!.dispose();
+    }
 
     _tabController = TabController(
       initialIndex: initialIndex,
@@ -236,13 +247,19 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   }
 
   void _handleTabSelection() {
-    if (!mounted || _tabController == null || _tabController!.indexIsChanging)
-      return;
+    if (_tabController == null) return;
 
-    final selectedDate = _availableDates[_tabController!.index];
-    if (!_raceSchedules.containsKey(selectedDate) &&
-        !_loadingTabs.contains(selectedDate)) {
-      _fetchDataForDate(selectedDate);
+    // タブ切り替えアニメーション中は発火させない（完了時のみ処理）
+    if (_tabController!.indexIsChanging) return;
+
+    final index = _tabController!.index;
+    if (index < 0 || index >= _availableDates.length) return;
+
+    final dateStr = _availableDates[index];
+
+    // まだデータを持っていない日付の場合のみ取得しに行く
+    if (!_raceSchedules.containsKey(dateStr)) {
+      _fetchDataForDate(dateStr);
     }
   }
 
@@ -255,25 +272,26 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     try {
       final date = DateFormat('yyyy-MM-dd', 'en_US').parse(dateString);
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
       RaceSchedule? schedule;
 
+      // ★修正: 未来・過去に関わらず、プルダウン更新でなければDBを優先する
       if (forceRefresh) {
+        // プルダウン更新（forceRefresh = true）の時は、強制的にWebから取得
         schedule = await _scraperService.scrapeRaceSchedule(date);
       } else {
-        if (date.isBefore(today)) {
-          schedule = await _dbHelper.getRaceSchedule(dateString);
-          schedule ??= await _scraperService.scrapeRaceSchedule(date);
-        } else {
-          schedule = await _scraperService.scrapeRaceSchedule(date);
-        }
+        // 通常アクセス時: まずDBを確認
+        schedule = await _dbHelper.getRaceSchedule(dateString);
+
+        // DBになければ（初アクセスなら）Webから取得
+        schedule ??= await _scraperService.scrapeRaceSchedule(date);
       }
 
       if (schedule != null) {
-        // ロード時に確定情報を復元
+        // データを取得できたら（DB/Web問わず）状態を初期化し、DBに保存（更新）する
         _initializeStatusMapFromSchedule(schedule);
         await _dbHelper.insertOrUpdateRaceSchedule(schedule);
+
+        // 補足: 表示データの更新とは別に、レースの発走時刻や確定状況のチェックは行う
         _checkRaceStatusesForSchedule(schedule);
       }
 
