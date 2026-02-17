@@ -6,6 +6,8 @@ import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/models/jyusyoichiran_page_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
 import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
+import 'package:hetaumakeiba_v2/services/race_schedule_scraper_service.dart'; // 追加
+import 'package:hetaumakeiba_v2/db/database_helper.dart'; // 追加
 
 class JyusyoIchiranPage extends StatefulWidget {
   const JyusyoIchiranPage({super.key});
@@ -16,6 +18,8 @@ class JyusyoIchiranPage extends StatefulWidget {
 
 class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   final RaceDataRepository _repository = RaceDataRepository();
+  final RaceScheduleScraperService _scheduleScraper = RaceScheduleScraperService(); // 追加
+  final DatabaseHelper _dbHelper = DatabaseHelper(); // 追加
 
   late PageController _pageController;
   static const int _initialPage = 10000;
@@ -60,6 +64,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       _selectedMonth = month;
       _filterRacesByMonth();
     });
+    // ★追加: 月を切り替えたタイミングで、その月の補完チェックを走らせる
+    _checkAndAutoFillIds(_selectedYear, month);
   }
 
   /// データをロードするメインフロー
@@ -76,7 +82,124 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       _yearlyRaceData = dbRaces;
       _filterRacesByMonth();
       setState(() => _isLoading = false);
+
+      // ★修正: 選択されている月のデータのみ補完チェックを行う
+      _checkAndAutoFillIds(year, _selectedMonth);
     }
+  }
+
+// ★修正: DBになければネットから取得してIDを補完する（未来のレースは除外）
+  Future<void> _checkAndAutoFillIds(int year, int month) async {
+    // 1. まずローカルDBだけで補完を試みる
+    List<JyusyoRace> updatedRaces = await _repository.fillMissingJyusyoIdsFromLocalSchedule(year, targetMonth: month);
+
+    // UI更新 (ローカルで見つかった分)
+    if (updatedRaces.isNotEmpty && mounted) {
+      _updateRaceListPartial(updatedRaces);
+    }
+
+    // 2. まだIDがないレースが残っているか確認
+    List<JyusyoRace> remainingMissingRaces = _yearlyRaceData.where((r) {
+      if (r.raceId != null && r.raceId!.isNotEmpty) return false;
+
+      final match = RegExp(r'^(\d{1,2})').firstMatch(r.date);
+      if (match == null) return false;
+      int rMonth = int.parse(match.group(1)!);
+      return rMonth == month;
+    }).toList();
+
+    // 未取得のレースがなければ終了
+    if (remainingMissingRaces.isEmpty) return;
+
+    // 3. データがないレースの日付リストを作成
+    Set<String> targetDates = {};
+    DateTime now = DateTime.now();
+    DateTime today = DateTime(now.year, now.month, now.day); // 時間を切り捨てた「今日」
+
+    for (var race in remainingMissingRaces) {
+      final dateMatch = RegExp(r'(\d{1,2})/(\d{1,2})').firstMatch(race.date);
+      if (dateMatch != null) {
+        String m = dateMatch.group(1)!.padLeft(2, '0');
+        String d = dateMatch.group(2)!.padLeft(2, '0');
+
+        // 年を考慮してDateTimeを作成
+        DateTime raceDate = DateTime(year, int.parse(m), int.parse(d));
+
+        // ★修正: 未来のレース（明日以降）は絶対に自動取得対象にしない
+        // 「今日」までは開催済みまたは開催中なので取得を試みる（過去の取りこぼし救済）
+        if (raceDate.isAfter(today)) {
+          continue;
+        }
+
+        targetDates.add('$year$m$d');
+      }
+    }
+
+    // 取得すべき過去の日付がなければここで終了（未来のレースのみの場合はここで止まる）
+    if (targetDates.isEmpty) return;
+
+    // ユーザーに通知（任意: 過去データの取得時のみ出るようになる）
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('${targetDates.length}日分の過去データを補完中...'),
+            duration: const Duration(seconds: 1)
+        ),
+      );
+    }
+
+    // 4. 不足している日のデータを取得してDBに保存
+    int fetchCount = 0;
+    for (String dateStr in targetDates) {
+      if (!mounted) return;
+
+      int y = int.parse(dateStr.substring(0, 4));
+      int m = int.parse(dateStr.substring(4, 6));
+      int d = int.parse(dateStr.substring(6, 8));
+      DateTime targetDate = DateTime(y, m, d);
+
+      try {
+        // スクレイピング実行
+        var result = await _scheduleScraper.fetchInitialData(targetDate);
+        if (result.$2 != null) {
+          // DBに保存
+          await _dbHelper.insertOrUpdateRaceSchedule(result.$2!);
+          fetchCount++;
+        }
+        // 負荷軽減のため少し待機
+        await Future.delayed(const Duration(milliseconds: 500));
+      } catch (e) {
+        debugPrint('Auto-fetch failed for $dateStr: $e');
+      }
+    }
+
+    // 5. データ取得後、再度ローカルDBから補完を試みる
+    if (fetchCount > 0 && mounted) {
+      List<JyusyoRace> retryUpdatedRaces = await _repository.fillMissingJyusyoIdsFromLocalSchedule(year, targetMonth: month);
+      if (retryUpdatedRaces.isNotEmpty) {
+        _updateRaceListPartial(retryUpdatedRaces);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('IDを自動取得しました'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
+  // UI部分更新用のヘルパーメソッド（既存になければ追加）
+  void _updateRaceListPartial(List<JyusyoRace> updatedRaces) {
+    setState(() {
+      for (var newRace in updatedRaces) {
+        int index = _yearlyRaceData.indexWhere((r) => r.id == newRace.id);
+        if (index != -1) {
+          _yearlyRaceData[index] = newRace;
+        }
+      }
+      _filterRacesByMonth();
+    });
   }
 
   /// DBのデータから現在の月でフィルタリング
@@ -559,26 +682,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
                       ),
                     ),
                   ),
-
-                  // 4. ステータスアイコン (変更なし)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12.0),
-                    child: hasId
-                        ? const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green, size: 20),
-                        Text("取得済", style: TextStyle(fontSize: 8, color: Colors.green)),
-                      ],
-                    )
-                        : const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.download_for_offline, color: Colors.grey, size: 24),
-                        Text("ID取得", style: TextStyle(fontSize: 8, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
+                  // 4. ステータスアイコン削除
+                  // paddingごと削除しました
                 ],
               ),
             ),

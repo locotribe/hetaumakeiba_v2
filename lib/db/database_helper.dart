@@ -272,7 +272,7 @@ class DatabaseHelper {
           )
         ''');
 
-        // ★追加: 重賞一覧ページ専用テーブル (v6で追加)
+        // 重賞一覧ページ専用テーブル (v6で追加)
         await db.execute('''
           CREATE TABLE jyusyo_races(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -290,7 +290,7 @@ class DatabaseHelper {
           )
         ''');
       },
-      // ★修正: 既存ユーザー向けのマイグレーション処理を安全化
+      // 既存ユーザー向けのマイグレーション処理を安全化
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           try {
@@ -341,7 +341,7 @@ class DatabaseHelper {
           }
         }
 
-        // ★追加: v5 -> v6 マイグレーション (jyusyo_racesテーブル追加)
+        // v5 -> v6 マイグレーション (jyusyo_racesテーブル追加)
         if (oldVersion < 6) {
           try {
             await db.execute('''
@@ -365,7 +365,7 @@ class DatabaseHelper {
           }
         }
 
-        // ★追加: v6 -> v7 マイグレーション (yearカラム追加のため再作成)
+        // v6 -> v7 マイグレーション (yearカラム追加のため再作成)
         if (oldVersion < 7) {
           try {
             // カラム追加のために一度削除して作り直すのが確実
@@ -1389,7 +1389,7 @@ class DatabaseHelper {
     });
   }
 
-  /// ★追加: 指定した年の重賞レースを取得します。
+  /// 指定した年の重賞レースを取得します。
   Future<List<Map<String, dynamic>>> getJyusyoRacesByYear(int year) async {
     final db = await database;
     return await db.query(
@@ -1400,8 +1400,6 @@ class DatabaseHelper {
     );
   }
 
-  // getAllJyusyoRacesは廃止または非推奨とします
-
   /// レースIDを更新します
   Future<void> updateJyusyoRaceId(int id, String newRaceId) async {
     final db = await database;
@@ -1410,6 +1408,19 @@ class DatabaseHelper {
       {'race_id': newRaceId},
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  // ★新規追加: レース名と年を条件にレースIDを更新します（スケジュールページからの自動連携用）
+  Future<void> updateJyusyoRaceIdByNameAndYear(String raceName, int year, String newRaceId) async {
+    final db = await database;
+    // 既にIDが入っている場合は上書きしないよう、race_id IS NULL を条件に加えるのが安全ですが、
+    // 修正用として強力に紐付けるなら条件なしで更新します。今回は「未取得のもの」を埋める意図なのでNULLチェックを入れます。
+    await db.update(
+      'jyusyo_races',
+      {'race_id': newRaceId},
+      where: 'race_name = ? AND year = ? AND (race_id IS NULL OR race_id = "")',
+      whereArgs: [raceName, year],
     );
   }
 }

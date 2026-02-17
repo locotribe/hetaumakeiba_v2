@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/services/race_schedule_scraper_service.dart';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
+import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart'; // ★追加
 
 class RaceSchedulePage extends StatefulWidget {
   const RaceSchedulePage({super.key});
@@ -21,6 +22,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   final RaceScheduleScraperService _scraperService =
   RaceScheduleScraperService();
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceDataRepository _repository = RaceDataRepository(); // ★追加
 
   bool _isLoading = false;
   bool _isDataLoaded = false;
@@ -290,6 +292,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         // データを取得できたら（DB/Web問わず）状態を初期化し、DBに保存（更新）する
         _initializeStatusMapFromSchedule(schedule);
         await _dbHelper.insertOrUpdateRaceSchedule(schedule);
+
+        // ★追加: 取得したスケジュール情報を使って、重賞一覧ページのIDを自動で埋める
+        await _repository.reflectScheduleDataToJyusyoRaces(schedule);
 
         // 補足: 表示データの更新とは別に、レースの発走時刻や確定状況のチェックは行う
         _checkRaceStatusesForSchedule(schedule);

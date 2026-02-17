@@ -12,6 +12,7 @@ import '../models/horse_profile_model.dart';
 import '../services/horse_profile_scraper_service.dart';
 import '../services/scraping_manager.dart';
 import '../models/jyusyoichiran_page_data_model.dart';
+import '../models/race_schedule_model.dart'; // ★追加
 
 /// データの保存を一元管理するリポジトリ
 class RaceDataRepository {
@@ -252,5 +253,262 @@ class RaceDataRepository {
   /// レースIDを更新します (詳細取得後)
   Future<void> updateJyusyoRaceId(int id, String newRaceId) async {
     await dbHelper.updateJyusyoRaceId(id, newRaceId);
+  }
+
+// ★修正: スケジュールデータから重賞一覧のIDを更新・自動連携する（デバッグログ追加版）
+  Future<void> reflectScheduleDataToJyusyoRaces(RaceSchedule schedule) async {
+    print('DEBUG: reflectScheduleDataToJyusyoRaces START for date: ${schedule.date}');
+
+    // 1. スケジュールの年を取得
+    int year;
+    try {
+      year = int.parse(schedule.date.substring(0, 4));
+    } catch (e) {
+      print('DEBUG: Error parsing year from date: $e');
+      return;
+    }
+
+    // 2. その年の重賞データをDBから全て取得してメモリに展開
+    List<JyusyoRace> jyusyoRaces = await getJyusyoRaces(year);
+    if (jyusyoRaces.isEmpty) {
+      print('DEBUG: No Jyusyo races found in DB for year $year');
+      return;
+    }
+    print('DEBUG: Loaded ${jyusyoRaces.length} Jyusyo races from DB for year $year');
+
+    // 3. 日付のマッチング用文字列を作成 (yyyy-MM-dd -> MM/dd)
+    // 例: "2026-02-22" -> "02/22"
+    String scheduleDateMMdd = schedule.date.substring(5).replaceAll('-', '/');
+    print('DEBUG: Schedule date formatted for matching: $scheduleDateMMdd');
+
+    int processedCount = 0;
+    int matchedCount = 0;
+
+    for (var venue in schedule.venues) {
+      print('DEBUG: Checking venue: ${venue.venueTitle}');
+
+      for (var race in venue.races) {
+        // IDが取得できていないレースはスキップ
+        if (race.raceId.isEmpty) continue;
+
+        // デバッグ用: ダイヤモンドS または グレードがあるレースのみ詳細ログを出す
+        bool isTarget = race.raceName.contains('ダイヤモンド') || race.grade.isNotEmpty;
+
+        if (isTarget) {
+          print('DEBUG: Processing schedule race: ${race.raceName} (ID: ${race.raceId}, Grade: ${race.grade}, Details: ${race.details})');
+        }
+
+        // DB上の重賞リストから候補を絞り込む
+        var candidates = jyusyoRaces.where((j) {
+          // 条件A: IDがまだない (race_id IS NULL or Empty)
+          bool hasNoId = j.raceId == null || j.raceId!.isEmpty;
+
+          // 条件B: 日付が一致する (前方一致 "02/22")
+          bool dateMatch = j.date.startsWith(scheduleDateMMdd);
+
+          // 条件C: 開催場所が含まれる (例: "1回東京8日" に "東京" が含まれる)
+          bool venueMatch = venue.venueTitle.contains(j.venue);
+
+          // ダイヤモンドSの候補判定ログ
+          if (isTarget && (j.raceName.contains('ダイヤモンド') || race.raceName.contains('ダイヤモンド'))) {
+            print('DEBUG: Candidate Check [${j.raceName}] vs [${race.raceName}] -> HasNoID: $hasNoId, DateMatch: $dateMatch (${j.date} vs $scheduleDateMMdd), VenueMatch: $venueMatch (${j.venue} vs ${venue.venueTitle})');
+          }
+
+          return hasNoId && dateMatch && venueMatch;
+        }).toList();
+
+        if (isTarget && candidates.isNotEmpty) {
+          print('DEBUG: Found ${candidates.length} candidate(s) for ${race.raceName}');
+        } else if (isTarget) {
+          print('DEBUG: No candidates found for ${race.raceName} (Date/Venue mismatch or ID already exists)');
+        }
+
+        for (var candidate in candidates) {
+          bool isMatch = false;
+          print('DEBUG: Matching logic for [${candidate.raceName}] vs [${race.raceName}]');
+
+          // 条件D-1: グレードの一致
+          if (candidate.grade.isNotEmpty && race.grade.isNotEmpty) {
+            if (candidate.grade == race.grade) {
+              isMatch = true;
+              print('DEBUG: -> Match confirmed by GRADE (${candidate.grade})');
+            } else {
+              print('DEBUG: -> Grade mismatch (${candidate.grade} vs ${race.grade})');
+            }
+          }
+
+          // 条件D-2: 距離の一致
+          if (!isMatch) {
+            RegExp digitRegex = RegExp(r'(\d+)');
+            String? dist1 = digitRegex.firstMatch(candidate.distance)?.group(1);
+            String? dist2 = digitRegex.firstMatch(race.details)?.group(1);
+
+            print('DEBUG: -> Distance check: DB=$dist1 vs Schedule=$dist2');
+
+            if (dist1 != null && dist2 != null && dist1 == dist2) {
+              isMatch = true;
+              print('DEBUG: -> Match confirmed by DISTANCE');
+            }
+          }
+
+          // 条件D-3: レース名の類似判定
+          if (!isMatch) {
+            String n1 = candidate.raceName.replaceAll(RegExp(r'\s'), '');
+            String n2 = race.raceName.replaceAll(RegExp(r'\s'), '');
+            print('DEBUG: -> Name check: $n1 vs $n2');
+            if (n1 == n2) {
+              isMatch = true;
+              print('DEBUG: -> Match confirmed by NAME');
+            }
+          }
+
+          // マッチした場合はIDを更新
+          if (isMatch && candidate.id != null) {
+            await updateJyusyoRaceId(candidate.id!, race.raceId);
+            print('DEBUG: SUCCESS! Database updated for ${candidate.raceName} with ID ${race.raceId}');
+            matchedCount++;
+          } else {
+            print('DEBUG: FAILED match for ${candidate.raceName}');
+          }
+        }
+        processedCount++;
+      }
+    }
+    print('DEBUG: reflectScheduleDataToJyusyoRaces END. Processed: $processedCount, Matched: $matchedCount');
+  }
+
+// ★修正: 名前比較を廃止し、コース種別・距離・グレードによる厳格マッチングに変更
+  Future<List<JyusyoRace>> fillMissingJyusyoIdsFromLocalSchedule(int year, {int? targetMonth}) async {
+    List<JyusyoRace> updatedRaces = [];
+
+    // 1. その年の全重賞データを取得
+    List<JyusyoRace> allRaces = await getJyusyoRaces(year);
+
+    // 2. IDがなく、かつ指定された月のレースだけを抽出
+    List<JyusyoRace> missingIdRaces = allRaces.where((r) {
+      if (r.raceId != null && r.raceId!.isNotEmpty) return false;
+
+      // 月の判定
+      final dateMatch = RegExp(r'^(\d{1,2})/').firstMatch(r.date);
+      if (dateMatch == null) return false;
+
+      int raceMonth = int.parse(dateMatch.group(1)!);
+
+      // targetMonthが指定されていれば、その月のみ対象にする
+      if (targetMonth != null && raceMonth != targetMonth) return false;
+
+      return true;
+    }).toList();
+
+    if (missingIdRaces.isEmpty) return [];
+
+    print('DEBUG: checking ${missingIdRaces.length} races for $year-${targetMonth ?? "ALL"}');
+
+    // 3. 1件ずつスケジュールDBを確認
+    for (var targetRace in missingIdRaces) {
+      // 日付フォーマット変換 "02/14(土)" -> "2026-02-14"
+      String dateStr = targetRace.date;
+      final dateMatch = RegExp(r'(\d{1,2})/(\d{1,2})').firstMatch(dateStr);
+      if (dateMatch == null) continue;
+
+      String month = dateMatch.group(1)!.padLeft(2, '0');
+      String day = dateMatch.group(2)!.padLeft(2, '0');
+      String targetDate = '$year-$month-$day';
+
+      // DBからその日のスケジュールを取得
+      final schedule = await dbHelper.getRaceSchedule(targetDate);
+      if (schedule == null) continue; // データがなければスキップ
+
+      bool isUpdated = false;
+      String? foundRaceId;
+
+      // 4. 新・マッチングロジック (名前は見ない)
+      for (var venue in schedule.venues) {
+        // 会場チェック (例: "1回小倉" に "小倉" が含まれるか)
+        if (!venue.venueTitle.contains(targetRace.venue)) continue;
+
+        for (var race in venue.races) {
+          if (race.raceId.isEmpty) continue;
+
+          bool isMatch = false;
+
+          // --- 【条件A】 コース種別と距離の完全一致 (最優先) ---
+          // JyusyoRace.distance (例: "障3390m")
+          // SimpleRaceInfo.details (例: "14:00 障3390m 12頭")
+
+          String type1 = _getCourseType(targetRace.distance);
+          String type2 = _getCourseType(race.details); // detailsから種別抽出
+
+          int? dist1 = _extractNumber(targetRace.distance);
+          int? dist2 = _extractNumber(race.details);
+
+          // 両方の種別と距離が取得でき、かつ一致する場合
+          if (type1.isNotEmpty && type2.isNotEmpty && dist1 != null && dist2 != null) {
+            if (type1 == type2 && dist1 == dist2) {
+              isMatch = true;
+            }
+          }
+
+          // --- 【条件B】 グレードの一致 (補完・正規化比較) ---
+          // 条件Aで決まらなかった場合のみチェック（重賞一覧にあるレースは必ずグレードがあるため）
+          if (!isMatch && targetRace.grade.isNotEmpty && race.grade.isNotEmpty) {
+            // 記号を削除して比較 ("J.G3" == "J-G3" -> "JG3" == "JG3")
+            String g1 = targetRace.grade.replaceAll(RegExp(r'[.\-\s]'), '');
+            String g2 = race.grade.replaceAll(RegExp(r'[.\-\s]'), '');
+
+            if (g1 == g2) {
+              // グレードが一致する場合、距離が大きく矛盾していなければマッチとみなす
+              // (念のため距離データが取れなかった場合の保険)
+              isMatch = true;
+            }
+          }
+
+          // ※名前(raceName)によるマッチングは廃止しました
+
+          if (isMatch) {
+            foundRaceId = race.raceId;
+            isUpdated = true;
+            break;
+          }
+        }
+        if (isUpdated) break;
+      }
+
+      // 5. 更新処理
+      if (isUpdated && foundRaceId != null && targetRace.id != null) {
+        await updateJyusyoRaceId(targetRace.id!, foundRaceId);
+        print('DEBUG: Auto-filled ID for ${targetRace.raceName}: $foundRaceId (By Type/Distance/Grade)');
+
+        updatedRaces.add(JyusyoRace(
+          id: targetRace.id,
+          raceId: foundRaceId,
+          year: targetRace.year,
+          date: targetRace.date,
+          raceName: targetRace.raceName,
+          grade: targetRace.grade,
+          venue: targetRace.venue,
+          distance: targetRace.distance,
+          conditions: targetRace.conditions,
+          weight: targetRace.weight,
+          sourceUrl: targetRace.sourceUrl,
+        ));
+      }
+    }
+
+    return updatedRaces;
+  }
+
+  // ヘルパー: 文字列から数値を抽出
+  int? _extractNumber(String text) {
+    final match = RegExp(r'(\d+)').firstMatch(text);
+    return match != null ? int.parse(match.group(1)!) : null;
+  }
+
+  // ヘルパー: コース種別(芝/ダ/障)を抽出
+  String _getCourseType(String text) {
+    if (text.contains('障')) return '障';
+    if (text.contains('ダ')) return 'ダ';
+    if (text.contains('芝')) return '芝';
+    return '';
   }
 }
