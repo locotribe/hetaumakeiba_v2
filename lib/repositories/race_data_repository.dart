@@ -10,13 +10,12 @@ import '../models/shutuba_table_cache_model.dart';
 import '../models/horse_performance_model.dart';
 import '../models/horse_profile_model.dart';
 import '../services/horse_profile_scraper_service.dart';
-// 追加: Managerをインポート
 import '../services/scraping_manager.dart';
+import '../models/jyusyoichiran_page_data_model.dart';
 
 /// データの保存を一元管理するリポジトリ
 class RaceDataRepository {
   final dbHelper = DatabaseHelper();
-  // 追加: Managerのインスタンス
   final ScrapingManager _scrapingManager = ScrapingManager();
 
   /// レース結果を保存する
@@ -232,5 +231,26 @@ class RaceDataRepository {
   /// 馬IDを指定して競走馬プロフィールを取得します。
   Future<HorseProfile?> getHorseProfile(String horseId) async {
     return dbHelper.getHorseProfile(horseId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Step 3: 重賞一覧ページ (JyusyoRace) 管理用メソッド (ここに追加)
+  // ---------------------------------------------------------------------------
+
+  /// 指定した年の重賞レースをリストで取得します (Modelに変換して返します)
+  Future<List<JyusyoRace>> getJyusyoRaces(int year) async {
+    final List<Map<String, dynamic>> maps = await dbHelper.getJyusyoRacesByYear(year);
+    return maps.map((m) => JyusyoRace.fromMap(m)).toList();
+  }
+
+  /// 重賞レースリストを保存します (マージ処理)
+  Future<void> saveJyusyoRaces(List<JyusyoRace> races) async {
+    // DatabaseHelperはList<dynamic>を受け取る仕様にしているためそのまま渡す
+    await dbHelper.mergeJyusyoRaces(races);
+  }
+
+  /// レースIDを更新します (詳細取得後)
+  Future<void> updateJyusyoRaceId(int id, String newRaceId) async {
+    await dbHelper.updateJyusyoRaceId(id, newRaceId);
   }
 }

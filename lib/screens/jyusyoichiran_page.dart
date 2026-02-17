@@ -3,9 +3,9 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as parser;
 import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
 import 'package:hetaumakeiba_v2/models/jyusyoichiran_page_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
+import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
 
 class JyusyoIchiranPage extends StatefulWidget {
   const JyusyoIchiranPage({super.key});
@@ -15,9 +15,10 @@ class JyusyoIchiranPage extends StatefulWidget {
 }
 
 class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
+  final RaceDataRepository _repository = RaceDataRepository();
+
   late PageController _pageController;
   static const int _initialPage = 10000;
-  // 初期表示年
   int _baseYear = DateTime.now().year;
 
   int _selectedYear = DateTime.now().year;
@@ -25,7 +26,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
 
   bool _isLoading = false;
 
-  // 表示用データ
   List<JyusyoRace> _yearlyRaceData = [];
   List<JyusyoRace> _monthlyRaceData = [];
 
@@ -36,7 +36,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       initialPage: _initialPage,
       viewportFraction: 0.33,
     );
-    // 初期表示：まずDBから読み込み
     _loadDataForYear(_selectedYear);
   }
 
@@ -67,12 +66,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   Future<void> _loadDataForYear(int year) async {
     setState(() => _isLoading = true);
 
-    // 1. DBから「指定した年」のデータを取得
-    final db = DatabaseHelper();
-    // ★修正: 年指定で取得
-    final List<Map<String, dynamic>> maps = await db.getJyusyoRacesByYear(year);
-
-    List<JyusyoRace> dbRaces = maps.map((m) => JyusyoRace.fromMap(m)).toList();
+    // Repository経由で取得
+    List<JyusyoRace> dbRaces = await _repository.getJyusyoRaces(year);
 
     // データがない場合はスクレイピングして保存
     if (dbRaces.isEmpty) {
@@ -105,7 +100,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
 
   /// プルダウン更新処理
   Future<void> _onRefresh() async {
-    // 条件1: 現在の年（2026年など）以上なら更新しない
     if (_selectedYear >= DateTime.now().year) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('今年のデータは自動更新されるため、再取得は不要です')),
@@ -113,8 +107,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       return;
     }
 
-    // 条件2: 表示中の年次データに「ID未取得」のものが一つもなければ更新しない
-    // (全てIDが埋まっていれば更新する必要がない)
     bool hasMissingId = _yearlyRaceData.any((race) => race.raceId == null || race.raceId!.isEmpty);
 
     if (!hasMissingId && _yearlyRaceData.isNotEmpty) {
@@ -124,7 +116,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       return;
     }
 
-    // 更新実行
     await _fetchAndSaveScheduleData(_selectedYear);
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -132,13 +123,9 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     );
   }
 
-  /// スクレイピングしてDBに保存 (一覧取得)
+  /// スクレイピングしてDBに保存
   Future<void> _fetchAndSaveScheduleData(int year) async {
     if (!mounted) return;
-    // RefreshIndicator内から呼ばれる場合はローディングを出さない方が自然だが、
-    // 初回ロード時も使うのでフラグ管理
-    // ここではあえてsetStateしない（RefreshIndicatorがくるくる回るため）
-    // 初回ロード時のみインジケーターを出す制御
     if (_yearlyRaceData.isEmpty) {
       setState(() => _isLoading = true);
     }
@@ -191,7 +178,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
             }
 
             fetchedRaces.add(JyusyoRace(
-              year: year, // ★追加: 年情報を保存
+              year: year,
               date: date,
               raceName: getText(1),
               grade: getText(2),
@@ -205,13 +192,12 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
           }
         }
 
-        await DatabaseHelper().mergeJyusyoRaces(fetchedRaces);
+        await _repository.saveJyusyoRaces(fetchedRaces);
 
         if (mounted) {
-          // DBから取り直して更新
-          final maps = await DatabaseHelper().getJyusyoRacesByYear(year);
+          List<JyusyoRace> updatedRaces = await _repository.getJyusyoRaces(year);
           setState(() {
-            _yearlyRaceData = maps.map((m) => JyusyoRace.fromMap(m)).toList();
+            _yearlyRaceData = updatedRaces;
             _filterRacesByMonth();
             _isLoading = false;
           });
@@ -225,6 +211,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
 
   /// カードタップ時の処理
   Future<void> _onRaceTap(JyusyoRace race) async {
+    // 1. IDがある場合は画面遷移
     if (race.raceId != null && race.raceId!.isNotEmpty) {
       Navigator.push(
         context,
@@ -238,17 +225,44 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       return;
     }
 
+    // 2. IDがない場合は取得処理
     if (race.sourceUrl != null && race.sourceUrl!.isNotEmpty) {
       _showLoadingDialog();
 
       String? foundId = await _fetchRaceIdFromUrl(race.sourceUrl!, _selectedYear);
 
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(); // ダイアログを閉じる
 
       if (foundId != null && race.id != null) {
-        await DatabaseHelper().updateJyusyoRaceId(race.id!, foundId);
-        await _loadDataForYear(_selectedYear);
+        // ★修正ポイント: 全更新せず、DB更新とメモリ上のデータ更新のみ行う
+
+        // A. DBを更新
+        await _repository.updateJyusyoRaceId(race.id!, foundId);
+
+        // B. メモリ上のリスト(_yearlyRaceData)の該当データを書き換える
+        // これによりListView全体のリロード(スクロールリセット)を防ぎます
+        setState(() {
+          final index = _yearlyRaceData.indexWhere((r) => r.id == race.id);
+          if (index != -1) {
+            // JyusyoRaceは不変(final)なので、新しいインスタンスを作成して差し替え
+            _yearlyRaceData[index] = JyusyoRace(
+              id: race.id,
+              year: race.year,
+              date: race.date,
+              raceName: race.raceName,
+              grade: race.grade,
+              venue: race.venue,
+              distance: race.distance,
+              conditions: race.conditions,
+              weight: race.weight,
+              sourceUrl: race.sourceUrl,
+              raceId: foundId, // ここだけ更新されたIDを入れる
+            );
+            // 表示用リストも再フィルタリングして画面更新
+            _filterRacesByMonth();
+          }
+        });
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -351,7 +365,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
                   ),
                 )
                     : RefreshIndicator(
-                  onRefresh: _onRefresh, // プルダウン更新
+                  onRefresh: _onRefresh,
                   child: _buildRaceList(),
                 ),
               ),
@@ -424,16 +438,30 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     );
   }
 
+  // レース一覧リスト（UIレイアウト修正版）
   Widget _buildRaceList() {
-    // RefreshIndicatorのためにはListViewが必要だが、
-    // 要素が少ないとスクロールできずRefreshIndicatorが反応しないことがあるため
-    // physics: const AlwaysScrollableScrollPhysics() を指定する
+    // PageStorageKeyを追加してスクロール位置を記憶させる
+    final Key listKey = PageStorageKey('race_list_${_selectedYear}_$_selectedMonth');
+
     return ListView.builder(
+      key: listKey,
       physics: const AlwaysScrollableScrollPhysics(),
       itemCount: _monthlyRaceData.length,
       itemBuilder: (context, index) {
         final item = _monthlyRaceData[index];
         final bool hasId = (item.raceId != null && item.raceId!.isNotEmpty);
+
+        // 曜日判定による背景色と文字色の設定
+        Color dateBgColor = Colors.grey.shade100; // 平日・その他
+        Color dateTextColor = Colors.black87;
+
+        if (item.date.contains('日')) {
+          dateBgColor = const Color(0xFFFFEBEE); // 薄い赤 (日曜日)
+          dateTextColor = Colors.red.shade900;
+        } else if (item.date.contains('土')) {
+          dateBgColor = const Color(0xFFE3F2FD); // 薄い青 (土曜日)
+          dateTextColor = Colors.blue.shade900;
+        }
 
         return GestureDetector(
           onTap: () => _onRaceTap(item),
@@ -441,60 +469,116 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
             elevation: 2,
             margin: const EdgeInsets.symmetric(vertical: 4),
             color: hasId ? Colors.green.shade50 : Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
+            clipBehavior: Clip.antiAlias, // 左端の背景色をカードの角丸に合わせる
+            child: IntrinsicHeight( // 子要素の高さを揃える
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch, // 縦方向に引き伸ばす
                 children: [
-                  SizedBox(
-                    width: 50,
-                    child: Text(item.date, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center),
-                  ),
-                  const SizedBox(width: 8),
+                  // 1. 一番左: 開催場所と日時 (縦並び・曜日別背景色)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
-                    child: Text(item.venue, style: const TextStyle(fontSize: 10)),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
+                    width: 60, // 幅を固定
+                    color: dateBgColor,
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Row(
-                          children: [
-                            if (item.grade.isNotEmpty)
-                              Container(
-                                margin: const EdgeInsets.only(right: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                decoration: BoxDecoration(color: _getGradeColor(item.grade), borderRadius: BorderRadius.circular(2)),
-                                child: Text(item.grade, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                              ),
-                            Expanded(
-                              child: Text(item.raceName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), overflow: TextOverflow.ellipsis),
-                            ),
-                          ],
+                        // 開催場所
+                        Text(
+                          item.venue,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: dateTextColor,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 4),
-                        Text('${item.distance} / ${item.conditions} / ${item.weight}', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                        const SizedBox(height: 6),
+                        // 日付
+                        Text(
+                          item.date,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: dateTextColor,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                        ),
                       ],
                     ),
                   ),
-                  if (hasId)
-                    const Column(
+
+                  // 2. その右: グレード表示 (開催場所があった位置)
+                  SizedBox(
+                    width: 45,
+                    child: Center(
+                      child: item.grade.isNotEmpty
+                          ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _getGradeColor(item.grade),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          item.grade,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                          : const SizedBox.shrink(), // グレードがない場合は空白
+                    ),
+                  ),
+
+                  // 3. レース名と詳細 (ここからグレード表示を削除)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 4.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            item.raceName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 2,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${item.distance} / ${item.conditions} / ${item.weight}',
+                            style: const TextStyle(fontSize: 11, color: Colors.black54),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 4. ステータスアイコン (変更なし)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12.0),
+                    child: hasId
+                        ? const Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.check_circle, color: Colors.green, size: 20),
                         Text("取得済", style: TextStyle(fontSize: 8, color: Colors.green)),
                       ],
                     )
-                  else
-                    const Column(
+                        : const Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.download_for_offline, color: Colors.grey, size: 24),
                         Text("ID取得", style: TextStyle(fontSize: 8, color: Colors.grey)),
                       ],
                     ),
+                  ),
                 ],
               ),
             ),
