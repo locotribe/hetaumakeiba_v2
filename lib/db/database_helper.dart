@@ -58,7 +58,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 5,
+      version: 7,
       /// データベースが初めて作成されるときに呼び出されます。
       /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
@@ -271,6 +271,24 @@ class DatabaseHelper {
             lastUpdated TEXT
           )
         ''');
+
+        // ★追加: 重賞一覧ページ専用テーブル (v6で追加)
+        await db.execute('''
+          CREATE TABLE jyusyo_races(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_id TEXT,
+            year INTEGER NOT NULL, -- ★追加
+            date TEXT NOT NULL,
+            race_name TEXT NOT NULL,
+            grade TEXT,
+            venue TEXT,
+            distance TEXT,
+            conditions TEXT,
+            weight TEXT,
+            source_url TEXT,
+            UNIQUE(year, date, race_name) -- ★修正: 年も含めてユニークに
+          )
+        ''');
       },
       // ★修正: 既存ユーザー向けのマイグレーション処理を安全化
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -320,6 +338,57 @@ class DatabaseHelper {
             print('DEBUG: horse_profiles table created or verified.');
           } catch (e) {
             print('DEBUG: Migration error (v->v5): $e');
+          }
+        }
+
+        // ★追加: v5 -> v6 マイグレーション (jyusyo_racesテーブル追加)
+        if (oldVersion < 6) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS jyusyo_races(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                race_id TEXT,
+                date TEXT NOT NULL,
+                race_name TEXT NOT NULL,
+                grade TEXT,
+                venue TEXT,
+                distance TEXT,
+                conditions TEXT,
+                weight TEXT,
+                source_url TEXT,
+                UNIQUE(date, race_name)
+              )
+            ''');
+            print('DEBUG: jyusyo_races table created.');
+          } catch (e) {
+            print('DEBUG: Migration error (v5->v6): $e');
+          }
+        }
+
+        // ★追加: v6 -> v7 マイグレーション (yearカラム追加のため再作成)
+        if (oldVersion < 7) {
+          try {
+            // カラム追加のために一度削除して作り直すのが確実
+            await db.execute('DROP TABLE IF EXISTS jyusyo_races');
+            await db.execute('''
+              CREATE TABLE jyusyo_races(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                race_id TEXT,
+                year INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                race_name TEXT NOT NULL,
+                grade TEXT,
+                venue TEXT,
+                distance TEXT,
+                conditions TEXT,
+                weight TEXT,
+                source_url TEXT,
+                UNIQUE(year, date, race_name)
+              )
+            ''');
+            print('DEBUG: jyusyo_races table recreated for v7.');
+          } catch (e) {
+            print('DEBUG: Migration error (v6->v7): $e');
           }
         }
       },
@@ -1267,5 +1336,80 @@ class DatabaseHelper {
       return maps.first['date'] as String;
     }
     return null;
+  }
+// ---------------------------------------------------------------------------
+  // Step 3: 重賞一覧ページ専用 (JyusyoRace) メソッド
+  // ---------------------------------------------------------------------------
+
+  /// 重賞レースリストをDBにマージ保存します。
+  Future<void> mergeJyusyoRaces(List<dynamic> races) async {
+    final db = await database;
+
+    await db.transaction((txn) async {
+      for (var race in races) {
+        final raceMap = (race as dynamic).toMap();
+
+        // ★修正: yearも含めて検索
+        final List<Map<String, dynamic>> existing = await txn.query(
+          'jyusyo_races',
+          columns: ['id', 'race_id'],
+          where: 'year = ? AND date = ? AND race_name = ?',
+          whereArgs: [raceMap['year'], raceMap['date'], raceMap['race_name']],
+        );
+
+        if (existing.isNotEmpty) {
+          final currentId = existing.first['id'];
+          final currentRaceId = existing.first['race_id'] as String?;
+          final newRaceId = raceMap['race_id'] as String?;
+
+          Map<String, dynamic> updateValues = {
+            'grade': raceMap['grade'],
+            'venue': raceMap['venue'],
+            'distance': raceMap['distance'],
+            'conditions': raceMap['conditions'],
+            'weight': raceMap['weight'],
+            'source_url': raceMap['source_url'],
+          };
+
+          // IDがない場合のみ新しいIDで更新
+          if (currentRaceId == null && newRaceId != null) {
+            updateValues['race_id'] = newRaceId;
+          }
+
+          await txn.update(
+            'jyusyo_races',
+            updateValues,
+            where: 'id = ?',
+            whereArgs: [currentId],
+          );
+        } else {
+          await txn.insert('jyusyo_races', raceMap);
+        }
+      }
+    });
+  }
+
+  /// ★追加: 指定した年の重賞レースを取得します。
+  Future<List<Map<String, dynamic>>> getJyusyoRacesByYear(int year) async {
+    final db = await database;
+    return await db.query(
+      'jyusyo_races',
+      where: 'year = ?',
+      whereArgs: [year],
+      orderBy: 'id ASC', // 必要なら日付順などでソート
+    );
+  }
+
+  // getAllJyusyoRacesは廃止または非推奨とします
+
+  /// レースIDを更新します
+  Future<void> updateJyusyoRaceId(int id, String newRaceId) async {
+    final db = await database;
+    await db.update(
+      'jyusyo_races',
+      {'race_id': newRaceId},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 }

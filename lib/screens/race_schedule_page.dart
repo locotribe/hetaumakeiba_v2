@@ -479,8 +479,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   }
 
   Widget _buildWeekNavigator() {
-    final weekStart = _weekDates.first;
-    final weekEnd = _weekDates.last;
     final formatter = DateFormat('M/d');
 
     final bool canShowTabs =
@@ -510,16 +508,20 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                 DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
                 final dayOfWeek = _raceSchedules[dateStr]?.dayOfWeek ??
                     DateFormat.E('ja').format(date);
-                return Tab(
-                    text:
-                    '${DateFormat('M/d').format(date)}($dayOfWeek)');
+                return Tab(text: '${DateFormat('M/d').format(date)}($dayOfWeek)');
               }).toList(),
             )
                 : Center(
-              child: Text(
-                '${formatter.format(weekStart)} 〜 ${formatter.format(weekEnd)}',
+              // _weekDates が空のときに .first/.last を呼ばないようにガード
+              child: _weekDates.isNotEmpty
+                  ? Text(
+                '${formatter.format(_weekDates.first)} 〜 ${formatter.format(_weekDates.last)}',
                 style: const TextStyle(
                     fontSize: 16, fontWeight: FontWeight.bold),
+              )
+                  : const Text(
+                '読み込み中...',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -527,13 +529,13 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
             icon: const Icon(Icons.arrow_forward_ios),
             onPressed: _isLoading || _loadingTabs.isNotEmpty
                 ? null
-                : () =>
-                _calculateWeek(_currentDate.add(const Duration(days: 7))),
+                : () => _calculateWeek(_currentDate.add(const Duration(days: 7))),
           ),
         ],
       ),
     );
   }
+
 
   Widget _buildRaceScheduleView(RaceSchedule schedule) {
     final scheduleDate = DateFormat('yyyy-MM-dd', 'en_US').parse(schedule.date);
