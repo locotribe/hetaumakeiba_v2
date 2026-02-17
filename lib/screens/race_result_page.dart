@@ -159,6 +159,13 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
   Future<PageData> _loadPageData() async {
     try {
+      if (_qrDataList.isEmpty) {
+        // Step3で追加した高速検索メソッドを使用
+        final savedTickets = await _dbHelper.getQrDataByRaceId(widget.raceId);
+        if (savedTickets.isNotEmpty) {
+          _qrDataList = savedTickets;
+        }
+      }
       // 全チケットをパース
       List<Map<String, dynamic>> parsedTickets = [];
       for (var qr in _qrDataList) {
@@ -262,19 +269,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
       await AnalyticsService().updateAggregatesOnResultConfirmed(newRaceResult.raceId, userId);
 
       // 2. ★修正: DBから同一レースの他の馬券（兄弟馬券）を検索してリストを更新
-      // QRコードの生データからレースIDを生成し、現在のIDと一致するものを抽出する
-      final allQrData = await _dbHelper.getAllQrData(userId);
-      final List<QrData> siblings = [];
-
-      final currentRaceId = widget.raceId;
-
-      for (var qr in allQrData) {
-        // ヘルパーメソッドでID生成
-        final generatedId = _generateRaceIdFromQr(qr.qrCode);
-        if (generatedId == currentRaceId) {
-          siblings.add(qr);
-        }
-      }
+      final siblings = await _dbHelper.getQrDataByRaceId(widget.raceId);
 
       if (siblings.isNotEmpty) {
         // 既存のリストにあるものは除外して追加（ID重複防止）

@@ -354,3 +354,22 @@ class _StringIterator {
     return _s[pos];
   }
 }
+
+/// QRコードの生文字列からレースID(例: 202305021111)を生成するヘルパー関数
+/// 戻り値: 成功時はレースID文字列、失敗時はnull
+String? generateRaceIdFromQr(String qrContent) {
+  try {
+    if (qrContent.length < 14) return null;
+
+    final place = qrContent.substring(1, 3);
+    final year = qrContent.substring(6, 8);
+    final kai = qrContent.substring(8, 10);
+    final nichime = qrContent.substring(10, 12);
+    final race = qrContent.substring(12, 14);
+
+    return "20$year$place$kai$nichime$race";
+  } catch (e) {
+    // 解析不能な場合はnullを返す
+    return null;
+  }
+}

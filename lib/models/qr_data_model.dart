@@ -1,19 +1,17 @@
 // lib/models/qr_data_model.dart
 
 class QrData {
-  final int? id; // データベースID (自動生成されるためnullable)
-  // ★★★ ここからが修正箇所 ★★★
+  final int? id; // データベースID
   final String userId; // 所有者を示すユーザーID
-  // ★★★ ここまでが修正箇所 ★★★
+  final String? raceId;
   final String qrCode; // 190桁のQRコードデータ
   final DateTime timestamp; // 保存日時
   final String parsedDataJson; // 解析済みデータをJSON文字列で保持
 
   QrData({
     this.id,
-    // ★★★ ここからが修正箇所 ★★★
     required this.userId,
-    // ★★★ ここまでが修正箇所 ★★★
+    this.raceId,
     required this.qrCode,
     required this.timestamp,
     required this.parsedDataJson,
@@ -23,10 +21,10 @@ class QrData {
   factory QrData.fromMap(Map<String, dynamic> map) {
     return QrData(
       id: map['id'] as int?,
-      userId: map['userId'] as String? ?? '', // 古いデータにはuserIdがないため、nullの場合は空文字を返す
+      userId: map['userId'] as String? ?? '',
+      raceId: map['race_id'] as String?,
       qrCode: map['qr_code'] as String,
       timestamp: DateTime.parse(map['timestamp'] as String),
-      // DBにまだこの列がない場合も考慮し、nullなら空のJSONオブジェクトを返す
       parsedDataJson: map['parsed_data_json'] as String? ?? '{}',
     );
   }
@@ -36,6 +34,7 @@ class QrData {
     return {
       'id': id,
       'userId': userId,
+      'race_id': raceId,
       'qr_code': qrCode,
       'timestamp': timestamp.toIso8601String(),
       'parsed_data_json': parsedDataJson,

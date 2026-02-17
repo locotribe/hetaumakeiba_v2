@@ -12,12 +12,10 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
-// ★追加: リポジトリのインポート
 import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
 
 class TicketProcessingService {
   final DatabaseHelper _dbHelper;
-  // ★追加: リポジトリのインスタンス
   final RaceDataRepository _repository = RaceDataRepository();
 
   TicketProcessingService({required DatabaseHelper dbHelper}) : _dbHelper = dbHelper;
@@ -30,14 +28,18 @@ class TicketProcessingService {
     try {
       parsedData = parseHorseracingTicketQr(combinedQrCode);
       if (parsedData['QR'] != null) {
+
+        // combinedQrCode (生のQRデータ) からレースIDを生成します
+        final raceId = generateRaceIdFromQr(combinedQrCode);
+
         final qrDataToSave = QrData(
           userId: userId,
+          raceId: raceId,
           qrCode: parsedData['QR'] as String,
           timestamp: DateTime.now(),
           parsedDataJson: json.encode(parsedData),
         );
 
-        // ★修正: リポジトリ経由で保存
         await _repository.saveQrData(qrDataToSave);
 
         savedListKey.currentState?.reloadData();

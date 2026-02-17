@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
@@ -57,10 +58,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      // スキーマを変更した場合は、このバージョンを上げる必要があります。
-      version: 7,
+      version: 8,
+
       /// データベースが初めて作成されるときに呼び出されます。
-      /// ここで初期テーブルの作成を行います。すべてのテーブルが最新のスキーマで作成されます。
       onCreate: (db, version) async {
         // QRコードデータテーブルの作成
         await db.execute('''
@@ -69,7 +69,8 @@ class DatabaseHelper {
             userId TEXT NOT NULL,
             qr_code TEXT UNIQUE,
             timestamp TEXT,
-            parsed_data_json TEXT
+            parsed_data_json TEXT,
+            race_id TEXT -- ★新規作成時にもカラムを追加
           )
         ''');
         // レース結果データテーブルの作成
@@ -277,7 +278,7 @@ class DatabaseHelper {
           CREATE TABLE jyusyo_races(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             race_id TEXT,
-            year INTEGER NOT NULL, -- ★追加
+            year INTEGER NOT NULL,
             date TEXT NOT NULL,
             race_name TEXT NOT NULL,
             grade TEXT,
@@ -286,7 +287,7 @@ class DatabaseHelper {
             conditions TEXT,
             weight TEXT,
             source_url TEXT,
-            UNIQUE(year, date, race_name) -- ★修正: 年も含めてユニークに
+            UNIQUE(year, date, race_name)
           )
         ''');
       },
@@ -391,6 +392,46 @@ class DatabaseHelper {
             print('DEBUG: Migration error (v6->v7): $e');
           }
         }
+
+        // v7 -> v8 マイグレーション (qr_data に race_id 追加 & データ移行)
+        if (oldVersion < 8) {
+          try {
+            print('DEBUG: Starting Migration v7->v8...');
+            // 1. qr_data テーブルに race_id カラムを追加
+            await db.execute('ALTER TABLE qr_data ADD COLUMN race_id TEXT');
+            print('DEBUG: Added race_id column to qr_data.');
+
+            // 2. 既存の全データを取得
+            final List<Map<String, dynamic>> allQrData = await db.query('qr_data');
+
+            // 3. バッチ処理で一括更新
+            final batch = db.batch();
+            int updateCount = 0;
+
+            for (final row in allQrData) {
+              final id = row['id'] as int;
+              final qrCode = row['qr_code'] as String;
+
+              // parse.dart のロジックを使ってIDを生成
+              final generatedId = generateRaceIdFromQr(qrCode);
+
+              if (generatedId != null) {
+                batch.update(
+                    'qr_data',
+                    {'race_id': generatedId},
+                    where: 'id = ?',
+                    whereArgs: [id]
+                );
+                updateCount++;
+              }
+            }
+
+            await batch.commit(noResult: true);
+            print('DEBUG: Migration v7->v8 completed. Updated $updateCount records with race_id.');
+          } catch (e) {
+            print('DEBUG: Migration error (v7->v8): $e');
+          }
+        }
       },
     );
   }
@@ -458,6 +499,21 @@ class DatabaseHelper {
         where: 'userId = ?',
         whereArgs: [userId],
         orderBy: 'timestamp DESC'
+    );
+    return List.generate(maps.length, (i) {
+      return QrData.fromMap(maps[i]);
+    });
+  }
+
+  /// ★追加: レースIDを指定して馬券データを高速に取得する
+  /// インデックスが効くようになればさらに高速化されます
+  Future<List<QrData>> getQrDataByRaceId(String raceId) async {
+    final db = await database;
+    final maps = await db.query(
+      'qr_data',
+      where: 'race_id = ?',
+      whereArgs: [raceId],
+      orderBy: 'timestamp DESC', // 新しい順
     );
     return List.generate(maps.length, (i) {
       return QrData.fromMap(maps[i]);
