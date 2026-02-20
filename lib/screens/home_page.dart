@@ -5,7 +5,10 @@ import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/feed_card_widget.dart';
 import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
-import 'package:hetaumakeiba_v2/main.dart'; // この行を追加
+import 'package:hetaumakeiba_v2/main.dart';
+import 'package:hetaumakeiba_v2/widgets/track_condition_ticker.dart'; // 追加
+import 'package:hetaumakeiba_v2/services/track_conditions_scraper_service.dart'; // 追加
+import 'package:shared_preferences/shared_preferences.dart'; // 追加
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,20 +25,47 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _refreshFeeds();
+    _checkAndAutoScrape(); // 自動更新チェック
+  }
+
+  /// 馬場情報の自動取得ロジック
+  Future<void> _checkAndAutoScrape() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastScraped = prefs.getString('last_track_condition_scrape_time');
+    final now = DateTime.now();
+
+    bool shouldScrape = false;
+    if (lastScraped == null) {
+      shouldScrape = true;
+    } else {
+      final lastDate = DateTime.parse(lastScraped);
+      // 2時間以上経過していれば更新
+      if (now.difference(lastDate).inHours >= 2) {
+        shouldScrape = true;
+      }
+    }
+
+    if (shouldScrape) {
+      await TrackConditionsScraperService.scrapeAndSave();
+      await prefs.setString('last_track_condition_scrape_time', now.toIso8601String());
+      // setStateを呼ぶことで、子の TrackConditionTicker が initState を経由して loadData を再実行します
+      if (mounted) {
+        setState(() {
+          _refreshFeeds(); // ついでにフィードも更新
+        });
+      }
+    }
   }
 
   void _refreshFeeds() {
     if (mounted) {
       setState(() {
-        // ★★★ ここからが修正箇所 ★★★
-        final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+        final userId = localUserId;
         if (userId == null) {
-          // ユーザーIDが取得できない場合、空のリストを返すFutureを設定
           _feedsFuture = Future.value([]);
         } else {
           _feedsFuture = _dbHelper.getAllFeeds(userId);
         }
-        // ★★★ ここまでが修正箇所 ★★★
       });
     }
   }
@@ -51,31 +81,41 @@ class _HomePageState extends State<HomePage> {
             fillColor: Color.fromRGBO(172, 234, 231, 1.0),
           ),
         ),
-        FutureBuilder<List<Feed>>(
-          future: _feedsFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return const Center(child: Text('データの読み込みに失敗しました。'));
-            }
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return _buildEmptyState();
-            }
+        Column(
+          children: [
+            // ティッカーのみを追加
+            const TrackConditionTicker(),
+            Expanded(
+              child: FutureBuilder<List<Feed>>(
+                future: _feedsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-            final feeds = snapshot.data!;
-            return RefreshIndicator(
-              onRefresh: () async => _refreshFeeds(),
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
-                itemCount: feeds.length,
-                itemBuilder: (context, index) {
-                  return FeedCard(feed: feeds[index]);
+                  if (snapshot.hasError) {
+                    return Center(child: Text('エラーが発生しました: ${snapshot.error}'));
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return _buildEmptyState();
+                  }
+
+                  final feeds = snapshot.data!;
+                  return RefreshIndicator(
+                    onRefresh: () async => _refreshFeeds(),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+                      itemCount: feeds.length,
+                      itemBuilder: (context, index) {
+                        return FeedCard(feed: feeds[index]);
+                      },
+                    ),
+                  );
                 },
               ),
-            );
-          },
+            ),
+          ],
         ),
       ],
     );

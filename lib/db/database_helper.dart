@@ -1,6 +1,7 @@
 // lib/db/database_helper.dart
 
 import 'dart:convert';
+import 'package:flutter/services.dart'; // 追加: rootBundleを使用するため
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
@@ -21,6 +22,7 @@ import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 import 'package:hetaumakeiba_v2/db/course_presets.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart'; // 追加: 馬場状態モデル
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -58,7 +60,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 8,
+      version: 9, // ★バージョンを8から9に変更
 
       /// データベースが初めて作成されるときに呼び出されます。
       onCreate: (db, version) async {
@@ -70,7 +72,7 @@ class DatabaseHelper {
             qr_code TEXT UNIQUE,
             timestamp TEXT,
             parsed_data_json TEXT,
-            race_id TEXT -- ★新規作成時にもカラムを追加
+            race_id TEXT 
           )
         ''');
         // レース結果データテーブルの作成
@@ -290,28 +292,39 @@ class DatabaseHelper {
             UNIQUE(year, date, race_name)
           )
         ''');
+
+        // ★新規追加: 馬場状態・含水率データテーブルの作成 (v9)
+        await db.execute('''
+          CREATE TABLE track_conditions(
+            track_condition_id INTEGER PRIMARY KEY,
+            date TEXT NOT NULL,
+            week_day TEXT NOT NULL,
+            cushion_value REAL,
+            moisture_turf_goal REAL,
+            moisture_turf_4c REAL,
+            moisture_dirt_goal REAL,
+            moisture_dirt_4c REAL
+          )
+        ''');
+        // JSONから初期データを一括投入
+        await _initTrackConditions(db);
       },
       // 既存ユーザー向けのマイグレーション処理を安全化
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           try {
-            // race_statisticsテーブルに analyzedRacesJson カラムを追加
             await db.execute('ALTER TABLE race_statistics ADD COLUMN analyzedRacesJson TEXT');
           } catch (e) {
             print('Migration error (v1->v2): $e');
-            // カラム重複エラー等は無視して続行
           }
         }
         if (oldVersion < 3) {
           try {
-            // shutubaHorsesJsonカラムを追加
             await db.execute('ALTER TABLE featured_races ADD COLUMN shutubaHorsesJson TEXT');
           } catch (e) {
-            // エラーログ: "duplicate column name: shutubaHorsesJson" が出ても無視する
             print('Migration error (v2->v3): $e - Assuming column already exists.');
           }
         }
-        // v3 -> v4 マイグレーション (horse_profilesテーブル追加)
         if (oldVersion < 5) {
           try {
             await db.execute('''
@@ -336,13 +349,10 @@ class DatabaseHelper {
                 lastUpdated TEXT
               )
             ''');
-            print('DEBUG: horse_profiles table created or verified.');
           } catch (e) {
             print('DEBUG: Migration error (v->v5): $e');
           }
         }
-
-        // v5 -> v6 マイグレーション (jyusyo_racesテーブル追加)
         if (oldVersion < 6) {
           try {
             await db.execute('''
@@ -360,16 +370,12 @@ class DatabaseHelper {
                 UNIQUE(date, race_name)
               )
             ''');
-            print('DEBUG: jyusyo_races table created.');
           } catch (e) {
             print('DEBUG: Migration error (v5->v6): $e');
           }
         }
-
-        // v6 -> v7 マイグレーション (yearカラム追加のため再作成)
         if (oldVersion < 7) {
           try {
-            // カラム追加のために一度削除して作り直すのが確実
             await db.execute('DROP TABLE IF EXISTS jyusyo_races');
             await db.execute('''
               CREATE TABLE jyusyo_races(
@@ -387,34 +393,19 @@ class DatabaseHelper {
                 UNIQUE(year, date, race_name)
               )
             ''');
-            print('DEBUG: jyusyo_races table recreated for v7.');
           } catch (e) {
             print('DEBUG: Migration error (v6->v7): $e');
           }
         }
-
-        // v7 -> v8 マイグレーション (qr_data に race_id 追加 & データ移行)
         if (oldVersion < 8) {
           try {
-            print('DEBUG: Starting Migration v7->v8...');
-            // 1. qr_data テーブルに race_id カラムを追加
             await db.execute('ALTER TABLE qr_data ADD COLUMN race_id TEXT');
-            print('DEBUG: Added race_id column to qr_data.');
-
-            // 2. 既存の全データを取得
             final List<Map<String, dynamic>> allQrData = await db.query('qr_data');
-
-            // 3. バッチ処理で一括更新
             final batch = db.batch();
-            int updateCount = 0;
-
             for (final row in allQrData) {
               final id = row['id'] as int;
               final qrCode = row['qr_code'] as String;
-
-              // parse.dart のロジックを使ってIDを生成
               final generatedId = generateRaceIdFromQr(qrCode);
-
               if (generatedId != null) {
                 batch.update(
                     'qr_data',
@@ -422,14 +413,35 @@ class DatabaseHelper {
                     where: 'id = ?',
                     whereArgs: [id]
                 );
-                updateCount++;
               }
             }
-
             await batch.commit(noResult: true);
-            print('DEBUG: Migration v7->v8 completed. Updated $updateCount records with race_id.');
           } catch (e) {
             print('DEBUG: Migration error (v7->v8): $e');
+          }
+        }
+
+        // ★新規追加: v8 -> v9 マイグレーション (track_conditionsテーブル追加)
+        if (oldVersion < 9) {
+          try {
+            print('DEBUG: Starting Migration v8->v9...');
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS track_conditions(
+                track_condition_id INTEGER PRIMARY KEY,
+                date TEXT NOT NULL,
+                week_day TEXT NOT NULL,
+                cushion_value REAL,
+                moisture_turf_goal REAL,
+                moisture_turf_4c REAL,
+                moisture_dirt_goal REAL,
+                moisture_dirt_4c REAL
+              )
+            ''');
+            // 既存ユーザー向けにも初期データを投入
+            await _initTrackConditions(db);
+            print('DEBUG: Migration v8->v9 completed. Created track_conditions table.');
+          } catch (e) {
+            print('DEBUG: Migration error (v8->v9): $e');
           }
         }
       },
@@ -464,6 +476,28 @@ class DatabaseHelper {
     }
     await batch.commit(noResult: true);
   }
+
+  /// ★新規追加: track_conditions テーブルに初期データ(JSON)を投入する
+  Future<void> _initTrackConditions(Database db) async {
+    try {
+      final jsonString = await rootBundle.loadString('assets/data/initial_track_conditions.json');
+      final List<dynamic> jsonData = jsonDecode(jsonString);
+
+      final batch = db.batch();
+      for (final item in jsonData) {
+        batch.insert(
+          'track_conditions',
+          item as Map<String, dynamic>,
+          conflictAlgorithm: ConflictAlgorithm.ignore, // 既に存在する場合は上書きしない
+        );
+      }
+      await batch.commit(noResult: true);
+      print('DEBUG: track_conditions initialized with ${jsonData.length} records.');
+    } catch (e) {
+      print('DEBUG: Error initializing track_conditions: $e');
+    }
+  }
+
 
   /// 指定されたQRコードがデータベースに存在するかを確認します。
   Future<bool> qrCodeExists(String qrCode) async {
@@ -505,8 +539,7 @@ class DatabaseHelper {
     });
   }
 
-  /// ★追加: レースIDを指定して馬券データを高速に取得する
-  /// インデックスが効くようになればさらに高速化されます
+  /// レースIDを指定して馬券データを高速に取得する
   Future<List<QrData>> getQrDataByRaceId(String raceId) async {
     final db = await database;
     final maps = await db.query(
@@ -522,7 +555,6 @@ class DatabaseHelper {
 
   /// 新しいQRコードデータをデータベースに挿入します。
   Future<int> insertQrData(QrData qrData) async {
-
     final db = await database;
     return await db.insert(
       'qr_data',
@@ -534,7 +566,6 @@ class DatabaseHelper {
   /// IDを指定してQRコードデータを削除します。
   Future<int> deleteQrData(int id, String userId) async {
     final db = await database;
-
     return await db.delete(
       'qr_data',
       where: 'id = ? AND userId = ?',
@@ -681,7 +712,6 @@ class DatabaseHelper {
 
   /// ユーザーが付けた印を挿入または更新します。
   Future<int> insertOrUpdateUserMark(UserMark mark) async {
-
     final db = await database;
     return await db.insert(
       'user_marks',
@@ -720,7 +750,6 @@ class DatabaseHelper {
 
   /// 特定のレースの特定の馬に付けられた印を削除します。
   Future<int> deleteUserMark(String userId, String raceId, String horseId) async {
-
     final db = await database;
     return await db.delete(
       'user_marks',
@@ -731,7 +760,6 @@ class DatabaseHelper {
 
   /// 新しいフィードを挿入します。
   Future<int> insertFeed(Feed feed) async {
-
     final db = await database;
     return await db.insert('user_feeds', feed.toMap());
   }
@@ -752,7 +780,6 @@ class DatabaseHelper {
 
   /// 既存のフィード情報を更新します。
   Future<int> updateFeed(Feed feed) async {
-
     final db = await database;
     return await db.update(
       'user_feeds',
@@ -765,7 +792,6 @@ class DatabaseHelper {
   /// IDを指定してフィードを削除します。
   Future<int> deleteFeed(int id) async {
     final db = await database;
-
     return await db.delete(
       'user_feeds',
       where: 'id = ?',
@@ -791,7 +817,6 @@ class DatabaseHelper {
 
   /// 全てのテーブルから全てのデータを削除します。
   Future<void> deleteAllDataForUser(String userId) async {
-
     final db = await database;
     await db.delete('qr_data', where: 'userId = ?', whereArgs: [userId]);
     await db.delete('user_marks', where: 'userId = ?', whereArgs: [userId]);
@@ -933,7 +958,6 @@ class DatabaseHelper {
     return resultList;
   }
 
-
   /// データベースファイルへの絶対パスを取得します。
   Future<String> getDbPath() async {
     final databasePath = await getDatabasesPath();
@@ -999,6 +1023,7 @@ class DatabaseHelper {
       conflictAlgorithm: ConflictAlgorithm.fail,
     );
   }
+
   /// ユーザー情報を更新する
   Future<int> updateUser(User user) async {
     final db = await database;
@@ -1011,6 +1036,7 @@ class DatabaseHelper {
       whereArgs: [user.id],
     );
   }
+
   /// ユーザー名でユーザー情報を取得します。
   Future<User?> getUserByUsername(String username) async {
     final db = await database;
@@ -1153,6 +1179,7 @@ class DatabaseHelper {
     }
     return null;
   }
+
   /// 週ごとの開催日リストをDBにキャッシュとして保存または更新します。
   Future<void> insertOrUpdateWeekCache(String weekKey, List<String> availableDates) async {
     final db = await database;
@@ -1277,20 +1304,14 @@ class DatabaseHelper {
   /// 該当する List<RaceResult> を返します。
   Future<List<RaceResult>> searchRaceResultsByName(String partialName) async {
     final db = await database;
-
-    // race_results テーブルから全レコードを取得
     final maps = await db.query('race_results');
-
     final List<RaceResult> matches = [];
 
     for (final map in maps) {
       final jsonStr = map['race_result_json'] as String?;
       if (jsonStr != null && jsonStr.isNotEmpty) {
         try {
-          // JSON文字列から RaceResult オブジェクトを復元
           final result = raceResultFromJson(jsonStr);
-
-          // レース名に検索キーワードが含まれているか判定
           if (result.raceTitle.contains(partialName)) {
             matches.add(result);
           }
@@ -1299,13 +1320,11 @@ class DatabaseHelper {
         }
       }
     }
-
     return matches;
   }
 
   /// 馬IDを指定して、DBから戦績リストを取得します。
   Future<List<HorseRaceRecord>> getHorseRaceRecords(String horseId) async {
-    // 既存のメソッドを利用して同じ機能を返す
     return getHorsePerformanceRecords(horseId);
   }
 
@@ -1324,6 +1343,7 @@ class DatabaseHelper {
 
     await batch.commit(noResult: true);
   }
+
   // ---------------------------------------------------------------------------
   // Step 2: 競走馬プロフィール管理用 追加メソッド
   // ---------------------------------------------------------------------------
@@ -1331,15 +1351,11 @@ class DatabaseHelper {
   Future<int> insertOrUpdateHorseProfile(HorseProfile profile) async {
     final db = await database;
     try {
-      print('DEBUG: DB insertOrUpdateHorseProfile called for ${profile.horseName} (${profile.horseId})');
-      print('DEBUG: Image Path to save: ${profile.ownerImageLocalPath}');
-
       final result = await db.insert(
         'horse_profiles',
         profile.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      print('DEBUG: DB insert success. Row ID: $result');
       return result;
     } catch (e) {
       print('DEBUG: [ERROR] DB insertOrUpdateHorseProfile failed: $e');
@@ -1358,27 +1374,26 @@ class DatabaseHelper {
         limit: 1,
       );
       if (maps.isNotEmpty) {
-        // print('DEBUG: Profile found for $horseId'); // 頻出するためコメントアウト推奨
         return HorseProfile.fromMap(maps.first);
       }
-      // print('DEBUG: Profile NOT found for $horseId');
       return null;
     } catch (e) {
       print('DEBUG: [ERROR] getHorseProfile failed: $e');
       return null;
     }
   }
+
   /// 出馬表キャッシュを保存または更新します
   Future<void> insertShutubaTableCache(ShutubaTableCache cache) async {
     final db = await database;
     await db.insert(
-      'shutuba_table_cache', // 既存の参照に合わせて単数形
+      'shutuba_table_cache',
       cache.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
+
   /// レースIDから開催スケジュール(race_schedules)を検索し、そのレースが含まれる日付を返します。
-  /// scheduleJson内にレースIDが含まれているかをLIKE検索で判定します。
   Future<String?> getDateFromScheduleByRaceId(String raceId) async {
     final db = await database;
     final maps = await db.query(
@@ -1393,19 +1408,17 @@ class DatabaseHelper {
     }
     return null;
   }
-// ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
   // Step 3: 重賞一覧ページ専用 (JyusyoRace) メソッド
   // ---------------------------------------------------------------------------
 
   /// 重賞レースリストをDBにマージ保存します。
   Future<void> mergeJyusyoRaces(List<dynamic> races) async {
     final db = await database;
-
     await db.transaction((txn) async {
       for (var race in races) {
         final raceMap = (race as dynamic).toMap();
-
-        // ★修正: yearも含めて検索
         final List<Map<String, dynamic>> existing = await txn.query(
           'jyusyo_races',
           columns: ['id', 'race_id'],
@@ -1427,7 +1440,6 @@ class DatabaseHelper {
             'source_url': raceMap['source_url'],
           };
 
-          // IDがない場合のみ新しいIDで更新
           if (currentRaceId == null && newRaceId != null) {
             updateValues['race_id'] = newRaceId;
           }
@@ -1452,7 +1464,7 @@ class DatabaseHelper {
       'jyusyo_races',
       where: 'year = ?',
       whereArgs: [year],
-      orderBy: 'id ASC', // 必要なら日付順などでソート
+      orderBy: 'id ASC',
     );
   }
 
@@ -1467,16 +1479,100 @@ class DatabaseHelper {
     );
   }
 
-  // ★新規追加: レース名と年を条件にレースIDを更新します（スケジュールページからの自動連携用）
+  /// レース名と年を条件にレースIDを更新します
   Future<void> updateJyusyoRaceIdByNameAndYear(String raceName, int year, String newRaceId) async {
     final db = await database;
-    // 既にIDが入っている場合は上書きしないよう、race_id IS NULL を条件に加えるのが安全ですが、
-    // 修正用として強力に紐付けるなら条件なしで更新します。今回は「未取得のもの」を埋める意図なのでNULLチェックを入れます。
     await db.update(
       'jyusyo_races',
       {'race_id': newRaceId},
       where: 'race_name = ? AND year = ? AND (race_id IS NULL OR race_id = "")',
       whereArgs: [raceName, year],
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // ★新規追加: 馬場状態・含水率データ (TrackCondition) 操作メソッド
+  // ---------------------------------------------------------------------------
+
+  /// 1件の馬場状態データを挿入または更新します
+  Future<int> insertOrUpdateTrackCondition(TrackConditionRecord record) async {
+    final db = await database;
+    return await db.insert(
+      'track_conditions',
+      record.toJson(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// 複数の馬場状態データを一括で挿入または更新します（スクレイピング結果の保存用）
+  Future<void> insertOrUpdateMultipleTrackConditions(List<TrackConditionRecord> records) async {
+    final db = await database;
+    final batch = db.batch();
+    for (final record in records) {
+      batch.insert(
+        'track_conditions',
+        record.toJson(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// プレフィックス（YYYYCCKKDD の10桁）を指定して、DB内の最新の管理番号(NN)を検索し、
+  /// そのプレフィックスにおける次の新しい12桁のIDを生成して返します。
+  /// 該当データが存在しない場合は、NNを 01 として返します。
+  Future<int> generateNextTrackConditionId(String prefix10) async {
+    final db = await database;
+
+    // CASTを使用して安全に前方一致検索を行う
+    final result = await db.rawQuery('''
+      SELECT MAX(track_condition_id) as max_id 
+      FROM track_conditions 
+      WHERE CAST(track_condition_id AS TEXT) LIKE ?
+    ''', ['$prefix10%']);
+
+    if (result.isNotEmpty && result.first['max_id'] != null) {
+      final maxId = result.first['max_id'] as int;
+      final currentNn = maxId % 100; // 下2桁を取り出す
+      final nextNn = currentNn + 1;
+      return int.parse('$prefix10${nextNn.toString().padLeft(2, '0')}');
+    } else {
+      // 該当プレフィックスのデータが存在しない場合は 01 からスタート
+      return int.parse('${prefix10}01');
+    }
+  }
+
+  /// 日付を指定してその日の馬場状態データを取得します
+  Future<List<TrackConditionRecord>> getTrackConditionsByDate(String date) async {
+    final db = await database;
+    final maps = await db.query(
+      'track_conditions',
+      where: 'date = ?',
+      whereArgs: [date],
+      orderBy: 'track_condition_id DESC',
+    );
+    return maps.map((e) => TrackConditionRecord.fromJson(e)).toList();
+  }
+
+  /// 各競馬場ごとの最新の馬場状態データを取得します（掲示板用）
+  Future<List<TrackConditionRecord>> getLatestTrackConditionsForEachCourse() async {
+    final db = await database;
+
+    // 競馬場コード(CC)ごとにグループ化し、最新のIDを持つレコードを抽出
+    // track_condition_id は YYYYCCKKDDNN なので、同じ競馬場(CC)なら数値が大きい方が新しい
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+    SELECT t1.*
+    FROM track_conditions t1
+    INNER JOIN (
+      SELECT MAX(track_condition_id) as max_id
+      FROM track_conditions
+      GROUP BY SUBSTR(CAST(track_condition_id AS TEXT), 5, 2)
+    ) t2 ON t1.track_condition_id = t2.max_id
+    ORDER BY t1.track_condition_id ASC
+  ''');
+
+    // 直近1週間以内のデータに絞り込むなどの処理が必要な場合はここで行いますが、
+    // まずはDBにある各場の最新データをすべて返します。
+    return maps.map((e) => TrackConditionRecord.fromJson(e)).toList();
   }
 }
