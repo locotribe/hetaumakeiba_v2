@@ -84,7 +84,7 @@ class _HomePageState extends State<HomePage> {
         Column(
           children: [
             // ティッカーのみを追加
-            const TrackConditionTicker(),
+            TrackConditionTicker(),
             Expanded(
               child: FutureBuilder<List<Feed>>(
                 future: _feedsFuture,

@@ -1,7 +1,7 @@
 // lib/db/database_helper.dart
 
 import 'dart:convert';
-import 'package:flutter/services.dart'; // 追加: rootBundleを使用するため
+import 'package:csv/csv.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
@@ -22,7 +22,7 @@ import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 import 'package:hetaumakeiba_v2/db/course_presets.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
-import 'package:hetaumakeiba_v2/models/track_conditions_model.dart'; // 追加: 馬場状態モデル
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 
 /// アプリケーションのSQLiteデータベース操作を管理するヘルパークラス。
 /// このクラスはシングルトンパターンで実装されており、アプリ全体で単一のインスタンスを共有します。
@@ -306,8 +306,6 @@ class DatabaseHelper {
             moisture_dirt_4c REAL
           )
         ''');
-        // JSONから初期データを一括投入
-        await _initTrackConditions(db);
       },
       // 既存ユーザー向けのマイグレーション処理を安全化
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -437,8 +435,6 @@ class DatabaseHelper {
                 moisture_dirt_4c REAL
               )
             ''');
-            // 既存ユーザー向けにも初期データを投入
-            await _initTrackConditions(db);
             print('DEBUG: Migration v8->v9 completed. Created track_conditions table.');
           } catch (e) {
             print('DEBUG: Migration error (v8->v9): $e');
@@ -475,27 +471,6 @@ class DatabaseHelper {
       );
     }
     await batch.commit(noResult: true);
-  }
-
-  /// ★新規追加: track_conditions テーブルに初期データ(JSON)を投入する
-  Future<void> _initTrackConditions(Database db) async {
-    try {
-      final jsonString = await rootBundle.loadString('assets/data/initial_track_conditions.json');
-      final List<dynamic> jsonData = jsonDecode(jsonString);
-
-      final batch = db.batch();
-      for (final item in jsonData) {
-        batch.insert(
-          'track_conditions',
-          item as Map<String, dynamic>,
-          conflictAlgorithm: ConflictAlgorithm.ignore, // 既に存在する場合は上書きしない
-        );
-      }
-      await batch.commit(noResult: true);
-      print('DEBUG: track_conditions initialized with ${jsonData.length} records.');
-    } catch (e) {
-      print('DEBUG: Error initializing track_conditions: $e');
-    }
   }
 
 
@@ -1518,27 +1493,26 @@ class DatabaseHelper {
     await batch.commit(noResult: true);
   }
 
-  /// プレフィックス（YYYYCCKKDD の10桁）を指定して、DB内の最新の管理番号(NN)を検索し、
-  /// そのプレフィックスにおける次の新しい12桁のIDを生成して返します。
-  /// 該当データが存在しない場合は、NNを 01 として返します。
-  Future<int> generateNextTrackConditionId(String prefix10) async {
+  /// ★修正版: プレフィックス（YYYYCCKK の8桁）を指定して、DB内の最新の管理番号(NN)を検索し、
+  /// その開催回における次の新しい12桁のIDを生成して返します。
+  Future<int> generateNextTrackConditionId(String prefix8, String dd) async {
     final db = await database;
 
-    // CASTを使用して安全に前方一致検索を行う
+    // YYYYCCKK(8桁) で前方一致検索を行い、その開催回全体のMAXのIDを取得
     final result = await db.rawQuery('''
       SELECT MAX(track_condition_id) as max_id 
       FROM track_conditions 
       WHERE CAST(track_condition_id AS TEXT) LIKE ?
-    ''', ['$prefix10%']);
+    ''', ['$prefix8%']);
 
     if (result.isNotEmpty && result.first['max_id'] != null) {
       final maxId = result.first['max_id'] as int;
-      final currentNn = maxId % 100; // 下2桁を取り出す
-      final nextNn = currentNn + 1;
-      return int.parse('$prefix10${nextNn.toString().padLeft(2, '0')}');
+      final currentNn = maxId % 100; // 下2桁(NN)を取り出す
+      final nextNn = currentNn + 1; // 1つカウントアップ
+      return int.parse('$prefix8$dd${nextNn.toString().padLeft(2, '0')}');
     } else {
-      // 該当プレフィックスのデータが存在しない場合は 01 からスタート
-      return int.parse('${prefix10}01');
+      // 該当開催回のデータが一つもない場合は NN=01 からスタート
+      return int.parse('$prefix8${dd}01');
     }
   }
 
@@ -1558,21 +1532,73 @@ class DatabaseHelper {
   Future<List<TrackConditionRecord>> getLatestTrackConditionsForEachCourse() async {
     final db = await database;
 
-    // 競馬場コード(CC)ごとにグループ化し、最新のIDを持つレコードを抽出
-    // track_condition_id は YYYYCCKKDDNN なので、同じ競馬場(CC)なら数値が大きい方が新しい
+    // ★修正版: IDの大きさではなく、日付(date)が一番新しいレコードを抽出する
+    // （金曜日は DD=00 となりIDが前週より小さくなる逆転現象を防ぐため）
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-    SELECT t1.*
-    FROM track_conditions t1
-    INNER JOIN (
-      SELECT MAX(track_condition_id) as max_id
-      FROM track_conditions
-      GROUP BY SUBSTR(CAST(track_condition_id AS TEXT), 5, 2)
-    ) t2 ON t1.track_condition_id = t2.max_id
-    ORDER BY t1.track_condition_id ASC
-  ''');
+      SELECT t1.*
+      FROM track_conditions t1
+      INNER JOIN (
+        SELECT SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) as cc, MAX(date) as max_date
+        FROM track_conditions
+        GROUP BY SUBSTR(CAST(track_condition_id AS TEXT), 5, 2)
+      ) t2 ON SUBSTR(CAST(t1.track_condition_id AS TEXT), 5, 2) = t2.cc AND t1.date = t2.max_date
+      ORDER BY t1.date DESC, t1.track_condition_id DESC
+    ''');
 
-    // 直近1週間以内のデータに絞り込むなどの処理が必要な場合はここで行いますが、
-    // まずはDBにある各場の最新データをすべて返します。
     return maps.map((e) => TrackConditionRecord.fromJson(e)).toList();
+  }
+
+  /// ★修正版: CSVからデータをインポートし、結果をMapで返す
+  Future<Map<String, int>> importTrackConditionsFromCsv(String csvString) async {
+    final db = await database;
+    int totalValidRows = 0; // 有効な行の総数
+
+    try {
+      final cleanCsv = csvString.replaceAll('\r\n', '\n');
+      final rows = const CsvToListConverter(eol: '\n').convert(cleanCsv);
+
+      if (rows.length <= 1) return {'inserted': 0, 'duplicates': 0};
+
+      final batch = db.batch();
+
+      for (int i = 1; i < rows.length; i++) {
+        final row = rows[i];
+        if (row.isEmpty || row[0] == null || row[0].toString().trim().isEmpty) continue;
+
+        final idVal = row[0];
+        int? trackConditionId = idVal is int ? idVal : int.tryParse(idVal.toString());
+        if (trackConditionId == null) continue;
+
+        totalValidRows++; // 有効な行としてカウント
+
+        final map = {
+          'track_condition_id': trackConditionId,
+          'date': row[1]?.toString(),
+          'week_day': row[2]?.toString(),
+          'cushion_value': double.tryParse(row[3]?.toString() ?? ''),
+          'moisture_turf_goal': double.tryParse(row[4]?.toString() ?? ''),
+          'moisture_turf_4c': double.tryParse(row[5]?.toString() ?? ''),
+          'moisture_dirt_goal': double.tryParse(row[6]?.toString() ?? ''),
+          'moisture_dirt_4c': double.tryParse(row[7]?.toString() ?? ''),
+        };
+
+        batch.insert('track_conditions', map, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+
+      // batch.commit() は各行の処理結果(新しく入った場合はID、無視された場合はnull)をリストで返します
+      final results = await batch.commit(continueOnError: true);
+
+      // nullや0以外の結果の数を数える＝「実際に新しく追加された件数」
+      int insertedCount = results.where((r) => r != null && r != 0).length;
+      int duplicatesCount = totalValidRows - insertedCount;
+
+      return {
+        'inserted': insertedCount,
+        'duplicates': duplicatesCount,
+      };
+    } catch (e) {
+      print('DEBUG: CSVインポートエラー: $e');
+      rethrow;
+    }
   }
 }

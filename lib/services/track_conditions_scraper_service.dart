@@ -7,6 +7,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:charset_converter/charset_converter.dart';
 import '../models/track_conditions_model.dart';
 import '../db/database_helper.dart';
+import '../models/race_schedule_model.dart';
 
 /// スクレイピング中の一時データ保持用クラス
 class _CourseMetadata {
@@ -177,20 +178,68 @@ class TrackConditionsScraperService {
           if (data.parsedDate == null) continue;
 
           String dateStr = data.parsedDate!.dateStr;
-          String yyyy = data.parsedDate!.date.year.toString();
-          String cc = _courseCodes[course.courseName] ?? '00';
-          String kk = course.kai.toString().padLeft(2, '0');
-          String dd = (data.parsedDate!.weekDayCode == 'fr') ? '00' : course.nichi.toString().padLeft(2, '0');
-          String prefix = '$yyyy$cc$kk$dd'; // 10桁プレフィックス
+          String courseCodeStr = _courseCodes[course.courseName] ?? '00';
 
-          // DBの機能を使って高速に最新IDを取得
-          int newId;
-          if (!sessionNextIdMap.containsKey(prefix)) {
-            newId = await dbHelper.generateNextTrackConditionId(prefix);
-          } else {
-            newId = sessionNextIdMap[prefix]! + 1;
+          // 1. 差分チェック: 既にDBに同日・同競馬場のデータがあるか？
+          List<TrackConditionRecord> existingRecords = await dbHelper.getTrackConditionsByDate(dateStr);
+          bool alreadyExists = existingRecords.any((record) {
+            String idStr = record.trackConditionId.toString();
+            return idStr.length == 12 && idStr.substring(4, 6) == courseCodeStr;
+          });
+
+          if (alreadyExists) {
+            debugPrint('DEBUG: $dateStr の ${course.courseName} は既に保存済みのためスキップします。');
+            continue;
           }
-          sessionNextIdMap[prefix] = newId;
+
+          // 2. 新規データの場合、正しい DD（第〇日）を特定
+          String yyyy = data.parsedDate!.date.year.toString();
+          String cc = courseCodeStr;
+          String kk = course.kai.toString().padLeft(2, '0');
+          String dd = '00'; // 初期値
+
+          if (data.parsedDate!.weekDayCode == 'fr') {
+            dd = '00'; // 金曜は00固定
+          } else {
+            // 土日はカレンダーから raceId を取得して DD を抽出
+            RaceSchedule? schedule = await dbHelper.getRaceSchedule(dateStr);
+            bool ddFound = false;
+            if (schedule != null) {
+              for (var venue in schedule.venues) {
+                if (venue.venueTitle.contains(course.courseName) && venue.races.isNotEmpty) {
+                  String raceId = venue.races.first.raceId;
+                  if (raceId.length >= 10) {
+                    dd = raceId.substring(8, 10);
+                    ddFound = true;
+                    break;
+                  }
+                }
+              }
+            }
+            if (!ddFound) {
+              // 万が一取得できない場合はページの数値をフォールバックとして使用
+              dd = course.nichi.toString().padLeft(2, '0');
+            }
+          }
+
+          // ★修正: 10桁ではなく、8桁(開催回ごと)のプレフィックスをキーにする
+          String prefix8 = '$yyyy$cc$kk';
+
+          // 3. DBの機能を使って高速に最新IDを取得
+          int newId;
+          if (!sessionNextIdMap.containsKey(prefix8)) {
+            // 初回のみDBから最大値を取得して次のIDを生成
+            newId = await dbHelper.generateNextTrackConditionId(prefix8, dd);
+          } else {
+            // 既にセッション内（同じ開催回）に存在する場合はNNをインクリメント
+            int lastId = sessionNextIdMap[prefix8]!;
+            int lastNn = lastId % 100;
+            int nextNn = lastNn + 1;
+            newId = int.parse('$prefix8$dd${nextNn.toString().padLeft(2, '0')}');
+          }
+
+          // 払い出した12桁の最新IDをマップに記録（次のループでNNを正しく+1するため）
+          sessionNextIdMap[prefix8] = newId;
 
           TrackConditionRecord record = TrackConditionRecord(
             trackConditionId: newId,

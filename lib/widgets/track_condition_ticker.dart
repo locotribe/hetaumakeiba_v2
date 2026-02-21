@@ -2,31 +2,36 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // ★追加
-import 'package:intl/intl.dart'; // ★追加: 時刻フォーマット用
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 import '../models/track_conditions_model.dart';
 import '../db/database_helper.dart';
 import '../services/track_conditions_scraper_service.dart';
 
+// ★新規追加: どこからでもティッカーを更新できるようにする魔法の鍵
+final GlobalKey<TrackConditionTickerState> trackConditionTickerKey = GlobalKey<TrackConditionTickerState>();
+
 class TrackConditionTicker extends StatefulWidget {
-  const TrackConditionTicker({super.key});
+  // ★修正: keyをGlobalKeyとして受け取れるようにする
+  TrackConditionTicker({Key? key}) : super(key: key ?? trackConditionTickerKey);
 
   @override
-  State<TrackConditionTicker> createState() => _TrackConditionTickerState();
+  State<TrackConditionTicker> createState() => TrackConditionTickerState();
 }
 
-class _TrackConditionTickerState extends State<TrackConditionTicker> {
+// ★修正: クラス名からアンダースコア(_)を外し、外からアクセスできるようにする
+class TrackConditionTickerState extends State<TrackConditionTicker> {
   List<TrackConditionRecord> _records = [];
   bool _isSyncing = false;
   final ScrollController _scrollController = ScrollController();
   Timer? _timer;
   int _currentIndex = 0;
-  String _lastUpdatedTime = "--:--"; // ★追加: 最終取得時刻を保持する変数
+  String _lastUpdatedTime = "--:--";
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    loadData(); // ★修正: _loadData() から loadData() に変更
   }
 
   @override
@@ -36,7 +41,8 @@ class _TrackConditionTickerState extends State<TrackConditionTicker> {
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  // ★修正: このメソッドを他のファイルから呼び出せるようにする（publicにする）
+  Future<void> loadData() async {
     if (!mounted) return;
     setState(() => _isSyncing = true);
 
@@ -87,7 +93,7 @@ class _TrackConditionTickerState extends State<TrackConditionTicker> {
     await prefs.setString('last_track_condition_scrape_time', DateTime.now().toIso8601String());
 
     // ティッカーの表示データを再読み込み
-    await _loadData();
+    await loadData(); // ★修正: _loadData() から loadData() に変更
 
     if (mounted) {
       setState(() => _isSyncing = false);
@@ -137,24 +143,30 @@ class _TrackConditionTickerState extends State<TrackConditionTicker> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+// 左端：更新ボタンまたは読み込み中インジケーター
           SizedBox(
-            width: 40,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Center(
-                heightFactor: 1.0,
-                child: _isSyncing
-                    ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
-                )
-                    : IconButton(
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.refresh, color: Colors.orange, size: 18),
-                  onPressed: _handleRefresh,
+            width: 48,
+            // 縦方向に全体の中央へ配置
+            child: Align(
+              alignment: Alignment.center,
+              child: _isSyncing
+                  ? const SizedBox(
+                width: 20,
+                height: 20,
+                // インジケーター自体も中央に配置
+                child: Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.orange,
+                  ),
                 ),
+              )
+                  : IconButton(
+                // IconButton自体の余計なパディングを排除して中央を維持
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.refresh, color: Colors.orange, size: 22),
+                onPressed: _handleRefresh,
               ),
             ),
           ),
@@ -175,7 +187,7 @@ class _TrackConditionTickerState extends State<TrackConditionTicker> {
 
                 return Container(
                   width: 380,
-                  padding: const EdgeInsets.only(left: 8, right: 8, top: 10),
+                  padding: const EdgeInsets.only(left: 8, right: 16, top: 10),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
