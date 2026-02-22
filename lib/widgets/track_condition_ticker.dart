@@ -135,6 +135,7 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
 
   @override
   Widget build(BuildContext context) {
+    // 1. データが空、かつ更新中でもない場合は何も表示しない
     if (_records.isEmpty && !_isSyncing) return const SizedBox.shrink();
 
     return Container(
@@ -143,42 +144,49 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-// 左端：更新ボタンまたは読み込み中インジケーター
-          SizedBox(
+          // 左端：更新ボタンまたは読み込み中インジケーター
+          Container(
             width: 48,
-            // 縦方向に全体の中央へ配置
-            child: Align(
-              alignment: Alignment.center,
-              child: _isSyncing
-                  ? const SizedBox(
-                width: 20,
-                height: 20,
-                // インジケーター自体も中央に配置
-                child: Center(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.orange,
-                  ),
-                ),
-              )
-                  : IconButton(
-                // IconButton自体の余計なパディングを排除して中央を維持
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.refresh, color: Colors.orange, size: 22),
-                onPressed: _handleRefresh,
+            height: 64, // ティッカー全体の高さ(64)と一致させる
+            alignment: Alignment.center, // 常にContainerのど真ん中に配置
+            child: _isSyncing
+                ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.orange,
               ),
+            )
+                : IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: const Icon(Icons.refresh, color: Colors.orange, size: 22),
+              onPressed: _handleRefresh,
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
-            child: VerticalDivider(color: Colors.white24, width: 1),
+
+          // 仕切り線（Paddingからconstを外してエラーを回避）
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: const VerticalDivider(color: Colors.white24, width: 1),
           ),
+
           Expanded(
-            child: ListView.builder(
+            child: _records.isEmpty
+                ? Center(
+              // ★ここが重要: リストが空の時に0除算が発生しないよう別の表示にする
+              child: Text(
+                _isSyncing ? '最新データを取得中...' : 'データがありません',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            )
+                : ListView.builder(
               controller: _scrollController,
               scrollDirection: Axis.horizontal,
               physics: const NeverScrollableScrollPhysics(),
+              // ★重要: _records.isEmpty が true の時はここが実行されないため
+              // index % _records.length での 0除算エラーは発生しなくなります
               itemBuilder: (context, index) {
                 final record = _records[index % _records.length];
                 final courseName = _getCourseName(record.trackConditionId);
@@ -186,6 +194,7 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
                 final dateFull = record.date.replaceAll("-", "/");
 
                 return Container(
+                  // ★オーバーフロー防止のため幅を固定し、適切な余白を設定
                   width: 380,
                   padding: const EdgeInsets.only(left: 8, right: 16, top: 10),
                   child: Row(
@@ -201,7 +210,6 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
                               style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
                           Text('$dateFull $jpWeekday',
                               style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                          // ★ここを変更: 動的な最終更新時刻を表示
                           Text('更新 $_lastUpdatedTime',
                               style: const TextStyle(color: Colors.white70, fontSize: 10)),
                         ],
