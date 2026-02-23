@@ -3,7 +3,9 @@
 import 'dart:convert';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/analytics_data_model.dart';
@@ -35,7 +37,9 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
   List<String> _visibleCards = [];
   TabController? _tabController;
 
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final UserRepository _userRepo = UserRepository();
+  final TicketRepository _ticketRepo = TicketRepository();
+  final RaceRepository _raceRepo = RaceRepository();
 
   @override
   void initState() {
@@ -113,25 +117,25 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     final int? filterYear = (_selectedPeriod == '総合') ? null : int.tryParse(_selectedPeriod);
 
     // 1. 利用可能な年のリストと、総合表示用の年別サマリーを取得
-    final yearlySummariesMaps = await _dbHelper.getYearlySummaries(userId);
+    final yearlySummariesMaps = await _userRepo.getYearlySummaries(userId);
     final availableYears = yearlySummariesMaps
         .map((e) => int.parse(e['aggregate_key'].split('_').last))
         .toList()..sort((a, b) => b.compareTo(a));
 
     // 2. 各カテゴリのサマリーを取得
-    final gradeSummaries = await _dbHelper.getCategorySummaries(userId, 'grade', year: filterYear);
-    final venueSummaries = await _dbHelper.getCategorySummaries(userId, 'venue', year: filterYear);
-    final distanceSummaries = await _dbHelper.getCategorySummaries(userId, 'distance', year: filterYear);
-    final trackSummaries = await _dbHelper.getCategorySummaries(userId, 'track', year: filterYear);
-    final ticketTypeSummaries = await _dbHelper.getCategorySummaries(userId, 'ticket_type', year: filterYear);
-    final purchaseMethodSummaries = await _dbHelper.getCategorySummaries(userId, 'purchase_method', year: filterYear);
+    final gradeSummaries = await _userRepo.getCategorySummaries(userId, 'grade', year: filterYear);
+    final venueSummaries = await _userRepo.getCategorySummaries(userId, 'venue', year: filterYear);
+    final distanceSummaries = await _userRepo.getCategorySummaries(userId, 'distance', year: filterYear);
+    final trackSummaries = await _userRepo.getCategorySummaries(userId, 'track', year: filterYear);
+    final ticketTypeSummaries = await _userRepo.getCategorySummaries(userId, 'ticket_type', year: filterYear);
+    final purchaseMethodSummaries = await _userRepo.getCategorySummaries(userId, 'purchase_method', year: filterYear);
 
-    final predictionStats = await _dbHelper.getPredictionStats(userId);
+    final predictionStats = await _userRepo.getPredictionStats(userId);
 
     // 3. 過去最高払戻は都度計算が必要なため、別途ロジックを呼び出す
     final topPayout = await _calculateTopPayoutOptimized(userId, filterYear: filterYear);
 
-    final grandTotalSummary = await _dbHelper.getGrandTotalSummary(userId);
+    final grandTotalSummary = await _userRepo.getGrandTotalSummary(userId);
 
     // 4. DBから取得したデータをUIで使うためのAnalyticsDataモデルに変換
     final Map<int, YearlySummary> yearlySummaries = {};
@@ -146,7 +150,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     }
 
     if (filterYear != null) {
-      final monthlyDataMaps = await _dbHelper.getMonthlyDataForYear(userId, filterYear);
+      final monthlyDataMaps = await _userRepo.getMonthlyDataForYear(userId, filterYear);
       final yearSummary = yearlySummaries.putIfAbsent(filterYear, () => YearlySummary(year: filterYear));
 
       yearSummary.monthlyPurchaseDetails.clear();
@@ -200,7 +204,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
   }
 
   Future<TopPayoutInfo?> _calculateTopPayoutOptimized(String userId, {int? filterYear}) async {
-    final allQrData = await _dbHelper.getAllQrData(userId);
+    final allQrData = await _ticketRepo.getAllQrData(userId);
     if (allQrData.isEmpty) {
       return null;
     }
@@ -227,7 +231,7 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     }
 
     // 2. 必要なレース結果をDBから一括取得
-    final raceResultsMap = await _dbHelper.getMultipleRaceResults(raceIds.cast<String>());
+    final raceResultsMap = await _raceRepo.getMultipleRaceResults(raceIds.cast<String>());
 
     TopPayoutInfo? topPayoutInfo;
 
@@ -357,10 +361,9 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
     );
 
     try {
-      final db = await _dbHelper.database;
-      await db.delete('analytics_aggregates', where: 'userId = ?', whereArgs: [userId]);
+      await _userRepo.deleteAllDataForUser(userId);
 
-      final allQrData = await _dbHelper.getAllQrData(userId);
+      final allQrData = await _ticketRepo.getAllQrData(userId);
       final Set<String> raceIds = {};
       for (final qrData in allQrData) {
         try {
@@ -683,8 +686,8 @@ class AnalyticsPageState extends State<AnalyticsPage> with TickerProviderStateMi
               '画面下の「開催一覧」や「重賞一覧」から\nレースを選び、あなたの予想印を登録してみましょう！\n分析結果がここに表示されます。',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: Colors.grey,
-                  height: 1.5,
+                color: Colors.grey,
+                height: 1.5,
                 fontSize: 12.0,
                 fontWeight: FontWeight.bold,
               ),

@@ -2,7 +2,8 @@
 
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_stats_model.dart';
@@ -19,14 +20,14 @@ class HorseStatsPage extends StatefulWidget {
   final String raceId;
   final String raceName;
   final List<PredictionHorseDetail> horses;
-  final PredictionRaceData? raceData; // ★修正: Optionalで受け取る
+  final PredictionRaceData? raceData;
 
   const HorseStatsPage({
     super.key,
     required this.raceId,
     required this.raceName,
     required this.horses,
-    this.raceData, // ★修正: コンストラクタに追加
+    this.raceData,
   });
 
   @override
@@ -34,7 +35,8 @@ class HorseStatsPage extends StatefulWidget {
 }
 
 class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProviderStateMixin {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final HorseRepository _horseRepository = HorseRepository();
+  final RaceRepository _raceRepository = RaceRepository();
   bool _isLoading = true;
   String _loadingMessage = '';
   double _loadingProgress = 0.0;
@@ -63,7 +65,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
       _loadingMessage = '分析データを確認中...';
     });
 
-    final cache = await _dbHelper.getHorseStatsCache(widget.raceId);
+    final cache = await _horseRepository.getHorseStatsCache(widget.raceId);
     if (cache != null) {
       await _recalculateExtraStats(cache.statsMap);
       setState(() {
@@ -78,7 +80,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   Future<void> _recalculateExtraStats(Map<String, HorseStats> stats) async {
     final Map<String, List<HorseRaceRecord>> allPerformanceRecords = {};
     for (final horse in widget.horses) {
-      final records = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      final records = await _horseRepository.getHorsePerformanceRecords(horse.horseId);
       allPerformanceRecords[horse.horseId] = records;
     }
 
@@ -88,7 +90,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         .where((id) => id.isNotEmpty)
         .toSet();
 
-    final allRaceResults = await _dbHelper.getMultipleRaceResults(allPastRaceIds.toList());
+    final allRaceResults = await _raceRepository.getMultipleRaceResults(allPastRaceIds.toList());
 
     final matchups = HorseStatsAnalyzer.analyzeMatchups(
       horses: widget.horses,
@@ -172,7 +174,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
 
           // 2. 取得したデータをDBに保存
           for (final record in scrapedRecords) {
-            await _dbHelper.insertOrUpdateHorsePerformance(record);
+            await _horseRepository.insertOrUpdateHorsePerformance(record);
           }
         } catch (e) {
           // 特定の馬でエラーが出ても止まらずにログを出して続行する
@@ -180,7 +182,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         }
 
         // 3. DBから最新の状態（今保存したものを含む）を読み込んでメモリに展開
-        final records = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+        final records = await _horseRepository.getHorsePerformanceRecords(horse.horseId);
         allPerformanceRecords[horse.horseId] = records;
 
         // 過去のレースIDを収集（後でレース詳細を取得するため）
@@ -196,7 +198,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
 
       // --- 以下は既存ロジックのまま（収集したレースIDの詳細情報を取得） ---
 
-      final existingResults = await _dbHelper.getMultipleRaceResults(allPastRaceIds.toList());
+      final existingResults = await _raceRepository.getMultipleRaceResults(allPastRaceIds.toList());
       final raceIdsToFetch = allPastRaceIds.where((id) => !existingResults.containsKey(id)).toList();
 
       final Map<String, RaceResult> fetchedResults = {};
@@ -211,7 +213,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
           });
           try {
             final result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$raceId');
-            await _dbHelper.insertOrUpdateRaceResult(result);
+            await _raceRepository.insertOrUpdateRaceResult(result);
             fetchedResults[raceId] = result;
             // サーバー負荷軽減のため少し待機
             await Future.delayed(const Duration(milliseconds: 200));
@@ -250,7 +252,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         statsMap: newStatsMap,
         lastUpdatedAt: DateTime.now(),
       );
-      await _dbHelper.insertOrUpdateHorseStatsCache(cacheToSave);
+      await _horseRepository.insertOrUpdateHorseStatsCache(cacheToSave);
 
       if (!mounted) return;
       setState(() {

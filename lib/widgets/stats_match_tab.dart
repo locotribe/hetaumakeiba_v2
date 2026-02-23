@@ -2,7 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
@@ -54,7 +55,8 @@ class StatsMatchTab extends StatefulWidget {
 class _StatsMatchTabState extends State<StatsMatchTab> {
   final HistoricalMatchService _service = HistoricalMatchService();
   final HistoricalMatchEngine _engine = HistoricalMatchEngine();
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceRepository _raceRepo = RaceRepository();
+  final HorseRepository _horseRepo = HorseRepository();
 
   bool _isLoading = true;
   String _statusMessage = 'データ準備中...';
@@ -81,17 +83,17 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       // 1. 今回の出走馬の履歴を取得
       final Map<String, List<HorseRaceRecord>> currentHorseHistory = {};
       for (final horse in widget.horses) {
-        final records = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+        final records = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
         currentHorseHistory[horse.horseId] = records;
       }
 
       // 2. 過去レース情報を取得（比較対象のレース群）
       List<RaceResult> pastRaces;
       if (widget.targetRaceIds != null && widget.targetRaceIds!.isNotEmpty) {
-        final resultsMap = await _dbHelper.getMultipleRaceResults(widget.targetRaceIds!);
+        final resultsMap = await _raceRepo.getMultipleRaceResults(widget.targetRaceIds!);
         pastRaces = resultsMap.values.toList();
       } else {
-        pastRaces = await _dbHelper.searchRaceResultsByName(widget.raceName);
+        pastRaces = await _raceRepo.searchRaceResultsByName(widget.raceName);
       }
 
       // データがない場合の早期リターン
@@ -114,7 +116,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           final rank = int.tryParse(horse.rank ?? '');
           if (rank != null && rank <= 3 && horse.horseId.isNotEmpty) {
             if (!pastTopHorseRecords.containsKey(horse.horseId)) {
-              final records = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+              final records = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
               pastTopHorseRecords[horse.horseId] = records;
             }
           }
@@ -129,12 +131,12 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       String targetRaceDateStr;
 
       // まず結果データ(RaceResult)から日付を探す
-      final targetResult = await _dbHelper.getRaceResult(widget.raceId);
+      final targetResult = await _raceRepo.getRaceResult(widget.raceId);
       if (targetResult != null) {
         targetRaceDateStr = targetResult.raceDate;
       } else {
         // なければ出馬表キャッシュ(ShutubaTableCache)から日付を探す
-        final targetCache = await _dbHelper.getShutubaTableCache(widget.raceId);
+        final targetCache = await _raceRepo.getShutubaTableCache(widget.raceId);
         if (targetCache != null) {
           targetRaceDateStr = targetCache.predictionRaceData.raceDate;
         } else {
@@ -537,7 +539,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     );
   }
 
-  // 類似馬詳細ダイアログ
+  // 類似度詳細ダイアログ
   void _showSimilarityDetailDialog(BuildContext context, String horseName, String horseId) {
     final matches = _similarityAllMatches[horseId] ?? [];
 

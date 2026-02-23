@@ -2,7 +2,7 @@
     description: "競馬予想と馬券データ管理アプリ"
     publish_to: 'none'
 
-    version: 12.94.1+1
+    version: 13.0.0+1
 
     environment:
         sdk: '>=3.0.0 <4.0.0'

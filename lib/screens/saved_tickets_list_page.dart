@@ -1,7 +1,7 @@
 // lib/screens/saved_tickets_list_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
@@ -31,7 +31,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   int _baseYear = DateTime.now().year;
 
   bool _isLoading = true;
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final TicketRepository _ticketRepository = TicketRepository();
   final TicketDataLogic _ticketLogic = TicketDataLogic();
 
   static const List<String> _englishMonths = [
@@ -593,7 +593,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           }
           return;
         }
-        await _dbHelper.deleteQrData(item.qrData.id!, userId);
+        await _ticketRepository.deleteQrData(item.qrData.id!, userId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('削除しました')));
           reloadData(); // データを再読み込みしてグループ構造を更新

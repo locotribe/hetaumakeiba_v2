@@ -204,15 +204,32 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                // 1. 着順ラベル（固定幅にしないことで最小限のスペースを確保）
                 Text(
-                  gradeDistribution,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black87,
-                    fontWeight: FontWeight.w900,
+                    label,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)
+                ),
+
+                const SizedBox(width: 4), // 最小限の隙間
+
+                // 2. グレード分布（ここが可変。溢れたら省略する）
+                Expanded(
+                  child: Text(
+                    gradeDistribution,
+                    textAlign: TextAlign.center, // 中央に寄せると見た目が綺麗です
+                    overflow: TextOverflow.ellipsis, // 326pxを超えたら「...」にする
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontSize: 10, // 11から10に下げて、より多く表示できるように調整
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
+
+                const SizedBox(width: 4), // 最小限の隙間
+
+                // 3. 合計回数（右端に固定）
                 RichText(
                   text: TextSpan(
                     style: const TextStyle(fontSize: 11, color: Colors.black87),
@@ -220,7 +237,11 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
                       const TextSpan(text: '計 '),
                       TextSpan(
                         text: '${summary.count}',
-                        style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12),
+                        style: const TextStyle(
+                            color: Colors.blue,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12
+                        ),
                       ),
                       const TextSpan(text: ' 回'),
                     ],
@@ -228,7 +249,7 @@ class _ConditionHorseRowState extends State<ConditionHorseRow> {
                 ),
               ],
             ),
-            const Divider(height: 8),
+            const Divider(height: 4),
 
             // 各集計行
             Row(

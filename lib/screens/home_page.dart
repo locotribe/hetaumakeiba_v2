@@ -1,14 +1,14 @@
 // lib/screens/home_page.dart
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/feed_card_widget.dart';
 import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
 import 'package:hetaumakeiba_v2/main.dart';
-import 'package:hetaumakeiba_v2/widgets/track_condition_ticker.dart'; // 追加
-import 'package:hetaumakeiba_v2/services/track_conditions_scraper_service.dart'; // 追加
-import 'package:shared_preferences/shared_preferences.dart'; // 追加
+import 'package:hetaumakeiba_v2/widgets/track_condition_ticker.dart';
+import 'package:hetaumakeiba_v2/services/track_conditions_scraper_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,7 +18,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final UserRepository _userRepository = UserRepository();
   late Future<List<Feed>> _feedsFuture;
 
   @override
@@ -64,7 +64,7 @@ class _HomePageState extends State<HomePage> {
         if (userId == null) {
           _feedsFuture = Future.value([]);
         } else {
-          _feedsFuture = _dbHelper.getAllFeeds(userId);
+          _feedsFuture = _userRepository.getAllFeeds(userId);
         }
       });
     }

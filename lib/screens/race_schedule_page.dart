@@ -1,14 +1,14 @@
 // lib/screens/race_schedule_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 import 'package:hetaumakeiba_v2/services/race_schedule_scraper_service.dart';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
-import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart'; // ★追加
+import 'package:hetaumakeiba_v2/services/jyusyo_matching_service.dart';
 
 class RaceSchedulePage extends StatefulWidget {
   const RaceSchedulePage({super.key});
@@ -21,8 +21,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     with TickerProviderStateMixin {
   final RaceScheduleScraperService _scraperService =
   RaceScheduleScraperService();
-  final DatabaseHelper _dbHelper = DatabaseHelper();
-  final RaceDataRepository _repository = RaceDataRepository(); // ★追加
+  final RaceRepository _raceRepository = RaceRepository();
+  final JyusyoMatchingService _jyusyoService = JyusyoMatchingService();
 
   bool _isLoading = false;
   bool _isDataLoaded = false;
@@ -40,10 +40,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   @override
   void initState() {
     super.initState();
-    // 矢印操作の基準となる日付は保持しておく
     _currentDate = DateTime.now();
 
-    // ★修正: 初期ロード時は特定のURL（日付なし）から開始することを明示する
     _loadDataForWeek(isInitial: true);
   }
 
@@ -109,12 +107,11 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
 
     try {
-      // ★修正: キャッシュ優先ロジック
       // 初期ロード以外で、既に週構成(_weekDates)が決まっている場合はキャッシュを確認
       if (!isInitial && _weekDates.isNotEmpty) {
         // 週を一意に識別するキー（週の月曜日の日付文字列）を使用
         final weekKey = DateFormat('yyyyMMdd').format(_weekDates.first);
-        final cachedDates = await _dbHelper.getWeekCache(weekKey);
+        final cachedDates = await _raceRepository.getWeekCache(weekKey);
 
         if (cachedDates != null && cachedDates.isNotEmpty) {
           // キャッシュヒット：スクレイピングせずにUI構築へ
@@ -129,7 +126,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         }
       }
 
-      // ★修正: キャッシュがない、または初期ロードの場合はスクレイピング
       final (dates, schedule) = await _scraperService.fetchInitialData(
         isInitial ? null : _currentDate,
         onProgress: (msg) {
@@ -151,15 +147,14 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
       _setupTabs(dates);
 
-      // ★追加: 取得した週データをキャッシュに保存
       if (_weekDates.isNotEmpty) {
         final weekKey = DateFormat('yyyyMMdd').format(_weekDates.first);
-        await _dbHelper.insertOrUpdateWeekCache(weekKey, dates);
+        await _raceRepository.insertOrUpdateWeekCache(weekKey, dates);
       }
 
       if (schedule != null) {
         _raceSchedules[schedule.date] = schedule;
-        await _dbHelper.insertOrUpdateRaceSchedule(schedule);
+        await _raceRepository.insertOrUpdateRaceSchedule(schedule);
       }
 
       if (mounted) {
@@ -211,9 +206,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         .map((d) => DateFormat('yyyy-MM-dd').format(d))
         .toList();
 
-    // ★修正: 基準日(_currentDate)の正規化
-    // 取得した日付リストの最後の日（日曜、あるいは変則開催の最終日）を基準に、
-    // 強制的に「その週の日曜日」まで補正して_currentDateとする。
     if (parsedDates.isNotEmpty) {
       final lastDate = parsedDates.last;
 
@@ -276,13 +268,12 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       final date = DateFormat('yyyy-MM-dd', 'en_US').parse(dateString);
       RaceSchedule? schedule;
 
-      // ★修正: 未来・過去に関わらず、プルダウン更新でなければDBを優先する
       if (forceRefresh) {
         // プルダウン更新（forceRefresh = true）の時は、強制的にWebから取得
         schedule = await _scraperService.scrapeRaceSchedule(date);
       } else {
         // 通常アクセス時: まずDBを確認
-        schedule = await _dbHelper.getRaceSchedule(dateString);
+        schedule = await _raceRepository.getRaceSchedule(dateString);
 
         // DBになければ（初アクセスなら）Webから取得
         schedule ??= await _scraperService.scrapeRaceSchedule(date);
@@ -291,12 +282,10 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       if (schedule != null) {
         // データを取得できたら（DB/Web問わず）状態を初期化し、DBに保存（更新）する
         _initializeStatusMapFromSchedule(schedule);
-        await _dbHelper.insertOrUpdateRaceSchedule(schedule);
+        await _raceRepository.insertOrUpdateRaceSchedule(schedule);
 
-        // ★追加: 取得したスケジュール情報を使って、重賞一覧ページのIDを自動で埋める
-        await _repository.reflectScheduleDataToJyusyoRaces(schedule);
+        await _jyusyoService.reflectScheduleDataToJyusyoRaces(schedule);
 
-        // 補足: 表示データの更新とは別に、レースの発走時刻や確定状況のチェックは行う
         _checkRaceStatusesForSchedule(schedule);
       }
 
@@ -337,11 +326,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       for (final race in venue.races) {
         if (!mounted) return;
 
-        // 1. 既に確定している（DBまたはメモリ上で確認済み）場合はスキップ
-        // これにより、再起動後もDBから読まれた isConfirmed=true があれば通信しません
         if (_raceStatusMap[race.raceId] == true) continue;
 
-        // 2. 発走時刻チェック
         if (!isPastDate) {
           final match = timeRegex.firstMatch(race.details);
           if (match != null) {
@@ -355,7 +341,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           }
         }
 
-        // 3. アクセス制限回避のための遅延
         await Future.delayed(const Duration(milliseconds: 1000));
 
         if (!mounted) return;
@@ -369,9 +354,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
               _raceStatusMap[race.raceId] = true;
             });
 
-            // ★重要: 確定したらデータを更新してDBに保存する
             race.isConfirmed = true;
-            await _dbHelper.insertOrUpdateRaceSchedule(schedule);
+            await _raceRepository.insertOrUpdateRaceSchedule(schedule);
           }
         } catch (e) {
           print('Error checking status for ${race.raceId}: $e');
@@ -517,7 +501,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
               }).toList(),
             )
                 : Center(
-              // _weekDates が空のときに .first/.last を呼ばないようにガード
               child: _weekDates.isNotEmpty
                   ? Text(
                 '${formatter.format(_weekDates.first)} 〜 ${formatter.format(_weekDates.last)}',

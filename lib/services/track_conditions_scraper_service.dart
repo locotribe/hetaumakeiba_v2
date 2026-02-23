@@ -6,7 +6,8 @@ import 'package:html/parser.dart' as parser;
 import 'package:html/dom.dart' as dom;
 import 'package:charset_converter/charset_converter.dart';
 import '../models/track_conditions_model.dart';
-import '../db/database_helper.dart';
+import '../db/repositories/track_condition_repository.dart';
+import '../db/repositories/race_repository.dart';
 import '../models/race_schedule_model.dart';
 
 /// スクレイピング中の一時データ保持用クラス
@@ -157,7 +158,8 @@ class TrackConditionsScraperService {
       // Step 4: マージ結果からRecord生成とDB保存
       // ---------------------------------------------------------
       List<TrackConditionRecord> newRecords = [];
-      final dbHelper = DatabaseHelper();
+      final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
+      final RaceRepository _raceRepo = RaceRepository();
 
       // 同じプレフィックス（同一競馬場の同一日など）でIDが重複しないよう、セッション内でNNを記憶
       Map<String, int> sessionNextIdMap = {};
@@ -181,7 +183,7 @@ class TrackConditionsScraperService {
           String courseCodeStr = _courseCodes[course.courseName] ?? '00';
 
           // 1. 差分チェック: 既にDBに同日・同競馬場のデータがあるか？
-          List<TrackConditionRecord> existingRecords = await dbHelper.getTrackConditionsByDate(dateStr);
+          List<TrackConditionRecord> existingRecords = await _trackConditionRepo.getTrackConditionsByDate(dateStr);
           bool alreadyExists = existingRecords.any((record) {
             String idStr = record.trackConditionId.toString();
             return idStr.length == 12 && idStr.substring(4, 6) == courseCodeStr;
@@ -202,7 +204,7 @@ class TrackConditionsScraperService {
             dd = '00'; // 金曜は00固定
           } else {
             // 土日はカレンダーから raceId を取得して DD を抽出
-            RaceSchedule? schedule = await dbHelper.getRaceSchedule(dateStr);
+            RaceSchedule? schedule = await _raceRepo.getRaceSchedule(dateStr);
             bool ddFound = false;
             if (schedule != null) {
               for (var venue in schedule.venues) {
@@ -229,7 +231,7 @@ class TrackConditionsScraperService {
           int newId;
           if (!sessionNextIdMap.containsKey(prefix8)) {
             // 初回のみDBから最大値を取得して次のIDを生成
-            newId = await dbHelper.generateNextTrackConditionId(prefix8, dd);
+            newId = await _trackConditionRepo.generateNextTrackConditionId(prefix8, dd);
           } else {
             // 既にセッション内（同じ開催回）に存在する場合はNNをインクリメント
             int lastId = sessionNextIdMap[prefix8]!;
@@ -258,7 +260,7 @@ class TrackConditionsScraperService {
 
       if (newRecords.isNotEmpty) {
         // SQLiteに一括保存（INSERT OR REPLACE なので重複エラーなし）
-        await dbHelper.insertOrUpdateMultipleTrackConditions(newRecords);
+        await _trackConditionRepo.insertOrUpdateMultipleTrackConditions(newRecords);
         debugPrint('=== [TrackConditionsScraperService] 成功: ${newRecords.length}件のデータをDBに保存・更新しました ===');
       } else {
         debugPrint('=== [TrackConditionsScraperService] 完了: 新規・更新データはありませんでした ===');

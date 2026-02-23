@@ -6,11 +6,13 @@ import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
 import 'package:charset_converter/charset_converter.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
 class HorseProfileScraperService {
+  final HorseRepository _horseRepository = HorseRepository();
+
   static const Map<String, String> _headers = {
     'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
@@ -19,6 +21,7 @@ class HorseProfileScraperService {
 
   /// 指定された馬IDのプロフィール（基本情報、馬主画像、血統）を取得し、DBに保存します。
   static Future<HorseProfile?> scrapeAndSaveProfile(String horseId) async {
+    final HorseRepository horseRepo = HorseRepository();
     print('DEBUG: scrapeAndSaveProfile START for ID: $horseId');
     try {
       // ★修正: プロフィール取得専用のURLを使用 (/result/なし)
@@ -65,7 +68,7 @@ class HorseProfileScraperService {
       );
 
       print('DEBUG: Saving profile to DB... (Owner Image Path: ${profile.ownerImageLocalPath})');
-      await DatabaseHelper().insertOrUpdateHorseProfile(profile);
+      await horseRepo.insertOrUpdateHorseProfile(profile);
       print('DEBUG: scrapeAndSaveProfile END (Success) for $horseId');
       return profile;
 

@@ -1,9 +1,9 @@
 // lib/screens/home_settings_page.dart
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/main.dart'; // この行を追加
+import 'package:hetaumakeiba_v2/main.dart';
 
 class HomeSettingsPage extends StatefulWidget {
   const HomeSettingsPage({super.key});
@@ -13,7 +13,7 @@ class HomeSettingsPage extends StatefulWidget {
 }
 
 class _HomeSettingsPageState extends State<HomeSettingsPage> {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final UserRepository _userRepository = UserRepository();
   List<Feed> _feeds = [];
   bool _isLoading = true;
 
@@ -28,8 +28,7 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
     setState(() {
       _isLoading = true;
     });
-    // ★★★ ここからが修正箇所 ★★★
-    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+    final userId = localUserId;
     if (userId == null) {
       if (mounted) {
         setState(() {
@@ -39,8 +38,7 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
       }
       return;
     }
-    final feeds = await _dbHelper.getAllFeeds(userId);
-    // ★★★ ここまでが修正箇所 ★★★
+    final feeds = await _userRepository.getAllFeeds(userId);
     if (mounted) {
       setState(() {
         _feeds = feeds;
@@ -49,138 +47,81 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
     }
   }
 
-  Future<void> _showAddOrEditFeedDialog({Feed? existingFeed}) async {
-    final formKey = GlobalKey<FormState>();
+  void _showAddOrEditFeedDialog({Feed? existingFeed}) {
     final titleController = TextEditingController(text: existingFeed?.title);
     final urlController = TextEditingController(text: existingFeed?.url);
-    String selectedType = existingFeed?.type ?? 'news'; // デフォルトは 'news'
+    String selectedType = existingFeed?.type ?? 'RSS';
 
-    // ★★★ 修正箇所：URLがYouTubeのRSS形式の場合、チャンネルIDのみを編集欄に表示する ★★★
-    if (selectedType == 'youtube' && urlController.text.contains('channel_id=')) {
-      urlController.text = Uri.parse(urlController.text).queryParameters['channel_id'] ?? urlController.text;
-    }
-
-    final result = await showDialog<Feed?>(
+    showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(existingFeed == null ? '新しいフィードを追加' : 'フィードを編集'),
-          content: Form(
-            key: formKey,
-            // ★★★ 修正箇所：StatefulBuilderでフォーム全体を囲み、UIを動的に変更 ★★★
-            child: StatefulBuilder(
-              builder: (BuildContext context, StateSetter setState) {
-                final String urlLabel = selectedType == 'youtube' ? 'YouTubeチャンネルID' : 'RSSフィードのURL';
-                final String urlHint = selectedType == 'youtube' ? '例: UCxxxxxxxxxxxx' : '例: https://...';
-
-                return SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: titleController,
-                        decoration: const InputDecoration(labelText: 'タイトル'),
-                        validator: (value) =>
-                        value == null || value.isEmpty ? 'タイトルを入力してください' : null,
-                      ),
-                      DropdownButtonFormField<String>(
-                        value: selectedType,
-                        decoration: const InputDecoration(labelText: '種類'),
-                        items: const [
-                          DropdownMenuItem(value: 'news', child: Text('ニュース')),
-                          DropdownMenuItem(value: 'youtube', child: Text('YouTube')),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => selectedType = value);
-                          }
-                        },
-                      ),
-                      TextFormField(
-                        controller: urlController,
-                        decoration: InputDecoration(
-                          labelText: urlLabel,
-                          hintText: urlHint,
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return selectedType == 'youtube' ? 'チャンネルIDを入力してください' : 'URLを入力してください';
-                          }
-                          // ニュースの場合はURL形式をチェック
-                          if (selectedType == 'news') {
-                            final uri = Uri.tryParse(value);
-                            if (uri == null || !uri.isAbsolute) {
-                              return '有効なURLを入力してください';
-                            }
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+      builder: (context) => AlertDialog(
+        title: Text(existingFeed == null ? 'フィードの追加' : 'フィードの編集'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(labelText: 'サイト名'),
+              ),
+              TextField(
+                controller: urlController,
+                decoration: const InputDecoration(labelText: 'URL (RSS または Web)'),
+              ),
+              DropdownButtonFormField<String>(
+                value: selectedType,
+                items: const [
+                  DropdownMenuItem(value: 'RSS', child: Text('RSS')),
+                  DropdownMenuItem(value: 'Web', child: Text('Webページ')),
+                ],
+                onChanged: (val) => selectedType = val!,
+                decoration: const InputDecoration(labelText: 'タイプ'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('キャンセル'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (formKey.currentState!.validate()) {
-                  // ★★★ ここからが修正箇所 ★★★
-                  final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
-                  if (userId == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('ユーザー情報の取得に失敗しました。')),
-                    );
-                    return;
-                  }
-                  // ★★★ ここまでが修正箇所 ★★★
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('キャンセル')),
+          TextButton(
+            onPressed: () async {
+              final userId = localUserId;
+              if (userId == null) return;
 
-                  // ★★★ 修正箇所：保存時にURLを自動生成するロジックを追加 ★★★
-                  String finalUrl = urlController.text.trim();
-                  if (selectedType == 'youtube' && !finalUrl.contains('youtube.com')) {
-                    finalUrl = 'https://www.youtube.com/feeds/videos.xml?channel_id=$finalUrl';
-                  }
-
-                  final newFeed = Feed(
-                    id: existingFeed?.id,
-                    // ★★★ ここからが修正箇所 ★★★
-                    userId: userId,
-                    // ★★★ ここまでが修正箇所 ★★★
-                    title: titleController.text,
-                    url: finalUrl, // 加工したURLを保存
-                    type: selectedType,
-                    displayOrder: existingFeed?.displayOrder ?? _feeds.length,
-                  );
-                  Navigator.of(context).pop(newFeed);
-                }
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        );
-      },
+              if (existingFeed == null) {
+                final newFeed = Feed(
+                  userId: userId,
+                  title: titleController.text,
+                  url: urlController.text,
+                  type: selectedType,
+                  displayOrder: _feeds.length,
+                );
+                await _userRepository.insertFeed(newFeed);
+              } else {
+                final updatedFeed = Feed(
+                  id: existingFeed.id,
+                  userId: userId,
+                  title: titleController.text,
+                  url: urlController.text,
+                  type: selectedType,
+                  displayOrder: existingFeed.displayOrder,
+                );
+                await _userRepository.updateFeed(updatedFeed);
+              }
+              if (context.mounted) Navigator.of(context).pop();
+              _loadFeeds();
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
     );
-
-    if (result != null) {
-      if (existingFeed == null) {
-        await _dbHelper.insertFeed(result);
-      } else {
-        await _dbHelper.updateFeed(result);
-      }
-      _loadFeeds();
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ニュースフィード設定'),
+        title: const Text('ホーム設定'),
       ),
       body: Stack(
         children: [
@@ -193,42 +134,43 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
           ),
           _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : (_feeds.isEmpty
-              ? _buildEmptyState()
-              : _buildFeedList()
+              : Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text('ニュースフィードの管理', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+              Expanded(child: _buildFeedList()),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text('新しいフィードを追加'),
+                  onPressed: () => _showAddOrEditFeedDialog(),
+                ),
+              ),
+            ],
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddOrEditFeedDialog(),
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return const Center(
-      child: Text(
-        '登録済みのフィードはありません。\n右下のボタンから追加してください。',
-        textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 16, color: Colors.black54),
       ),
     );
   }
 
   Widget _buildFeedList() {
+    if (_feeds.isEmpty) {
+      return const Center(child: Text('登録されたフィードはありません'));
+    }
+
     return ReorderableListView.builder(
-      padding: const EdgeInsets.all(8.0),
       itemCount: _feeds.length,
       itemBuilder: (context, index) {
         final feed = _feeds[index];
         return Card(
           key: ValueKey(feed.id),
-          margin: const EdgeInsets.symmetric(vertical: 4.0),
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: ListTile(
-            leading: const Icon(Icons.rss_feed),
             title: Text(feed.title),
-            subtitle: Text(feed.type == 'youtube' ? 'YouTubeチャンネル' : 'ニュースフィード', style: const TextStyle(fontSize: 12)),
+            subtitle: Text(feed.url, maxLines: 1, overflow: TextOverflow.ellipsis),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -251,7 +193,7 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
                       ),
                     );
                     if (confirm == true) {
-                      await _dbHelper.deleteFeed(feed.id!);
+                      await _userRepository.deleteFeed(feed.id!);
                       _loadFeeds();
                     }
                   },
@@ -268,9 +210,9 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
         }
         final Feed item = _feeds.removeAt(oldIndex);
         _feeds.insert(newIndex, item);
-        setState(() {}); // UI上の並び順を即時反映
+        setState(() {});
 
-        await _dbHelper.updateFeedOrder(_feeds);
+        await _userRepository.updateFeedOrder(_feeds);
       },
     );
   }

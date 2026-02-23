@@ -1,7 +1,7 @@
 // lib/screens/bulk_memo_edit_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/main.dart';
@@ -23,7 +23,7 @@ class BulkMemoEditPage extends StatefulWidget {
 class _BulkMemoEditPageState extends State<BulkMemoEditPage> {
   late Map<String, TextEditingController> _controllers;
   bool _isLoading = false;
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final HorseRepository _horseRepository = HorseRepository();
 
   @override
   void initState() {
@@ -72,7 +72,7 @@ class _BulkMemoEditPageState extends State<BulkMemoEditPage> {
         }
       }
 
-      await _dbHelper.insertOrUpdateMultipleMemos(memosToUpdate);
+      await _horseRepository.insertOrUpdateMultipleMemos(memosToUpdate);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

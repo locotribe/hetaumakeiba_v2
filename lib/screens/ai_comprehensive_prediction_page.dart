@@ -2,7 +2,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
@@ -102,11 +104,13 @@ class ComprehensivePredictionPage extends StatefulWidget {
 
 class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPage>
     with SingleTickerProviderStateMixin {
+  final RaceRepository _raceRepo = RaceRepository();
+  final HorseRepository _horseRepo = HorseRepository();
+  final CoursePresetRepository _coursePresetRepo = CoursePresetRepository();
   int _sortColumnIndex = 0;
   bool _sortAscending = true;
   late List<PredictionHorseDetail> _sortedHorses;
   late TabController _tabController;
-  final DatabaseHelper _dbHelper = DatabaseHelper();
   final AiPredictionService _predictionService = AiPredictionService();
   int? _touchedSpotIndex;
 
@@ -143,7 +147,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
   }
 
   Future<Map<String, dynamic>> _loadPageData() async {
-    var predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
+    var predictions = await _raceRepo.getAiPredictionsForRace(widget.raceId);
 
     if (predictions.isEmpty) {
       final result = await showDialog<String>(
@@ -175,10 +179,10 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
         );
         await _predictionService.calculatePredictionScores(widget.raceData, widget.raceId);
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
+        predictions = await _raceRepo.getAiPredictionsForRace(widget.raceId);
       } else if (result == 'tune' && mounted) {
         await _handleTuneAndRecalculate();
-        predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
+        predictions = await _raceRepo.getAiPredictionsForRace(widget.raceId);
       } else {
         if (mounted) Navigator.of(context).pop();
         throw Exception('予測がキャンセルされました。');
@@ -191,7 +195,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
     for (var horse in widget.raceData.horses) {
-      allPastRecords[horse.horseId] = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      allPastRecords[horse.horseId] = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
     }
 
     final overallScores = {for (var p in predictions) p.horseId: p.overallScore};
@@ -214,10 +218,9 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
 
     widget.raceData.racePacePrediction = RaceAnalyzer.predictRacePace(widget.raceData.horses, allPastRecords, pastRaceResults);
 
-    final raceStats = await _dbHelper.getRaceStatistics(widget.raceData.raceId);
+    final raceStats = await _raceRepo.getRaceStatistics(widget.raceData.raceId);
 
     CoursePreset? coursePreset;
-    final dbHelper = DatabaseHelper();
     final venueCode = RaceAnalyzer.venueCodeMap[widget.raceData.venue];
     String trackType = '';
     String distance = '';
@@ -234,7 +237,7 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
       distance = distanceMatch.group(1)!;
     }
     final courseId = '${venueCode}_${trackType}_$distance';
-    coursePreset = await dbHelper.getCoursePreset(courseId);
+    coursePreset = await _coursePresetRepo.getCoursePreset(courseId);
 
     for (var horse in widget.raceData.horses) {
       final pastRecords = allPastRecords[horse.horseId] ?? [];

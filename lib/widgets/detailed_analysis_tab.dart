@@ -1,17 +1,15 @@
 // lib/widgets/detailed_analysis_tab.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/formation_analysis_model.dart';
 import 'package:hetaumakeiba_v2/logic/ai/formation_analysis_engine.dart';
-// Intlパッケージがあれば使うが、なければ自前フォーマット
 
 class DetailedAnalysisTab extends StatefulWidget {
   final String raceId;
   final String raceName;
-  // ★変更: 今回の馬データに加えて、統計対象のレースIDリストを受け取る
   final List<PredictionHorseDetail> horses;
   final List<String> targetRaceIds;
 
@@ -28,7 +26,7 @@ class DetailedAnalysisTab extends StatefulWidget {
 }
 
 class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceRepository _raceRepo = RaceRepository();
   final FormationAnalysisEngine _engine = FormationAnalysisEngine();
 
   bool _isLoading = true;
@@ -45,12 +43,11 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
     try {
       List<RaceResult> pastRaces = [];
 
-      // ★修正: ターゲットIDがある場合はそれを使用し、なければ名前検索（互換性）
       if (widget.targetRaceIds.isNotEmpty) {
-        final resultsMap = await _dbHelper.getMultipleRaceResults(widget.targetRaceIds);
+        final resultsMap = await _raceRepo.getMultipleRaceResults(widget.targetRaceIds);
         pastRaces = resultsMap.values.toList();
       } else {
-        pastRaces = await _dbHelper.searchRaceResultsByName(widget.raceName);
+        pastRaces = await _raceRepo.searchRaceResultsByName(widget.raceName);
       }
 
       if (pastRaces.isEmpty) {
@@ -61,7 +58,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
         return;
       }
 
-      // 分析ロジックは以前と同じエンジンを使用（UIを維持するため）
       final result = _engine.analyze(
         pastRaces: pastRaces,
         currentHorses: widget.horses,
@@ -131,7 +127,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
     );
   }
 
-  // --- Widgets (元のファイルを維持) ---
 
   Widget _buildDisclaimerBanner() {
     return Container(

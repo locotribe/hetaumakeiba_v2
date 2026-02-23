@@ -1,7 +1,7 @@
 // lib/screens/race_statistics_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'dart:convert';
@@ -33,12 +33,11 @@ class RaceStatisticsPage extends StatefulWidget {
 class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   final StatisticsService _statisticsService = StatisticsService();
   final PastRaceIdFetcherService _pastRaceIdFetcher = PastRaceIdFetcherService();
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceRepository _raceRepo = RaceRepository();
 
   Future<RaceStatistics?>? _statisticsFuture;
   List<PredictionHorseDetail> _horses = []; // 出走馬リストを保持
 
-  // ★追加: 結果分析用のデータとフラグ
   List<PredictionHorseDetail>? _resultHorses;
   bool _hasCacheData = false;
   // 結果分析タブを表示するかどうかの判定
@@ -67,7 +66,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   Future<void> _loadShutubaData() async {
     try {
       // 1. まず出馬表キャッシュを確認（未来～直近のレース / 予想データ）
-      final cache = await _dbHelper.getShutubaTableCache(widget.raceId);
+      final cache = await _raceRepo.getShutubaTableCache(widget.raceId);
       if (cache != null) {
         _horses = cache.predictionRaceData.horses;
         _hasCacheData = true;
@@ -76,7 +75,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       }
 
       // 2. 確定したレース結果を確認（過去のレース / 結果データ）
-      final RaceResult? result = await _dbHelper.getRaceResult(widget.raceId);
+      final RaceResult? result = await _raceRepo.getRaceResult(widget.raceId);
       if (result != null) {
         // 結果分析タブ用に、RankをPopularityにマッピングして変換
         _resultHorses = _convertResultsToDetails(result.horseResults, useRankAsPopularity: true);
@@ -144,7 +143,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   void _checkAndLoadStatistics() {
     setState(() {
-      _statisticsFuture = _dbHelper.getRaceStatistics(widget.raceId);
+      _statisticsFuture = _raceRepo.getRaceStatistics(widget.raceId);
     });
   }
 
@@ -240,9 +239,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // タブ構成: 結果分析タブがあれば11個、なければ10個
     return DefaultTabController(
-      // ★修正: タブ数が変わるためKeyを設定し、条件に応じて長さを変更
       key: ValueKey(_showResultTab),
       length: _showResultTab ? 11 : 10,
       child: Scaffold(
@@ -255,7 +252,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                 indicatorColor: Colors.white,
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white70,
-                // ★修正: constを削除し、条件分岐でタブを追加
                 tabs: [
                   const Tab(text: '配当'),
                   const Tab(text: '人気'),
@@ -266,7 +262,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   const Tab(text: '調教師'),
                   const Tab(text: '人気分析'),
                   const Tab(text: '傾向分析'),
-                  // ★追加: 結果分析タブ
                   if (_showResultTab) const Tab(text: '結果分析'),
                   const Tab(text: '分析対象'),
                 ],
@@ -285,7 +280,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
                   final stats = snapshot.data;
                   if (stats == null) {
-                    // データがない場合の初期画面
                     return TabBarView(
                       children: List.generate(_showResultTab ? 11 : 10, (index) => _buildInitialView()),
                     );
@@ -313,7 +307,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                       // 7. 調教師
                       _buildTabContent(child: _buildTrainerStatsTable(data['trainerStats'] ?? const {})),
                       // 8. 詳細分析
-                      // 修正: 過去の統計データ(IDリスト)を渡して、常に一定の過去傾向を表示する
                       stats.analyzedRacesList.isEmpty
                           ? const Center(child: Text('分析データがありません。'))
                           : DetailedAnalysisTab(
@@ -331,7 +324,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                         horses: _horses,
                         targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                       ),
-                      // ★追加: 結果分析タブ (結果データ)
                       if (_showResultTab)
                         StatsMatchTab(
                           raceId: widget.raceId,

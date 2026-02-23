@@ -1,7 +1,7 @@
 // lib/screens/ai_prediction_result_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
@@ -30,7 +30,7 @@ class AiPredictionResultPage extends StatefulWidget {
 
 class _AiPredictionResultPageState extends State<AiPredictionResultPage> {
   late Future<List<PredictionResultViewData>> _viewDataFuture;
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceRepository _raceRepo = RaceRepository();
 
   @override
   void initState() {
@@ -40,8 +40,8 @@ class _AiPredictionResultPageState extends State<AiPredictionResultPage> {
 
   Future<List<PredictionResultViewData>> _loadPredictionResults() async {
     // データベースからAI予測とレース結果を両方取得
-    final predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
-    final raceResult = await _dbHelper.getRaceResult(widget.raceId);
+    final predictions = await _raceRepo.getAiPredictionsForRace(widget.raceId);
+    final raceResult = await _raceRepo.getRaceResult(widget.raceId);
 
     if (predictions.isEmpty || raceResult == null) {
       // どちらかのデータがない場合は空リストを返す

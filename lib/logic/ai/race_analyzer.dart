@@ -7,7 +7,7 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/logic/ai/aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 
@@ -111,7 +111,7 @@ class RaceAnalyzer {
       List<String> cornersToPredict,
       Map<String, JockeyStats> allJockeyStats,
       ) async {
-    final dbHelper = DatabaseHelper();
+    final CoursePresetRepository coursePresetRepo = CoursePresetRepository();
     final venueCode = venueCodeMap[raceData.venue];
     String trackType = '';
     String distance = '';
@@ -131,7 +131,7 @@ class RaceAnalyzer {
     }
 
     final courseId = '${venueCode}_${trackType}_$distance';
-    final CoursePreset? coursePreset = await dbHelper.getCoursePreset(courseId);
+    final CoursePreset? coursePreset = await coursePresetRepo.getCoursePreset(courseId);
 
     final simHorses = raceData.horses.map((horse) {
       final pastRecords = allPastRecords[horse.horseId] ?? [];
@@ -296,7 +296,7 @@ class RaceAnalyzer {
           i += 1;
         }
       }
-      return parallelGroups.join(',');
+      return parallelGroups.join('-');
     }).join('-');
   }
 }

@@ -6,7 +6,7 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/condition_presentation_model.dart';
 import 'package:hetaumakeiba_v2/logic/ai/condition_match_engine.dart';
 import 'package:hetaumakeiba_v2/widgets/condition_horse_row.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 
 /// 好走条件出馬表タブのメインコンテンツ
 class ConditionBasedAnalysisPage extends StatefulWidget {
@@ -24,7 +24,7 @@ class ConditionBasedAnalysisPage extends StatefulWidget {
 class _ConditionBasedAnalysisPageState extends State<ConditionBasedAnalysisPage> with AutomaticKeepAliveClientMixin {
   bool _isLoading = true;
   List<HorseConditionDisplayData> _displayDataList = [];
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final HorseRepository _horseRepository = HorseRepository();
 
   @override
   bool get wantKeepAlive => true;
@@ -44,7 +44,7 @@ class _ConditionBasedAnalysisPageState extends State<ConditionBasedAnalysisPage>
 
       // 1. 全頭の過去成績をDBから取得
       for (var horse in widget.raceData.horses) {
-        final records = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+        final records = await _horseRepository.getHorsePerformanceRecords(horse.horseId);
         allPastRecords[horse.horseId] = records;
       }
 

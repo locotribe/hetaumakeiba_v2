@@ -3,7 +3,9 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
@@ -20,9 +22,8 @@ import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 
-// 修正: 複数のチケット情報を保持できるように変更
 class PageData {
-  final List<Map<String, dynamic>> parsedTickets; // 変更: リスト化
+  final List<Map<String, dynamic>> parsedTickets;
   final RaceResult? raceResult;
   final RacePacePrediction? pacePrediction;
 
@@ -48,10 +49,12 @@ class RaceResultPage extends StatefulWidget {
 }
 
 class _RaceResultPageState extends State<RaceResultPage> {
-  late Future<PageData> _pageDataFuture;
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceRepository _raceRepo = RaceRepository();
+  final TicketRepository _ticketRepo = TicketRepository();
+  final HorseRepository _horseRepo = HorseRepository();
 
-  // 修正: 複数枚表示用の変数を追加
+  late Future<PageData> _pageDataFuture;
+
   late PageController _ticketPageController;
   List<QrData> _qrDataList = [];
   int _currentTicketIndex = 0;
@@ -81,7 +84,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
   @override
   void initState() {
     super.initState();
-    // 初期化ロジックを didChangeDependencies に移動
   }
 
   @override
@@ -127,8 +129,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     _pageDataFuture = _loadPageData();
   }
 
-  // ★追加: QRコードの生文字列からレースIDを生成するヘルパーメソッド
-  // parse.dartのロジックに基づき、所定の位置からコードを抽出して連結する
   String? _generateRaceIdFromQr(String qrContent) {
     try {
       if (qrContent.length < 14) return null;
@@ -161,7 +161,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
     try {
       if (_qrDataList.isEmpty) {
         // Step3で追加した高速検索メソッドを使用
-        final savedTickets = await _dbHelper.getQrDataByRaceId(widget.raceId);
+        final savedTickets = await _ticketRepo.getQrDataByRaceId(widget.raceId);
         if (savedTickets.isNotEmpty) {
           _qrDataList = savedTickets;
         }
@@ -177,11 +177,11 @@ class _RaceResultPageState extends State<RaceResultPage> {
         }
       }
 
-      RaceResult? raceResult = await _dbHelper.getRaceResult(widget.raceId);
+      RaceResult? raceResult = await _raceRepo.getRaceResult(widget.raceId);
 
       final userId = localUserId;
       if (raceResult != null && userId != null) {
-        final memos = await _dbHelper.getMemosForRace(userId, widget.raceId);
+        final memos = await _horseRepo.getMemosForRace(userId, widget.raceId);
         final memosMap = {for (var memo in memos) memo.horseId: memo};
         final List<PredictionHorseDetail> horseDetailsForPacePrediction = [];
         final Map<String, List<HorseRaceRecord>> allPastRecords = {};
@@ -190,7 +190,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
           if (memosMap.containsKey(horseResult.horseId)) {
             horseResult.userMemo = memosMap[horseResult.horseId];
           }
-          final pastRecords = await _dbHelper.getHorsePerformanceRecords(horseResult.horseId);
+          final pastRecords = await _horseRepo.getHorsePerformanceRecords(horseResult.horseId);
           allPastRecords[horseResult.horseId] = pastRecords;
           final trainerText = horseResult.trainerName;
           String trainerAffiliation = '';
@@ -265,11 +265,10 @@ class _RaceResultPageState extends State<RaceResultPage> {
       final newRaceResult = await RaceResultScraperService.scrapeRaceDetails(
           'https://db.netkeiba.com/race/$raceId'
       );
-      await _dbHelper.insertOrUpdateRaceResult(newRaceResult);
+      await _raceRepo.insertOrUpdateRaceResult(newRaceResult);
       await AnalyticsService().updateAggregatesOnResultConfirmed(newRaceResult.raceId, userId);
 
-      // 2. ★修正: DBから同一レースの他の馬券（兄弟馬券）を検索してリストを更新
-      final siblings = await _dbHelper.getQrDataByRaceId(widget.raceId);
+      final siblings = await _ticketRepo.getQrDataByRaceId(widget.raceId);
 
       if (siblings.isNotEmpty) {
         // 既存のリストにあるものは除外して追加（ID重複防止）
@@ -372,7 +371,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     reviewMemo: memoController.text,
                     timestamp: DateTime.now(),
                   );
-                  await _dbHelper.insertOrUpdateHorseMemo(newMemo);
+                  await _horseRepo.insertOrUpdateHorseMemo(newMemo);
                   Navigator.of(context).pop();
                   _loadPageData();
                 }
@@ -439,7 +438,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
                   padding: const EdgeInsets.symmetric(vertical: 8.0),
                   children: [
                     if (parsedTickets.isNotEmpty)
-                    // ★修正: 複数の馬券をPageViewで表示
                       _buildTicketPageView(parsedTickets, raceResult),
 
                     if (raceResult != null) ...[
@@ -479,7 +477,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  // ★追加: 馬券のPageViewと収支サマリーを表示
   Widget _buildTicketPageView(List<Map<String, dynamic>> parsedTickets, RaceResult? raceResult) {
     // 現在表示中のチケット
     final currentTicket = parsedTickets.isNotEmpty
@@ -542,8 +539,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
                     // 2層目: 的中画像 (的中時のみ表示)
                     if (isHit)
-                      Positioned.fill( // ★親のStack領域(馬券カード)いっぱいに広げる
-                        child: IgnorePointer( // タップ操作を透過させる
+                      Positioned.fill(
+                        child: IgnorePointer(
                           child: Image.asset(
                             'assets/images/hit.png',
                             fit: BoxFit.fill,

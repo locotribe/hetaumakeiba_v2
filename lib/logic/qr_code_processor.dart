@@ -1,13 +1,13 @@
 // lib/logic/qr_code_processor.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 
 class QrCodeProcessor {
-  final DatabaseHelper _dbHelper;
+  final TicketRepository _ticketRepository;
   final Function(bool status, String? message) onWarningStatusChanged;
   final Function(bool) onScannerControl;
   final Function(Map<String, dynamic> parsedData) onProcessingComplete;
@@ -19,13 +19,12 @@ class QrCodeProcessor {
   bool _isShowingDuplicateMessageInternal = false;
 
   QrCodeProcessor({
-    required DatabaseHelper dbHelper,
     required this.onWarningStatusChanged,
     required this.onScannerControl,
     required this.onProcessingComplete,
     required this.savedListKey,
-  })  : _dbHelper = dbHelper,
-        _ticketProcessingService = TicketProcessingService(dbHelper: dbHelper);
+  })  : _ticketRepository = TicketRepository(),
+        _ticketProcessingService = TicketProcessingService();
 
   void _setWarningStatus(bool status, String? message) {
     if (_isShowingDuplicateMessageInternal != status) {
@@ -49,7 +48,7 @@ class QrCodeProcessor {
       return;
     }
 
-    final bool existsSingle = await _dbHelper.qrCodeExists(rawValue);
+    final bool existsSingle = await _ticketRepository.qrCodeExists(rawValue);
     if (existsSingle) {
       onScannerControl(false);
       _setWarningStatus(true, 'この馬券はすでに読み込みました');
@@ -115,7 +114,7 @@ class QrCodeProcessor {
       }
 
       combinedQrCode = frontPart + backPart;
-      final bool existsCombined = await _dbHelper.qrCodeExists(combinedQrCode);
+      final bool existsCombined = await _ticketRepository.qrCodeExists(combinedQrCode);
       if (existsCombined) {
         _setWarningStatus(true, 'この馬券はすでに読み込みました');
         _qrResults.clear();
@@ -159,7 +158,7 @@ class QrCodeProcessor {
     onProcessingComplete(parsedData);
 
     // スクレイピングはawaitせずに実行（Fire-and-forget）
-    _ticketProcessingService.triggerBackgroundScraping(userId, parsedData, _dbHelper).catchError((e) {
+    _ticketProcessingService.triggerBackgroundScraping(userId, parsedData).catchError((e) {
       // バックグラウンド処理のエラーはコンソールに出力するのみ
       print('ERROR: バックグラウンドスクレイピング中にエラーが発生しました: $e');
     });

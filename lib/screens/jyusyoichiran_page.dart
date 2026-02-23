@@ -5,9 +5,10 @@ import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/models/jyusyoichiran_page_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
-import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
-import 'package:hetaumakeiba_v2/services/race_schedule_scraper_service.dart'; // 追加
-import 'package:hetaumakeiba_v2/db/database_helper.dart'; // 追加
+import 'package:hetaumakeiba_v2/db/repositories/jyusyo_race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/services/jyusyo_matching_service.dart';
+import 'package:hetaumakeiba_v2/services/race_schedule_scraper_service.dart';
 
 class JyusyoIchiranPage extends StatefulWidget {
   const JyusyoIchiranPage({super.key});
@@ -17,9 +18,10 @@ class JyusyoIchiranPage extends StatefulWidget {
 }
 
 class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
-  final RaceDataRepository _repository = RaceDataRepository();
-  final RaceScheduleScraperService _scheduleScraper = RaceScheduleScraperService(); // 追加
-  final DatabaseHelper _dbHelper = DatabaseHelper(); // 追加
+  final JyusyoRaceRepository _jyusyoRepo = JyusyoRaceRepository();
+  final RaceRepository _raceRepo = RaceRepository();
+  final JyusyoMatchingService _matchingService = JyusyoMatchingService();
+  final RaceScheduleScraperService _scheduleScraper = RaceScheduleScraperService();
 
   late PageController _pageController;
   static const int _initialPage = 10000;
@@ -64,7 +66,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       _selectedMonth = month;
       _filterRacesByMonth();
     });
-    // ★追加: 月を切り替えたタイミングで、その月の補完チェックを走らせる
     _checkAndAutoFillIds(_selectedYear, month);
   }
 
@@ -72,10 +73,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   Future<void> _loadDataForYear(int year) async {
     setState(() => _isLoading = true);
 
-    // Repository経由で取得
-    List<JyusyoRace> dbRaces = await _repository.getJyusyoRaces(year);
+    List<JyusyoRace> dbRaces = (await _jyusyoRepo.getJyusyoRacesByYear(year)).map((m) => JyusyoRace.fromMap(m)).toList();
 
-    // データがない場合はスクレイピングして保存
     if (dbRaces.isEmpty) {
       await _fetchAndSaveScheduleData(year);
     } else {
@@ -83,17 +82,14 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       _filterRacesByMonth();
       setState(() => _isLoading = false);
 
-      // ★修正: 選択されている月のデータのみ補完チェックを行う
       _checkAndAutoFillIds(year, _selectedMonth);
     }
   }
 
-// ★修正: DBになければネットから取得してIDを補完する（未来のレースは除外）
   Future<void> _checkAndAutoFillIds(int year, int month) async {
     // 1. まずローカルDBだけで補完を試みる
-    List<JyusyoRace> updatedRaces = await _repository.fillMissingJyusyoIdsFromLocalSchedule(year, targetMonth: month);
+    List<JyusyoRace> updatedRaces = await _matchingService.fillMissingJyusyoIdsFromLocalSchedule(year, targetMonth: month);
 
-    // UI更新 (ローカルで見つかった分)
     if (updatedRaces.isNotEmpty && mounted) {
       _updateRaceListPartial(updatedRaces);
     }
@@ -108,7 +104,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       return rMonth == month;
     }).toList();
 
-    // 未取得のレースがなければ終了
     if (remainingMissingRaces.isEmpty) return;
 
     // 3. データがないレースの日付リストを作成
@@ -122,11 +117,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         String m = dateMatch.group(1)!.padLeft(2, '0');
         String d = dateMatch.group(2)!.padLeft(2, '0');
 
-        // 年を考慮してDateTimeを作成
         DateTime raceDate = DateTime(year, int.parse(m), int.parse(d));
 
-        // ★修正: 未来のレース（明日以降）は絶対に自動取得対象にしない
-        // 「今日」までは開催済みまたは開催中なので取得を試みる（過去の取りこぼし救済）
         if (raceDate.isAfter(today)) {
           continue;
         }
@@ -135,10 +127,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       }
     }
 
-    // 取得すべき過去の日付がなければここで終了（未来のレースのみの場合はここで止まる）
     if (targetDates.isEmpty) return;
 
-    // ユーザーに通知（任意: 過去データの取得時のみ出るようになる）
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -163,7 +153,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
         var result = await _scheduleScraper.fetchInitialData(targetDate);
         if (result.$2 != null) {
           // DBに保存
-          await _dbHelper.insertOrUpdateRaceSchedule(result.$2!);
+          await _raceRepo.insertOrUpdateRaceSchedule(result.$2!);
           fetchCount++;
         }
         // 負荷軽減のため少し待機
@@ -175,7 +165,7 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
 
     // 5. データ取得後、再度ローカルDBから補完を試みる
     if (fetchCount > 0 && mounted) {
-      List<JyusyoRace> retryUpdatedRaces = await _repository.fillMissingJyusyoIdsFromLocalSchedule(year, targetMonth: month);
+      List<JyusyoRace> retryUpdatedRaces = await _matchingService.fillMissingJyusyoIdsFromLocalSchedule(year, targetMonth: month);
       if (retryUpdatedRaces.isNotEmpty) {
         _updateRaceListPartial(retryUpdatedRaces);
 
@@ -315,10 +305,10 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
           }
         }
 
-        await _repository.saveJyusyoRaces(fetchedRaces);
+        await _jyusyoRepo.mergeJyusyoRaces(fetchedRaces);
 
         if (mounted) {
-          List<JyusyoRace> updatedRaces = await _repository.getJyusyoRaces(year);
+          List<JyusyoRace> updatedRaces = (await _jyusyoRepo.getJyusyoRacesByYear(year)).map((m) => JyusyoRace.fromMap(m)).toList();
           setState(() {
             _yearlyRaceData = updatedRaces;
             _filterRacesByMonth();
@@ -358,17 +348,14 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       Navigator.of(context).pop(); // ダイアログを閉じる
 
       if (foundId != null && race.id != null) {
-        // ★修正ポイント: 全更新せず、DB更新とメモリ上のデータ更新のみ行う
 
         // A. DBを更新
-        await _repository.updateJyusyoRaceId(race.id!, foundId);
+        await _jyusyoRepo.updateJyusyoRaceId(race.id!, foundId);
 
         // B. メモリ上のリスト(_yearlyRaceData)の該当データを書き換える
-        // これによりListView全体のリロード(スクロールリセット)を防ぎます
         setState(() {
           final index = _yearlyRaceData.indexWhere((r) => r.id == race.id);
           if (index != -1) {
-            // JyusyoRaceは不変(final)なので、新しいインスタンスを作成して差し替え
             _yearlyRaceData[index] = JyusyoRace(
               id: race.id,
               year: race.year,
@@ -380,9 +367,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
               conditions: race.conditions,
               weight: race.weight,
               sourceUrl: race.sourceUrl,
-              raceId: foundId, // ここだけ更新されたIDを入れる
+              raceId: foundId,
             );
-            // 表示用リストも再フィルタリングして画面更新
             _filterRacesByMonth();
           }
         });
@@ -563,7 +549,6 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
 
   // レース一覧リスト（UIレイアウト修正版）
   Widget _buildRaceList() {
-    // PageStorageKeyを追加してスクロール位置を記憶させる
     final Key listKey = PageStorageKey('race_list_${_selectedYear}_$_selectedMonth');
 
     return ListView.builder(

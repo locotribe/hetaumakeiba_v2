@@ -5,11 +5,13 @@ import 'dart:convert';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
-import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 
 /// netkeiba.comの当日のレース結果ページ（JavaScript動的生成）を
 /// InAppWebViewを使用してスクレイピングすることに特化したサービスクラスです。
 class RaceResultFirstScraperService {
+  final RaceRepository _raceRepository = RaceRepository();
+
   static const String _scrapeJs = r'''
 (function(){
   function textOrEmpty(el){ return el ? el.innerText.trim() : ''; }
@@ -133,6 +135,8 @@ class RaceResultFirstScraperService {
       }
     });
 
+    final service = RaceResultFirstScraperService(); // インスタンス作成
+
     headlessWebView = HeadlessInAppWebView(
       initialUrlRequest: URLRequest(url: WebUri(url)),
       initialSettings: InAppWebViewSettings(
@@ -146,9 +150,8 @@ class RaceResultFirstScraperService {
           if (result != null) {
             final data = _parseScrapedData(result, raceId);
 
-            // ★修正: データを完了させる前にRepository経由で保存する
-            // これにより、速報データ取得時も自動的にDBへ保存・更新が試みられる
-            await RaceDataRepository().saveRaceResult(data);
+            // インスタンス変数の _raceRepository を使用して保存
+            await service._raceRepository.insertOrUpdateRaceResult(data);
 
             completer.complete(data);
           } else {

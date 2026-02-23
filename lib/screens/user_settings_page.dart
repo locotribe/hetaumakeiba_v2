@@ -2,7 +2,7 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/user_model.dart';
 import 'package:hetaumakeiba_v2/services/local_auth_service.dart';
@@ -27,6 +27,7 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _localAuthService = LocalAuthService();
+  final UserRepository _userRepository = UserRepository();
   User? _currentUser;
   bool _hasPassword = false;
   String _loginUsername = '';
@@ -56,8 +57,7 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
       });
       return;
     }
-    final db = DatabaseHelper();
-    final user = await db.getUserByUuid(localUserId!);
+    final user = await _userRepository.getUserByUuid(localUserId!);
     final prefs = await SharedPreferences.getInstance();
 
     final profileImagePath = prefs.getString('profile_picture_path_${localUserId!}');

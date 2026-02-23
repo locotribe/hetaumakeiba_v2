@@ -4,10 +4,12 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
-// ★追加: リポジトリのインポート
-import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 
 class ShutubaTableScraperService {
+  final RaceRepository _raceRepo = RaceRepository();
+
   Future<PredictionRaceData> scrapeAllData(String raceId) async {
     final completer = Completer<PredictionRaceData>();
     final url = WebUri(generateShutubaUrl(raceId: raceId, type: 'shutuba'));
@@ -37,8 +39,12 @@ class ShutubaTableScraperService {
           if (result != null) {
             final data = _parseScrapedData(result, raceId);
 
-            // ★追加: 取得した出馬表データをRepository経由で保存
-            await RaceDataRepository().saveShutubaData(data);
+            final cache = ShutubaTableCache(
+              raceId: data.raceId,
+              predictionRaceData: data,
+              lastUpdatedAt: DateTime.now(),
+            );
+            await _raceRepo.insertOrUpdateShutubaTableCache(cache);
 
             completer.complete(data);
           } else {
@@ -152,16 +158,15 @@ class ShutubaTableScraperService {
     final String raceData02 = jsonData["raceData02"] ?? "";
     final List<dynamic> horsesData = jsonData["horses"] ?? [];
 
-    String raceDate = jsonData["raceDate"] ?? ""; // JSから直接日付を取得
+    String raceDate = jsonData["raceDate"] ?? "";
     String venue = '';
     String raceNumber = '';
 
-    // 日付部分を削除し、開催場所とレース番号のみを抽出する正規表現に変更
     final raceData01Match =
     RegExp(r'\s*(.*?)\s*(\d{1,2}R)')
         .firstMatch(raceData01);
     if (raceData01Match != null) {
-      venue = raceData01Match.group(1)?.trim() ?? ''; // trim()を追加
+      venue = raceData01Match.group(1)?.trim() ?? '';
       raceNumber = raceData01Match.group(2) ?? '';
     }
 

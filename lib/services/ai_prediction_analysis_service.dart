@@ -1,11 +1,13 @@
 // lib/services/ai_prediction_analysis_service.dart
 
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
+import 'package:hetaumakeiba_v2/db/db_constants.dart';
+import 'package:hetaumakeiba_v2/db/db_provider.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
 // AI予測全体の分析結果サマリーを保持するクラス
 class AiOverallAnalysis {
@@ -53,7 +55,8 @@ class AiFactorAnalysis {
 }
 
 class AiPredictionAnalysisService {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceRepository _raceRepo = RaceRepository();
+  final HorseRepository _horseRepo = HorseRepository();
 
   // データベースから全予測・全結果を読み込み、分析を行うメインメソッド
   Future<Map<String, dynamic>> analyzeAllPredictions(String userId) async {
@@ -63,7 +66,7 @@ class AiPredictionAnalysisService {
     final allHorseIds = allPredictions.map((p) => p.horseId).toSet();
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
     for (final horseId in allHorseIds) {
-      allPastRecords[horseId] = await _dbHelper.getHorsePerformanceRecords(horseId);
+      allPastRecords[horseId] = await _horseRepo.getHorsePerformanceRecords(horseId);
     }
 
     // 2. レースIDをキーにしてデータを整理
@@ -189,31 +192,23 @@ class AiPredictionAnalysisService {
 
     return {
       'overall': overallAnalysis,
-      // 'byVenue': (競馬場ごとの分析結果リスト),
       'byVenue': venueAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(),
       'byDistance': distanceAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(),
       'byTrackCondition': trackConditionAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(),
       'byPopularity': popularityAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(),
-      'byLegStyle': legStyleAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(), // ← この行を追加
+      'byLegStyle': legStyleAnalysis.entries.map((e) => AiFactorAnalysis(factorName: e.key, analysis: e.value)).toList(),
     };
   }
 
   // DBから全レース結果を一度に取得するヘルパー
   Future<Map<String, RaceResult>> _getAllRaceResults() async {
-    final db = await _dbHelper.database;
-    final maps = await db.query('race_results');
-    final Map<String, RaceResult> results = {};
-    for (final map in maps) {
-      final result = raceResultFromJson(map['race_result_json'] as String);
-      results[result.raceId] = result;
-    }
-    return results;
+    return await _raceRepo.getAllRaceResults();
   }
 
   // DBから全AI予測を一度に取得するヘルパー
   Future<List<AiPrediction>> _getAllAiPredictions() async {
-    final db = await _dbHelper.database;
-    final maps = await db.query('ai_predictions');
+    final db = await DbProvider().database;
+    final maps = await db.query(DbConstants.tableAiPredictions);
     return maps.map((map) => AiPrediction.fromMap(map)).toList();
   }
 

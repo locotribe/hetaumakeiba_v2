@@ -1,7 +1,8 @@
 // lib/logic/ticket_data_logic.dart
 
 import 'dart:convert';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/ticket_list_item.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
@@ -16,13 +17,14 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 
 class TicketDataLogic {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final TicketRepository _ticketRepository = TicketRepository();
+  final RaceRepository _raceRepository = RaceRepository();
 
   // ★追加: 確定済みデータを保持するメモリキャッシュ (staticにしてインスタンス間で共有)
   static final Map<int, TicketListItem> _memoryCache = {};
 
   Future<List<TicketListItem>> fetchAndProcessTickets(String userId) async {
-    final allQrData = await _dbHelper.getAllQrData(userId);
+    final allQrData = await _ticketRepository.getAllQrData(userId);
     final List<TicketListItem> tempItems = [];
     final shutubaScraper = ShutubaTableScraperService(); // インスタンスは維持しますが、このループ内では通信しません
 
@@ -65,11 +67,11 @@ class TicketDataLogic {
     }
 
     // 1. レース結果(RaceResult)の一括取得 [確定済みデータ]
-    final Map<String, RaceResult> batchRaceResults = await _dbHelper.getMultipleRaceResults(raceIdsToFetch.toList());
+    final Map<String, RaceResult> batchRaceResults = await _raceRepository.getMultipleRaceResults(raceIdsToFetch.toList());
 
     // 2. 注目レース(FeaturedRace)の一括取得 [未確定・出馬表データ] (★ここを復元・追加)
     // ※FeaturedRaceには一括取得メソッドがないため、全件取得してメモリでフィルタリング（件数が数千件程度なら高速）
-    final List<FeaturedRace> allFeaturedRaces = await _dbHelper.getAllFeaturedRaces();
+    final List<FeaturedRace> allFeaturedRaces = await _raceRepository.getAllFeaturedRaces();
     final Map<String, FeaturedRace> batchFeaturedRaces = {
       for (var race in allFeaturedRaces) race.raceId: race
     };
@@ -135,7 +137,7 @@ class TicketDataLogic {
         // ステップ3: 情報がない場合、出馬表キャッシュ(ShutubaTableCache)をDBから探す
         // ---------------------------------------------------------
         if (raceDate.isEmpty) {
-          final shutubaCache = await _dbHelper.getShutubaTableCache(raceId);
+          final shutubaCache = await _raceRepository.getShutubaTableCache(raceId);
           if (shutubaCache != null) {
             // すでにパース済みのデータ(predictionRaceData)から直接取得します
             final data = shutubaCache.predictionRaceData;
@@ -148,7 +150,7 @@ class TicketDataLogic {
         // ステップ4: それでも情報がない場合、開催スケジュール(RaceSchedule)をDBから探す
         // ---------------------------------------------------------
         if (raceDate.isEmpty) {
-          final scheduleDate = await _dbHelper.getDateFromScheduleByRaceId(raceId);
+          final scheduleDate = await _raceRepository.getDateFromScheduleByRaceId(raceId);
           if (scheduleDate != null) {
             raceDate = scheduleDate;
             // スケジュールからは日付のみ取得（タイトルは後続処理で「開催場+R」として生成されるため問題なし）
@@ -187,7 +189,7 @@ class TicketDataLogic {
 
               // 重要: 取得したデータをDBに保存し、次回以降のロード時間を0秒にします
               // メソッド名を修正: insertOrUpdateRaceResult
-              await _dbHelper.insertOrUpdateRaceResult(fetched);
+              await _raceRepository.insertOrUpdateRaceResult(fetched);
             }
           } catch (e) {
             print('新規レース情報のWeb取得に失敗: $raceId - $e');

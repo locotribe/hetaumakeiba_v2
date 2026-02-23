@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../models/track_conditions_model.dart';
-import '../db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import '../services/track_conditions_scraper_service.dart';
 
 // ★新規追加: どこからでもティッカーを更新できるようにする魔法の鍵
@@ -19,8 +19,8 @@ class TrackConditionTicker extends StatefulWidget {
   State<TrackConditionTicker> createState() => TrackConditionTickerState();
 }
 
-// ★修正: クラス名からアンダースコア(_)を外し、外からアクセスできるようにする
 class TrackConditionTickerState extends State<TrackConditionTicker> {
+  final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
   List<TrackConditionRecord> _records = [];
   bool _isSyncing = false;
   final ScrollController _scrollController = ScrollController();
@@ -56,7 +56,8 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
       }
 
       final List<String> activeCourseNames = await TrackConditionsScraperService.getActiveCourseNames();
-      final allLatestRecords = await DatabaseHelper().getLatestTrackConditionsForEachCourse();
+
+      final allLatestRecords = await _trackConditionRepo.getLatestTrackConditionsForEachCourse();
 
       final List<TrackConditionRecord> filteredRecords = [];
       for (var name in activeCourseNames) {

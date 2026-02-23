@@ -6,10 +6,12 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_first_scraper_service.dart';
-import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 
 /// netkeiba.comからレース結果の詳細をスクレイピングすることに特化したサービスクラスです。
 class RaceResultScraperService {
+  final RaceRepository _raceRepository = RaceRepository();
+
   static const Map<String, String> _headers = {
     'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
@@ -54,6 +56,7 @@ class RaceResultScraperService {
 
   /// netkeiba.comのレース結果ページをスクレイピングし、RaceResultオブジェクトを返す
   static Future<RaceResult> scrapeRaceDetails(String url) async {
+    final service = RaceResultScraperService(); // インスタンス作成
     try {
       final dbUrl = url.replaceFirst('race.netkeiba.com/race/result.html?race_id=', 'db.netkeiba.com/race/');
       final raceId = getRaceIdFromUrl(dbUrl);
@@ -97,8 +100,8 @@ class RaceResultScraperService {
           lapTimes: lapTimes,
         );
 
-        // 作成したリポジトリを使って保存（既存データとの整合性チェック含む）
-        await RaceDataRepository().saveRaceResult(result);
+        // インスタンス変数の _raceRepository を使用して保存
+        await service._raceRepository.insertOrUpdateRaceResult(result);
 
         return result;
       } else {

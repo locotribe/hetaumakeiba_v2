@@ -13,7 +13,12 @@ import 'dart:io';
 import 'package:hetaumakeiba_v2/screens/user_settings_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/db_provider.dart';
+import 'package:hetaumakeiba_v2/db/db_constants.dart';
+import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:hetaumakeiba_v2/screens/race_schedule_page.dart';
@@ -38,7 +43,9 @@ class _MainScaffoldState extends State<MainScaffold> {
   final GlobalKey<AnalyticsPageState> _analyticsPageKey = GlobalKey<AnalyticsPageState>();
   final GlobalKey<RaceSchedulePageState> _raceScheduleKey = GlobalKey<RaceSchedulePageState>();
 
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final DbProvider _dbProvider = DbProvider();
+  final UserRepository _userRepository = UserRepository();
+  final TrackConditionRepository _trackConditionRepository = TrackConditionRepository();
   bool _isBusy = false;
 
   String _displayName = '';
@@ -57,7 +64,8 @@ class _MainScaffoldState extends State<MainScaffold> {
         const SnackBar(content: Text('バックアップを準備中...')),
       );
 
-      final dbPath = await _dbHelper.getDbPath();
+      final databasePath = await getDatabasesPath();
+      final dbPath = p.join(databasePath, DbConstants.dbName);
       final now = DateTime.now();
       final formatter = DateFormat('yyyy-MM-dd_HH-mm');
       final formattedDate = formatter.format(now);
@@ -122,14 +130,12 @@ class _MainScaffoldState extends State<MainScaffold> {
             const SnackBar(content: Text('ファイル選択がキャンセルされました。')),
           );
         }
-        // キャンセルされた場合も busy 状態を解除
         setState(() { _isBusy = false; });
         return;
       }
 
       if (!mounted) return;
 
-      // ローディングダイアログを表示
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -146,14 +152,15 @@ class _MainScaffoldState extends State<MainScaffold> {
 
       final sourcePath = result.files.single.path!;
 
-      await _dbHelper.closeDb();
+      await _dbProvider.closeDb();
 
-      final destinationPath = await _dbHelper.getDbPath();
+      final databasePath = await getDatabasesPath();
+      final destinationPath = p.join(databasePath, DbConstants.dbName);
       final sourceFile = File(sourcePath);
       await sourceFile.copy(destinationPath);
 
       if (!mounted) return;
-      Navigator.of(context).pop(); // ローディングダイアログを閉じる
+      Navigator.of(context).pop();
 
       await showDialog<void>(
         context: context,
@@ -172,7 +179,6 @@ class _MainScaffoldState extends State<MainScaffold> {
 
     } catch (e) {
       if (mounted) {
-        // エラー発生時にローディングダイアログが開いている可能性があれば閉じる
         if(Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
         }
@@ -189,22 +195,16 @@ class _MainScaffoldState extends State<MainScaffold> {
     }
   }
 
-  // Drawerの情報を読み込むための新しいメソッド
   Future<void> _loadUserInfoForDrawer() async {
     if (localUserId == null) return;
     final prefs = await SharedPreferences.getInstance();
-    final db = DatabaseHelper();
-    final user = await db.getUserByUuid(localUserId!);
+    final user = await _userRepository.getUserByUuid(localUserId!);
     final profileImagePath = prefs.getString('profile_picture_path_${localUserId!}');
 
     File? newImageFile;
     if (profileImagePath != null) {
       newImageFile = File(profileImagePath);
-      // --- ▼▼▼ キャッシュクリアのロジック ▼▼▼ ---
-      // FileImageオブジェクトを作成し、キャッシュを無効化(evict)する
-      // これにより、次にこの画像が要求されたときにディスクから再読み込みされる
       FileImage(newImageFile).evict();
-      // --- ▲▲▲ キャッシュクリアのロジック ▲▲▲ ---
     }
 
     if (mounted) {
@@ -218,11 +218,9 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   Future<void> _importTrackConditionsCsv() async {
     try {
-      // 1. ファイルピッカーの設定を変更
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
-        // ★重要: クラウド上のファイルを扱うためにキャッシュさせる設定を追加
         withData: true,
       );
 
@@ -233,26 +231,21 @@ class _MainScaffoldState extends State<MainScaffold> {
 
         String csvString = "";
 
-        // ★修正: Googleドライブ等の場合は path が null になることがあるため、bytes から読み込む
         if (result.files.single.bytes != null) {
-          // Webや一部のクラウドストレージ用（メモリ上のデータから読み込む）
           csvString = utf8.decode(result.files.single.bytes!);
         } else if (result.files.single.path != null) {
-          // 端末内の物理ファイル用
           File file = File(result.files.single.path!);
           csvString = await file.readAsString();
         }
 
         if (csvString.isEmpty) throw Exception("ファイルの内容を読み込めませんでした");
 
-        // 2. DatabaseHelperのインポート関数を呼び出し
-        final resultCounts = await _dbHelper.importTrackConditionsFromCsv(csvString);
+        final resultCounts = await _trackConditionRepository.importTrackConditionsFromCsv(csvString);
         int inserted = resultCounts['inserted'] ?? 0;
         int duplicates = resultCounts['duplicates'] ?? 0;
 
         if (!mounted) return;
 
-        // 3. 完了通知とティッカーのリフレッシュ
         String message = '✅ インポート完了: $inserted件追加しました';
         if (duplicates > 0) {
           message += '（既に登録済みの $duplicates件 はスキップしました）';
@@ -262,7 +255,6 @@ class _MainScaffoldState extends State<MainScaffold> {
           SnackBar(content: Text(message), backgroundColor: Colors.green),
         );
 
-        // ティッカーを即座に更新
         trackConditionTickerKey.currentState?.loadData();
       }
     } catch (e) {
@@ -377,18 +369,16 @@ class _MainScaffoldState extends State<MainScaffold> {
               leading: const Icon(Icons.person_outline),
               title: const Text('ユーザー設定'),
               onTap: () async {
-                Navigator.of(context).pop(); // Drawerを閉じる
-                // ユーザー設定画面から戻ってきた後に必ず再読み込みを実行
+                Navigator.of(context).pop();
                 await Navigator.of(context).push<bool>(
                   MaterialPageRoute(
                     builder: (context) => UserSettingsPage(onLogout: widget.onLogout),
                   ),
                 );
-                // 戻ってきたら、変更の有無にかかわらず情報を再読み込みする
                 _loadUserInfoForDrawer();
               },
             ),
-            const Divider(), // 他のメニュー項目との区切り線
+            const Divider(),
 
             ListTile(
               leading: const Icon(Icons.home_work_outlined),
@@ -449,7 +439,6 @@ class _MainScaffoldState extends State<MainScaffold> {
               },
             ),
 
-            // ★新規追加: 馬場データのCSVインポートボタン
             ListTile(
               leading: const Icon(Icons.upload_file),
               title: const Text('馬場データ(CSV)をインポート'),

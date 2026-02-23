@@ -6,7 +6,7 @@ import 'package:hetaumakeiba_v2/models/relative_evaluation_model.dart';
 import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
 import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 
@@ -51,11 +51,11 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     );
 
     // 2. 馬ごとの過去戦績の取得
-    final db = DatabaseHelper();
+    final _horseRepo = HorseRepository();
     final Map<String, List<HorseRaceRecord>> horsePerformanceMap = {};
 
     for (var horse in widget.horses) {
-      final records = await db.getHorsePerformanceRecords(horse.horseId);
+      final List<HorseRaceRecord> records = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
       horsePerformanceMap[horse.horseId] = records;
     }
 

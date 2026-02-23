@@ -6,9 +6,6 @@ import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/result_page.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
-
-// 新しく分離したギャラリーQRデータ処理ロジックをインポート
 import 'package:hetaumakeiba_v2/logic/gallery_qr_code_processor.dart';
 
 class GalleryQrScannerPage extends StatefulWidget {
@@ -35,10 +32,8 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
   @override
   void initState() {
     super.initState();
-    final DatabaseHelper dbHelper = DatabaseHelper(); // プロセッサに渡すためのインスタンス
 
     _galleryQrProcessor = GalleryQrCodeProcessor(
-      dbHelper: dbHelper,
       onWarningStatusChanged: (status, message) {
         setState(() {
           _errorMessage = message; // メッセージをUIに表示
@@ -74,7 +69,6 @@ class _GalleryQrScannerPageState extends State<GalleryQrScannerPage> {
 
   @override
   void dispose() {
-    // MobileScannerController は GalleryQrCodeProcessor 内で管理されるため、ここではdisposeしない
     super.dispose();
   }
 

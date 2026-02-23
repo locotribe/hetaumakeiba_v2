@@ -2,13 +2,13 @@
 
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 
 class GalleryQrCodeProcessor {
-  final DatabaseHelper _dbHelper;
+  final TicketRepository _ticketRepository;
   final Function(bool status, String? message) onWarningStatusChanged;
   final Function(Map<String, dynamic> parsedData) onProcessingComplete;
   final GlobalKey<SavedTicketsListPageState> savedListKey;
@@ -27,12 +27,11 @@ class GalleryQrCodeProcessor {
   }
 
   GalleryQrCodeProcessor({
-    required DatabaseHelper dbHelper,
     required this.onWarningStatusChanged,
     required this.onProcessingComplete,
     required this.savedListKey,
-  })  : _dbHelper = dbHelper,
-        _ticketProcessingService = TicketProcessingService(dbHelper: dbHelper);
+  })  : _ticketRepository = TicketRepository(),
+        _ticketProcessingService = TicketProcessingService();
 
   void _setWarningStatus(bool status, String? message) {
     onWarningStatusChanged(status, message);
@@ -121,7 +120,7 @@ class GalleryQrCodeProcessor {
       }
 
       combinedQrCode = frontPart + backPart;
-      final bool existsCombined = await _dbHelper.qrCodeExists(combinedQrCode);
+      final bool existsCombined = await _ticketRepository.qrCodeExists(combinedQrCode);
       if (existsCombined) {
         _setWarningStatus(true, 'この馬券はすでに読み込みました');
         await Future.delayed(const Duration(seconds: 2));
@@ -181,7 +180,7 @@ class GalleryQrCodeProcessor {
     onProcessingComplete(parsedData);
 
     // スクレイピングはawaitせずに実行（Fire-and-forget）
-    _ticketProcessingService.triggerBackgroundScraping(userId, parsedData, _dbHelper).catchError((e) {
+    _ticketProcessingService.triggerBackgroundScraping(userId, parsedData).catchError((e) {
       // バックグラウンド処理のエラーはコンソールに出力するのみ
       print('ERROR: バックグラウンドスクレイピング中にエラーが発生しました: $e');
     });

@@ -1,6 +1,6 @@
 // lib/screens/auth_gate.dart
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/main_scaffold.dart';
 import 'package:hetaumakeiba_v2/models/user_model.dart';
 import 'package:hetaumakeiba_v2/screens/login_page.dart';
@@ -17,6 +17,7 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   User? _currentUser;
   bool _isLoading = true; // 読み込み状態を管理するフラグ
+  final UserRepository _userRepository = UserRepository();
 
   @override
   void initState() {
@@ -32,8 +33,7 @@ class _AuthGateState extends State<AuthGate> {
 
     User? user;
     if (userUuid != null) {
-      final dbHelper = DatabaseHelper();
-      user = await dbHelper.getUserByUuid(userUuid);
+      user = await _userRepository.getUserByUuid(userUuid);
       print('[AUTH_GATE] User fetched from DB with UUID: ${user?.username}');
     }
 

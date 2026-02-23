@@ -2,7 +2,9 @@
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
@@ -12,13 +14,13 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
-import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
 
 class TicketProcessingService {
-  final DatabaseHelper _dbHelper;
-  final RaceDataRepository _repository = RaceDataRepository();
+  final TicketRepository _ticketRepository = TicketRepository();
+  final RaceRepository _raceRepository = RaceRepository();
+  final HorseRepository _horseRepository = HorseRepository();
 
-  TicketProcessingService({required DatabaseHelper dbHelper}) : _dbHelper = dbHelper;
+  TicketProcessingService();
 
   /// QRコードを解析してDBに保存し、解析結果を返す
   Future<Map<String, dynamic>> processAndSaveTicket(
@@ -40,7 +42,7 @@ class TicketProcessingService {
           parsedDataJson: json.encode(parsedData),
         );
 
-        await _repository.saveQrData(qrDataToSave);
+        await _ticketRepository.insertQrData(qrDataToSave);
 
         savedListKey.currentState?.reloadData();
       } else {
@@ -55,7 +57,7 @@ class TicketProcessingService {
   /// バックグラウンドでレース関連情報をスクレイピングする
   Future<void> triggerBackgroundScraping(
       String userId,
-      Map<String, dynamic> parsedData, DatabaseHelper dbHelper) async {
+      Map<String, dynamic> parsedData) async {
     try {
       final String year = parsedData['年'].toString();
       final String racecourseCode = racecourseDict.entries
@@ -75,7 +77,7 @@ class TicketProcessingService {
       if (raceId != null) {
         // ここでの既存チェックは「スクレイピングするかどうか」の判断用なのでDB直接参照でOK
         // ただし保存はRepositoryを使う
-        final existingRaceResult = await dbHelper.getRaceResult(raceId);
+        final existingRaceResult = await _raceRepository.getRaceResult(raceId);
 
         if (existingRaceResult == null) {
           // ★修正: スクレイピングサービス内ですでにRepository保存が行われるようになったため
@@ -86,13 +88,13 @@ class TicketProcessingService {
 
           for (final horse in raceResult.horseResults) {
             final latestRecord =
-            await dbHelper.getLatestHorsePerformanceRecord(horse.horseId);
+            await _horseRepository.getLatestHorsePerformanceRecord(horse.horseId);
             if (latestRecord == null || latestRecord.date != raceResult.raceDate) {
               try {
                 final horseRecords =
                 await HorsePerformanceScraperService.scrapeHorsePerformance(horse.horseId);
                 for (final record in horseRecords) {
-                  await dbHelper.insertOrUpdateHorsePerformance(record);
+                  await _horseRepository.insertOrUpdateHorsePerformance(record);
                 }
                 await Future.delayed(const Duration(milliseconds: 500));
               } catch (e) {
@@ -120,7 +122,7 @@ class TicketProcessingService {
             raceDetails1: existingRaceResult.raceInfo,
             raceDetails2: existingRaceResult.raceGrade,
           );
-          await ScraperService.syncNewHorseData([featuredRacePlaceholder], dbHelper);
+          await ScraperService.syncNewHorseData([featuredRacePlaceholder]);
         }
 
         await AnalyticsService().updateAggregatesOnResultConfirmed(raceId, userId);

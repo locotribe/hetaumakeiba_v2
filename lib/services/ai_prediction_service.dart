@@ -1,7 +1,8 @@
 // lib/services/ai_prediction_service.dart
 
 import 'dart:convert';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
@@ -34,7 +35,8 @@ class AiPredictionScores {
 }
 
 class AiPredictionService {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceRepository _raceRepo = RaceRepository();
+  final HorseRepository _horseRepo = HorseRepository();
 
   Future<AiPredictionScores> calculatePredictionScores(
       PredictionRaceData raceData, String raceId) async {
@@ -59,14 +61,14 @@ class AiPredictionService {
     final Map<String, double> staminaScores = {};
     RaceStatistics? raceStats;
     try {
-      raceStats = await _dbHelper.getRaceStatistics(raceId);
+      raceStats = await _raceRepo.getRaceStatistics(raceId);
     } catch (e) {
       print('レース統計データの取得に失敗しました (テーブル未作成の可能性があります): $e');
       raceStats = null;
     }
 
     for (var horse in raceData.horses) {
-      final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      final pastRecords = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
       scores[horse.horseId] = AptitudeAnalyzer.calculateOverallAptitudeScore(
         horse,
@@ -116,7 +118,7 @@ class AiPredictionService {
         analysisDetailsJson: json.encode(details),
       ));
     }
-    await _dbHelper.insertOrUpdateAiPredictions(predictionsToSave);
+    await _raceRepo.insertOrUpdateAiPredictions(predictionsToSave);
 
     return AiPredictionScores(
       overallScores: scores,

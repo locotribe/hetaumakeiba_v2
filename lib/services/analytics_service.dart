@@ -1,7 +1,9 @@
 // lib/services/analytics_service.dart
 
 import 'dart:convert';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
@@ -9,17 +11,19 @@ import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
 class AnalyticsService {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceRepository _raceRepo = RaceRepository();
+  final UserRepository _userRepo = UserRepository();
+  final TicketRepository _ticketRepo = TicketRepository();
 
   /// 特定のレースIDの結果が確定した際に、関連する全ての集計値を更新する
   Future<void> updateAggregatesOnResultConfirmed(String raceId, String userId) async {
-    final raceResult = await _dbHelper.getRaceResult(raceId);
+    final raceResult = await _raceRepo.getRaceResult(raceId);
     if (raceResult == null || raceResult.isIncomplete) {
       return; // レース結果が存在しない、または未確定の場合は何もしない
     }
 
     // このraceIdに紐づく全てのQrDataを取得
-    final allQrData = await _dbHelper.getAllQrData(userId);
+    final allQrData = await _ticketRepo.getAllQrData(userId);
     final List<QrData> relevantTickets = [];
     for (final qrData in allQrData) {
       final parsedData = json.decode(qrData.parsedDataJson) as Map<String, dynamic>;
@@ -61,13 +65,13 @@ class AnalyticsService {
     await _updatePredictionStats(updates, raceResult, userId);
 
     if (updates.isNotEmpty) {
-      await _dbHelper.updateAggregates(userId, updates);
+      await _userRepo.updateAggregates(userId, updates);
     }
   }
 
   /// 予想印の成績を集計・更新する
   Future<void> _updatePredictionStats(Map<String, Map<String, int>> updates, RaceResult raceResult, String userId) async {
-    final userMarks = await _dbHelper.getAllUserMarksForRace(userId, raceResult.raceId);
+    final userMarks = await _userRepo.getAllUserMarksForRace(userId, raceResult.raceId);
     if (userMarks.isEmpty) {
       return;
     }
@@ -78,7 +82,6 @@ class AnalyticsService {
       // 対応する馬の着順を取得
       HorseResult? horseResult;
       try {
-        // ★★★ ここが修正箇所 ★★★
         horseResult = raceResult.horseResults.firstWhere((r) => r.horseId == mark.horseId);
       } catch (e) {
         // レース結果に馬が見つからない場合（取消など）はスキップ

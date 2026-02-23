@@ -1,42 +1,42 @@
 // lib/screens/shutuba_table_page.dart
 
-import 'package:flutter/material.dart';
-import 'package:csv/csv.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:just_the_tooltip/just_the_tooltip.dart';
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
+
+import 'package:csv/csv.dart';
 import 'package:data_table_2/data_table_2.dart';
-import 'package:hetaumakeiba_v2/main.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/logic/ai/stats_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+// --- 新しいRepository / Serviceのインポート ---
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/ai/stats_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
-import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
-import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
-import 'package:hetaumakeiba_v2/widgets/leg_style_indicator.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
+import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
-import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
-import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
-import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
-import 'package:hetaumakeiba_v2/services/scraping_manager.dart'; // 追加
-import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
-import 'package:hetaumakeiba_v2/screens/ai_comprehensive_prediction_page.dart';
-import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
-import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
-import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
-import '../utils/grade_utils.dart';
-import 'package:hetaumakeiba_v2/repositories/race_data_repository.dart';
+import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
+import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
+import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
+import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
+import 'package:hetaumakeiba_v2/services/horse_profile_sync_service.dart';
+import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
+import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
+import 'package:hetaumakeiba_v2/widgets/leg_style_indicator.dart';
+import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
+import 'package:just_the_tooltip/just_the_tooltip.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../utils/grade_utils.dart';
 
 enum SortableColumn {
   mark,
@@ -78,10 +78,15 @@ class ShutubaTablePage extends StatefulWidget {
 class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   PredictionRaceData? _predictionRaceData;
   bool _isLoading = true;
-  final DatabaseHelper _dbHelper = DatabaseHelper();
   final ShutubaTableScraperService _scraperService = ShutubaTableScraperService();
   final AiPredictionService _predictionService = AiPredictionService();
-  final RaceDataRepository _repository = RaceDataRepository();
+
+  // --- 新しいRepository / Serviceのインスタンス化 ---
+  final RaceRepository _raceRepo = RaceRepository();
+  final HorseRepository _horseRepo = HorseRepository();
+  final UserRepository _userRepo = UserRepository();
+  final HorseProfileSyncService _horseProfileSyncService = HorseProfileSyncService();
+
   Map<String, double> _overallScores = {};
   Map<String, double> _expectedValues = {};
   Map<String, ConditionFitResult> _conditionFits = {};
@@ -108,6 +113,71 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     super.dispose();
   }
 
+  Future<PredictionRaceData?> _getShutubaDataWithProfile(String raceId) async {
+    final cache = await _raceRepo.getShutubaTableCache(raceId);
+    if (cache != null) {
+      var data = cache.predictionRaceData;
+      final List<PredictionHorseDetail> updatedHorses = [];
+
+      for (var horse in data.horses) {
+        final profile = await _horseRepo.getHorseProfile(horse.horseId);
+        if (profile != null) {
+          updatedHorses.add(PredictionHorseDetail(
+            horseId: horse.horseId,
+            horseNumber: horse.horseNumber,
+            gateNumber: horse.gateNumber,
+            horseName: horse.horseName,
+            sexAndAge: horse.sexAndAge,
+            jockey: horse.jockey,
+            jockeyId: horse.jockeyId,
+            carriedWeight: horse.carriedWeight,
+            trainerName: horse.trainerName,
+            trainerAffiliation: horse.trainerAffiliation,
+            odds: horse.odds,
+            effectiveOdds: horse.effectiveOdds,
+            popularity: horse.popularity,
+            horseWeight: horse.horseWeight,
+            userMark: horse.userMark,
+            userMemo: horse.userMemo,
+            isScratched: horse.isScratched,
+            predictionScore: horse.predictionScore,
+            conditionFit: horse.conditionFit,
+            distanceCourseAptitudeStats: horse.distanceCourseAptitudeStats,
+            trackAptitudeLabel: horse.trackAptitudeLabel,
+            bestTimeStats: horse.bestTimeStats,
+            fastestAgariStats: horse.fastestAgariStats,
+            overallScore: horse.overallScore,
+            expectedValue: horse.expectedValue,
+            legStyleProfile: horse.legStyleProfile,
+            previousHorseWeight: horse.previousHorseWeight,
+            previousJockey: horse.previousJockey,
+            ownerName: (profile.ownerName.isNotEmpty) ? profile.ownerName : horse.ownerName,
+            ownerId: (profile.ownerId.isNotEmpty) ? profile.ownerId : horse.ownerId,
+            ownerImageLocalPath: (profile.ownerImageLocalPath.isNotEmpty) ? profile.ownerImageLocalPath : horse.ownerImageLocalPath,
+            breederName: (profile.breederName.isNotEmpty) ? profile.breederName : horse.breederName,
+            fatherName: (profile.fatherName.isNotEmpty) ? profile.fatherName : horse.fatherName,
+            motherName: (profile.motherName.isNotEmpty) ? profile.motherName : horse.motherName,
+          ));
+        } else {
+          updatedHorses.add(horse);
+        }
+      }
+
+      return PredictionRaceData(
+        raceId: data.raceId,
+        raceName: data.raceName,
+        raceDate: data.raceDate,
+        venue: data.venue,
+        raceNumber: data.raceNumber,
+        shutubaTableUrl: data.shutubaTableUrl,
+        raceGrade: data.raceGrade,
+        raceDetails1: data.raceDetails1,
+        horses: updatedHorses,
+        racePacePrediction: data.racePacePrediction,
+      );
+    }
+    return null;
+  }
 
   Future<void> _loadShutubaData({bool refresh = false}) async {
     if (!refresh) {
@@ -119,34 +189,31 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     try {
       PredictionRaceData? data;
 
-      // ★修正: 引数データよりもDBキャッシュ（プロフィール結合済み）を優先するロジックに変更
-      // 1. まずDBキャッシュを確認する (refresh時はスキップ)
       if (!refresh) {
-        data = await _repository.getShutubaData(widget.raceId);
+        data = await _getShutubaDataWithProfile(widget.raceId);
       }
 
-      // 2. DBになければ、引数のデータを使う
       if (data == null && widget.predictionRaceData != null && !refresh) {
         data = widget.predictionRaceData;
       }
-      // 3. 引数もなければレース結果から生成
       else if (data == null && widget.raceResult != null && !refresh) {
         data = _createPredictionDataFromRaceResult(widget.raceResult!);
       }
 
-      // 4. それでもデータがない、または更新要求時はスクレイピング
       if (data == null || refresh) {
-        // キャッシュがない、または更新要求時はスクレイピング
         data = await _fetchDataWithUserMarks();
         if (data != null) {
-          // リポジトリ経由で保存
-          await _repository.saveShutubaData(data);
+          final cache = ShutubaTableCache(
+            raceId: data.raceId,
+            predictionRaceData: data,
+            lastUpdatedAt: DateTime.now(),
+          );
+          await _raceRepo.insertOrUpdateShutubaTableCache(cache);
         }
       }
 
       if (mounted) {
         if (data != null) {
-          // AIスコアのマッピング (既存処理)
           if (data.horses.any((h) => h.overallScore != null)) {
             _overallScores = {
               for (var h in data.horses)
@@ -157,7 +224,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                 if (h.expectedValue != null) h.horseId: h.expectedValue!
             };
           } else {
-            final predictions = await _dbHelper.getAiPredictionsForRace(widget.raceId);
+            final predictions = await _raceRepo.getAiPredictionsForRace(widget.raceId);
             if(predictions.isNotEmpty){
               _overallScores = {for (var p in predictions) p.horseId: p.overallScore};
               _expectedValues = {for (var p in predictions) p.horseId: p.expectedValue};
@@ -173,16 +240,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           _isLoading = false;
         });
 
-        // ★修正: プロフィール情報のバックグラウンド同期を実行
-        // リポジトリがManager経由でリクエストをキューイングするため、メインスレッドはブロックされない
-        // DBから取得したデータであっても、未取得の馬がいればここでチェックされ、キューに追加される
         if (data != null) {
-          _repository.syncMissingHorseProfiles(data.horses, (updatedHorseId) async {
-            // コールバック: 1頭保存されるたびに呼ばれる
+          _horseProfileSyncService.syncMissingHorseProfiles(data.horses, (updatedHorseId) async {
             if (!mounted) return;
 
-            // 最新データをDBから再取得して画面に反映
-            final updatedData = await _repository.getShutubaData(widget.raceId);
+            final updatedData = await _getShutubaDataWithProfile(widget.raceId);
             if (updatedData != null && mounted) {
               setState(() {
                 _predictionRaceData = updatedData;
@@ -202,14 +264,14 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<void> _updateMarkAndSaveInBackground(UserMark mark) async {
-    await _dbHelper.insertOrUpdateUserMark(mark);
+    await _userRepo.insertOrUpdateUserMark(mark);
     if (_predictionRaceData != null) {
       final newCache = ShutubaTableCache(
         raceId: widget.raceId,
         predictionRaceData: _predictionRaceData!,
         lastUpdatedAt: DateTime.now(),
       );
-      await _dbHelper.insertOrUpdateShutubaTableCache(newCache);
+      await _raceRepo.insertOrUpdateShutubaTableCache(newCache);
     }
   }
 
@@ -217,14 +279,14 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     final userId = localUserId;
     if (userId == null) return;
 
-    await _dbHelper.deleteUserMark(userId, widget.raceId, horse.horseId);
+    await _userRepo.deleteUserMark(userId, widget.raceId, horse.horseId);
     if (_predictionRaceData != null) {
       final newCache = ShutubaTableCache(
         raceId: widget.raceId,
         predictionRaceData: _predictionRaceData!,
         lastUpdatedAt: DateTime.now(),
       );
-      await _dbHelper.insertOrUpdateShutubaTableCache(newCache);
+      await _raceRepo.insertOrUpdateShutubaTableCache(newCache);
     }
   }
 
@@ -309,7 +371,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       predictionRaceData: raceData,
       lastUpdatedAt: DateTime.now(),
     );
-    await _dbHelper.insertOrUpdateShutubaTableCache(newCache);
+    await _raceRepo.insertOrUpdateShutubaTableCache(newCache);
 
     if (mounted) {
       setState(() {
@@ -341,8 +403,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     final raceData = await _scraperService.scrapeAllData(widget.raceId);
 
     final results = await Future.wait([
-      _dbHelper.getAllUserMarksForRace(userId, widget.raceId),
-      _dbHelper.getMemosForRace(userId, widget.raceId),
+      _userRepo.getAllUserMarksForRace(userId, widget.raceId),
+      _horseRepo.getMemosForRace(userId, widget.raceId),
     ]);
 
     final userMarks = results[0] as List<UserMark>;
@@ -367,7 +429,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           horse.popularity = memosMap[horse.horseId]!.popularity;
         }
       }
-      final pastRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+      final pastRecords = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
       allPastRecords[horse.horseId] = pastRecords;
 
       if (pastRecords.isNotEmpty) {
@@ -378,7 +440,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
     }
 
-    final pastRaceResults = await _dbHelper.getMultipleRaceResults(pastRaceIdsToFetch.toList());
+    final pastRaceResults = await _raceRepo.getMultipleRaceResults(pastRaceIdsToFetch.toList());
 
     for (var horse in raceData.horses) {
       final pastRecords = allPastRecords[horse.horseId] ?? [];
@@ -468,7 +530,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                     popularity: horse.userMemo?.popularity,
                     timestamp: DateTime.now(),
                   );
-                  await _dbHelper.insertOrUpdateHorseMemo(newMemo);
+                  await _horseRepo.insertOrUpdateHorseMemo(newMemo);
                   Navigator.of(context).pop();
                   _loadShutubaData(refresh: true);
                 }
@@ -558,7 +620,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         ));
       }
 
-      await _dbHelper.insertOrUpdateMultipleMemos(memosToUpdate);
+      await _horseRepo.insertOrUpdateMultipleMemos(memosToUpdate);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${memosToUpdate.length}件のメモをインポートしました。')),
@@ -718,13 +780,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ],
           ),
         ),
-        // ★追加: スクレイピング進捗バー
         _buildScrapingProgressIndicator(),
       ],
     );
   }
 
-  // ★追加: スクレイピング進捗バーのビルドメソッド
   Widget _buildScrapingProgressIndicator() {
     return StreamBuilder<ScrapingStatus>(
       stream: ScrapingManager().statusStream,
@@ -889,7 +949,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       sortAscending: _isAscending,
       columnSpacing: 6.0,
       headingRowHeight: 50,
-      dataRowHeight: 60,
+      dataRowHeight: 90,
       headingTextStyle: const TextStyle(
         fontSize: 12.0, // ヘッダーの文字サイズ
         fontWeight: FontWeight.bold,
@@ -911,7 +971,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
         DataColumn2(label: const Text('枠\n番'), fixedWidth: 40, onSort: (i, asc) => _onSort(SortableColumn.gateNumber)),
         DataColumn2(label: const Text('馬\n番'), fixedWidth: 40, onSort: (i, asc) => _onSort(SortableColumn.horseNumber)),
-        // ★追加: 勝負服画像の列
         const DataColumn2(label: Text('服'), fixedWidth: 40),
         DataColumn2(label: const Text('馬名'), fixedWidth: 130, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
         DataColumn2(label: const Text('人気'), fixedWidth: 65, numeric: true, onSort: (i, asc) => _onSort(SortableColumn.popularity)),
@@ -926,12 +985,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         ),
         DataCell(_buildGateNumber(horse.gateNumber)),
         DataCell(_buildHorseNumber(horse.horseNumber, horse.gateNumber)),
-        // ★追加: 勝負服画像セル
         DataCell(
           FutureBuilder<HorseProfile?>(
-            future: _dbHelper.getHorseProfile(horse.horseId),
+            future: _horseRepo.getHorseProfile(horse.horseId),
             builder: (context, snapshot) {
-              // データ取得完了かつ、パスが存在する場合のみ画像を表示
               if (snapshot.connectionState == ConnectionState.done &&
                   snapshot.hasData &&
                   snapshot.data!.ownerImageLocalPath.isNotEmpty) {
@@ -944,7 +1001,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   ),
                 );
               }
-              // ロード中、または画像がない場合は何も表示しない
               return const SizedBox.shrink();
             },
           ),
@@ -1019,9 +1075,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         const DataColumn2(label: Text('騎手'), fixedWidth: 80),
         const DataColumn2(label: Text('前走騎手'), fixedWidth: 80),
         const DataColumn2(label: Text('所属'), fixedWidth: 50),
-        // ★修正: 調教師にソート追加
         DataColumn2(label: const Text('調教師'), fixedWidth: 80, onSort: (i, asc) => _onSort(SortableColumn.trainer)),
-        // ★修正: 馬主にソート追加
         DataColumn2(label: const Text('馬主'), fixedWidth: 250, onSort: (i, asc) => _onSort(SortableColumn.owner)),
       ],
       horses: horses,
@@ -1454,7 +1508,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       if (rankInt == 3) backgroundColor = Colors.yellow.withAlpha(80);
     }
 
-    // 脚質を簡易判定
     final legStyle = RaceDataParser.getSimpleLegStyle(record.cornerPassage, record.numberOfHorses);
 
     String extractedGrade = '';
@@ -1463,7 +1516,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     if (match != null) extractedGrade = match.group(1)!;
     final gradeColor = getGradeColor(extractedGrade);
 
-    // 2種類の着差を結合して表示用文字列を作成
     final timeDiffMargin = record.margin; // タイム差（例: "3.3"）
     final stringMargin = horseResult?.margin ?? ''; // 文字列着差（例: "ハナ"）
     String displayMargin = timeDiffMargin; // デフォルトはタイム差
@@ -1479,9 +1531,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         if (record.raceId.isNotEmpty) {
           setState(() {
             if (_highlightedRaceId == record.raceId) {
-              _highlightedRaceId = null; // Toggle off
+              _highlightedRaceId = null;
             } else {
-              _highlightedRaceId = record.raceId; // Toggle on
+              _highlightedRaceId = record.raceId;
             }
           });
         }
@@ -1497,7 +1549,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             // --- 左列 (着順/印・人気・脚質) ---
             Container(
               width: 50,
-              height: 80,
               decoration: BoxDecoration(
                 color: backgroundColor,
                 border: Border(right: BorderSide(color: Colors.grey.shade300)),
@@ -1509,7 +1560,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                     alignment: Alignment.center,
                     children: [
                       FutureBuilder<UserMark?>(
-                        future: _dbHelper.getUserMark(localUserId!, record.raceId, record.horseId),
+                        future: _userRepo.getUserMark(localUserId!, record.raceId, record.horseId),
                         builder: (context, snapshot) {
                           if (snapshot.hasData && snapshot.data?.mark != null) {
                             return Text(
@@ -1531,7 +1582,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                           Text(
                             record.rank,
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: ['1','2','3'].contains(record.rank)
                                   ? Colors.red
@@ -1556,7 +1607,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ),
             // --- 中央・右列 (レース詳細) ---
             Expanded(
-              child: Container( // 背景色を適用するためにContainerでラップ
+              child: Container(
                 color: backgroundColor,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(8.0, 4.0, 4.0, 4.0),
@@ -1597,17 +1648,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   /// 過去5走分のセルを作成
   List<DataCell> _buildPerformanceCells(String horseId) {
-    // 競走成績と、それに紐づく全レース結果をまとめて非同期で取得するFutureを作成
     final futurePerformanceData = Future<_PerformanceData>(() async {
-      final records = await _dbHelper.getHorsePerformanceRecords(horseId);
+      final records = await _horseRepo.getHorsePerformanceRecords(horseId);
       final raceIds = records.map((r) => r.raceId).where((id) => id.isNotEmpty).toSet().toList();
-      final raceResults = await _dbHelper.getMultipleRaceResults(raceIds);
+      final raceResults = await _raceRepo.getMultipleRaceResults(raceIds);
       return _PerformanceData(records, raceResults);
     });
 
     final List<DataCell> cells = [];
 
-    // 前走との間隔を表示するセル
     cells.add(DataCell(
       FutureBuilder<_PerformanceData>(
         future: futurePerformanceData,
@@ -1624,7 +1673,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       ),
     ));
 
-    // 過去5走分のセル
     for (int i = 0; i < 5; i++) {
       cells.add(DataCell(
         FutureBuilder<_PerformanceData>(
@@ -1638,10 +1686,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                 try {
                   horseResultInRace = raceResult.horseResults.firstWhere((hr) => hr.horseId == record.horseId);
                 } catch (e) {
-                  // just in case
                 }
               }
-              // 両方のデータをカード生成ウィジェットに渡す
               return _buildPastRaceDetailCard(record, horseResultInRace);
             }
             return const SizedBox(width: 250);
@@ -1649,7 +1695,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         ),
       ));
 
-      // 4走前までのレース間隔を表示
       if (i < 4) {
         cells.add(DataCell(
           FutureBuilder<_PerformanceData>(

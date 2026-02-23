@@ -1,6 +1,6 @@
 // lib/services/statistics_service.dart
 
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
@@ -9,7 +9,7 @@ import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 
 class StatisticsService {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceRepository _raceRepo = RaceRepository();
 
   /// [新規追加] レースIDのリストを直接受け取り、統計データを生成・保存する
   Future<RaceStatistics?> processAndSaveRaceStatisticsByIds({
@@ -19,10 +19,10 @@ class StatisticsService {
   }) async {
     final List<RaceResult> pastResults = [];
     for (final pastId in pastRaceIds) {
-      RaceResult? result = await _dbHelper.getRaceResult(pastId);
+      RaceResult? result = await _raceRepo.getRaceResult(pastId);
       if (result == null) {
         result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
-        await _dbHelper.insertOrUpdateRaceResult(result);
+        await _raceRepo.insertOrUpdateRaceResult(result);
         await Future.delayed(const Duration(milliseconds: 200));
       }
       pastResults.add(result);
@@ -72,7 +72,7 @@ class StatisticsService {
       lastUpdatedAt: DateTime.now(),
     );
 
-    await _dbHelper.insertOrUpdateRaceStatistics(statsToSave);
+    await _raceRepo.insertOrUpdateRaceStatistics(statsToSave);
     return statsToSave;
   }
 
@@ -92,12 +92,12 @@ class StatisticsService {
     final List<RaceResult> pastResults = [];
     for (final pastId in pastRaceIdCandidates) {
       // まずDBから試みる
-      RaceResult? result = await _dbHelper.getRaceResult(pastId);
+      RaceResult? result = await _raceRepo.getRaceResult(pastId);
       if (result == null) {
         // DBになければスクレイピング
         print('DBに無いためWebから取得: $pastId');
         result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
-        await _dbHelper.insertOrUpdateRaceResult(result);
+        await _raceRepo.insertOrUpdateRaceResult(result);
         await Future.delayed(const Duration(milliseconds: 200)); // サーバー負荷軽減
       }
 
@@ -131,7 +131,7 @@ class StatisticsService {
     );
 
     // 4. DBに保存
-    await _dbHelper.insertOrUpdateRaceStatistics(statsToSave);
+    await _raceRepo.insertOrUpdateRaceStatistics(statsToSave);
     return statsToSave;
   }
 

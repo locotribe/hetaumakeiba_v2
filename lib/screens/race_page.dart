@@ -1,7 +1,8 @@
 // lib/screens/race_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/database_helper.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
@@ -36,7 +37,8 @@ class RacePage extends StatefulWidget {
 
 class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RaceRepository _raceRepo = RaceRepository();
+  final HorseRepository _horseRepo = HorseRepository();
   RaceStatus _status = RaceStatus.loading;
   RaceResult? _raceResult;
   PredictionRaceData? _predictionRaceData;
@@ -75,7 +77,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         ? int.tryParse(raceResult.raceId.substring(raceResult.raceId.length - 2))?.toString() ?? ''
         : '';
 
-    // レースIDから開催場所(venue)を特定するロジック
     String venueName = '';
     if (raceResult.raceId.length >= 12) {
       final placeCode = raceResult.raceId.substring(4, 6);
@@ -116,15 +117,14 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   }
 
   Future<void> _determineRaceStatus() async {
-    final shutubaCache = await _dbHelper.getShutubaTableCache(widget.raceId);
-    final dbResult = await _dbHelper.getRaceResult(widget.raceId);
+    final shutubaCache = await _raceRepo.getShutubaTableCache(widget.raceId);
+    final dbResult = await _raceRepo.getRaceResult(widget.raceId);
 
     if (shutubaCache != null) {
       setState(() {
         _predictionRaceData = shutubaCache.predictionRaceData;
         _raceResult = dbResult;
         _status = RaceStatus.resultConfirmed;
-        // ★修正: 結果がある場合は「レース結果(5)」へ。なければ「出馬表(0)」へ
         _tabController.animateTo(dbResult != null ? 5 : 0);
       });
       return;
@@ -135,7 +135,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _raceResult = dbResult;
         _predictionRaceData = _createPredictionDataFromRaceResult(dbResult);
         _status = RaceStatus.resultConfirmed;
-        // ★修正: 既に結果があるなら「レース結果(5)」へ移動
         _tabController.animateTo(5);
       });
       return;
@@ -161,14 +160,14 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   Future<void> _fetchAndSaveRaceResult() async {
     try {
       final result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/${widget.raceId}');
-      await _dbHelper.insertOrUpdateRaceResult(result);
+      await _raceRepo.insertOrUpdateRaceResult(result);
       for (final horse in result.horseResults) {
-        final existingRecords = await _dbHelper.getHorsePerformanceRecords(horse.horseId);
+        final existingRecords = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
         if (existingRecords.isEmpty) {
           try {
             final horseRecords = await HorsePerformanceScraperService.scrapeHorsePerformance(horse.horseId);
             for (final record in horseRecords) {
-              await _dbHelper.insertOrUpdateHorsePerformance(record);
+              await _horseRepo.insertOrUpdateHorsePerformance(record);
             }
             await Future.delayed(const Duration(milliseconds: 500));
           } catch (e) {
@@ -180,7 +179,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         setState(() {
           _raceResult = result;
           _status = RaceStatus.resultConfirmed;
-          // ★修正: 取得完了後、自動的に「レース結果(5)」へ移動
           _tabController.animateTo(5);
         });
       }
