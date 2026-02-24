@@ -244,7 +244,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white70,
                 tabs: [
-                  const Tab(text: '波乱度'),
+                  const Tab(text: '総合'),
                   const Tab(text: '配当'),
                   const Tab(text: '人気'),
                   const Tab(text: '枠番'),
@@ -281,7 +281,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
                   return TabBarView(
                     children: [
-                      // ★新設: 波乱度
                       VolatilityAnalysisTab(
                         targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                       ),

@@ -128,4 +128,21 @@ class TrackConditionRepository {
       rethrow;
     }
   }
+// ★追加: レースIDの先頭10桁から、当日の最新の馬場状態レコードを取得するメソッド
+  Future<TrackConditionRecord?> getLatestTrackConditionByPrefix(String prefix10) async {
+    final db = await _dbProvider.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      DbConstants.tableTrackConditions,
+      // 先頭10桁が一致、かつ下2桁が00(前日データ)ではないものを抽出
+      where: 'CAST(track_condition_id AS TEXT) LIKE ? AND track_condition_id % 100 != 0',
+      whereArgs: ['$prefix10%'],
+      // 複数ある場合は一番新しい(IDが大きい)ものを取得
+      orderBy: 'track_condition_id DESC',
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return TrackConditionRecord.fromJson(maps.first);
+    }
+    return null;
+  }
 }
