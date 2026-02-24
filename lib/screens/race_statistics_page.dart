@@ -1,20 +1,20 @@
 // lib/screens/race_statistics_page.dart
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
-import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
-import 'package:hetaumakeiba_v2/services/statistics_service.dart';
-import 'dart:convert';
-import 'package:intl/intl.dart';
-import 'package:hetaumakeiba_v2/services/past_race_id_fetcher_service.dart';
-import 'package:hetaumakeiba_v2/widgets/stats_match_tab.dart';
-import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
-import 'package:hetaumakeiba_v2/widgets/detailed_analysis_tab.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart';
-import 'package:hetaumakeiba_v2/widgets/past_race_selection_dialog.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
+import 'package:hetaumakeiba_v2/services/past_race_id_fetcher_service.dart';
+import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/widgets/analyzed_races_tab.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart'; // ★追加
+import 'package:hetaumakeiba_v2/widgets/detailed_analysis_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/past_race_selection_dialog.dart';
+import 'package:hetaumakeiba_v2/widgets/stats_match_tab.dart';
+import 'package:intl/intl.dart';
+import 'package:hetaumakeiba_v2/widgets/volatility_analysis_tab.dart';
 
 class RaceStatisticsPage extends StatefulWidget {
   final String raceId;
@@ -36,14 +36,12 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   final RaceRepository _raceRepo = RaceRepository();
 
   Future<RaceStatistics?>? _statisticsFuture;
-  List<PredictionHorseDetail> _horses = []; // 出走馬リストを保持
+  List<PredictionHorseDetail> _horses = [];
 
   List<PredictionHorseDetail>? _resultHorses;
   bool _hasCacheData = false;
-  // 結果分析タブを表示するかどうかの判定
   bool get _showResultTab => _hasCacheData && _resultHorses != null;
 
-  // 配当タブで使用する辞書定義
   final Map<String, String> bettingDict = {
     '1': '単勝',
     '2': '複勝',
@@ -77,10 +75,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       // 2. 確定したレース結果を確認（過去のレース / 結果データ）
       final RaceResult? result = await _raceRepo.getRaceResult(widget.raceId);
       if (result != null) {
-        // 結果分析タブ用に、RankをPopularityにマッピングして変換
         _resultHorses = _convertResultsToDetails(result.horseResults, useRankAsPopularity: true);
 
-        // キャッシュがない（過去レースを初めて開いた）場合
         if (!_hasCacheData) {
           _horses = _convertResultsToDetails(result.horseResults, useRankAsPopularity: false);
         }
@@ -108,10 +104,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       // 人気・着順の処理
       int? popVal;
       if (useRankAsPopularity) {
-        // 結果分析用: RankをPopularityフィールドに入れる
         popVal = int.tryParse(res.rank);
       } else {
-        // 予想Fallback用: そのまま人気を入れる
         popVal = int.tryParse(res.popularity);
       }
 
@@ -136,7 +130,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         userMark: null,
         userMemo: res.userMemo,
         ownerName: res.ownerName,
-        // 他の予想系フィールドはnull
       );
     }).toList();
   }
@@ -149,7 +142,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   /// データ取得のメインロジック
   void _startFetchingProcess() async {
-    // ローディング表示
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -161,7 +153,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     // 1. 踏み台経由でDB一覧を取得
     final PastRaceIdResult result = await _pastRaceIdFetcher.fetchPastRaceIds(widget.raceId, widget.raceName);
 
-    if (mounted) Navigator.of(context).pop(); // ローディングを閉じる
+    if (mounted) Navigator.of(context).pop();
 
     if (result.status == FetchStatus.temporaryError) {
       if (mounted) {
@@ -176,7 +168,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     if (mounted) {
       final List<PastRaceItem>? selectedItems = await showDialog<List<PastRaceItem>>(
         context: context,
-        barrierDismissible: false, // キャンセルボタンでのみ閉じれるようにする
+        barrierDismissible: false,
         builder: (context) => PastRaceSelectionDialog(
           initialResult: result,
           defaultSearchText: widget.raceName,
@@ -188,7 +180,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         final List<String> idsToFetch = selectedItems.map((e) => e.raceId).toList();
 
         setState(() {
-          // 選択されたIDだけで再分析・保存を行う
           _statisticsFuture = _statisticsService.processAndSaveRaceStatisticsByIds(
             raceId: widget.raceId,
             raceName: widget.raceName,
@@ -241,7 +232,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       key: ValueKey(_showResultTab),
-      length: _showResultTab ? 11 : 10,
+      length: _showResultTab ? 12 : 11,
       child: Scaffold(
         body: Column(
           children: [
@@ -253,6 +244,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white70,
                 tabs: [
+                  const Tab(text: '波乱度'),
                   const Tab(text: '配当'),
                   const Tab(text: '人気'),
                   const Tab(text: '枠番'),
@@ -281,7 +273,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   final stats = snapshot.data;
                   if (stats == null) {
                     return TabBarView(
-                      children: List.generate(_showResultTab ? 11 : 10, (index) => _buildInitialView()),
+                      children: List.generate(_showResultTab ? 12 : 11, (index) => _buildInitialView()),
                     );
                   }
 
@@ -289,6 +281,10 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
                   return TabBarView(
                     children: [
+                      // ★新設: 波乱度
+                      VolatilityAnalysisTab(
+                        targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
+                      ),
                       // 1. 配当
                       _buildTabContent(child: _buildPayoutTable(data['payoutStats'] ?? const {})),
                       // 2. 人気

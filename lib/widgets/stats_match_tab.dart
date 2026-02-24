@@ -10,6 +10,7 @@ import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/services/historical_match_service.dart';
 import 'package:hetaumakeiba_v2/logic/ai/historical_match_engine.dart';
+import 'package:hetaumakeiba_v2/logic/ai/volatility_analyzer.dart';
 
 // 類似度データを保持するクラス
 class SimilarityData {
@@ -209,9 +210,13 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         }
       }
 
+      final volatilityAnalyzer = VolatilityAnalyzer();
+      final volResult = volatilityAnalyzer.analyze(pastRaces);
+
       // 5. HistoricalMatchEngineによる分析
       final analysisResult = _engine.analyze(
         currentRaceName: widget.raceName,
+        pastRaceVolatility: volResult.averagePopularity,
         currentHorses: widget.horses,
         pastRaces: pastRaces,
         currentHorseHistory: currentHorseHistory,
@@ -222,6 +227,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       if (widget.comparisonTargets != null && widget.comparisonTargets!.isNotEmpty) {
         final predictionAnalysis = _engine.analyze(
           currentRaceName: widget.raceName,
+          pastRaceVolatility: volResult.averagePopularity,
           currentHorses: widget.comparisonTargets!,
           pastRaces: pastRaces,
           currentHorseHistory: currentHorseHistory,

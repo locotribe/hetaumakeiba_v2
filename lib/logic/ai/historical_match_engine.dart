@@ -19,7 +19,8 @@ class HistoricalMatchEngine {
   final RotationFactor _rotationFactor = RotationFactor();
 
   Map<String, dynamic> analyze({
-    required String currentRaceName, // ←★これを追加
+    required String currentRaceName,
+    required double pastRaceVolatility,
     required List<PredictionHorseDetail> currentHorses,
     required List<RaceResult> pastRaces,
     required Map<String, List<HorseRaceRecord>> currentHorseHistory,
@@ -82,7 +83,7 @@ class HistoricalMatchEngine {
       // 各ファクターに分析を委譲
       final weightRes = _weightFactor.analyze(horse, prevRecord, medianWeight);
       final frameRes = _frameFactor.analyze(horse.gateNumber, currentHorses.length, zoneWinRates, maxRate);
-      // ★第3引数(レース名)、第4引数(波乱度)を追加
+
       final popRes = _popularityFactor.analyze(horse, history, currentRaceName, pastRaceVolatility);
       final rotRes = _rotationFactor.analyze(prevRecord, favorableRotations);
 
