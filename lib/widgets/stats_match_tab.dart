@@ -211,6 +211,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
 
       // 5. HistoricalMatchEngineによる分析
       final analysisResult = _engine.analyze(
+        currentRaceName: widget.raceName,
         currentHorses: widget.horses,
         pastRaces: pastRaces,
         currentHorseHistory: currentHorseHistory,
@@ -220,6 +221,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       // 比較対象(予想データ)の分析
       if (widget.comparisonTargets != null && widget.comparisonTargets!.isNotEmpty) {
         final predictionAnalysis = _engine.analyze(
+          currentRaceName: widget.raceName,
           currentHorses: widget.comparisonTargets!,
           pastRaces: pastRaces,
           currentHorseHistory: currentHorseHistory,
