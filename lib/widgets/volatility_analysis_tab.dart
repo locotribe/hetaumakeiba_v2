@@ -191,7 +191,7 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('過去の好走馬 ＆ 馬場状態 (上位3頭)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('過去レース上位3頭と馬場状態', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             ..._pastTop3Result!.map((res) {
               // 事前に取得しておいた馬場状態データ(クッション値・含水率)を取り出す
@@ -354,18 +354,15 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
   Widget _buildPayoutComparisonCard() {
     if (_payoutResult == null || _payoutResult!.averages.isEmpty) return const SizedBox.shrink();
 
-    // 全馬券種を定義（表示順序を固定）
     final targetTypes = ['単勝', '複勝', '枠連', '馬連', 'ワイド', '馬単', '3連複', '3連単'];
 
     List<BarChartGroupData> barGroups = [];
     int xIndex = 0;
     List<String> labels = [];
 
-    // 最高/最低を保持するMap
     Map<String, int?> maxVals = {};
     Map<String, int?> minVals = {};
 
-    // 数値フォーマッタ (intl パッケージを使用)
     final currencyFormatter = intl.NumberFormat.decimalPattern('ja');
 
     for (String label in targetTypes) {
@@ -384,7 +381,6 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
           ),
         );
 
-        // 最高・最低額の取得とMapへの保存
         final rawList = _payoutResult!.rawPayouts[label] ?? [];
         if (rawList.isNotEmpty) {
           maxVals[label] = rawList.reduce((a, b) => a > b ? a : b).toInt();
@@ -399,7 +395,6 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
 
     if (barGroups.isEmpty) return const SizedBox.shrink();
 
-    // 単位を短縮するフォーマット関数 (例: 15000 -> 1.5万)
     String formatShort(int? val) {
       if (val == null) return '-';
       if (val == 0) return '0';
@@ -409,9 +404,8 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
       return currencyFormatter.format(val);
     }
 
-    // タップで詳細額が浮かび上がるテキストセルを構築する関数
+    // 既存の最低・最高額用セル（ここはTooltipのまま維持）
     Widget buildTapCell(String text, int? exactVal) {
-      // 縦の高さを14pxに固定してズレを防ぐ
       Widget cellContent = SizedBox(
         height: 14,
         child: Center(
@@ -422,14 +416,14 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
       if (exactVal != null) {
         return Tooltip(
           message: '${currencyFormatter.format(exactVal)}円',
-          triggerMode: TooltipTriggerMode.tap, // タップで表示
+          triggerMode: TooltipTriggerMode.tap,
           preferBelow: false,
           decoration: BoxDecoration(
             color: Colors.black87.withOpacity(0.9),
             borderRadius: BorderRadius.circular(6),
           ),
           textStyle: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-          child: cellContent, // InkWell等を使わずTooltipのみでシンプルに判定
+          child: cellContent,
         );
       }
       return cellContent;
@@ -451,52 +445,73 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
               ],
             ),
             const SizedBox(height: 24),
-            // ★Stackを使ってグラフと見出し(左側)を綺麗に合成する
             Stack(
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(left: 24.0), // 左側の見出し用の余白を確保
+                  padding: const EdgeInsets.only(left: 24.0),
                   child: SizedBox(
-                    height: 250, // 3行ラベルが入るように高さを少し広げる
+                    height: 250,
                     child: BarChart(
                       BarChartData(
-                        barTouchData: BarTouchData(
-                          touchTooltipData: BarTouchTooltipData(
-                            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                              return BarTooltipItem(
-                                '${currencyFormatter.format(rod.toY.toInt())}円',
-                                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                              );
-                            },
-                          ),
-                        ),
+                        barTouchData: BarTouchData(enabled: false),
                         alignment: BarChartAlignment.spaceAround,
                         barGroups: barGroups,
                         borderData: FlBorderData(show: false),
                         gridData: FlGridData(show: true, drawVerticalLine: false),
                         titlesData: FlTitlesData(
                           show: true,
-                          // X軸のラベル領域を改造して3行のデータを表示する
                           bottomTitles: AxisTitles(
                             sideTitles: SideTitles(
                               showTitles: true,
-                              reservedSize: 52, // 3行分(14px × 3 + 余白)の高さを確保
+                              reservedSize: 52,
                               getTitlesWidget: (value, meta) {
                                 int idx = value.toInt();
                                 if (idx >= 0 && idx < labels.length) {
                                   String L = labels[idx];
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 8.0),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        // 1行目: 馬券名
-                                        SizedBox(height: 14, child: Center(child: Text(L, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)))),
-                                        // 2行目: 最低額
-                                        buildTapCell(formatShort(minVals[L]), minVals[L]),
-                                        // 3行目: 最高額
-                                        buildTapCell(formatShort(maxVals[L]), maxVals[L]),
-                                      ],
+                                  double avg = _payoutResult!.averages[L] ?? 0;
+                                  double med = _payoutResult!.medians[L] ?? 0;
+
+                                  return GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTapDown: (details) {
+                                      // タップ位置にポップアップを表示
+                                      final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+                                      showMenu(
+                                        context: context,
+                                        position: RelativeRect.fromRect(
+                                          details.globalPosition & const Size(40, 40), // タップした位置
+                                          Offset.zero & overlay.size,
+                                        ),
+                                        color: Colors.black87.withOpacity(0.9),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        items: [
+                                          PopupMenuItem(
+                                            enabled: false, // 選択不可（表示のみ）
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(L, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+                                                const SizedBox(height: 4),
+                                                Text('平均: ${currencyFormatter.format(avg.toInt())}円', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                                Text('中央: ${currencyFormatter.format(med.toInt())}円', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // 視認性のため馬券種名を少し強調
+                                          SizedBox(height: 14, child: Center(child: Text(L, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue)))),
+                                          buildTapCell(formatShort(minVals[L]), minVals[L]),
+                                          buildTapCell(formatShort(maxVals[L]), maxVals[L]),
+                                        ],
+                                      ),
                                     ),
                                   );
                                 }
@@ -512,20 +527,17 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
                     ),
                   ),
                 ),
-                // 左下に固定で配置する「最低」「最高」の見出し
                 Positioned(
                   left: 0,
                   bottom: 0,
                   child: Container(
-                    height: 52, // X軸のラベル領域(reservedSize)と高さをピッタリ合わせる
+                    height: 52,
                     padding: const EdgeInsets.only(top: 8.0),
                     child: const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(height: 14), // 1行目(馬券名)の高さ分をスキップ
-                        // 2行目
+                        SizedBox(height: 14),
                         SizedBox(height: 14, child: Center(child: Text('最低', style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)))),
-                        // 3行目
                         SizedBox(height: 14, child: Center(child: Text('最高', style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)))),
                       ],
                     ),
@@ -1156,7 +1168,7 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text('平均ラップ ＆ 個別ラップ推移', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+            const Text('レース別ラップ推移', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 12,
