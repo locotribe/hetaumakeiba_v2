@@ -435,3 +435,245 @@ class PastTopHorsesAnalyzer {
     return results;
   }
 }
+// 7. ラップタイム・ペース
+class PaceLegStyleStats {
+  int total = 0;
+  Map<String, int> showCounts = {
+    '逃げ': 0,
+    '先行': 0,
+    '差し': 0,
+    '追込': 0,
+  };
+}
+
+class RaceLapData {
+  final String raceId;
+  final String raceName;
+  final String raceDate; // ★追加: レース年月日
+  final String winningHorseName; // ★追加: 勝ち馬名
+  final String paceCategory; // ハイペース, ミドルペース, スローペース
+  final bool isAccelerating; // 加速ラップか
+  final List<double> lapTimes;
+  final double first3F;
+  final double last3F;
+  final String trackCondition; // ★追加: 馬場状態
+
+  RaceLapData({
+    required this.raceId,
+    required this.raceName,
+    required this.raceDate, // ★追加
+    required this.winningHorseName, // ★追加
+    required this.paceCategory,
+    required this.isAccelerating,
+    required this.lapTimes,
+    required this.first3F,
+    required this.last3F,
+    required this.trackCondition,
+  });
+}
+
+class LapTimeAnalysisResult {
+  final List<double> averageLapTimes;
+  final double averageFirst3F;
+  final double averageLast3F;
+  final Map<String, PaceLegStyleStats> paceLegStyleStats;
+  final List<RaceLapData> acceleratingRaces;
+  final String typicalPace;
+  final List<RaceLapData> allRacesLapData; // ★追加: 全レースのラップデータ
+
+  LapTimeAnalysisResult({
+    required this.averageLapTimes,
+    required this.averageFirst3F,
+    required this.averageLast3F,
+    required this.paceLegStyleStats,
+    required this.acceleratingRaces,
+    required this.typicalPace,
+    required this.allRacesLapData, // ★追加
+  });
+}
+
+class LapTimeAnalyzer {
+  LapTimeAnalysisResult? analyze(List<RaceResult> pastRaces) {
+    if (pastRaces.isEmpty) return null;
+
+    int? targetDistance;
+    int targetLapCount = 0;
+
+    List<List<double>> validLapsList = [];
+    List<double> allFirst3F = [];
+    List<double> allLast3F = [];
+
+    final paceLegStyleStats = {
+      'ハイペース': PaceLegStyleStats(),
+      'ミドルペース': PaceLegStyleStats(),
+      'スローペース': PaceLegStyleStats(),
+    };
+
+    List<RaceLapData> acceleratingRaces = [];
+    List<RaceLapData> allRacesLapData = []; // ★追加: 全レースデータを保持するリスト
+    Map<String, int> paceCounts = {'ハイペース': 0, 'ミドルペース': 0, 'スローペース': 0};
+
+    String determineLegStyle(String? cornerStr) {
+      if (cornerStr == null || cornerStr.isEmpty) return '不明';
+      final corners = cornerStr.split('-');
+      if (corners.isEmpty) return '不明';
+      final lastCornerStr = corners.last.replaceAll(RegExp(r'[^0-9]'), '');
+      final pos = int.tryParse(lastCornerStr);
+      if (pos == null) return '不明';
+      if (pos == 1) return '逃げ';
+      if (pos <= 5) return '先行';
+      if (pos <= 10) return '差し';
+      return '追込';
+    }
+
+    for (final r in pastRaces) {
+      // 距離の抽出（距離が異なるレースを計算から除外するため）
+      final distMatch = RegExp(r'\d{4}').firstMatch(r.raceInfo);
+      if (distMatch == null) continue;
+      final distance = int.tryParse(distMatch.group(0)!);
+      if (distance == null) continue;
+
+      if (targetDistance == null) {
+        targetDistance = distance;
+      } else if (targetDistance != distance) {
+        continue; // 距離が違うレースは除外
+      }
+
+      List<double> lapList = [];
+      double first3F = 0.0;
+      double last3F = 0.0;
+
+      for (String lapStr in r.lapTimes) {
+        if (lapStr.startsWith('ラップ:')) {
+          final laps = lapStr.replaceAll('ラップ:', '').split('-');
+          lapList = laps.map((e) => double.tryParse(e.trim()) ?? 0.0).toList();
+        } else if (lapStr.startsWith('ペース:')) {
+          final match = RegExp(r'\(([\d\.]+)-([\d\.]+)\)').firstMatch(lapStr);
+          if (match != null) {
+            first3F = double.tryParse(match.group(1) ?? '') ?? 0.0;
+            last3F = double.tryParse(match.group(2) ?? '') ?? 0.0;
+          }
+        }
+      }
+
+      // ペースデータがない場合（パース失敗等）の代替計算
+      if (lapList.length >= 3) {
+        if (first3F == 0.0) {
+          first3F = lapList.take(3).fold(0.0, (a, b) => a + b);
+        }
+        if (last3F == 0.0) {
+          last3F = lapList.skip(lapList.length - 3).fold(0.0, (a, b) => a + b);
+        }
+      }
+
+      if (lapList.isEmpty || first3F == 0.0 || last3F == 0.0) continue;
+
+      if (targetLapCount == 0) {
+        targetLapCount = lapList.length;
+      } else if (targetLapCount != lapList.length) {
+        continue; // ハロン数が違う場合は除外
+      }
+
+      validLapsList.add(lapList);
+      allFirst3F.add(first3F);
+      allLast3F.add(last3F);
+
+      // ペース判定（前後半3Fの差が0.5秒より大きいかで判定）
+      String paceCategory = 'ミドルペース';
+      if (first3F < last3F - 0.5) {
+        paceCategory = 'ハイペース';
+      } else if (first3F > last3F + 0.5) {
+        paceCategory = 'スローペース';
+      }
+      paceCounts[paceCategory] = (paceCounts[paceCategory] ?? 0) + 1;
+      paceLegStyleStats[paceCategory]!.total += 1;
+
+      // 脚質集計
+      for (final h in r.horseResults) {
+        int rank = int.tryParse(h.rank ?? '') ?? 0;
+        if (rank >= 1 && rank <= 3) {
+          String style = determineLegStyle(h.cornerRanking);
+          if (paceLegStyleStats[paceCategory]!.showCounts.containsKey(style)) {
+            paceLegStyleStats[paceCategory]!.showCounts[style] =
+                paceLegStyleStats[paceCategory]!.showCounts[style]! + 1;
+          }
+        }
+      }
+
+      // 馬場状態判定
+      String trackCondition = '良';
+      if (r.raceInfo.contains('不良')) {
+        trackCondition = '不良';
+      } else if (r.raceInfo.contains('稍重')) {
+        trackCondition = '稍重';
+      } else if (r.raceInfo.contains('重')) {
+        trackCondition = '重';
+      } else if (r.raceInfo.contains('良')) {
+        trackCondition = '良';
+      }
+
+      // ★追加: 勝ち馬（1着馬）の特定
+      String winningHorseName = '不明';
+      for (final h in r.horseResults) {
+        if (h.rank == '1') {
+          winningHorseName = h.horseName ?? '不明';
+          break;
+        }
+      }
+
+      // 加速ラップ判定（最後から2番目のハロン > 最後のハロン であれば終盤加速とみなす）
+      bool isAccelerating = false;
+      if (lapList.length >= 2) {
+        if (lapList[lapList.length - 2] > lapList.last) {
+          isAccelerating = true;
+        }
+      }
+
+      final raceLapData = RaceLapData(
+        raceId: r.raceId,
+        raceName: r.raceTitle,
+        raceDate: r.raceDate, // ★追加
+        winningHorseName: winningHorseName, // ★追加
+        paceCategory: paceCategory,
+        isAccelerating: isAccelerating,
+        lapTimes: lapList,
+        first3F: first3F,
+        last3F: last3F,
+        trackCondition: trackCondition,
+      );
+
+      allRacesLapData.add(raceLapData); // ★追加: 全レースのラップデータを保存
+
+      if (isAccelerating) {
+        acceleratingRaces.add(raceLapData);
+      }
+    }
+
+    if (validLapsList.isEmpty) return null;
+
+    // 平均計算
+    List<double> avgLaps = List.filled(targetLapCount, 0.0);
+    for (int i = 0; i < targetLapCount; i++) {
+      double sum = 0;
+      for (var laps in validLapsList) {
+        sum += laps[i];
+      }
+      avgLaps[i] = sum / validLapsList.length;
+    }
+
+    double avgFirst3F = allFirst3F.reduce((a, b) => a + b) / allFirst3F.length;
+    double avgLast3F = allLast3F.reduce((a, b) => a + b) / allLast3F.length;
+
+    String typicalPace = paceCounts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+
+    return LapTimeAnalysisResult(
+      averageLapTimes: avgLaps,
+      averageFirst3F: avgFirst3F,
+      averageLast3F: avgLast3F,
+      paceLegStyleStats: paceLegStyleStats,
+      acceleratingRaces: acceleratingRaces,
+      typicalPace: typicalPace,
+      allRacesLapData: allRacesLapData, // ★追加
+    );
+  }
+}
