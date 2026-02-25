@@ -160,7 +160,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   Future<void> _fetchAndSaveRaceResult() async {
     try {
       final result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/${widget.raceId}');
-      await _raceRepo.insertOrUpdateRaceResult(result);
       for (final horse in result.horseResults) {
         final existingRecords = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
         if (existingRecords.isEmpty) {

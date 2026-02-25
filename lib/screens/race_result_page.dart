@@ -217,7 +217,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
       final newRaceResult = await RaceResultScraperService.scrapeRaceDetails(
           'https://db.netkeiba.com/race/$raceId'
       );
-      await _raceRepo.insertOrUpdateRaceResult(newRaceResult);
       await AnalyticsService().updateAggregatesOnResultConfirmed(newRaceResult.raceId, userId);
 
       final siblings = await _ticketRepo.getQrDataByRaceId(widget.raceId);

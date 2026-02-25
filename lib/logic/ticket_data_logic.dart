@@ -187,9 +187,6 @@ class TicketDataLogic {
               raceDate = fetched.raceDate;
               raceName = fetched.raceTitle;
 
-              // 重要: 取得したデータをDBに保存し、次回以降のロード時間を0秒にします
-              // メソッド名を修正: insertOrUpdateRaceResult
-              await _raceRepository.insertOrUpdateRaceResult(fetched);
             }
           } catch (e) {
             print('新規レース情報のWeb取得に失敗: $raceId - $e');

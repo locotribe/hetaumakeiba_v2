@@ -22,7 +22,6 @@ class StatisticsService {
       RaceResult? result = await _raceRepo.getRaceResult(pastId);
       if (result == null) {
         result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
-        await _raceRepo.insertOrUpdateRaceResult(result);
         await Future.delayed(const Duration(milliseconds: 200));
       }
       pastResults.add(result);
@@ -97,7 +96,6 @@ class StatisticsService {
         // DBになければスクレイピング
         print('DBに無いためWebから取得: $pastId');
         result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
-        await _raceRepo.insertOrUpdateRaceResult(result);
         await Future.delayed(const Duration(milliseconds: 200)); // サーバー負荷軽減
       }
 
