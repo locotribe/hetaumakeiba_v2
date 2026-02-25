@@ -56,12 +56,6 @@ class RaceMatchupContext {
 
 /// 好走条件分析のための計算エンジン
 class ConditionMatchEngine {
-  /// 全出走馬の過去成績から、レースIDをキーとした出走馬マップを作成
-  static Map<String, List<PredictionHorseDetail>> buildRaceParticipantMap(List<PredictionHorseDetail> allHorses) {
-    // 実際に計算で利用するのは詳細な過去成績だが、
-    // まずは今回の出走メンバーがどのレースにいたかを特定するためのインデックスが必要
-    return {}; // 実装は分析メソッド内で行う
-  }
 
   /// 特定の馬の過去成績を着順ごとに分類し、統計と対戦情報を抽出する
   static Map<String, List<HorseRaceRecord>> groupRecordsByRank(List<HorseRaceRecord> records) {

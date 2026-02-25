@@ -4,36 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 
-// itertoolsパッケージの代替となる、組み合わせ計算の関数
-Iterable<List<T>> combinations<T>(List<T> elements, int r) sync* {
-  if (r < 0 || r > elements.length) return;
-  if (r == 0) {
-    yield <T>[];
-  } else {
-    for (int i = 0; i <= elements.length - r; i++) {
-      var head = elements[i];
-      var tail = elements.sublist(i + 1);
-      for (var subcomb in combinations(tail, r - 1)) {
-        yield [head, ...subcomb];
-      }
-    }
-  }
-}
-
-Iterable<List<T>> permutations<T>(List<T> elements, int r) sync* {
-  if (r < 0 || r > elements.length) return;
-  if (r == 0) {
-    yield <T>[];
-  } else {
-    for (int i = 0; i < elements.length; i++) {
-      var rest = [...elements]..removeAt(i);
-      for (var subperm in permutations(rest, r - 1)) {
-        yield [elements[i], ...subperm];
-      }
-    }
-  }
-}
-
 
 /// 的中判定の結果を格納するためのデータクラス
 class HitResult {

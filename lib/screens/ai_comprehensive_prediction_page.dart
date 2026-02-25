@@ -19,7 +19,7 @@ import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
 import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
-
+import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 import '../widgets/themed_tab_bar.dart';
 
 class _HorseNumberDotPainter extends FlDotPainter {
@@ -298,29 +298,6 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
     });
   }
 
-  Color _getGateColor(int gateNumber) {
-    switch (gateNumber) {
-      case 1: return Colors.white;
-      case 2: return Colors.black;
-      case 3: return Colors.red;
-      case 4: return Colors.blue;
-      case 5: return Colors.yellow;
-      case 6: return Colors.green;
-      case 7: return Colors.orange;
-      case 8: return Colors.pink.shade200;
-      default: return Colors.grey;
-    }
-  }
-
-  Color _getTextColorForGate(int gateNumber) {
-    switch (gateNumber) {
-      case 1:
-      case 5:
-        return Colors.black;
-      default:
-        return Colors.white;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -824,14 +801,14 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                       width: 24,
                       height: 24,
                       decoration: BoxDecoration(
-                        color: _getGateColor(horse.gateNumber),
+                        color: horse.gateNumber.gateBackgroundColor,
                         border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
                       ),
                       alignment: Alignment.center,
                       child: Text(
                         horse.horseNumber.toString(),
                         style: TextStyle(
-                          color: _getTextColorForGate(horse.gateNumber),
+                          color: horse.gateNumber.gateTextColor,
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
@@ -900,14 +877,14 @@ class _ComprehensivePredictionPageState extends State<ComprehensivePredictionPag
                   width: 24,
                   height: 24,
                   decoration: BoxDecoration(
-                    color: _getGateColor(horse.gateNumber),
+                    color: horse.gateNumber.gateBackgroundColor,
                     border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     horse.horseNumber.toString(),
                     style: TextStyle(
-                      color: _getTextColorForGate(horse.gateNumber),
+                      color: horse.gateNumber.gateTextColor,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),

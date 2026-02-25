@@ -5,6 +5,7 @@ import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';
 import 'package:data_table_2/data_table_2.dart';
+import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 
 class JockeyStatsPage extends StatefulWidget {
   final PredictionRaceData raceData;
@@ -28,30 +29,6 @@ class _JockeyStatsPageState extends State<JockeyStatsPage> {
   void _loadJockeyStats() {
     final jockeyIds = widget.raceData.horses.map((h) => h.jockeyId).toList();
     _jockeyStatsFuture = _jockeyAnalysisService.analyzeAllJockeys(jockeyIds, raceData: widget.raceData);
-  }
-
-  Color _getGateColor(int gateNumber) {
-    switch (gateNumber) {
-      case 1: return Colors.white;
-      case 2: return Colors.black;
-      case 3: return Colors.red;
-      case 4: return Colors.blue;
-      case 5: return Colors.yellow;
-      case 6: return Colors.green;
-      case 7: return Colors.orange;
-      case 8: return Colors.pink.shade200;
-      default: return Colors.grey;
-    }
-  }
-
-  Color _getTextColorForGate(int gateNumber) {
-    switch (gateNumber) {
-      case 1:
-      case 5:
-        return Colors.black;
-      default:
-        return Colors.white;
-    }
   }
 
   @override
@@ -104,14 +81,14 @@ class _JockeyStatsPageState extends State<JockeyStatsPage> {
                       width: 24,
                       height: 24,
                       decoration: BoxDecoration(
-                        color: _getGateColor(horse.gateNumber),
+                        color: horse.gateNumber.gateBackgroundColor,
                         border: horse.gateNumber == 1 ? Border.all(color: Colors.grey) : null,
                       ),
                       alignment: Alignment.center,
                       child: Text(
                         horse.horseNumber.toString(),
                         style: TextStyle(
-                          color: _getTextColorForGate(horse.gateNumber),
+                          color: horse.gateNumber.gateTextColor,
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),

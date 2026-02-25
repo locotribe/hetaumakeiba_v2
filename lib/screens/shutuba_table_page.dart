@@ -35,7 +35,7 @@ import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:just_the_tooltip/just_the_tooltip.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-
+import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 import '../utils/grade_utils.dart';
 
 enum SortableColumn {
@@ -1454,15 +1454,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     return Container(
       width: 24,
       height: 24,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: _getGateColor(gateNumber),
+        color: gateNumber.gateBackgroundColor,
         border: gateNumber == 1 ? Border.all(color: Colors.grey) : null,
       ),
-      alignment: Alignment.center,
       child: Text(
         gateNumber.toString(),
         style: TextStyle(
-          color: _getTextColorForGate(gateNumber),
+          color: gateNumber.gateTextColor,
           fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
@@ -1472,12 +1472,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   /// 馬番表示を作成
   Widget _buildHorseNumber(int horseNumber, int gateNumber) {
+    // 追加: 拡張メソッドを使って色を一度だけ取得する
+    final frameColor = gateNumber.gateBackgroundColor;
+
     return Container(
       width: 24,
       height: 24,
       decoration: BoxDecoration(
         border: Border.all(
-          color: _getGateColor(gateNumber),
+          color: frameColor, // 修正: _getGateColor(gateNumber) を変数に置き換え
           width: 2.0,
         ),
       ),
@@ -1485,7 +1488,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       child: Text(
         horseNumber.toString(),
         style: TextStyle(
-          color: _getGateColor(gateNumber) == Colors.black ? Colors.black : Colors.black87,
+          // 修正: _getGateColor(gateNumber) を変数に置き換え
+          color: frameColor == Colors.black ? Colors.black : Colors.black87,
           fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
@@ -1732,30 +1736,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         ],
       ),
     );
-  }
-
-  Color _getGateColor(int gateNumber) {
-    switch (gateNumber) {
-      case 1: return Colors.white;
-      case 2: return Colors.black;
-      case 3: return Colors.red;
-      case 4: return Colors.blue;
-      case 5: return Colors.yellow;
-      case 6: return Colors.green;
-      case 7: return Colors.orange;
-      case 8: return Colors.pink.shade200;
-      default: return Colors.grey;
-    }
-  }
-
-  Color _getTextColorForGate(int gateNumber) {
-    switch (gateNumber) {
-      case 1:
-      case 5:
-        return Colors.black;
-      default:
-        return Colors.white;
-    }
   }
 
   Widget _buildHelpIcon(String title, String content) {

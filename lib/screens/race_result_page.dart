@@ -21,6 +21,7 @@ import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
+import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 
 class PageData {
   final List<Map<String, dynamic>> parsedTickets;
@@ -59,27 +60,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
   List<QrData> _qrDataList = [];
   int _currentTicketIndex = 0;
   bool _isInitialized = false;
-
-  final Map<String, Color> _frameColors = {
-    '1': Colors.white,
-    '2': Colors.black,
-    '3': Colors.red,
-    '4': Colors.blue,
-    '5': Colors.yellow,
-    '6': Colors.green,
-    '7': Colors.orange,
-    '8': Colors.pink.shade200,
-  };
-
-  Color _getTextColorForFrame(String frameNumber) {
-    switch (frameNumber) {
-      case '1':
-      case '5':
-        return Colors.black;
-      default:
-        return Colors.white;
-    }
-  }
 
   @override
   void initState() {
@@ -127,34 +107,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     _currentTicketIndex = initialIndex;
     _ticketPageController = PageController(initialPage: initialIndex, viewportFraction: 0.92); // 少し隣が見えるように
     _pageDataFuture = _loadPageData();
-  }
-
-  String? _generateRaceIdFromQr(String qrContent) {
-    try {
-      if (qrContent.length < 14) return null;
-
-      // parse.dartのイテレータロジックに基づく抽出位置
-      // index 0: format (1 char)
-      // index 1-2: racecourseCode (2 chars)
-      // index 3-4: skip (2 chars)
-      // index 5: alternativeCode (1 char)
-      // index 6-7: year (2 chars)
-      // index 8-9: kai/round (2 chars)
-      // index 10-11: nichime/day (2 chars)
-      // index 12-13: race (2 chars)
-
-      final place = qrContent.substring(1, 3);
-      final year = qrContent.substring(6, 8);
-      final kai = qrContent.substring(8, 10);
-      final nichime = qrContent.substring(10, 12);
-      final race = qrContent.substring(12, 14);
-
-      // 20xx年と仮定してID生成 (YYYY + Place + Kai + Nichime + Race)
-      return "20$year$place$kai$nichime$race";
-    } catch (e) {
-      print('Failed to generate Race ID from QR: $e');
-      return null;
-    }
   }
 
   Future<PageData> _loadPageData() async {
@@ -740,7 +692,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                           width: 32,
                           padding: const EdgeInsets.symmetric(vertical: 4.0),
                           decoration: BoxDecoration(
-                            color: _frameColors[horse.frameNumber] ?? Colors.transparent,
+                            color: horse.frameNumber.gateBackgroundColor,
                             borderRadius: BorderRadius.circular(4),
                             border: horse.frameNumber == '1' ? Border.all(color: Colors.grey.shade400) : null,
                           ),
@@ -748,7 +700,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                             horse.horseNumber,
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: _getTextColorForFrame(horse.frameNumber),
+                              color: horse.frameNumber.gateTextColor,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
