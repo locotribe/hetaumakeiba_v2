@@ -1,31 +1,37 @@
 // main_scaffold.dart
-import 'dart:math' as math;
 import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/screens/home_page.dart';
-import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
-import 'package:hetaumakeiba_v2/screens/analytics_page.dart';
-import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
-import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
-import 'package:hetaumakeiba_v2/screens/jyusyoichiran_page.dart';
-import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
 import 'dart:io';
-import 'package:hetaumakeiba_v2/screens/user_settings_page.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math' as math;
+
+import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:hetaumakeiba_v2/db/db_provider.dart';
+import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/db_constants.dart';
-import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
+import 'package:hetaumakeiba_v2/db/db_provider.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
-import 'package:path/path.dart' as p;
-import 'package:sqflite/sqflite.dart';
-import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:hetaumakeiba_v2/screens/race_schedule_page.dart';
+import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/main.dart';
-import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
+import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
+import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_analysis_page.dart';
+import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
+import 'package:hetaumakeiba_v2/screens/analytics_page.dart';
+import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
+import 'package:hetaumakeiba_v2/screens/home_page.dart';
+import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
+import 'package:hetaumakeiba_v2/screens/jyusyoichiran_page.dart';
+import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
+import 'package:hetaumakeiba_v2/screens/race_schedule_page.dart';
+import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
+import 'package:hetaumakeiba_v2/screens/user_settings_page.dart';
 import 'package:hetaumakeiba_v2/widgets/track_condition_ticker.dart';
+import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
+import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 
 
 class MainScaffold extends StatefulWidget {
@@ -47,6 +53,9 @@ class _MainScaffoldState extends State<MainScaffold> {
   final UserRepository _userRepository = UserRepository();
   final TrackConditionRepository _trackConditionRepository = TrackConditionRepository();
   bool _isBusy = false;
+
+  final RaceRepository _raceRepo = RaceRepository();
+  final HorseRepository _horseRepo = HorseRepository();
 
   String _displayName = '';
   File? _profileImageFile;
@@ -265,6 +274,135 @@ class _MainScaffoldState extends State<MainScaffold> {
     }
   }
 
+  Future<void> _importGlobalMemosFromCsv() async {
+    final userId = localUserId; // _MainScaffoldState内で取得可能なユーザーID
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ログインが必要です。')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+
+      if (result == null || result.files.single.path == null) {
+        setState(() {
+          _isBusy = false;
+        });
+        return; // キャンセル時
+      }
+
+      final filePath = result.files.single.path!;
+      final file = File(filePath);
+      final csvString = await file.readAsString();
+      final List<List<dynamic>> rows = const CsvToListConverter().convert(csvString);
+
+      if (rows.length < 2) throw Exception('データがありません');
+
+      // ヘッダーの検証
+      final header = rows.first.map((e) => e.toString().trim()).toList();
+      final expectedHeaderPrefix = 'raceId,horseId,horseNumber,horseName,reviewMemo,predictionMemo';
+      final currentHeaderPrefix = header.take(6).join(',');
+
+      if (currentHeaderPrefix != expectedHeaderPrefix) {
+        throw Exception('CSVヘッダーが正しくありません。正しいフォーマットのファイルを選択してください。');
+      }
+
+      final hasRaceMemoCol = header.length > 6 && header[6] == 'raceMemo';
+
+      final List<HorseMemo> memosToUpdate = [];
+      int importedRaceMemosCount = 0;
+
+      for (int i = 1; i < rows.length; i++) {
+        final row = rows[i];
+        if (row.length < 2) continue; // 空行などをスキップ
+
+        final csvRaceId = row[0].toString();
+        final horseId = row[1].toString();
+
+        // 1. 各馬のメモ (HorseMemo) の作成
+        memosToUpdate.add(HorseMemo(
+          userId: userId,
+          raceId: csvRaceId,
+          horseId: horseId,
+          reviewMemo: row.length > 4 ? row[4].toString() : '',
+          predictionMemo: row.length > 5 ? row[5].toString() : '',
+          timestamp: DateTime.now(), // 必須パラメータ
+        ));
+
+        // 2. レース総評 (RaceMemo) の作成と即時保存
+        if (hasRaceMemoCol && row.length > 6) {
+          final rmText = row[6].toString().trim();
+          if (rmText.isNotEmpty) {
+            // 既存のメモを取得（IDを引き継ぐため）
+            final existingRaceMemo = await _raceRepo.getRaceMemo(userId, csvRaceId);
+
+            // 安全策: 既存のメモが存在し、かつ今回インポートする内容と異なる場合は追記する
+            String finalMemo = rmText;
+            if (existingRaceMemo != null && existingRaceMemo.memo.isNotEmpty) {
+              if (!existingRaceMemo.memo.contains(rmText)) {
+                finalMemo = '${existingRaceMemo.memo}\n\n$rmText';
+              } else {
+                finalMemo = existingRaceMemo.memo; // 既に同じ内容が含まれていればそのまま
+              }
+            }
+
+            final newRaceMemo = RaceMemo(
+              id: existingRaceMemo?.id, // 既存ID（新規ならnull）
+              userId: userId,
+              raceId: csvRaceId,
+              memo: finalMemo,
+              timestamp: DateTime.now(), // 必須パラメータ
+            );
+
+            await _raceRepo.insertOrUpdateRaceMemo(newRaceMemo);
+            importedRaceMemosCount++;
+          }
+        }
+      }
+
+      // 3. 馬ごとのメモを一括保存
+      if (memosToUpdate.isNotEmpty) {
+        await _horseRepo.insertOrUpdateMultipleMemos(memosToUpdate);
+      }
+
+      // 4. 成功のUIフィードバック
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${memosToUpdate.length}件の馬メモと$importedRaceMemosCount件のレース総評をインポートしました'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      // 失敗時のUIフィードバック
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('インポートエラー: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      // 処理終了後にBusyフラグを下ろす
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
   late final List<Widget> _pages;
   static const List<String> _pageTitles = ['ニュース', '開催一覧', '重賞一覧', '購入履歴', '集計'];
 
@@ -445,6 +583,20 @@ class _MainScaffoldState extends State<MainScaffold> {
               onTap: () {
                 Navigator.pop(context); // メニューを閉じる
                 _importTrackConditionsCsv(); // インポート処理を実行
+              },
+            ),
+
+            ListTile(
+              // enabled: !_isBusy, // 必要に応じて連打防止を追加してください
+              leading: const Icon(Icons.library_books_outlined),
+              title: const Text('メモ・総評の一括インポート(CSV)'),
+              subtitle: const Text(
+                '複数レースのメモをまとめて取り込みます。',
+                style: TextStyle(fontSize: 12), // サブタイトルが少し長いので文字サイズを調整
+              ),
+              onTap: () {
+                Navigator.pop(context); // ドロワーを閉じる
+                _importGlobalMemosFromCsv(); // 一括インポート処理を実行
               },
             ),
 
