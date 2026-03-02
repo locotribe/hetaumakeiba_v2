@@ -1,27 +1,37 @@
 // lib/screens/race_result_page.dart
 
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
-import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
-import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/services/analytics_service.dart';
-import 'package:hetaumakeiba_v2/widgets/betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/main.dart';
-import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
+import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/screens/bulk_review_edit_page.dart';
+import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
-import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
-import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
+import 'package:hetaumakeiba_v2/widgets/betting_ticket_card.dart';
+import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
+// 新規追加ウィジェットと画面
+import 'package:hetaumakeiba_v2/widgets/race_review_card.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class PageData {
   final List<Map<String, dynamic>> parsedTickets;
@@ -252,6 +262,157 @@ class _RaceResultPageState extends State<RaceResultPage> {
     });
   }
 
+  Future<void> _openBulkReviewEdit(RaceResult raceResult) async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BulkReviewEditPage(
+          raceId: widget.raceId,
+          horseResults: raceResult.horseResults,
+        ),
+      ),
+    );
+    if (result == true) {
+      _handleRefresh(); // 保存されたら画面を更新
+    }
+  }
+
+  Future<void> _exportReviewsAsCsv(RaceResult raceResult) async {
+    final userId = localUserId;
+    if (userId == null) return;
+
+    // レース総評を取得
+    final raceMemo = await _raceRepo.getRaceMemo(userId, widget.raceId);
+    final raceMemoText = raceMemo?.memo ?? '';
+
+    final List<List<dynamic>> rows = [];
+    // ヘッダーに raceMemo を追加
+    rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'reviewMemo', 'predictionMemo', 'raceMemo']);
+
+    for (int i = 0; i < raceResult.horseResults.length; i++) {
+      final horse = raceResult.horseResults[i];
+      rows.add([
+        widget.raceId,
+        horse.horseId,
+        horse.horseNumber,
+        horse.horseName,
+        horse.userMemo?.reviewMemo ?? '',
+        horse.userMemo?.predictionMemo ?? '',
+        // レース総評は長文になるため、最初のデータ行（i == 0）にのみ出力してスッキリさせる
+        i == 0 ? raceMemoText : '',
+      ]);
+    }
+
+    final String csv = const ListToCsvConverter().convert(rows);
+    final directory = await getTemporaryDirectory();
+    final path = '${directory.path}/${widget.raceId}_reviews.csv';
+    final file = File(path);
+    await file.writeAsString(csv);
+
+    await Share.shareXFiles([XFile(path)], text: '${raceResult.raceTitle} の回顧メモ');
+  }
+
+  Future<void> _importReviewsFromCsv() async {
+    final userId = localUserId;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ログインが必要です。')),
+      );
+      return;
+    }
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+
+      if (result == null || result.files.single.path == null) return;
+
+      final filePath = result.files.single.path!;
+      final file = File(filePath);
+      final csvString = await file.readAsString();
+      final List<List<dynamic>> rows = const CsvToListConverter().convert(csvString);
+
+      if (rows.length < 2) throw Exception('データがありません');
+
+      final header = rows.first.map((e) => e.toString().trim()).toList();
+      // 旧フォーマットのCSVでも読み込めるように後方互換性を持たせる
+      final hasRaceMemoCol = header.length > 6 && header[6] == 'raceMemo';
+
+      if (header[0] != 'raceId' || header[1] != 'horseId') {
+        throw Exception('CSVヘッダーが正しくありません');
+      }
+
+      final List<HorseMemo> memosToUpdate = [];
+      String? importedRaceMemo;
+
+      for (int i = 1; i < rows.length; i++) {
+        final row = rows[i];
+        final csvRaceId = row[0].toString();
+
+        if (csvRaceId != widget.raceId) continue;
+
+        final horseId = row[1].toString();
+        memosToUpdate.add(HorseMemo(
+          userId: userId,
+          raceId: csvRaceId,
+          horseId: horseId,
+          reviewMemo: row.length > 4 ? row[4].toString() : '',
+          predictionMemo: row.length > 5 ? row[5].toString() : '',
+          timestamp: DateTime.now(),
+        ));
+
+        // レース総評の取得（空文字でないものが入力されていれば取得）
+        if (hasRaceMemoCol && row.length > 6) {
+          final rmText = row[6].toString().trim();
+          if (rmText.isNotEmpty) {
+            importedRaceMemo = rmText;
+          }
+        }
+      }
+
+      // 馬ごとのメモを一括保存
+      await _horseRepo.insertOrUpdateMultipleMemos(memosToUpdate);
+
+      // レース総評の保存
+      if (importedRaceMemo != null) {
+        final existingRaceMemo = await _raceRepo.getRaceMemo(userId, widget.raceId);
+        final newRaceMemo = RaceMemo(
+          id: existingRaceMemo?.id,
+          userId: userId,
+          raceId: widget.raceId,
+          memo: importedRaceMemo,
+          timestamp: DateTime.now(),
+        );
+        await _raceRepo.insertOrUpdateRaceMemo(newRaceMemo);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  '${memosToUpdate.length}頭のメモ' +
+                      (importedRaceMemo != null ? 'とレース総評' : '') +
+                      'をインポートしました'
+              )
+          ),
+        );
+
+        // 画面を再読み込みして最新データを反映（RaceReviewCardも更新される）
+        setState(() {
+          _pageDataFuture = _loadPageData();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('インポートエラー: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _showMemoDialog(HorseResult horse) async {
     final userId = localUserId;
     if (userId == null) {
@@ -261,15 +422,21 @@ class _RaceResultPageState extends State<RaceResultPage> {
       return;
     }
 
-    final memoController = TextEditingController(text: horse.userMemo?.reviewMemo);
-    final formKey = GlobalKey<FormState>();
+    final existingReviewMemo = horse.userMemo?.reviewMemo ?? '';
     final predictionMemo = horse.userMemo?.predictionMemo;
+
+    // 既存メモ編集用のコントローラー
+    final existingMemoController = TextEditingController(text: existingReviewMemo);
+    // 新規追記用のコントローラー
+    final appendController = TextEditingController();
+
+    final formKey = GlobalKey<FormState>();
 
     await showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('${horse.horseName} - メモ'),
+          title: Text('${horse.horseName} - 回顧メモ'),
           content: SingleChildScrollView(
             child: Form(
               key: formKey,
@@ -277,28 +444,60 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 1. 予想メモ（完全読み取り専用）
                   if (predictionMemo != null && predictionMemo.isNotEmpty) ...[
-                    const Text('予想メモ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('【当時の予想】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue)),
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(8.0),
                       margin: const EdgeInsets.only(top: 4.0, bottom: 16.0),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
+                        color: Colors.blue.shade50,
                         borderRadius: BorderRadius.circular(4.0),
+                        border: Border.all(color: Colors.blue.shade200),
                       ),
-                      child: Text(predictionMemo),
+                      child: Text(predictionMemo, style: const TextStyle(fontSize: 13)),
                     ),
                   ],
-                  const Text('総評メモ', style: TextStyle(fontWeight: FontWeight.bold)),
+
+                  // 2. 既存の回顧メモ（タップで修正可能だが、見た目は表示欄風）
+                  if (existingReviewMemo.isNotEmpty) ...[
+                    const Text('【これまでの回顧】 (タップで修正可)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange)),
+                    const SizedBox(height: 4),
+                    TextFormField(
+                      controller: existingMemoController,
+                      maxLines: null,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.orange.shade50,
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.orange.shade200),
+                          borderRadius: BorderRadius.circular(4.0),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.orange.shade200),
+                          borderRadius: BorderRadius.circular(4.0),
+                        ),
+                        contentPadding: const EdgeInsets.all(8.0),
+                        isDense: true,
+                      ),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // 3. 追記用フォーム（ここに最初からフォーカスが当たるため、誤消去を防げる）
+                  const Text('【追記】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green)),
                   const SizedBox(height: 4),
                   TextFormField(
-                    controller: memoController,
-                    autofocus: true,
+                    controller: appendController,
+                    autofocus: true, // 開いた瞬間ここにカーソルが合う
                     maxLines: null,
+                    minLines: 3,
                     decoration: const InputDecoration(
-                      hintText: 'ここに総評メモを入力...',
+                      hintText: '新たな気づきや次走へのメモを追記...',
                       border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.all(12),
                     ),
                   ),
                 ],
@@ -313,18 +512,33 @@ class _RaceResultPageState extends State<RaceResultPage> {
             ElevatedButton(
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
+                  // 既存のメモ（編集反映）と、新しく追記したメモを結合
+                  String finalMemo = existingMemoController.text.trim();
+                  final appendedText = appendController.text.trim();
+
+                  if (appendedText.isNotEmpty) {
+                    if (finalMemo.isNotEmpty) {
+                      finalMemo += '\n\n'; // 既存のメモがあれば改行を挟む
+                    }
+                    finalMemo += appendedText;
+                  }
+
                   final newMemo = HorseMemo(
                     id: horse.userMemo?.id,
                     userId: userId,
                     raceId: widget.raceId,
                     horseId: horse.horseId,
-                    predictionMemo: horse.userMemo?.predictionMemo,
-                    reviewMemo: memoController.text,
+                    predictionMemo: horse.userMemo?.predictionMemo, // 維持
+                    reviewMemo: finalMemo, // 結合したメモを保存
                     timestamp: DateTime.now(),
                   );
                   await _horseRepo.insertOrUpdateHorseMemo(newMemo);
                   Navigator.of(context).pop();
-                  _loadPageData();
+
+                  // 画面を再読み込みして最新データを反映
+                  setState(() {
+                    _pageDataFuture = _loadPageData();
+                  });
                 }
               },
               child: const Text('保存'),
@@ -401,6 +615,14 @@ class _RaceResultPageState extends State<RaceResultPage> {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8.0),
                           child: _buildRaceInfoCard(raceResult, pageData.pacePrediction),
+                        ),
+                        // 【新規追加】レース総評カードをここに挿入
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: RaceReviewCard(
+                            raceId: widget.raceId,
+                            userId: localUserId ?? '',
+                          ),
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -663,28 +885,72 @@ class _RaceResultPageState extends State<RaceResultPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'レース結果',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            // ヘッダー部分：枠線付きのボタン（OutlinedButton）に変更し、ラベルを明確化
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'レース結果',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Row(
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => _openBulkReviewEdit(raceResult),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4.0), // 少し角丸のカード風
+                        ),
+                      ),
+                      child: const Text('一括編集', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8), // ボタン間の隙間
+                    OutlinedButton(
+                      onPressed: _importReviewsFromCsv,
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4.0),
+                        ),
+                      ),
+                      child: const Text('CSV入力', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: () => _exportReviewsAsCsv(raceResult),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4.0),
+                        ),
+                      ),
+                      child: const Text('CSV出力', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 columnSpacing: 16,
                 columns: const [
                   DataColumn(label: Text('着')),
-                  DataColumn(label: Text('メモ')),
                   DataColumn(label: Text('馬番')),
                   DataColumn(label: Text('馬名')),
                   DataColumn(label: Text('騎手')),
                   DataColumn(label: Text('単勝')),
                   DataColumn(label: Text('人気')),
+                  DataColumn(label: Text('メモ')),
                 ],
                 rows: raceResult.horseResults.map((horse) {
                   return DataRow(cells: [
                     DataCell(Text(horse.rank)),
-                    DataCell(_buildMemoCell(horse)),
                     DataCell(
                       Center(
                         child: Container(
@@ -710,6 +976,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     DataCell(Text(horse.jockeyName)),
                     DataCell(Text(horse.odds)),
                     DataCell(Text(horse.popularity)),
+                    DataCell(_buildMemoCell(horse)),
                   ]);
                 }).toList(),
               ),
@@ -790,26 +1057,35 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   Widget _buildMemoCell(HorseResult horse) {
-    bool hasPredictionMemo = horse.userMemo?.predictionMemo != null && horse.userMemo!.predictionMemo!.isNotEmpty;
-    bool hasReviewMemo = horse.userMemo?.reviewMemo != null && horse.userMemo!.reviewMemo!.isNotEmpty;
+    final reviewText = horse.userMemo?.reviewMemo ?? '';
+    final hasReview = reviewText.isNotEmpty;
 
     return InkWell(
       onTap: () => _showMemoDialog(horse),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.description_outlined,
-            color: hasPredictionMemo ? Colors.blueAccent : Colors.grey,
-            size: 20,
-          ),
-          const SizedBox(width: 2),
-          Icon(
-            Icons.rate_review_outlined,
-            color: hasReviewMemo ? Colors.orange.shade700 : Colors.grey,
-            size: 20,
-          ),
-        ],
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 200), // 右端なので少し広めに許容
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Expanded(
+              child: Text(
+                hasReview ? reviewText : 'メモなし',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: hasReview ? Colors.black87 : Colors.grey,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.edit,
+              size: 16,
+              color: hasReview ? Colors.orange.shade800 : Colors.grey,
+            ),
+          ],
+        ),
       ),
     );
   }

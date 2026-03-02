@@ -2,7 +2,7 @@
 
 class DbConstants {
   static const String dbName = 'hetaumakeiba_v2.db';
-  static const int dbVersion = 9;
+  static const int dbVersion = 10; // 9 から 10 へ変更
 
   // --- Tables ---
   static const String tableQrData = 'qr_data';
@@ -24,6 +24,7 @@ class DbConstants {
   static const String tableHorseProfiles = 'horse_profiles';
   static const String tableJyusyoRaces = 'jyusyo_races';
   static const String tableTrackConditions = 'track_conditions';
+  static const String tableRaceMemos = 'race_memos'; // 新規追加
 
   // --- Common Columns ---
   static const String colId = 'id';

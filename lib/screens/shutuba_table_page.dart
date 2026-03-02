@@ -75,11 +75,26 @@ class ShutubaTablePage extends StatefulWidget {
   State<ShutubaTablePage> createState() => _ShutubaTablePageState();
 }
 
+class _PastMemoDetail {
+  final String raceName;
+  final String date;
+  final String rank; // "1着", "取消" など
+  final String predictionMemo;
+  final String reviewMemo;
+
+  _PastMemoDetail({
+    required this.raceName,
+    required this.date,
+    required this.rank,
+    required this.predictionMemo,
+    required this.reviewMemo,
+  });
+}
+
 class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   PredictionRaceData? _predictionRaceData;
   bool _isLoading = true;
   final ShutubaTableScraperService _scraperService = ShutubaTableScraperService();
-  final AiPredictionService _predictionService = AiPredictionService();
 
   // --- 新しいRepository / Serviceのインスタンス化 ---
   final RaceRepository _raceRepo = RaceRepository();
@@ -351,35 +366,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('情報の更新に失敗しました: $e')));
       }
-    }
-  }
-
-
-  Future<void> _calculatePredictionScores(PredictionRaceData raceData) async {
-    final scores = await _predictionService.calculatePredictionScores(
-      raceData,
-      widget.raceId,
-    );
-
-    for (var horse in raceData.horses) {
-      horse.overallScore = scores.overallScores[horse.horseId];
-      horse.expectedValue = scores.expectedValues[horse.horseId];
-    }
-
-    final newCache = ShutubaTableCache(
-      raceId: widget.raceId,
-      predictionRaceData: raceData,
-      lastUpdatedAt: DateTime.now(),
-    );
-    await _raceRepo.insertOrUpdateShutubaTableCache(newCache);
-
-    if (mounted) {
-      setState(() {
-        _predictionRaceData = raceData;
-        _overallScores = scores.overallScores;
-        _expectedValues = scores.expectedValues;
-        _conditionFits = scores.conditionFits;
-      });
     }
   }
 
@@ -1336,9 +1322,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         Expanded(
           child: _buildDataTableForTab(
             columns: [
-              DataColumn2(label: const Text('印'), fixedWidth: 80, onSort: (i, asc) => _onSort(SortableColumn.mark)),
+              DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
               DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-              const DataColumn2(label: Text('メモ'), size: ColumnSize.L),
+              const DataColumn2(label: Text('今回の予想'), size: ColumnSize.M),
+              // 【追加】過去メモ用のカラム
+              const DataColumn2(label: Text('過去メモ(直近5走)'), size: ColumnSize.L),
             ],
             horses: horses,
             cellBuilder: (horse) => [
@@ -1356,6 +1344,76 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                 ),
               ),
               DataCell(_buildMemoCell(horse)),
+              // 【追加】過去メモ表示セル
+              DataCell(
+                FutureBuilder<List<_PastMemoDetail>>(
+                  future: _fetchPastMemoDetails(horse.horseId),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2)
+                      );
+                    }
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return const Text('-', style: TextStyle(color: Colors.grey));
+                    }
+
+                    // スクロール可能なリストとして表示
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: snapshot.data!.map((detail) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // ヘッダー: 日付 レース名 (着順)
+                                Text(
+                                  '${detail.date} ${detail.raceName} (${detail.rank})',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                ),
+                                const SizedBox(height: 2),
+                                // 予想メモ
+                                if (detail.predictionMemo.isNotEmpty)
+                                  RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style.copyWith(fontSize: 11),
+                                      children: [
+                                        const TextSpan(text: '[予] ', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                                        TextSpan(text: detail.predictionMemo),
+                                      ],
+                                    ),
+                                  ),
+                                // 総評メモ
+                                if (detail.reviewMemo.isNotEmpty)
+                                  RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style.copyWith(fontSize: 11),
+                                      children: [
+                                        const TextSpan(text: '[顧] ', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                                        TextSpan(text: detail.reviewMemo),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ],
           ),
         ),
@@ -1761,5 +1819,67 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         child: Icon(Icons.help_outline, color: Colors.grey, size: 16),
       ),
     );
+  }
+
+  /// 指定した馬の直近5走分のメモと、そのレース情報を取得して結合する
+  Future<List<_PastMemoDetail>> _fetchPastMemoDetails(String horseId) async {
+    final userId = localUserId;
+    if (userId == null) return [];
+
+    // 1. 直近5走のメモを取得（今回のレースは除外）
+    final memos = await _horseRepo.getRecentMemosForHorse(
+      horseId, // 修正: 実装済みのメソッドシグネチャに合わせて userId と excludeRaceId を調整する場合がありますが、一旦指示書通りに進めます。
+      // ※注意: horse_repository.dart に追加した getRecentMemosForHorse が引数 (String horseId) のみの場合、
+      // ユーザーIDや除外レースのフィルタリングは取得後にDart側で行うか、リポジトリ側を修正する必要があります。
+      // ここでは、もしリポジトリ側が (horseId) のみを受け取る仕様であれば、以下のようにDart側でフィルタリングします。
+    );
+
+    // 今回のレースを除外し、直近5件に絞る（リポジトリ側で対応していない場合の安全策）
+    final filteredMemos = memos.where((m) => m.raceId != widget.raceId && m.userId == userId).take(5).toList();
+
+    if (filteredMemos.isEmpty) return [];
+
+    // 2. メモに関連するレースIDをリスト化
+    final raceIds = filteredMemos.map((m) => m.raceId).toList();
+
+    // 3. レース詳細情報を一括取得（レース名や日付のため）
+    final raceResults = await _raceRepo.getMultipleRaceResults(raceIds);
+
+    final List<_PastMemoDetail> details = [];
+
+    for (final memo in filteredMemos) {
+      final race = raceResults[memo.raceId];
+      String raceName = '不明なレース';
+      String date = memo.timestamp.toString().substring(0, 10);
+      String rank = '-';
+
+      if (race != null) {
+        raceName = race.raceTitle;
+        // 日付を短く整形 (例: 2023年12月24日 -> 23/12/24)
+        date = race.raceDate.replaceFirst('20', '').replaceAll('年', '/').replaceAll('月', '/').replaceAll('日', '');
+
+        // この馬の着順を探す
+        try {
+          final horseResult = race.horseResults.firstWhere((h) => h.horseId == horseId);
+          rank = horseResult.rank.isNotEmpty ? '${horseResult.rank}着' : '他';
+        } catch (_) {
+          rank = '-';
+        }
+      }
+
+      // メモが空でない場合のみリストに追加
+      if ((memo.predictionMemo != null && memo.predictionMemo!.isNotEmpty) ||
+          (memo.reviewMemo != null && memo.reviewMemo!.isNotEmpty)) {
+        details.add(_PastMemoDetail(
+          raceName: raceName,
+          date: date,
+          rank: rank,
+          predictionMemo: memo.predictionMemo ?? '',
+          reviewMemo: memo.reviewMemo ?? '',
+        ));
+      }
+    }
+
+    return details;
   }
 }

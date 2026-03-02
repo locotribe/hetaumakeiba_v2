@@ -275,6 +275,18 @@ class DbProvider {
         moisture_dirt_4c REAL
       )
     ''');
+
+    // ▼ 新規追加: レース総評（メモ）テーブル
+    await db.execute('''
+      CREATE TABLE ${DbConstants.tableRaceMemos}(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL,
+        raceId TEXT NOT NULL,
+        memo TEXT,
+        timestamp TEXT NOT NULL,
+        UNIQUE(userId, raceId) ON CONFLICT REPLACE
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -351,6 +363,21 @@ class DbProvider {
           )
         ''');
       } catch (e) { print('DEBUG: Migration error (v8->v9): $e'); }
+    }
+    // ▼ 新規追加: バージョン9から10へのマイグレーション（レース総評テーブルの追加）
+    if (oldVersion < 10) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS ${DbConstants.tableRaceMemos}(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId TEXT NOT NULL,
+            raceId TEXT NOT NULL,
+            memo TEXT,
+            timestamp TEXT NOT NULL,
+            UNIQUE(userId, raceId) ON CONFLICT REPLACE
+          )
+        ''');
+      } catch (e) { print('DEBUG: Migration error (v9->v10): $e'); }
     }
   }
 

@@ -181,4 +181,22 @@ class HorseRepository {
       return null;
     }
   }
+
+  // ===========================================================================
+  // 過去メモ取得 (horse_memos) ▼ 新規追加
+  // ===========================================================================
+
+  Future<List<HorseMemo>> getRecentMemosForHorse(String horseId) async {
+    final db = await _db;
+    final maps = await db.query(
+      DbConstants.tableHorseMemos,
+      where: 'horseId = ?',
+      whereArgs: [horseId],
+      orderBy: 'timestamp DESC',
+      limit: 5,
+    );
+    return List.generate(maps.length, (i) {
+      return HorseMemo.fromMap(maps[i]);
+    });
+  }
 }

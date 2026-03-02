@@ -10,6 +10,7 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
+import 'package:hetaumakeiba_v2/models/race_memo_model.dart'; // ▼ 新規追加
 
 class RaceRepository {
   final DbProvider _dbProvider = DbProvider();
@@ -319,5 +320,41 @@ class RaceRepository {
     return List.generate(maps.length, (i) {
       return AiPrediction.fromMap(maps[i]);
     });
+  }
+
+  // ===========================================================================
+  // レース総評メモ (race_memos) ▼ 新規追加
+  // ===========================================================================
+
+  Future<RaceMemo?> getRaceMemo(String userId, String raceId) async {
+    final db = await _dbProvider.database;
+    final maps = await db.query(
+      DbConstants.tableRaceMemos,
+      where: 'userId = ? AND raceId = ?',
+      whereArgs: [userId, raceId],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return RaceMemo.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<int> insertOrUpdateRaceMemo(RaceMemo memo) async {
+    final db = await _dbProvider.database;
+    return await db.insert(
+      DbConstants.tableRaceMemos,
+      memo.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<int> deleteRaceMemo(String userId, String raceId) async {
+    final db = await _dbProvider.database;
+    return await db.delete(
+      DbConstants.tableRaceMemos,
+      where: 'userId = ? AND raceId = ?',
+      whereArgs: [userId, raceId],
+    );
   }
 }
