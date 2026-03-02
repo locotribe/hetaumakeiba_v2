@@ -164,8 +164,12 @@ class RaceResultFirstScraperService {
         }
       },
       onReceivedError: (controller, request, error) {
-        if (!completer.isCompleted) {
-          completer.completeError(Exception("Failed to load page: ${error.description}"));
+        // メインフレーム（ページ本体）のエラーのみを致命的エラーとして扱う
+        if (request.isForMainFrame ?? true) {
+          if (!completer.isCompleted) {
+            completer.completeError(
+                Exception("Failed to load page: ${error.description}"));
+          }
         }
       },
     );

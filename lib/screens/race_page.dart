@@ -127,6 +127,59 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _status = RaceStatus.resultConfirmed;
         _tabController.animateTo(dbResult != null ? 5 : 0);
       });
+
+      // --- 追加ロジック開始 ---
+      try {
+        final dateStr = shutubaCache.predictionRaceData.raceDate;
+        final details = shutubaCache.predictionRaceData.raceDetails1 ?? '';
+
+        // 日付と時刻を抽出 (例: "2025年5月24日", "15:35発走")
+        // 年月日が「/」区切りの場合も考慮
+        final dateMatch = RegExp(r'(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})').firstMatch(dateStr);
+        final timeMatch = RegExp(r'(\d{1,2}):(\d{2})発走').firstMatch(details);
+
+        if (dateMatch != null && timeMatch != null) {
+          final year = int.parse(dateMatch.group(1)!);
+          final month = int.parse(dateMatch.group(2)!);
+          final day = int.parse(dateMatch.group(3)!);
+          final hour = int.parse(timeMatch.group(1)!);
+          final minute = int.parse(timeMatch.group(2)!);
+
+          final raceTime = DateTime(year, month, day, hour, minute);
+          final now = DateTime.now();
+
+          bool shouldFetch = false;
+
+          if (dbResult == null) {
+            // ケース1: 結果がまだDBにない場合
+            // 現在時刻が発走時刻を過ぎていれば確認
+            if (now.isAfter(raceTime)) {
+              shouldFetch = true;
+            }
+          } else {
+            // ケース2: 結果はDBにあるが「速報版（詳細不足）」の可能性がある場合
+            // 判定基準: ラップタイム情報が空、かつレースから1日以上経過している
+            // (速報版はラップタイムが取れない仕様を利用)
+            if (dbResult.lapTimes.isEmpty && now.difference(raceTime).inHours >= 24) {
+              shouldFetch = true;
+            }
+          }
+
+          if (shouldFetch) {
+            final isConfirmed = await RaceResultScraperService.isRaceResultConfirmed(widget.raceId);
+            if (isConfirmed && mounted) {
+              // 結果がWebにあれば取得・保存・画面更新を実行
+              // (すでに速報版があっても上書き保存される)
+              await _fetchAndSaveRaceResult();
+            }
+          }
+        }
+      } catch (e) {
+        // パースエラー等は無視して既存の動作を維持
+        print('Auto-check result error: $e');
+      }
+      // --- 追加ロジック終了 ---
+
       return;
     }
 
