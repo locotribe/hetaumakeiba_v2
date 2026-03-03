@@ -15,6 +15,7 @@ import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
+import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_analysis_page.dart';
 import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
 import 'package:hetaumakeiba_v2/screens/analytics_page.dart';
@@ -318,8 +319,15 @@ class _MainScaffoldState extends State<MainScaffold> {
 
       final hasRaceMemoCol = header.length > 6 && header[6] == 'raceMemo';
 
+      // DBアクセスの負荷を下げるためのキャッシュ用Map
+      final Map<String, Map<String, HorseMemo>> cachedHorseMemos = {};
+      final Map<String, RaceMemo?> cachedRaceMemos = {};
+
+      final Map<String, RaceMemo> raceMemosToUpdate = {}; // raceIdごとの最新状態を保持
       final List<HorseMemo> memosToUpdate = [];
-      int importedRaceMemosCount = 0;
+
+      int updatedHorseCount = 0;
+      int updatedRaceMemoCount = 0;
 
       for (int i = 1; i < rows.length; i++) {
         final row = rows[i];
@@ -327,44 +335,99 @@ class _MainScaffoldState extends State<MainScaffold> {
 
         final csvRaceId = row[0].toString();
         final horseId = row[1].toString();
+        final horseName = row.length > 3 ? row[3].toString() : '馬番不明';
+        final csvReview = row.length > 4 ? row[4].toString() : '';
+        final csvPrediction = row.length > 5 ? row[5].toString() : '';
 
-        // 1. 各馬のメモ (HorseMemo) の作成
-        memosToUpdate.add(HorseMemo(
-          userId: userId,
-          raceId: csvRaceId,
-          horseId: horseId,
-          reviewMemo: row.length > 4 ? row[4].toString() : '',
-          predictionMemo: row.length > 5 ? row[5].toString() : '',
-          timestamp: DateTime.now(), // 必須パラメータ
-        ));
+        // 初めて登場したレースIDの既存データをDBから一括取得してキャッシュする
+        if (!cachedHorseMemos.containsKey(csvRaceId)) {
+          final memos = await _horseRepo.getMemosForRace(userId, csvRaceId);
+          cachedHorseMemos[csvRaceId] = {for (var m in memos) m.horseId: m};
+          cachedRaceMemos[csvRaceId] = await _raceRepo.getRaceMemo(userId, csvRaceId);
+        }
 
-        // 2. レース総評 (RaceMemo) の作成と即時保存
-        if (hasRaceMemoCol && row.length > 6) {
-          final rmText = row[6].toString().trim();
-          if (rmText.isNotEmpty) {
-            // 既存のメモを取得（IDを引き継ぐため）
-            final existingRaceMemo = await _raceRepo.getRaceMemo(userId, csvRaceId);
+        final existingHorse = cachedHorseMemos[csvRaceId]![horseId];
+        String finalReview = existingHorse?.reviewMemo ?? '';
+        String finalPrediction = existingHorse?.predictionMemo ?? '';
+        bool isHorseUpdated = false;
 
-            // 安全策: 既存のメモが存在し、かつ今回インポートする内容と異なる場合は追記する
-            String finalMemo = rmText;
-            if (existingRaceMemo != null && existingRaceMemo.memo.isNotEmpty) {
-              if (!existingRaceMemo.memo.contains(rmText)) {
-                finalMemo = '${existingRaceMemo.memo}\n\n$rmText';
-              } else {
-                finalMemo = existingRaceMemo.memo; // 既に同じ内容が含まれていればそのまま
-              }
-            }
+        // 回顧メモの競合判定
+        final reviewMerge = MemoImportLogic.determineMergeAction(existingHorse?.reviewMemo, csvReview);
+        if (reviewMerge.action == MemoMergeAction.overwrite) {
+          finalReview = reviewMerge.resultText;
+          isHorseUpdated = true;
+        } else if (reviewMerge.action == MemoMergeAction.conflict) {
+          final resolved = await _resolveConflictDialog('$horseNameの回顧メモ\n(レース: $csvRaceId)', reviewMerge);
+          if (resolved != null && resolved != finalReview) {
+            finalReview = resolved;
+            isHorseUpdated = true;
+          }
+        }
 
-            final newRaceMemo = RaceMemo(
-              id: existingRaceMemo?.id, // 既存ID（新規ならnull）
+        // 予想メモの競合判定
+        final predictionMerge = MemoImportLogic.determineMergeAction(existingHorse?.predictionMemo, csvPrediction);
+        if (predictionMerge.action == MemoMergeAction.overwrite) {
+          finalPrediction = predictionMerge.resultText;
+          isHorseUpdated = true;
+        } else if (predictionMerge.action == MemoMergeAction.conflict) {
+          final resolved = await _resolveConflictDialog('$horseNameの予想メモ\n(レース: $csvRaceId)', predictionMerge);
+          if (resolved != null && resolved != finalPrediction) {
+            finalPrediction = resolved;
+            isHorseUpdated = true;
+          }
+        }
+
+        // 変更があった場合、または新規作成の場合のみ更新リストへ追加
+        if (isHorseUpdated || existingHorse == null) {
+          // 新規の場合でかつCSVのメモがどちらも空なら追加しない
+          if (existingHorse != null || finalReview.isNotEmpty || finalPrediction.isNotEmpty) {
+            memosToUpdate.add(HorseMemo(
+              id: existingHorse?.id,
               userId: userId,
               raceId: csvRaceId,
-              memo: finalMemo,
-              timestamp: DateTime.now(), // 必須パラメータ
-            );
+              horseId: horseId,
+              reviewMemo: finalReview,
+              predictionMemo: finalPrediction,
+              timestamp: DateTime.now(),
+              odds: existingHorse?.odds,
+              popularity: existingHorse?.popularity,
+            ));
+            updatedHorseCount++;
+          }
+        }
 
-            await _raceRepo.insertOrUpdateRaceMemo(newRaceMemo);
-            importedRaceMemosCount++;
+        // レース総評の処理
+        if (hasRaceMemoCol && row.length > 6) {
+          final csvRaceMemo = row[6].toString().trim();
+          if (csvRaceMemo.isNotEmpty) {
+            final existingRaceMemo = cachedRaceMemos[csvRaceId];
+
+            // 同一レースの複数行で総評が上書きされないように、ループ内の更新状況(raceMemosToUpdate)を優先的に確認する
+            String currentRaceMemoText = raceMemosToUpdate.containsKey(csvRaceId)
+                ? raceMemosToUpdate[csvRaceId]!.memo
+                : (existingRaceMemo?.memo ?? '');
+
+            final raceMerge = MemoImportLogic.determineMergeAction(currentRaceMemoText, csvRaceMemo);
+            if (raceMerge.action == MemoMergeAction.overwrite) {
+              raceMemosToUpdate[csvRaceId] = RaceMemo(
+                id: existingRaceMemo?.id,
+                userId: userId,
+                raceId: csvRaceId,
+                memo: raceMerge.resultText,
+                timestamp: DateTime.now(),
+              );
+            } else if (raceMerge.action == MemoMergeAction.conflict) {
+              final resolved = await _resolveConflictDialog('レース総評\n(レース: $csvRaceId)', raceMerge);
+              if (resolved != null && resolved != currentRaceMemoText) {
+                raceMemosToUpdate[csvRaceId] = RaceMemo(
+                  id: existingRaceMemo?.id,
+                  userId: userId,
+                  raceId: csvRaceId,
+                  memo: resolved,
+                  timestamp: DateTime.now(),
+                );
+              }
+            }
           }
         }
       }
@@ -374,11 +437,17 @@ class _MainScaffoldState extends State<MainScaffold> {
         await _horseRepo.insertOrUpdateMultipleMemos(memosToUpdate);
       }
 
-      // 4. 成功のUIフィードバック
+      // 4. レース総評を個別に保存
+      for (final rm in raceMemosToUpdate.values) {
+        await _raceRepo.insertOrUpdateRaceMemo(rm);
+        updatedRaceMemoCount++;
+      }
+
+      // 5. 成功のUIフィードバック
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${memosToUpdate.length}件の馬メモと$importedRaceMemosCount件のレース総評をインポートしました'),
+            content: Text('$updatedHorseCount件の馬メモと$updatedRaceMemoCount件のレース総評をインポートしました'),
             backgroundColor: Colors.green,
           ),
         );
@@ -401,6 +470,57 @@ class _MainScaffoldState extends State<MainScaffold> {
         });
       }
     }
+  }
+
+  /// 競合発生時にユーザーに解決アクションを選択させるダイアログ
+  Future<String?> _resolveConflictDialog(String title, MemoMergeResult conflict) async {
+    return await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text('競合の解決: $title', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('【現在のデータ】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(top: 4, bottom: 12),
+                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)),
+                child: Text(conflict.existingText.isEmpty ? '(なし)' : conflict.existingText),
+              ),
+              const Text('【インポートデータ】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(top: 4, bottom: 16),
+                decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4)),
+                child: Text(conflict.newText.isEmpty ? '(なし)' : conflict.newText),
+              ),
+              const Text('このデータをどのように処理しますか？', style: TextStyle(fontSize: 13)),
+            ],
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, conflict.existingText),
+            child: const Text('スキップ'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, conflict.newText),
+            child: const Text('CSVで上書き', style: TextStyle(color: Colors.red)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, '${conflict.existingText}\n\n${conflict.newText}'),
+            child: const Text('追記する'),
+          ),
+        ],
+      ),
+    );
   }
 
   late final List<Widget> _pages;

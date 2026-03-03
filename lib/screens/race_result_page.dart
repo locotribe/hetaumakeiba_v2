@@ -28,8 +28,8 @@ import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 import 'package:hetaumakeiba_v2/widgets/betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
-// 新規追加ウィジェットと画面
 import 'package:hetaumakeiba_v2/widgets/race_review_card.dart';
+import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -344,8 +344,15 @@ class _RaceResultPageState extends State<RaceResultPage> {
         throw Exception('CSVヘッダーが正しくありません');
       }
 
+      // === 既存データの取得 ===
+      final existingHorseMemos = await _horseRepo.getMemosForRace(userId, widget.raceId);
+      final existingHorseMemosMap = {for (var m in existingHorseMemos) m.horseId: m};
+      final existingRaceMemo = await _raceRepo.getRaceMemo(userId, widget.raceId);
+
       final List<HorseMemo> memosToUpdate = [];
-      String? importedRaceMemo;
+      bool updateRaceMemo = false;
+      String finalRaceMemo = existingRaceMemo?.memo ?? '';
+      int updatedHorseCount = 0;
 
       for (int i = 1; i < rows.length; i++) {
         final row = rows[i];
@@ -354,35 +361,91 @@ class _RaceResultPageState extends State<RaceResultPage> {
         if (csvRaceId != widget.raceId) continue;
 
         final horseId = row[1].toString();
-        memosToUpdate.add(HorseMemo(
-          userId: userId,
-          raceId: csvRaceId,
-          horseId: horseId,
-          reviewMemo: row.length > 4 ? row[4].toString() : '',
-          predictionMemo: row.length > 5 ? row[5].toString() : '',
-          timestamp: DateTime.now(),
-        ));
+        final horseName = row.length > 3 ? row[3].toString() : '馬番不明';
+        final csvReview = row.length > 4 ? row[4].toString() : '';
+        final csvPrediction = row.length > 5 ? row[5].toString() : '';
 
-        // レース総評の取得（空文字でないものが入力されていれば取得）
+        final existingHorse = existingHorseMemosMap[horseId];
+        String finalReview = existingHorse?.reviewMemo ?? '';
+        String finalPrediction = existingHorse?.predictionMemo ?? '';
+        bool isHorseUpdated = false;
+
+        // 回顧メモの競合判定
+        final reviewMerge = MemoImportLogic.determineMergeAction(existingHorse?.reviewMemo, csvReview);
+        if (reviewMerge.action == MemoMergeAction.overwrite) {
+          finalReview = reviewMerge.resultText;
+          isHorseUpdated = true;
+        } else if (reviewMerge.action == MemoMergeAction.conflict) {
+          final resolved = await _resolveConflictDialog('$horseNameの回顧メモ', reviewMerge);
+          if (resolved != null && resolved != finalReview) {
+            finalReview = resolved;
+            isHorseUpdated = true;
+          }
+        }
+
+        // 予想メモの競合判定
+        final predictionMerge = MemoImportLogic.determineMergeAction(existingHorse?.predictionMemo, csvPrediction);
+        if (predictionMerge.action == MemoMergeAction.overwrite) {
+          finalPrediction = predictionMerge.resultText;
+          isHorseUpdated = true;
+        } else if (predictionMerge.action == MemoMergeAction.conflict) {
+          final resolved = await _resolveConflictDialog('$horseNameの予想メモ', predictionMerge);
+          if (resolved != null && resolved != finalPrediction) {
+            finalPrediction = resolved;
+            isHorseUpdated = true;
+          }
+        }
+
+        // 変更があった場合、または新規作成の場合のみ更新リストへ追加
+        if (isHorseUpdated || existingHorse == null) {
+          // 新規の場合でかつCSVのメモがどちらも空なら追加しない
+          if (existingHorse != null || finalReview.isNotEmpty || finalPrediction.isNotEmpty) {
+            memosToUpdate.add(HorseMemo(
+              id: existingHorse?.id,
+              userId: userId,
+              raceId: csvRaceId,
+              horseId: horseId,
+              reviewMemo: finalReview,
+              predictionMemo: finalPrediction,
+              timestamp: DateTime.now(),
+              odds: existingHorse?.odds,
+              popularity: existingHorse?.popularity,
+            ));
+            updatedHorseCount++;
+          }
+        }
+
+        // レース総評の競合判定
         if (hasRaceMemoCol && row.length > 6) {
-          final rmText = row[6].toString().trim();
-          if (rmText.isNotEmpty) {
-            importedRaceMemo = rmText;
+          final csvRaceMemo = row[6].toString().trim();
+          if (csvRaceMemo.isNotEmpty) {
+            final raceMerge = MemoImportLogic.determineMergeAction(finalRaceMemo, csvRaceMemo);
+            if (raceMerge.action == MemoMergeAction.overwrite) {
+              finalRaceMemo = raceMerge.resultText;
+              updateRaceMemo = true;
+            } else if (raceMerge.action == MemoMergeAction.conflict) {
+              final resolved = await _resolveConflictDialog('レース総評', raceMerge);
+              if (resolved != null && resolved != finalRaceMemo) {
+                finalRaceMemo = resolved;
+                updateRaceMemo = true;
+              }
+            }
           }
         }
       }
 
       // 馬ごとのメモを一括保存
-      await _horseRepo.insertOrUpdateMultipleMemos(memosToUpdate);
+      if (memosToUpdate.isNotEmpty) {
+        await _horseRepo.insertOrUpdateMultipleMemos(memosToUpdate);
+      }
 
       // レース総評の保存
-      if (importedRaceMemo != null) {
-        final existingRaceMemo = await _raceRepo.getRaceMemo(userId, widget.raceId);
+      if (updateRaceMemo) {
         final newRaceMemo = RaceMemo(
           id: existingRaceMemo?.id,
           userId: userId,
           raceId: widget.raceId,
-          memo: importedRaceMemo,
+          memo: finalRaceMemo,
           timestamp: DateTime.now(),
         );
         await _raceRepo.insertOrUpdateRaceMemo(newRaceMemo);
@@ -392,9 +455,9 @@ class _RaceResultPageState extends State<RaceResultPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  '${memosToUpdate.length}頭のメモ' +
-                      (importedRaceMemo != null ? 'とレース総評' : '') +
-                      'をインポートしました'
+                  '$updatedHorseCount頭のメモ' +
+                      (updateRaceMemo ? 'とレース総評' : '') +
+                      'を更新・インポートしました'
               )
           ),
         );
@@ -411,6 +474,57 @@ class _RaceResultPageState extends State<RaceResultPage> {
         );
       }
     }
+  }
+
+  /// 競合発生時にユーザーに解決アクションを選択させるダイアログ
+  Future<String?> _resolveConflictDialog(String title, MemoMergeResult conflict) async {
+    return await showDialog<String>(
+      context: context,
+      barrierDismissible: false, // 誤タップで閉じるのを防ぎ、必ず選択させる
+      builder: (context) => AlertDialog(
+        title: Text('競合の解決: $title', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('【現在のデータ】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(top: 4, bottom: 12),
+                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)),
+                child: Text(conflict.existingText.isEmpty ? '(なし)' : conflict.existingText),
+              ),
+              const Text('【インポートデータ】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(top: 4, bottom: 16),
+                decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4)),
+                child: Text(conflict.newText.isEmpty ? '(なし)' : conflict.newText),
+              ),
+              const Text('このデータをどのように処理しますか？', style: TextStyle(fontSize: 13)),
+            ],
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, conflict.existingText),
+            child: const Text('スキップ'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, conflict.newText),
+            child: const Text('CSVで上書き', style: TextStyle(color: Colors.red)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, '${conflict.existingText}\n\n${conflict.newText}'),
+            child: const Text('追記する'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showMemoDialog(HorseResult horse) async {
