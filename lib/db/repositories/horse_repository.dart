@@ -199,4 +199,24 @@ class HorseRepository {
       return HorseMemo.fromMap(maps[i]);
     });
   }
+
+  Future<List<HorseMemo>> getMemosForHorseByRaceIds(String userId, String horseId, List<String> raceIds) async {
+    if (raceIds.isEmpty) {
+      return [];
+    }
+
+    final db = await _db;
+    final placeholders = List.filled(raceIds.length, '?').join(',');
+    final List<dynamic> args = [userId, horseId, ...raceIds];
+
+    final maps = await db.query(
+      DbConstants.tableHorseMemos,
+      where: 'userId = ? AND horseId = ? AND raceId IN ($placeholders)',
+      whereArgs: args,
+    );
+
+    return List.generate(maps.length, (i) {
+      return HorseMemo.fromMap(maps[i]);
+    });
+  }
 }

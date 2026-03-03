@@ -1821,59 +1821,56 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
-  /// 指定した馬の直近5走分のメモと、そのレース情報を取得して結合する
+  /// 指定した馬の直近5走分のメモと、その成績情報を取得して結合する
   Future<List<_PastMemoDetail>> _fetchPastMemoDetails(String horseId) async {
     final userId = localUserId;
     if (userId == null) return [];
 
-    // 1. 直近5走のメモを取得（今回のレースは除外）
-    final memos = await _horseRepo.getRecentMemosForHorse(
-      horseId, // 修正: 実装済みのメソッドシグネチャに合わせて userId と excludeRaceId を調整する場合がありますが、一旦指示書通りに進めます。
-      // ※注意: horse_repository.dart に追加した getRecentMemosForHorse が引数 (String horseId) のみの場合、
-      // ユーザーIDや除外レースのフィルタリングは取得後にDart側で行うか、リポジトリ側を修正する必要があります。
-      // ここでは、もしリポジトリ側が (horseId) のみを受け取る仕様であれば、以下のようにDart側でフィルタリングします。
-    );
+    // 1. 直近の成績（馬柱データ）を取得
+    final records = await _horseRepo.getHorsePerformanceRecords(horseId);
 
-    // 今回のレースを除外し、直近5件に絞る（リポジトリ側で対応していない場合の安全策）
-    final filteredMemos = memos.where((m) => m.raceId != widget.raceId && m.userId == userId).take(5).toList();
+    // 2. 今回のレースを除外し、直近5走のレコードを抽出
+    final targetRecords = records
+        .where((r) => r.raceId.isNotEmpty && r.raceId != widget.raceId)
+        .take(5)
+        .toList();
 
-    if (filteredMemos.isEmpty) return [];
+    if (targetRecords.isEmpty) return [];
 
-    // 2. メモに関連するレースIDをリスト化
-    final raceIds = filteredMemos.map((m) => m.raceId).toList();
+    // レースIDをリスト化
+    final raceIds = targetRecords.map((r) => r.raceId).toList();
 
-    // 3. レース詳細情報を一括取得（レース名や日付のため）
-    final raceResults = await _raceRepo.getMultipleRaceResults(raceIds);
+    // 3. 対象のレースIDリストを使ってメモを一括取得 (追加した新メソッドを利用)
+    final memos = await _horseRepo.getMemosForHorseByRaceIds(userId, horseId, raceIds);
+
+    // 検索を高速化するため、raceIdをキーにしたMapに変換
+    final memosMap = {for (var m in memos) m.raceId: m};
 
     final List<_PastMemoDetail> details = [];
 
-    for (final memo in filteredMemos) {
-      final race = raceResults[memo.raceId];
-      String raceName = '不明なレース';
-      String date = memo.timestamp.toString().substring(0, 10);
-      String rank = '-';
+    // 4. 成績の順序（直近走が上）に合わせてメモを結合し、表示用データを作成
+    for (final record in targetRecords) {
+      final memo = memosMap[record.raceId];
 
-      if (race != null) {
-        raceName = race.raceTitle;
-        // 日付を短く整形 (例: 2023年12月24日 -> 23/12/24)
-        date = race.raceDate.replaceFirst('20', '').replaceAll('年', '/').replaceAll('月', '/').replaceAll('日', '');
+      // メモが存在し、かつ予想か回顧のどちらかが入力されている場合のみ追加
+      if (memo != null &&
+          ((memo.predictionMemo != null && memo.predictionMemo!.isNotEmpty) ||
+              (memo.reviewMemo != null && memo.reviewMemo!.isNotEmpty))) {
 
-        // この馬の着順を探す
-        try {
-          final horseResult = race.horseResults.firstWhere((h) => h.horseId == horseId);
-          rank = horseResult.rank.isNotEmpty ? '${horseResult.rank}着' : '他';
-        } catch (_) {
-          rank = '-';
+        // 日付の整形 (例: 2023-12-24 -> 23/12/24)
+        String date = record.date.replaceAll('-', '/').replaceAll('年', '/').replaceAll('月', '/').replaceAll('日', '');
+        if (date.startsWith('20')) {
+          date = date.substring(2);
         }
-      }
 
-      // メモが空でない場合のみリストに追加
-      if ((memo.predictionMemo != null && memo.predictionMemo!.isNotEmpty) ||
-          (memo.reviewMemo != null && memo.reviewMemo!.isNotEmpty)) {
+        // 着順の整形 (数字なら「着」をつける)
+        final rankInt = int.tryParse(record.rank);
+        String rankText = rankInt != null ? '${rankInt}着' : (record.rank.isNotEmpty ? record.rank : '他');
+
         details.add(_PastMemoDetail(
-          raceName: raceName,
+          raceName: record.raceName,
           date: date,
-          rank: rank,
+          rank: rankText,
           predictionMemo: memo.predictionMemo ?? '',
           reviewMemo: memo.reviewMemo ?? '',
         ));
