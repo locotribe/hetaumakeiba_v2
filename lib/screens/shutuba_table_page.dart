@@ -1,10 +1,6 @@
 // lib/screens/shutuba_table_page.dart
 
-import 'dart:io';
-
-import 'package:csv/csv.dart';
 import 'package:data_table_2/data_table_2.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
@@ -13,35 +9,24 @@ import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/ai/stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
-import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
 import 'package:hetaumakeiba_v2/main.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
-import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
-import 'package:hetaumakeiba_v2/services/ai_prediction_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_profile_sync_service.dart';
 import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
-import 'package:hetaumakeiba_v2/widgets/leg_style_indicator.dart';
-import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/starters_tab.dart'; // ← 追加
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/info_tab.dart'; // ← 追加 (情報タブ)
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/jockey_trainer_tab.dart'; // ← ★これを追加
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/time_tab.dart';
-import 'package:just_the_tooltip/just_the_tooltip.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
-import '../utils/grade_utils.dart';
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/performance_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/info_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/jockey_trainer_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/memo_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/performance_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/starters_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/time_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 
 enum SortableColumn {
   mark,
@@ -52,7 +37,6 @@ enum SortableColumn {
   odds,
   carriedWeight,
   horseWeight,
-  overallScore,
   bestTime,
   fastestAgari,
   legStyle,
@@ -78,15 +62,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   bool _isLoading = true;
   final ShutubaTableScraperService _scraperService = ShutubaTableScraperService();
 
-  // --- 新しいRepository / Serviceのインスタンス化 ---
   final RaceRepository _raceRepo = RaceRepository();
   final HorseRepository _horseRepo = HorseRepository();
   final UserRepository _userRepo = UserRepository();
   final HorseProfileSyncService _horseProfileSyncService = HorseProfileSyncService();
-
-  Map<String, double> _overallScores = {};
-  Map<String, double> _expectedValues = {};
-  Map<String, ConditionFitResult> _conditionFits = {};
 
   SortableColumn _sortColumn = SortableColumn.horseNumber;
   bool _isAscending = true;
@@ -100,7 +79,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _loadShutubaData();
   }
 
@@ -211,22 +190,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
       if (mounted) {
         if (data != null) {
-          if (data.horses.any((h) => h.overallScore != null)) {
-            _overallScores = {
-              for (var h in data.horses)
-                if (h.overallScore != null) h.horseId: h.overallScore!
-            };
-            _expectedValues = {
-              for (var h in data.horses)
-                if (h.expectedValue != null) h.horseId: h.expectedValue!
-            };
-          } else {
-            final predictions = await _raceRepo.getAiPredictionsForRace(widget.raceId);
-            if(predictions.isNotEmpty){
-              _overallScores = {for (var p in predictions) p.horseId: p.overallScore};
-              _expectedValues = {for (var p in predictions) p.horseId: p.expectedValue};
-            }
-          }
           if (widget.onDataRefreshed != null) {
             widget.onDataRefreshed!(data);
           }
@@ -349,17 +312,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('情報の更新に失敗しました: $e')));
       }
     }
-  }
-
-  String _getRankFromScore(double score) {
-    if (score >= 90) return 'S';
-    if (score >= 85) return 'A+';
-    if (score >= 80) return 'A';
-    if (score >= 75) return 'B+';
-    if (score >= 70) return 'B';
-    if (score >= 60) return 'C+';
-    if (score >= 50) return 'C';
-    return 'D';
   }
 
   Future<PredictionRaceData?> _fetchDataWithUserMarks() async {
@@ -497,7 +449,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   Tab(text: '出走馬'),
                   Tab(text: '情報'),
                   Tab(text: '騎手・調教師'),
-                  Tab(text: '分析'),
                   Tab(text: '時計'),
                   Tab(text: '成績'),
                   Tab(text: 'メモ'),
@@ -545,11 +496,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             final aWeight = int.tryParse(a.horseWeight?.split('(').first ?? '');
                             final bWeight = int.tryParse(b.horseWeight?.split('(').first ?? '');
                             comparison = compareNullsLast(aWeight, bWeight);
-                            break;
-                          case SortableColumn.overallScore:
-                            final aScore = _overallScores[a.horseId];
-                            final bScore = _overallScores[b.horseId];
-                            comparison = compareNullsLast(aScore, bScore);
                             break;
                           case SortableColumn.bestTime:
                             final aTime = a.bestTimeStats?.timeInSeconds;
@@ -602,7 +548,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             buildMarkDropdown: _buildMarkDropdown,
                             buildDataTableForTab: _buildDataTableForTab,
                           ),
-                          _buildAnalysisTab(sortedHorses),
                           TimeTabWidget(
                             horses: sortedHorses,
                             onSort: _onSort,
@@ -690,39 +635,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
-  Widget _buildConditionFitCell(ConditionFitResult? fitResult) {
-    if (fitResult == null) {
-      return const Text('-');
-    }
-
-    final ratings = [fitResult.trackFit, fitResult.paceFit, fitResult.weightFit, fitResult.gateFit];
-    int totalScore = 0;
-    int validRatings = 0;
-    for (var rating in ratings) {
-      if (rating != FitnessRating.unknown) {
-        validRatings++;
-        totalScore += {FitnessRating.excellent: 4, FitnessRating.good: 3, FitnessRating.average: 2, FitnessRating.poor: 1}[rating]!;
-      }
-    }
-
-    if (validRatings == 0) {
-      return const Text('-');
-    }
-
-    final avgScore = totalScore / validRatings;
-
-    String rank;
-    if (avgScore >= 3.5) {
-      rank = 'S';
-    } else if (avgScore >= 3.0) rank = 'A';
-    else if (avgScore >= 2.5) rank = 'B';
-    else if (avgScore >= 2.0) rank = 'C';
-    else rank = 'D';
-
-    return Text(rank, style: const TextStyle(fontWeight: FontWeight.bold));
-  }
-
-
   void _onSort(SortableColumn column) {
     setState(() {
       if (_sortColumn == column) {
@@ -776,11 +688,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             final bWeight = int.tryParse(b.horseWeight?.split('(').first ?? '');
             comparison = compareNullsLast(aWeight, bWeight);
             break;
-          case SortableColumn.overallScore:
-            final aScore = _overallScores[a.horseId];
-            final bScore = _overallScores[b.horseId];
-            comparison = compareNullsLast(bScore, aScore);
-            break;
           case SortableColumn.bestTime:
             final aTime = a.bestTimeStats?.timeInSeconds;
             final bTime = b.bestTimeStats?.timeInSeconds;
@@ -826,81 +733,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       ),
       columns: columns,
       rows: horses.map((horse) => DataRow(cells: cellBuilder(horse))).toList(),
-    );
-  }
-
-  /// 分析タブ
-  Widget _buildAnalysisTab(List<PredictionHorseDetail> horses) {
-    return _buildDataTableForTab(
-      columns: [
-        DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => _onSort(SortableColumn.mark)),
-        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => _onSort(SortableColumn.horseName)),
-        DataColumn2(label: const Text('総合評価'), fixedWidth: 80, onSort: (i, asc) => _onSort(SortableColumn.overallScore)),
-        const DataColumn2(label: Text('条件適性'), fixedWidth: 80,),
-        DataColumn2(
-          label: Row(
-            children: [
-              const Text('距離適性'),
-              _buildHelpIcon('距離・コース適性', 'コース種別・距離が今回と完全に一致した過去レースでの成績を「1着-2着-3着-着外」で表示します。'),
-            ],
-          ),
-          fixedWidth: 100,
-        ),
-        DataColumn2(
-          label: Row(
-            children: [
-              const Text('馬場適性'),
-              _buildHelpIcon('馬場適性', '良馬場と道悪（稍重・重・不良）での複勝率を比較し、道悪でのパフォーマンスを評価します。'),
-            ],
-          ),
-          fixedWidth: 120,
-        ),
-      ],
-      horses: horses,
-      cellBuilder: (horse) {
-        final score = _overallScores[horse.horseId] ?? 0.0;
-        final rank = _getRankFromScore(score);
-        final fitResult = _conditionFits[horse.horseId];
-        final distanceCourseStats = horse.distanceCourseAptitudeStats;
-        final trackAptitudeLabel = horse.trackAptitudeLabel ?? '－';
-        return [
-          DataCell(
-            horse.isScratched
-                ? const Text('取消', style: TextStyle(color: Colors.red))
-                : _buildMarkDropdown(horse),
-          ),
-          DataCell(
-            Text(
-              horse.horseName,
-              style: TextStyle(
-                decoration: horse.isScratched ? TextDecoration.lineThrough : null,
-              ),
-            ),
-          ),
-          DataCell(
-            Text(
-              '$rank (${score.toStringAsFixed(1)})',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          DataCell(_buildConditionFitCell(fitResult)),
-          DataCell(
-            Text(
-              (distanceCourseStats == null || distanceCourseStats.raceCount == 0) ? '-' : distanceCourseStats.recordString,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          DataCell(
-            Text(
-              trackAptitudeLabel,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: trackAptitudeLabel.contains('◎') ? Colors.red : (trackAptitudeLabel.contains('✕') ? Colors.blue : Colors.black87),
-              ),
-            ),
-          ),
-        ];
-      },
     );
   }
 
