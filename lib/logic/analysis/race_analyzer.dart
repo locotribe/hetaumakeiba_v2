@@ -1,12 +1,12 @@
-// lib/logic/ai/race_analyzer.dart
+// lib/logic/analysis/race_analyzer.dart
 
-import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/analysis_model.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
-import 'package:hetaumakeiba_v2/logic/ai/aptitude_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/aptitude_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';

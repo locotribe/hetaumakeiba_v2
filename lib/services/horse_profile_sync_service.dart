@@ -1,7 +1,7 @@
 // lib/services/horse_profile_sync_service.dart
 
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/services/horse_profile_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 

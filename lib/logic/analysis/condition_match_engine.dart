@@ -1,9 +1,8 @@
-// lib/logic/ai/condition_match_engine.dart
+// lib/logic/analysis/condition_match_engine.dart
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
-import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 
 /// 特定の着順グループにおける数値範囲を保持するモデル
 class ConditionRange {

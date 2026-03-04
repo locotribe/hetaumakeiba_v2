@@ -9,7 +9,6 @@ import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_model.dart';
 import 'package:hetaumakeiba_v2/models/race_memo_model.dart'; // ▼ 新規追加
 
 class RaceRepository {
@@ -293,34 +292,6 @@ class RaceRepository {
     await insertOrUpdateShutubaTableCache(cache);
   }
 
-  // ===========================================================================
-  // AI予測 (ai_predictions)
-  // ===========================================================================
-
-  Future<void> insertOrUpdateAiPredictions(List<AiPrediction> predictions) async {
-    final db = await _dbProvider.database;
-    final batch = db.batch();
-    for (final prediction in predictions) {
-      batch.insert(
-        DbConstants.tableAiPredictions,
-        prediction.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-    await batch.commit(noResult: true);
-  }
-
-  Future<List<AiPrediction>> getAiPredictionsForRace(String raceId) async {
-    final db = await _dbProvider.database;
-    final maps = await db.query(
-      DbConstants.tableAiPredictions,
-      where: 'race_id = ?',
-      whereArgs: [raceId],
-    );
-    return List.generate(maps.length, (i) {
-      return AiPrediction.fromMap(maps[i]);
-    });
-  }
 
   // ===========================================================================
   // レース総評メモ (race_memos) ▼ 新規追加

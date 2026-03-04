@@ -1,10 +1,10 @@
 // lib/screens/condition_based_analysis_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/condition_presentation_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai/condition_match_engine.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/condition_match_engine.dart';
 import 'package:hetaumakeiba_v2/widgets/condition_horse_row.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 

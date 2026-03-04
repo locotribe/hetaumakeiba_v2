@@ -207,19 +207,6 @@ class DbProvider {
       )
     ''');
 
-    await db.execute('''
-      CREATE TABLE ${DbConstants.tableAiPredictions}(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        race_id TEXT NOT NULL,
-        horse_id TEXT NOT NULL,
-        overall_score REAL NOT NULL,
-        expected_value REAL NOT NULL,
-        prediction_timestamp TEXT NOT NULL,
-        analysis_details_json TEXT,
-        UNIQUE(race_id, horse_id) ON CONFLICT REPLACE
-      )
-    ''');
-
     await _createCoursePresetsTable(db);
     await _initCoursePresets(db);
 

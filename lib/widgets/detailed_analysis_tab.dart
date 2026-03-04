@@ -2,10 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/formation_analysis_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai/formation_analysis_engine.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/formation_analysis_engine.dart';
 
 class DetailedAnalysisTab extends StatefulWidget {
   final String raceId;

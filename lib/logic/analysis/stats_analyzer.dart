@@ -1,7 +1,7 @@
-// lib/logic/ai/stats_analyzer.dart
+// lib/logic/analysis/stats_analyzer.dart
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/complex_aptitude_model.dart';
 import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';

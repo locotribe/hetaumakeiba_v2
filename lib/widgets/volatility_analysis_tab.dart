@@ -5,7 +5,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai/volatility_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 

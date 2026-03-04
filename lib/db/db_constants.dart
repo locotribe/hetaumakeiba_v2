@@ -19,7 +19,6 @@ class DbConstants {
   static const String tableRaceSchedules = 'race_schedules';
   static const String tableWeekSchedulesCache = 'week_schedules_cache';
   static const String tableShutubaTableCache = 'shutuba_table_cache';
-  static const String tableAiPredictions = 'ai_predictions';
   static const String tableCoursePresets = 'course_presets';
   static const String tableHorseProfiles = 'horse_profiles';
   static const String tableJyusyoRaces = 'jyusyo_races';

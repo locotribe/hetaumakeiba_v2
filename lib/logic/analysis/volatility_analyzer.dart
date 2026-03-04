@@ -1,4 +1,4 @@
-// lib/logic/ai/volatility_analyzer.dart
+// lib/logic/analysis/volatility_analyzer.dart
 
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
@@ -66,8 +66,6 @@ class PayoutAnalysisResult {
     required this.rawPayouts,
   });
 }
-
-// lib/logic/ai/volatility_analyzer.dart
 
 class PayoutAnalyzer {
   // 実際のデータベースの券種ID（combination_calculator.dart）に合わせた名称マッピング

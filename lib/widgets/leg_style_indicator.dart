@@ -1,7 +1,7 @@
 // lib/widgets/leg_style_indicator.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 
 class LegStyleIndicator extends StatelessWidget {
   final LegStyleProfile? legStyleProfile;

@@ -1,13 +1,13 @@
 // lib/logic/relative_battle_calculator.dart
 
 import 'dart:math';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/ai/stats_analyzer.dart'; // ★追加
+import 'package:hetaumakeiba_v2/logic/analysis/stats_analyzer.dart'; // ★追加
 import '../models/relative_evaluation_model.dart';
 
 /// 相対評価シミュレーションを実行する計算クラス

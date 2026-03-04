@@ -6,7 +6,7 @@ import 'package:hetaumakeiba_v2/main.dart'; // localUserId用
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';

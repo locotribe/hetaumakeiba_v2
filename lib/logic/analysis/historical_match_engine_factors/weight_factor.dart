@@ -1,7 +1,7 @@
-// lib/logic/ai/historical_match_engine_factors/weight_factor.dart
+// lib/logic/analysis/historical_match_engine_factors/weight_factor.dart
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 
 class WeightFactorResult {
   final double score;

@@ -12,7 +12,7 @@ import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 

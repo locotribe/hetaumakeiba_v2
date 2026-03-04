@@ -1,7 +1,7 @@
 // lib/widgets/condition_match_chips.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/logic/ai/condition_match_engine.dart'; // MatchupBrief型のため
+import 'package:hetaumakeiba_v2/logic/analysis/condition_match_engine.dart'; // MatchupBrief型のため
 
 /// 対戦結果（先着・敗北）を詳細な行形式で表示するウィジェット
 class MatchupResultRow extends StatelessWidget {

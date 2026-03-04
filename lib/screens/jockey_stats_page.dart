@@ -1,7 +1,7 @@
 // lib/screens/jockey_stats_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';
 import 'package:data_table_2/data_table_2.dart';

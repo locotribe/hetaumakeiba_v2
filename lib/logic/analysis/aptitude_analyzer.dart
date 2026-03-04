@@ -1,8 +1,7 @@
-// lib/logic/ai/aptitude_analyzer.dart
+// lib/logic/analysis/aptitude_analyzer.dart
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
-import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 
 class AptitudeAnalyzer {

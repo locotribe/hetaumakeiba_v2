@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 
 class BulkMemoEditPage extends StatefulWidget {

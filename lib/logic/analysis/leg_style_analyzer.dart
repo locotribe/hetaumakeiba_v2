@@ -1,4 +1,4 @@
-// lib/logic/ai/leg_style_analyzer.dart
+// lib/logic/analysis/leg_style_analyzer.dart
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 

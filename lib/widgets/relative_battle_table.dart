@@ -1,7 +1,7 @@
 // lib/widgets/relative_battle_table.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/relative_evaluation_model.dart';
 import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
 import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';

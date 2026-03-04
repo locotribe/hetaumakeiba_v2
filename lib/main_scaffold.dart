@@ -16,8 +16,6 @@ import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
 import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
-import 'package:hetaumakeiba_v2/screens/ai_prediction_analysis_page.dart';
-import 'package:hetaumakeiba_v2/screens/ai_prediction_settings_page.dart';
 import 'package:hetaumakeiba_v2/screens/analytics_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/home_page.dart';
@@ -646,31 +644,6 @@ class _MainScaffoldState extends State<MainScaffold> {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => const HomeSettingsPage(),
-                  ),
-                );
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.tune),
-              title: const Text('AI予測チューニング'),
-              onTap: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const AiPredictionSettingsPage(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.insights),
-              title: const Text('AI予測 傾向分析'),
-              onTap: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const AiPredictionAnalysisPage(),
                   ),
                 );
               },

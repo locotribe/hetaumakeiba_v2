@@ -1,7 +1,7 @@
 // lib/models/condition_presentation_model.dart
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai/condition_match_engine.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/condition_match_engine.dart';
 
 /// UIに表示するために最適化された、馬ごとの好走条件データモデル
 class HorseConditionDisplayData {

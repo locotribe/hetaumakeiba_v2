@@ -1,7 +1,7 @@
 // lib/widgets/analysis_tab_container.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/screens/condition_based_analysis_page.dart';
 
 /// 分析タブ内で「適性評価」と「好走条件」を切り替えるためのコンテナ

@@ -1,15 +1,15 @@
-// lib/logic/ai/historical_match_engine.dart
+// lib/logic/analysis/historical_match_engine.dart
 
 import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 
 // 各ファクターをインポート
-import 'historical_match_engine_factors/weight_factor.dart';
-import 'historical_match_engine_factors/frame_factor.dart';
-import 'historical_match_engine_factors/popularity_factor.dart';
-import 'historical_match_engine_factors/rotation_factor.dart';
+import '../analysis/historical_match_engine_factors/weight_factor.dart';
+import '../analysis/historical_match_engine_factors/frame_factor.dart';
+import '../analysis/historical_match_engine_factors/popularity_factor.dart';
+import '../analysis/historical_match_engine_factors/rotation_factor.dart';
 
 class HistoricalMatchEngine {
   // 各ファクターのインスタンス化

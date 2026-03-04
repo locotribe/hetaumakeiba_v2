@@ -1,6 +1,6 @@
 // lib/screens/horse_stats_page.dart
 
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';

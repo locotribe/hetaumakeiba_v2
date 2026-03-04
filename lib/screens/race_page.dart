@@ -8,14 +8,14 @@ import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
-import 'package:hetaumakeiba_v2/screens/ai_prediction_result_page.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+// ▼ モデルのインポートをリネーム後のパスに変更
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
 import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/screens/jockey_stats_page.dart';
-import 'package:hetaumakeiba_v2/screens/ai_comprehensive_prediction_page.dart';
+// ▲ AIページのインポート2つを削除済み
 
 enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
 
@@ -106,7 +106,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    // ▼ 7 から 5 に変更
+    _tabController = TabController(length: 5, vsync: this);
     _determineRaceStatus();
   }
 
@@ -125,7 +126,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _predictionRaceData = shutubaCache.predictionRaceData;
         _raceResult = dbResult;
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(dbResult != null ? 5 : 0);
+        // ▼ 5 から 4 に変更
+        _tabController.animateTo(dbResult != null ? 4 : 0);
       });
 
       // --- 追加ロジック開始 ---
@@ -133,8 +135,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         final dateStr = shutubaCache.predictionRaceData.raceDate;
         final details = shutubaCache.predictionRaceData.raceDetails1 ?? '';
 
-        // 日付と時刻を抽出 (例: "2025年5月24日", "15:35発走")
-        // 年月日が「/」区切りの場合も考慮
         final dateMatch = RegExp(r'(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})').firstMatch(dateStr);
         final timeMatch = RegExp(r'(\d{1,2}):(\d{2})発走').firstMatch(details);
 
@@ -151,15 +151,10 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           bool shouldFetch = false;
 
           if (dbResult == null) {
-            // ケース1: 結果がまだDBにない場合
-            // 現在時刻が発走時刻を過ぎていれば確認
             if (now.isAfter(raceTime)) {
               shouldFetch = true;
             }
           } else {
-            // ケース2: 結果はDBにあるが「速報版（詳細不足）」の可能性がある場合
-            // 判定基準: ラップタイム情報が空、かつレースから1日以上経過している
-            // (速報版はラップタイムが取れない仕様を利用)
             if (dbResult.lapTimes.isEmpty && now.difference(raceTime).inHours >= 24) {
               shouldFetch = true;
             }
@@ -168,14 +163,11 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           if (shouldFetch) {
             final isConfirmed = await RaceResultScraperService.isRaceResultConfirmed(widget.raceId);
             if (isConfirmed && mounted) {
-              // 結果がWebにあれば取得・保存・画面更新を実行
-              // (すでに速報版があっても上書き保存される)
               await _fetchAndSaveRaceResult();
             }
           }
         }
       } catch (e) {
-        // パースエラー等は無視して既存の動作を維持
         print('Auto-check result error: $e');
       }
       // --- 追加ロジック終了 ---
@@ -188,7 +180,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _raceResult = dbResult;
         _predictionRaceData = _createPredictionDataFromRaceResult(dbResult);
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(5);
+        // ▼ 5 から 4 に変更
+        _tabController.animateTo(4);
       });
       return;
     }
@@ -231,7 +224,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         setState(() {
           _raceResult = result;
           _status = RaceStatus.resultConfirmed;
-          _tabController.animateTo(5);
+          // ▼ 5 から 4 に変更
+          _tabController.animateTo(4);
         });
       }
     } catch (e) {
@@ -253,14 +247,13 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
+          // ▼ タブを5つに削減
           tabs: const [
             Tab(text: '出馬表'),     // 0
             Tab(text: '過去分析'),   // 1
             Tab(text: '出走馬分析'), // 2
             Tab(text: '騎手特性'),   // 3
-            Tab(text: 'AI分析'),     // 4
-            Tab(text: 'レース結果'), // 5
-            Tab(text: 'AI分析結果'), // 6
+            Tab(text: 'レース結果'), // 4
           ],
         ),
       ),
@@ -277,11 +270,10 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           children: [
             TabBarView(
               controller: _tabController,
+              // ▼ ここもぴったり5つに修正
               children: [
                 ShutubaTablePage(raceId: widget.raceId),
                 const Center(child: CircularProgressIndicator()),
-                const Center(child: Text('レース結果を取得中です...')),
-                const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
@@ -294,6 +286,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
       case RaceStatus.resultConfirmed:
         return TabBarView(
           controller: _tabController,
+          // ▼ AI関連ページを取り除き、ぴったり5つに修正
           children: [
             ShutubaTablePage(
               raceId: widget.raceId,
@@ -323,16 +316,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               )
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),
-
-            if (_predictionRaceData != null)
-              ComprehensivePredictionPage(
-                raceId: widget.raceId,
-                raceData: _predictionRaceData!,
-              )
-            else
-              const Center(child: Text('出馬表データを読み込んでいます...')),
             RaceResultPage(raceId: widget.raceId, qrData: widget.qrData),
-            AiPredictionResultPage(raceId: widget.raceId),
           ],
         );
     }

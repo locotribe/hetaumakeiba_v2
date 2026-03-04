@@ -1,12 +1,11 @@
-// lib/logic/ai/condition_analyzer.dart
+// lib/logic/analysis/condition_analyzer.dart
 
 import 'dart:convert';
-import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/analysis_model.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai/race_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 
 class ConditionAnalyzer {
   static ConditionFitResult analyzeConditionFit({

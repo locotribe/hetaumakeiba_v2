@@ -1,8 +1,8 @@
-// lib/logic/ai/historical_match_engine_factors/popularity_factor.dart
+// lib/logic/analysis/historical_match_engine_factors/popularity_factor.dart
 
 import 'dart:math';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 
 class PopularityFactorResult {
   final double valueIndex; // 実力スコア

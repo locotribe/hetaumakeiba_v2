@@ -2,7 +2,7 @@
 
 import 'package:data_table_2/data_table_2.dart';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 
 class JockeyTrainerTabWidget extends StatelessWidget {

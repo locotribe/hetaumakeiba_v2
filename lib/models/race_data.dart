@@ -3,11 +3,11 @@
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_analysis_model.dart';
+import 'package:hetaumakeiba_v2/models/analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/complex_aptitude_model.dart';
 import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
-import 'package:hetaumakeiba_v2/logic/ai/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 
 /// レース全体の予想データを保持するコンテナです。
 class PredictionRaceData {

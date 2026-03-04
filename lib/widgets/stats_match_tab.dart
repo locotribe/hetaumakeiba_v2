@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
-import 'package:hetaumakeiba_v2/models/ai_prediction_race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/services/historical_match_service.dart';
-import 'package:hetaumakeiba_v2/logic/ai/historical_match_engine.dart';
-import 'package:hetaumakeiba_v2/logic/ai/volatility_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
 
 // 類似度データを保持するクラス
 class SimilarityData {
@@ -690,7 +690,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       children: [
         Row(
           children: [
-            SizedBox(width: 30, child: Text('${item.weightScore.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14))),
+            SizedBox(width: 40, child: Text('${item.weightScore.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14))),
             if (scoreDiffStr != null)
               Padding(
                 padding: const EdgeInsets.only(left: 2),
