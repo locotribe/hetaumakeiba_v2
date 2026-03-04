@@ -27,6 +27,7 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/performance_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/starters_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/time_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/training_tab.dart'; // ▼ 新規追加
 
 enum SortableColumn {
   mark,
@@ -79,7 +80,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _loadShutubaData();
   }
 
@@ -452,6 +453,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   Tab(text: '時計'),
                   Tab(text: '成績'),
                   Tab(text: 'メモ'),
+                  Tab(text: '調教'), // ▼ 新規追加
                 ],
               ),
               Expanded(
@@ -581,6 +583,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             reloadData: () {
                               _loadShutubaData(refresh: true);
                             },
+                          ),
+                          TrainingTabWidget(
+                            raceId: widget.raceId,
+                            raceDate: _predictionRaceData!.raceDate,
+                            horses: sortedHorses,
                           ),
                         ],
                       );

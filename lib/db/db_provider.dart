@@ -34,7 +34,6 @@ class DbProvider {
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    // テーブル作成ロジックをDatabaseHelperから完全移植
     await db.execute('''
       CREATE TABLE ${DbConstants.tableQrData}(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -263,7 +262,6 @@ class DbProvider {
       )
     ''');
 
-    // ▼ 新規追加: レース総評（メモ）テーブル
     await db.execute('''
       CREATE TABLE ${DbConstants.tableRaceMemos}(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -274,10 +272,28 @@ class DbProvider {
         UNIQUE(userId, raceId) ON CONFLICT REPLACE
       )
     ''');
+
+    // ▼ 新規追加: 調教データテーブル
+    await db.execute('''
+      CREATE TABLE ${DbConstants.tableTrainingTimes}(
+        ${DbConstants.colHorseId} TEXT NOT NULL,
+        ${DbConstants.colTrainingDate} TEXT NOT NULL,
+        ${DbConstants.colTrainingTime} TEXT NOT NULL,
+        ${DbConstants.colTrackType} TEXT NOT NULL,
+        ${DbConstants.colLocation} TEXT NOT NULL,
+        ${DbConstants.colF6} REAL,
+        ${DbConstants.colF5} REAL,
+        ${DbConstants.colF4} REAL,
+        ${DbConstants.colF3} REAL,
+        ${DbConstants.colF2} REAL,
+        ${DbConstants.colF1} REAL,
+        ${DbConstants.colStableName} TEXT,
+        PRIMARY KEY (${DbConstants.colHorseId}, ${DbConstants.colTrainingDate}, ${DbConstants.colTrainingTime}, ${DbConstants.colTrackType}, ${DbConstants.colLocation})
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // DatabaseHelperの安全なマイグレーションロジックを完全移植
     if (oldVersion < 2) {
       try {
         await db.execute('ALTER TABLE ${DbConstants.tableRaceStatistics} ADD COLUMN analyzedRacesJson TEXT');
@@ -351,7 +367,6 @@ class DbProvider {
         ''');
       } catch (e) { print('DEBUG: Migration error (v8->v9): $e'); }
     }
-    // ▼ 新規追加: バージョン9から10へのマイグレーション（レース総評テーブルの追加）
     if (oldVersion < 10) {
       try {
         await db.execute('''
@@ -365,6 +380,29 @@ class DbProvider {
           )
         ''');
       } catch (e) { print('DEBUG: Migration error (v9->v10): $e'); }
+    }
+
+    // ▼ 新規追加: バージョン10から11へのマイグレーション（調教データテーブルの追加）
+    if (oldVersion < 11) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS ${DbConstants.tableTrainingTimes}(
+            ${DbConstants.colHorseId} TEXT NOT NULL,
+            ${DbConstants.colTrainingDate} TEXT NOT NULL,
+            ${DbConstants.colTrainingTime} TEXT NOT NULL,
+            ${DbConstants.colTrackType} TEXT NOT NULL,
+            ${DbConstants.colLocation} TEXT NOT NULL,
+            ${DbConstants.colF6} REAL,
+            ${DbConstants.colF5} REAL,
+            ${DbConstants.colF4} REAL,
+            ${DbConstants.colF3} REAL,
+            ${DbConstants.colF2} REAL,
+            ${DbConstants.colF1} REAL,
+            ${DbConstants.colStableName} TEXT,
+            PRIMARY KEY (${DbConstants.colHorseId}, ${DbConstants.colTrainingDate}, ${DbConstants.colTrainingTime}, ${DbConstants.colTrackType}, ${DbConstants.colLocation})
+          )
+        ''');
+      } catch (e) { print('DEBUG: Migration error (v10->v11): $e'); }
     }
   }
 

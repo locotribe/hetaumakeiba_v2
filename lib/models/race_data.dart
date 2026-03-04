@@ -1,4 +1,4 @@
-// lib/models/ai_prediction_race_data.dart
+// lib/models/race_data.dart
 
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
