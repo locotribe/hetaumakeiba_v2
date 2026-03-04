@@ -1,7 +1,7 @@
 // lib/screens/horse_stats_page.dart
 
-import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
@@ -12,9 +12,14 @@ import 'package:hetaumakeiba_v2/models/horse_stats_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/matchup_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
-import 'package:hetaumakeiba_v2/screens/condition_based_analysis_page.dart';
-import 'package:hetaumakeiba_v2/widgets/relative_battle_table.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
+
+// ▼ 新しく作成したタブのウィジェットをインポート
+import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/individual_stats_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/matchup_stats_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/jockey_combo_stats_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/condition_based_analysis_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/relative_battle_tab.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -112,7 +117,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     });
   }
 
-
   Future<void> _showConfirmationDialog({bool isRefresh = false}) async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
@@ -155,48 +159,36 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
       final allPastRaceIds = <String>{};
       final Map<String, List<HorseRaceRecord>> allPerformanceRecords = {};
 
-      // ★修正箇所: 各馬ごとにスクレイピングを実行してからDB保存・取得を行う
       int horseIndex = 0;
       for (final horse in widget.horses) {
         horseIndex++;
-        // 進捗状況を画面に表示
         if (mounted) {
           setState(() {
             _loadingMessage = 'データ取得中: ${horse.horseName} ($horseIndex/${widget.horses.length})';
-            // 全体の工程の前半50%をこの処理に割り当てるイメージ
             _loadingProgress = (horseIndex / widget.horses.length) * 0.5;
           });
         }
 
         try {
-          // 1. Webから最新の戦績データを取得 (ここが欠落していた処理)
           final scrapedRecords = await HorsePerformanceScraperService.scrapeHorsePerformance(horse.horseId);
-
-          // 2. 取得したデータをDBに保存
           for (final record in scrapedRecords) {
             await _horseRepository.insertOrUpdateHorsePerformance(record);
           }
         } catch (e) {
-          // 特定の馬でエラーが出ても止まらずにログを出して続行する
           print('Error scraping horse ${horse.horseName} (${horse.horseId}): $e');
         }
 
-        // 3. DBから最新の状態（今保存したものを含む）を読み込んでメモリに展開
         final records = await _horseRepository.getHorsePerformanceRecords(horse.horseId);
         allPerformanceRecords[horse.horseId] = records;
 
-        // 過去のレースIDを収集（後でレース詳細を取得するため）
         for (final record in records) {
           if (record.raceId.isNotEmpty) {
             allPastRaceIds.add(record.raceId);
           }
         }
 
-        // サーバー負荷軽減のため少し待機 (0.5秒)
         await Future.delayed(const Duration(milliseconds: 500));
       }
-
-      // --- 以下は既存ロジックのまま（収集したレースIDの詳細情報を取得） ---
 
       final existingResults = await _raceRepository.getMultipleRaceResults(allPastRaceIds.toList());
       final raceIdsToFetch = allPastRaceIds.where((id) => !existingResults.containsKey(id)).toList();
@@ -208,14 +200,12 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
           if (!mounted) return;
           setState(() {
             _loadingMessage = 'レース詳細データを取得中 (${i + 1}/${raceIdsToFetch.length})';
-            // 後半50%を進捗バーに反映
             _loadingProgress = 0.5 + ((i + 1) / raceIdsToFetch.length * 0.5);
           });
           try {
             final result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$raceId');
             await _raceRepository.insertOrUpdateRaceResult(result);
             fetchedResults[raceId] = result;
-            // サーバー負荷軽減のため少し待機
             await Future.delayed(const Duration(milliseconds: 200));
           } catch (e) {
             print('Failed to fetch race result for $raceId: $e');
@@ -225,7 +215,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
 
       final allRaceResults = {...existingResults, ...fetchedResults};
 
-      // 4. 取得したデータを使って分析を実行
       final newStatsMap = <String, HorseStats>{};
       final newJockeyComboStats = <String, JockeyComboStats>{};
       for (final horse in widget.horses) {
@@ -246,7 +235,6 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         allPerformanceRecords: allPerformanceRecords,
       );
 
-      // キャッシュに保存
       final cacheToSave = HorseStatsCache(
         raceId: widget.raceId,
         statsMap: newStatsMap,
@@ -346,14 +334,24 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
       );
     }
 
+    // ▼ 切り出したウィジェットを呼び出すように変更
     return TabBarView(
       controller: _tabController,
       children: [
-        _buildIndividualStatsTab(),
-        _buildMatchupStatsTab(),
-        _buildJockeyComboStatsTab(),
-        ConditionBasedAnalysisPage(
-          raceData: PredictionRaceData(
+        IndividualStatsTab(
+          horses: widget.horses,
+          statsMap: _statsMap,
+        ),
+        MatchupStatsTab(
+          horses: widget.horses,
+          matchupStats: _matchupStats,
+        ),
+        JockeyComboStatsTab(
+          horses: widget.horses,
+          jockeyComboStats: _jockeyComboStats,
+        ),
+        ConditionBasedAnalysisTab(
+          raceData: widget.raceData ?? PredictionRaceData(
             raceId: widget.raceId,
             raceName: widget.raceName,
             raceDate: '',
@@ -364,355 +362,11 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             horses: widget.horses,
           ),
         ),
-        // ★修正: raceDataを渡す
-        RelativeBattleTable(
+        RelativeBattleTab(
           horses: widget.horses,
           raceData: widget.raceData,
         ),
       ],
-    );
-  }
-
-  Widget _buildIndividualStatsTab() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 16.0,
-          columns: const [
-            DataColumn(label: Text('馬番')),
-            DataColumn(label: Text('馬名')),
-            DataColumn(label: Text('出走数'), numeric: true),
-            DataColumn(label: Text('勝率'), numeric: true),
-            DataColumn(label: Text('連対率'), numeric: true),
-            DataColumn(label: Text('複勝率'), numeric: true),
-            DataColumn(label: Text('単回率'), numeric: true),
-            DataColumn(label: Text('複回率'), numeric: true),
-            DataColumn(label: Text('G1')),
-            DataColumn(label: Text('G2')),
-            DataColumn(label: Text('G3')),
-            DataColumn(label: Text('OP')),
-            DataColumn(label: Text('条件戦')),
-          ],
-          rows: widget.horses.map((horse) {
-            final stats = _statsMap[horse.horseId] ?? HorseStats();
-            return DataRow(
-              cells: [
-                DataCell(Text(horse.horseNumber.toString())),
-                DataCell(Text(horse.horseName)),
-                DataCell(Text(stats.raceCount.toString())),
-                DataCell(Text('${stats.winRate.toStringAsFixed(1)}%')),
-                DataCell(Text('${stats.placeRate.toStringAsFixed(1)}%')),
-                DataCell(Text('${stats.showRate.toStringAsFixed(1)}%')),
-                DataCell(Text('${stats.winRecoveryRate.toStringAsFixed(1)}%')),
-                DataCell(Text('${stats.showRecoveryRate.toStringAsFixed(1)}%')),
-                DataCell(Text(stats.g1Stats)),
-                DataCell(Text(stats.g2Stats)),
-                DataCell(Text(stats.g3Stats)),
-                DataCell(Text(stats.opStats)),
-                DataCell(Text(stats.conditionStats)),
-              ],
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMatchupStatsTab() {
-    if (_matchupStats.isEmpty) {
-      return const Center(child: Text('直接対決の成績はありません。'));
-    }
-
-    const double cellWidth = 50.0;
-    const double cellHeight = 50.0;
-    const double headerHeight = 50.0;
-    const double totalCellWidth = 70.0;
-
-    final Map<String, Map<String, int>> horseTotals = {};
-    for (final horseA in widget.horses) {
-      int totalOpponentWins = 0;
-      int totalWinLegs = 0;
-      int totalLossLegs = 0;
-
-      for (final horseB in widget.horses) {
-        if (horseA.horseId == horseB.horseId) continue;
-
-        MatchupStats? stats;
-        try {
-          stats = _matchupStats.firstWhere((m) =>
-          (m.horseIdA == horseA.horseId && m.horseIdB == horseB.horseId) ||
-              (m.horseIdA == horseB.horseId && m.horseIdB == horseA.horseId));
-        } catch (e) {
-          stats = null;
-        }
-
-        if (stats != null) {
-          final wins = (stats.horseIdA == horseA.horseId) ? stats.horseAWins : stats.horseBWins;
-          final losses = stats.matchupCount - wins;
-          totalWinLegs += wins;
-          totalLossLegs += losses;
-          if (wins > losses) {
-            totalOpponentWins++;
-          }
-        }
-      }
-      horseTotals[horseA.horseId] = {
-        'Win': totalOpponentWins,
-        'WinLeg': totalWinLegs,
-        'LosLeg': totalLossLegs,
-      };
-    }
-
-    return SingleChildScrollView(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          IntrinsicWidth(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(height: headerHeight),
-                ...widget.horses.map((horse) {
-                  return Container(
-                    height: cellHeight,
-                    padding: const EdgeInsets.only(left: 8.0, right: 8.0),
-                    alignment: Alignment.centerLeft,
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: Colors.grey.shade300, width: 1),
-                      ),
-                    ),
-                    child: Text(
-                      horse.horseName,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      ...widget.horses.map((horse) {
-                        final horseName = horse.horseName;
-                        final displayName = horseName.length > 3 ? horseName.substring(0, 3) : horseName;
-                        return Container(
-                          width: cellWidth,
-                          height: headerHeight,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(color: Colors.grey.shade400, width: 2),
-                            ),
-                          ),
-                          child: Text(
-                            '${horse.horseNumber}\n$displayName',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        );
-                      }),
-                      Container(
-                          width: totalCellWidth,
-                          height: headerHeight,
-                          alignment: Alignment.center,
-                          child: const Text('WIN',
-                              style: TextStyle(fontSize: 14),
-                              textAlign: TextAlign.center
-                          )
-                      ),
-                      Container(
-                          width: totalCellWidth,
-                          height: headerHeight,
-                          alignment: Alignment.center,
-                          child: const Text('W-Leg',
-                              style: TextStyle(fontSize: 12),
-                              textAlign: TextAlign.center
-                          )
-                      ),
-                      Container(
-                          width: totalCellWidth,
-                          height: headerHeight,
-                          alignment: Alignment.center,
-                          child: const Text('L-Leg',
-                              style: TextStyle(fontSize: 12),
-                              textAlign: TextAlign.center
-                          )
-                      ),
-                    ],
-                  ),
-                  ...widget.horses.map((horseA) {
-                    final totals = horseTotals[horseA.horseId] ?? {'Win': 0, 'WinLeg': 0, 'LosLeg': 0};
-                    return Row(
-                      children: [
-                        ...widget.horses.map((horseB) {
-                          String cellText = '';
-                          Color? cellColor;
-                          if (horseA.horseId == horseB.horseId) {
-                            cellText = '';
-                            cellColor = Colors.grey.shade500;
-                          } else {
-                            MatchupStats? stats;
-                            try {
-                              stats = _matchupStats.firstWhere((m) =>
-                              (m.horseIdA == horseA.horseId && m.horseIdB == horseB.horseId) ||
-                                  (m.horseIdA == horseB.horseId && m.horseIdB == horseA.horseId));
-                            } catch (e) {
-                              stats = null;
-                            }
-
-                            if (stats != null) {
-                              int wins = (stats.horseIdA == horseA.horseId) ? stats.horseAWins : stats.horseBWins;
-                              int losses = stats.matchupCount - wins;
-                              cellText = '$wins-$losses';
-                            }
-                          }
-                          return Container(
-                            width: cellWidth,
-                            height: cellHeight,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: cellColor,
-                              border: Border(
-                                bottom: BorderSide(color: Colors.grey.shade300, width: 1),
-                              ),
-                            ),
-                            child: Builder(
-                              builder: (context) {
-                                Widget symbolWidget = const SizedBox.shrink();
-                                if (cellText.isNotEmpty && cellText != '-') {
-                                  final parts = cellText.split('-');
-                                  if (parts.length == 2) {
-                                    final wins = int.tryParse(parts[0]);
-                                    final losses = int.tryParse(parts[1]);
-                                    if (wins != null && losses != null) {
-                                      if (wins > losses) {
-                                        symbolWidget = const Text(
-                                          '〇',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            color: Colors.blue,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        );
-                                      } else if (wins < losses) {
-                                        symbolWidget = const Text(
-                                          '✕',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            color: Colors.red,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  }
-                                }
-                                return Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    symbolWidget,
-                                    Text(
-                                      cellText,
-                                      style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                          );
-                        }),
-                        Container(
-                            width: totalCellWidth,
-                            height: cellHeight,
-                            alignment: Alignment.center,
-                            child: Text(totals['Win'].toString(),
-                                style: const TextStyle(fontSize: 20.0,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue
-                                )
-                            )
-                        ),
-                        Container(
-                            width: totalCellWidth,
-                            height: cellHeight,
-                            alignment: Alignment.center,
-                            child: Text(totals['WinLeg'].toString(),
-                                style: const TextStyle(fontSize: 20.0,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue
-                                )
-                            )
-                        ),
-                        Container(
-                            width: totalCellWidth,
-                            height: cellHeight,
-                            alignment: Alignment.center,
-                            child: Text(totals['LosLeg'].toString(),
-                                style: const TextStyle(fontSize: 20.0,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.red
-                                )
-                            )
-                        ),
-                      ],
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildJockeyComboStatsTab() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 16.0,
-          columns: const [
-            DataColumn(label: Text('馬名')),
-            DataColumn(label: Text('騎手')),
-            DataColumn(label: Text('成績')),
-            DataColumn(label: Text('勝率'), numeric: true),
-            DataColumn(label: Text('連対率'), numeric: true),
-            DataColumn(label: Text('複勝率'), numeric: true),
-            DataColumn(label: Text('単回率'), numeric: true),
-            DataColumn(label: Text('複回率'), numeric: true),
-          ],
-          rows: widget.horses.map((horse) {
-            final stats = _jockeyComboStats[horse.horseId] ?? JockeyComboStats();
-            return DataRow(
-              cells: [
-                DataCell(Text(horse.horseName)),
-                DataCell(Text(horse.jockey)),
-                DataCell(
-                  stats.isFirstRide
-                      ? const Text('初', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold))
-                      : Text(stats.recordString),
-                ),
-                DataCell(Text('${stats.winRate.toStringAsFixed(1)}%')),
-                DataCell(Text('${stats.placeRate.toStringAsFixed(1)}%')),
-                DataCell(Text('${stats.showRate.toStringAsFixed(1)}%')),
-                DataCell(Text('${stats.winRecoveryRate.toStringAsFixed(1)}%')),
-                DataCell(Text('${stats.showRecoveryRate.toStringAsFixed(1)}%')),
-              ],
-            );
-          }).toList(),
-        ),
-      ),
     );
   }
 }

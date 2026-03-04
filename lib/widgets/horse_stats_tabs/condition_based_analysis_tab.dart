@@ -1,5 +1,3 @@
-// lib/screens/condition_based_analysis_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -9,19 +7,19 @@ import 'package:hetaumakeiba_v2/widgets/condition_horse_row.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 
 /// 好走条件出馬表タブのメインコンテンツ
-class ConditionBasedAnalysisPage extends StatefulWidget {
+class ConditionBasedAnalysisTab extends StatefulWidget {
   final PredictionRaceData raceData;
 
-  const ConditionBasedAnalysisPage({
+  const ConditionBasedAnalysisTab({
     super.key,
     required this.raceData,
   });
 
   @override
-  State<ConditionBasedAnalysisPage> createState() => _ConditionBasedAnalysisPageState();
+  State<ConditionBasedAnalysisTab> createState() => _ConditionBasedAnalysisTabState();
 }
 
-class _ConditionBasedAnalysisPageState extends State<ConditionBasedAnalysisPage> with AutomaticKeepAliveClientMixin {
+class _ConditionBasedAnalysisTabState extends State<ConditionBasedAnalysisTab> with AutomaticKeepAliveClientMixin {
   bool _isLoading = true;
   List<HorseConditionDisplayData> _displayDataList = [];
   final HorseRepository _horseRepository = HorseRepository();

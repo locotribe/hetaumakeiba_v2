@@ -1,5 +1,3 @@
-// lib/widgets/relative_battle_table.dart
-
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/relative_evaluation_model.dart';
@@ -10,21 +8,21 @@ import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 
-class RelativeBattleTable extends StatefulWidget {
+class RelativeBattleTab extends StatefulWidget {
   final List<PredictionHorseDetail> horses;
   final PredictionRaceData? raceData;
 
-  const RelativeBattleTable({
+  const RelativeBattleTab({
     super.key,
     required this.horses,
     this.raceData,
   });
 
   @override
-  State<RelativeBattleTable> createState() => _RelativeBattleTableState();
+  State<RelativeBattleTab> createState() => _RelativeBattleTabState();
 }
 
-class _RelativeBattleTableState extends State<RelativeBattleTable> {
+class _RelativeBattleTabState extends State<RelativeBattleTab> {
   List<RelativeEvaluationResult>? _results;
   Map<String, JockeyStats>? _jockeyStats;
   bool _isLoading = true;
@@ -78,7 +76,7 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     }
   }
 
-// ★追加: 場所を確実に特定するメソッド
+  // ★追加: 場所を確実に特定するメソッド
   String _resolveVenue(PredictionRaceData? data) {
     if (data == null) return '';
 
@@ -88,8 +86,6 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     // 2. レースIDから抽出 (例: 202505... -> 05 -> 東京)
     if (data.raceId.length >= 12) {
       final code = data.raceId.substring(4, 6);
-      // racecourseDict は logic/parse.dart に定義されています。
-      // 未インポートの場合は import 'package:hetaumakeiba_v2/logic/parse.dart'; を追加してください
       if (racecourseDict.containsKey(code)) {
         return racecourseDict[code]!;
       }
@@ -154,7 +150,7 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     }
   }
 
-// ダイアログ表示メソッド
+  // ダイアログ表示メソッド
   void _showJockeyDetails(BuildContext context, RelativeEvaluationResult result) {
     final details = result.jockeyDetails;
     if (details == null) return;
@@ -165,9 +161,7 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     String distanceStr = "";
 
     if (widget.raceData != null) {
-      // 以前定義した _resolveVenue メソッドを使用
       venueName = _resolveVenue(widget.raceData);
-      // 以前定義した _extractDistance メソッドを使用
       distanceStr = _extractDistance(widget.raceData!.raceDetails1 ?? "");
 
       if (venueName.isNotEmpty && distanceStr.isNotEmpty) {
@@ -191,8 +185,6 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     List<Widget> content = [];
 
     // --- 【上段】本コース実績セクション ---
-    // ここで使用するデータ(cs)は JockeyStatsModel 由来のため、
-    // winRate 等は既にパーセント値(例: 18.6)になっています。 => *100 不要
     if (venueName.isNotEmpty && distanceStr.isNotEmpty) {
       content.add(Text("【本コース ($venueName$distanceStr)】",
           style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)));
@@ -200,7 +192,6 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
       if (fullStats != null && fullStats.courseStats != null && fullStats.courseStats!.raceCount > 0) {
         final cs = fullStats.courseStats!;
 
-        // 着度数の正しい計算 (累積値から算出)
         final win = cs.winCount;
         final second = cs.placeCount - cs.winCount;
         final third = cs.showCount - cs.placeCount;
@@ -208,7 +199,6 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
         final record = "$win-$second-$third-$unplaced";
 
         content.add(_detailRow("着度数", record));
-        // ★修正: cs.winRate は既にパーセント値なのでそのまま表示
         content.add(_detailRow("勝率", "${cs.winRate.toStringAsFixed(1)}%"));
         content.add(_detailRow("連対率", "${cs.placeRate.toStringAsFixed(1)}%"));
         content.add(_detailRow("複勝率", "${cs.showRate.toStringAsFixed(1)}%"));
@@ -222,13 +212,9 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     }
 
     // --- 【下段】評価採用データセクション ---
-    // ここで使用するデータ(details)は RelativeBattleCalculator 由来のため、
-    // winRate 等は比率(例: 0.186)になっています。 => *100 必要
     content.add(const Text("【評価採用データ】", style: TextStyle(fontWeight: FontWeight.bold)));
     content.add(_detailRow("採用元", details['source']));
     content.add(_detailRow("騎乗回数", "${details['raceCount']}回"));
-
-    // ★修正: details['winRate'] は比率なので、100倍してパーセント表示にする
     content.add(_detailRow("勝率", "${(details['winRate'] * 100).toStringAsFixed(1)}%"));
     content.add(_detailRow("ボーナス", details['bonus'].toString()));
 
@@ -240,8 +226,6 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
         content: content
     );
   }
-
-// lib/widgets/relative_battle_table.dart
 
   void _showCompatibilityDetails(BuildContext context, RelativeEvaluationResult result) {
     final details = result.compatibilityDetails;
@@ -261,11 +245,7 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
             : [
           _detailRow("コンビ結成", "継続"),
           _detailRow("騎乗回数", "${details['rideCount']}回"),
-
-          // 勝率は小数のため *100 が必要（そのまま）
           _detailRow("コンビ勝率", "${(details['winRate'] * 100).toStringAsFixed(1)}%"),
-
-          // ★修正箇所: 連対率は既にパーセント値のため *100 を削除
           _detailRow("連対率", "${details['placeRate'].toStringAsFixed(1)}%"),
         ]
     );
@@ -535,7 +515,6 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
     final jockeyRank = _getRankInList(result.factorScores['jockey'] ?? 0, (r) => r.factorScores['jockey'] ?? 0, descending: true);
     final compRank = _getRankInList(result.factorScores['compatibility'] ?? 0, (r) => r.factorScores['compatibility'] ?? 0, descending: true);
 
-    // ★修正: 枠順ランク (isDeterminedがfalseなら色を付けない)
     final gateRank = _getRankInList(result.factorScores['gate'] ?? 0, (r) => r.factorScores['gate'] ?? 0, descending: true);
     final bool isGateDetermined = result.gateDetails?['isDetermined'] ?? false;
     final Color? gateColor = isGateDetermined ? _getRankColor(gateRank) : null;
@@ -662,7 +641,6 @@ class _RelativeBattleTableState extends State<RelativeBattleTable> {
           ),
         ),
       ),
-      // ★修正: 枠順スコア (確定前は色なし)
       DataCell(
         InkWell(
           onTap: () => _showGateDetails(context, result),
