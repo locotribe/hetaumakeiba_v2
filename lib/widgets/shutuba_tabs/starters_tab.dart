@@ -35,25 +35,33 @@ class StartersTabWidget extends StatelessWidget {
 
   Color _getAffiliationColor(String affiliation) {
     if (affiliation.contains('美') || affiliation.contains('美浦')) {
-      return Colors.lightBlue.shade50; // 関東馬は水色
+      return Colors.lightBlue.shade50;
     } else if (affiliation.contains('栗') || affiliation.contains('栗東')) {
-      return Colors.pink.shade50; // 関西馬はピンク
+      return Colors.pink.shade50;
     } else if (affiliation.contains('地') || affiliation.contains('地方')) {
-      return Colors.orange.shade50; // 地方馬はオレンジ
+      return Colors.orange.shade50;
     } else if (affiliation.contains('外') || affiliation.contains('海外')) {
-      return Colors.green.shade50; // 外国馬は緑
+      return Colors.green.shade50;
     }
     return Colors.transparent;
   }
+
+  // ▼▼ 新規追加: 芝・ダートを判別して文字色を返すメソッド ▼▼
+  Color _getTrackColor(String? venueAndDistance) {
+    if (venueAndDistance == null) return Colors.black87;
+    // 視認性を高めるため、少し暗めの緑と茶色（shade700）を使用します
+    if (venueAndDistance.contains('芝')) return Colors.green.shade700;
+    if (venueAndDistance.contains('ダ')) return Colors.brown.shade700;
+    return Colors.black87; // 該当しない場合は黒
+  }
+  // ▲▲ 新規追加 ▲▲
 
   @override
   Widget build(BuildContext context) {
     return buildDataTableForTab(
       columns: [
         DataColumn2(label: const Text('印\n枠'), fixedWidth: 35, onSort: (i, asc) => onSort(SortableColumn.horseNumber)),
-
         DataColumn2(label: const Text('人\n気'), fixedWidth: 40, onSort: (i, asc) => onSort(SortableColumn.odds)),
-
         const DataColumn2(
           label: Center(
             child: FittedBox(
@@ -63,7 +71,6 @@ class StartersTabWidget extends StatelessWidget {
           ),
           fixedWidth: 70,
         ),
-
         const DataColumn2(
           label: Center(
             child: FittedBox(
@@ -73,8 +80,29 @@ class StartersTabWidget extends StatelessWidget {
           ),
           fixedWidth: 35,
         ),
-
         DataColumn2(label: const Text('馬情報'), size: ColumnSize.L, onSort: (i, asc) => onSort(SortableColumn.horseName)),
+
+        // ヘッダーはそのまま（幅85）
+        DataColumn2(
+          label: const Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text('持ち時計\n馬場/C\nG/4c', textAlign: TextAlign.center),
+            ),
+          ),
+          fixedWidth: 85,
+          onSort: (i, asc) => onSort(SortableColumn.bestTime),
+        ),
+        DataColumn2(
+          label: const Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text('上がり最速\n馬場/C\nG/4c', textAlign: TextAlign.center),
+            ),
+          ),
+          fixedWidth: 85,
+          onSort: (i, asc) => onSort(SortableColumn.fastestAgari),
+        ),
       ],
       horses: horses,
       cellBuilder: (horse) {
@@ -83,8 +111,12 @@ class StartersTabWidget extends StatelessWidget {
         final mf = (horse.mfName?.isNotEmpty == true) ? horse.mfName : '--';
         final owner = (horse.ownerName?.isNotEmpty == true) ? horse.ownerName : '--';
 
+        // ▼ 第6列・第7列の文字色をコースによって決定 ▼
+        final bestTimeColor = _getTrackColor(horse.bestTimeStats?.venueAndDistance);
+        final agariColor = _getTrackColor(horse.fastestAgariStats?.venueAndDistance);
+
         return [
-          // 1列目: 印（薄いグレー背景）、馬番（枠色背景）
+          // 1列目: 印・枠
           DataCell(
             Container(
               width: double.infinity,
@@ -119,7 +151,7 @@ class StartersTabWidget extends StatelessWidget {
             ),
           ),
 
-          // 2列目: 人気、オッズ（9.9以下なら赤文字）
+          // 2列目: 人気・オッズ
           DataCell(
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -139,7 +171,7 @@ class StartersTabWidget extends StatelessWidget {
             ),
           ),
 
-          // 3列目: 勝負服、(替)騎手名、騎手との戦績(初)、斤量、馬主
+          // 3列目: 騎手・斤量・馬主
           DataCell(
             Container(
               width: double.infinity,
@@ -181,7 +213,7 @@ class StartersTabWidget extends StatelessWidget {
             ),
           ),
 
-          // 4列目(新規): 所属、調教師（所属に応じた背景色付き）
+          // 4列目: 所属・調教師
           DataCell(
             Container(
               width: double.infinity,
@@ -209,7 +241,7 @@ class StartersTabWidget extends StatelessWidget {
             ),
           ),
 
-          // 5列目: 父、性齢 馬名、母(母父)、馬体重 前馬体重、脚質分布図
+          // 5列目: 馬情報
           DataCell(
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,6 +270,106 @@ class StartersTabWidget extends StatelessWidget {
                 const SizedBox(height: 2),
                 LegStyleIndicator(legStyleProfile: horse.legStyleProfile),
               ],
+            ),
+          ),
+
+          // ▼ 修正: 第6列 (持ち時計) 開催場から数字を排除して「東京 芝1800」のように整形 ▼
+          DataCell(
+            Container(
+              width: double.infinity,
+              alignment: Alignment.center,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      horse.bestTimeStats?.formattedTime ?? '--',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: bestTimeColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${horse.bestTimeStats?.trackCondition ?? '--'} / ${horse.bestTimeStats?.cushionValue != null ? 'C:${horse.bestTimeStats!.cushionValue}' : '--'}',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: bestTimeColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      (horse.bestTimeStats?.moistureGoal != null || horse.bestTimeStats?.moisture4c != null)
+                          ? 'G:${horse.bestTimeStats?.moistureGoal ?? '-'}\n4c:${horse.bestTimeStats?.moisture4c ?? '-'}'
+                          : '--',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: bestTimeColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      (() {
+                        // ▼ ここで「4東京4芝1800」から「東京 芝1800」へ整形
+                        final raw = horse.bestTimeStats?.venueAndDistance;
+                        if (raw == null || raw.isEmpty) return '--';
+                        final match = RegExp(r'^(.*?)([芝ダ障].*)$').firstMatch(raw);
+                        if (match != null) {
+                          // 前半(開催場)の数字とスペースを除去し、後半(距離)と結合
+                          final v = match.group(1)!.replaceAll(RegExp(r'[0-9０-９\s]'), '');
+                          return '$v ${match.group(2)}';
+                        }
+                        return raw;
+                      })(),
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: bestTimeColor),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // ▼ 修正: 第7列 (上がり最速) 開催場から数字を排除して「東京 芝1800」のように整形 ▼
+          DataCell(
+            Container(
+              width: double.infinity,
+              alignment: Alignment.center,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      horse.fastestAgariStats?.formattedAgari ?? '--',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: agariColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${horse.fastestAgariStats?.trackCondition ?? '--'} / ${horse.fastestAgariStats?.cushionValue != null ? 'C:${horse.fastestAgariStats!.cushionValue}' : '--'}',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: agariColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      (horse.fastestAgariStats?.moistureGoal != null || horse.fastestAgariStats?.moisture4c != null)
+                          ? 'G:${horse.fastestAgariStats?.moistureGoal ?? '-'}\n4c:${horse.fastestAgariStats?.moisture4c ?? '-'}'
+                          : '--',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: agariColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      (() {
+                        // ▼ ここで「4東京4芝1800」から「東京 芝1800」へ整形
+                        final raw = horse.fastestAgariStats?.venueAndDistance;
+                        if (raw == null || raw.isEmpty) return '--';
+                        final match = RegExp(r'^(.*?)([芝ダ障].*)$').firstMatch(raw);
+                        if (match != null) {
+                          // 前半(開催場)の数字とスペースを除去し、後半(距離)と結合
+                          final v = match.group(1)!.replaceAll(RegExp(r'[0-9０-９\s]'), '');
+                          return '$v ${match.group(2)}';
+                        }
+                        return raw;
+                      })(),
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: agariColor),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ];

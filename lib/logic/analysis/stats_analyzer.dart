@@ -163,6 +163,9 @@ class StatsAnalyzer {
       trackCondition: bestTimeRecord.trackCondition,
       raceName: bestTimeRecord.raceName,
       date: bestTimeRecord.date,
+      // ★追加: 馬場状態取得用および表示用のデータ
+      sourceRaceId: bestTimeRecord.raceId,
+      venueAndDistance: '${bestTimeRecord.venue} ${bestTimeRecord.distance}',
     );
   }
 
@@ -190,6 +193,9 @@ class StatsAnalyzer {
       trackCondition: bestAgariRecord.trackCondition,
       raceName: bestAgariRecord.raceName,
       date: bestAgariRecord.date,
+      // ★追加: 馬場状態取得用および表示用のデータ
+      sourceRaceId: bestAgariRecord.raceId,
+      venueAndDistance: '${bestAgariRecord.venue} ${bestAgariRecord.distance}',
     );
   }
 

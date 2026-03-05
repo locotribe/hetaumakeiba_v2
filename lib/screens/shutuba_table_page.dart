@@ -30,6 +30,7 @@ import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/training_tab.dart';
 import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
+import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 
 enum SortableColumn {
   mark,
@@ -70,10 +71,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   final UserRepository _userRepo = UserRepository();
   final HorseProfileSyncService _horseProfileSyncService = HorseProfileSyncService();
 
-  // ▼ 新規追加: UI描画用の事前ロードデータキャッシュ ▼
+  // ▼▼ 新規追加 ▼▼
+  final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
+  // ▲▲ 新規追加 ▲▲
+
   final Map<String, String> _mfNameCache = {};
   final Map<String, JockeyComboStats> _jockeyComboCache = {};
-  // ▲ 新規追加 ▲
 
   SortableColumn _sortColumn = SortableColumn.horseNumber;
   bool _isAscending = true;
@@ -419,9 +422,38 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         raceData: raceData,
         pastRecords: pastRecords,
       );
+      // ▼▼ 修正: 持ち時計の馬場状態(クッション値・含水率G/4c)を取得して紐付け ▼▼
+      if (horse.bestTimeStats?.sourceRaceId != null && horse.bestTimeStats!.sourceRaceId!.length >= 10) {
+        final prefix10 = horse.bestTimeStats!.sourceRaceId!.substring(0, 10);
+        final trackCondition = await _trackConditionRepo.getLatestTrackConditionByPrefix(prefix10);
+        if (trackCondition != null) {
+          final isDirt = horse.bestTimeStats!.venueAndDistance?.contains('ダ') ?? false;
+          horse.bestTimeStats = horse.bestTimeStats!.copyWithTrackCondition(
+            cushionValue: trackCondition.cushionValue,
+            moistureGoal: isDirt ? trackCondition.moistureDirtGoal : trackCondition.moistureTurfGoal,
+            moisture4c: isDirt ? trackCondition.moistureDirt4c : trackCondition.moistureTurf4c,
+          );
+        }
+      }
+      // ▲▲ 修正 ▲▲
+
       horse.fastestAgariStats = StatsAnalyzer.analyzeFastestAgari(
         pastRecords: pastRecords,
       );
+      // ▼▼ 修正: 上がり最速の馬場状態(クッション値・含水率G/4c)を取得して紐付け ▼▼
+      if (horse.fastestAgariStats?.sourceRaceId != null && horse.fastestAgariStats!.sourceRaceId!.length >= 10) {
+        final prefix10 = horse.fastestAgariStats!.sourceRaceId!.substring(0, 10);
+        final trackCondition = await _trackConditionRepo.getLatestTrackConditionByPrefix(prefix10);
+        if (trackCondition != null) {
+          final isDirt = horse.fastestAgariStats!.venueAndDistance?.contains('ダ') ?? false;
+          horse.fastestAgariStats = horse.fastestAgariStats!.copyWithTrackCondition(
+            cushionValue: trackCondition.cushionValue,
+            moistureGoal: isDirt ? trackCondition.moistureDirtGoal : trackCondition.moistureTurfGoal,
+            moisture4c: isDirt ? trackCondition.moistureDirt4c : trackCondition.moistureTurf4c,
+          );
+        }
+      }
+      // ▲▲ 修正 ▲▲
     }
 
     raceData.racePacePrediction = RaceAnalyzer.predictRacePace(
@@ -746,10 +778,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     required List<PredictionHorseDetail> horses,
     required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
   }) {
-    // ▼ 追加: 現在のソート項目(_sortColumn)に基づいて、どの列番号に矢印を出すか判定
+// ▼ 追加: 現在のソート項目(_sortColumn)に基づいて、どの列番号に矢印を出すか判定
     int? getSortColumnIndex() {
       // カラムリストの中から、onSortが設定されており、かつ現在のソート項目と一致するものを探す
-      // ※StartersTabWidgetの新しい列順(0:枠印, 1:人気, 3:所属調教師, 4:馬情報)に対応
       for (int i = 0; i < columns.length; i++) {
         final col = columns[i];
         if (col.onSort != null) {
@@ -758,27 +789,42 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           if (_sortColumn == SortableColumn.odds && i == 1) return 1;
           if (_sortColumn == SortableColumn.trainer && i == 3) return 3;
           if (_sortColumn == SortableColumn.horseName && i == 4) return 4;
+          // ▼▼ 新規追加: 持ち時計(第6列)と上がり(第7列)のインデックス判定を追加 ▼▼
+          if (_sortColumn == SortableColumn.bestTime && i == 5) return 5;
+          if (_sortColumn == SortableColumn.fastestAgari && i == 6) return 6;
+          // ▲▲ 新規追加 ▲▲
         }
       }
       return null;
     }
 
+// ▼▼ 新規追加: カラム数等から現在のタブを判定し、適切な minWidth を算出 ▼▼
+    double determineMinWidth() {
+      // starters_tab.dart は全7列で構成されているため、7列の時は幅を狭める
+      if (columns.length == 7) {
+        return 550; // 出走馬タブの適正幅（画面に綺麗に収まり、少しスクロールで右端が見える幅）
+      }
+      return 2000; // 成績タブなど、その他の横長タブは既存の幅を維持
+    }
+    // ▲▲ 新規追加 ▲▲
+
     return DataTable2(
       key: ValueKey(_predictionRaceData.hashCode),
-      minWidth: 2000,
+      minWidth: determineMinWidth(), // ★ 固定の2000から、動的メソッドに差し替え
       fixedTopRows: 1,
       sortColumnIndex: getSortColumnIndex(),
       sortAscending: _isAscending,
       columnSpacing: 6.0,
+      horizontalMargin: 2,
       headingRowHeight: 50,
       dataRowHeight: 100,
       headingTextStyle: const TextStyle(
-        fontSize: 11.0, // 2段表示に対応するため少し小さめに調整
+        fontSize: 11.0,
         fontWeight: FontWeight.bold,
         color: Colors.black87,
       ),
       dataTextStyle: const TextStyle(
-        fontSize: 12.0, // 凝縮レイアウトに合わせて14.0から調整
+        fontSize: 12.0,
         color: Colors.black87,
       ),
       columns: columns,
