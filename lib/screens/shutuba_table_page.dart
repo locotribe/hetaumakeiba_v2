@@ -20,12 +20,9 @@ import 'package:hetaumakeiba_v2/services/horse_profile_sync_service.dart';
 import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/info_tab.dart';
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/jockey_trainer_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/memo_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/performance_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/starters_tab.dart';
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/time_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/training_tab.dart';
 import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
@@ -90,7 +87,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadShutubaData();
   }
 
@@ -397,15 +394,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           }
         }
       }
-      // ▼ 新規追加: 騎手とのコンビ成績を計算してキャッシュに保存 ▼
       _jockeyComboCache[horse.horseId] = HorseStatsAnalyzer.analyzeJockeyCombo(
         currentJockeyId: horse.jockeyId,
         performanceRecords: pastRecords,
         raceResults: pastRaceResults,
       );
-      // ▲ 新規追加 ▲
       horse.legStyleProfile = LegStyleAnalyzer.getRunningStyle(pastRecords);
-      // ▼ 新規追加 (ここで騎手コンビ成績を計算してモデルに保持させる)
       horse.jockeyComboStats = HorseStatsAnalyzer.analyzeJockeyCombo(
         currentJockeyId: horse.jockeyId,
         performanceRecords: pastRecords,
@@ -422,7 +416,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         raceData: raceData,
         pastRecords: pastRecords,
       );
-      // ▼▼ 修正: 持ち時計の馬場状態(クッション値・含水率G/4c)を取得して紐付け ▼▼
       if (horse.bestTimeStats?.sourceRaceId != null && horse.bestTimeStats!.sourceRaceId!.length >= 10) {
         final prefix10 = horse.bestTimeStats!.sourceRaceId!.substring(0, 10);
         final trackCondition = await _trackConditionRepo.getLatestTrackConditionByPrefix(prefix10);
@@ -435,12 +428,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           );
         }
       }
-      // ▲▲ 修正 ▲▲
 
       horse.fastestAgariStats = StatsAnalyzer.analyzeFastestAgari(
         pastRecords: pastRecords,
       );
-      // ▼▼ 修正: 上がり最速の馬場状態(クッション値・含水率G/4c)を取得して紐付け ▼▼
       if (horse.fastestAgariStats?.sourceRaceId != null && horse.fastestAgariStats!.sourceRaceId!.length >= 10) {
         final prefix10 = horse.fastestAgariStats!.sourceRaceId!.substring(0, 10);
         final trackCondition = await _trackConditionRepo.getLatestTrackConditionByPrefix(prefix10);
@@ -453,7 +444,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           );
         }
       }
-      // ▲▲ 修正 ▲▲
     }
 
     raceData.racePacePrediction = RaceAnalyzer.predictRacePace(
@@ -482,37 +472,43 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     )
         : Column(
       children: [
-        if (widget.raceResult == null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: OutlinedButton.icon(
-                onPressed: _updateDynamicData,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('オッズ・馬体重を更新'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ),
-          ),
         Expanded(
           child: Column(
             children: [
-              ThemedTabBar(
-                controller: _tabController,
-                isScrollable: true,
-                tabs: const [
-                  Tab(text: '出走馬'),
-                  Tab(text: '情報'),
-                  Tab(text: '騎手・調教師'),
-                  Tab(text: '時計'),
-                  Tab(text: '成績'),
-                  Tab(text: 'メモ'),
-                  Tab(text: '調教'),
-                ],
+              Container(
+                color: const Color(0xFF303030),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: ThemedTabBar(
+                        controller: _tabController,
+                        isScrollable: true,
+                        tabs: const [
+                          Tab(text: '出走馬'),
+                          Tab(text: '成績'),
+                          Tab(text: 'メモ'),
+                          Tab(text: '調教'),
+                        ],
+                      ),
+                    ),
+                    if (widget.raceResult == null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: TextButton.icon(
+                          onPressed: _updateDynamicData,
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('オッズ更新', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          style: TextButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
               Expanded(
                 child: Builder(
@@ -594,24 +590,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             buildGateNumber: _buildGateNumber,
                             buildHorseNumber: _buildHorseNumber,
                             getHorseProfile: _horseRepo.getHorseProfile,
-                            buildDataTableForTab: _buildDataTableForTab,
-                          ),
-                          InfoTabWidget(
-                            horses: sortedHorses,
-                            onSort: _onSort,
-                            buildMarkDropdown: _buildMarkDropdown,
-                            buildDataTableForTab: _buildDataTableForTab,
-                          ),
-                          JockeyTrainerTabWidget(
-                            horses: sortedHorses,
-                            onSort: _onSort,
-                            buildMarkDropdown: _buildMarkDropdown,
-                            buildDataTableForTab: _buildDataTableForTab,
-                          ),
-                          TimeTabWidget(
-                            horses: sortedHorses,
-                            onSort: _onSort,
-                            buildMarkDropdown: _buildMarkDropdown,
                             buildDataTableForTab: _buildDataTableForTab,
                           ),
                           PerformanceTabWidget(
@@ -778,9 +756,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     required List<PredictionHorseDetail> horses,
     required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
   }) {
-// ▼ 追加: 現在のソート項目(_sortColumn)に基づいて、どの列番号に矢印を出すか判定
     int? getSortColumnIndex() {
-      // カラムリストの中から、onSortが設定されており、かつ現在のソート項目と一致するものを探す
       for (int i = 0; i < columns.length; i++) {
         final col = columns[i];
         if (col.onSort != null) {
@@ -789,28 +765,23 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           if (_sortColumn == SortableColumn.odds && i == 1) return 1;
           if (_sortColumn == SortableColumn.trainer && i == 3) return 3;
           if (_sortColumn == SortableColumn.horseName && i == 4) return 4;
-          // ▼▼ 新規追加: 持ち時計(第6列)と上がり(第7列)のインデックス判定を追加 ▼▼
           if (_sortColumn == SortableColumn.bestTime && i == 5) return 5;
           if (_sortColumn == SortableColumn.fastestAgari && i == 6) return 6;
-          // ▲▲ 新規追加 ▲▲
         }
       }
       return null;
     }
 
-// ▼▼ 新規追加: カラム数等から現在のタブを判定し、適切な minWidth を算出 ▼▼
     double determineMinWidth() {
-      // starters_tab.dart は全7列で構成されているため、7列の時は幅を狭める
       if (columns.length == 7) {
-        return 550; // 出走馬タブの適正幅（画面に綺麗に収まり、少しスクロールで右端が見える幅）
+        return 550;
       }
-      return 2000; // 成績タブなど、その他の横長タブは既存の幅を維持
+      return 2000;
     }
-    // ▲▲ 新規追加 ▲▲
 
     return DataTable2(
       key: ValueKey(_predictionRaceData.hashCode),
-      minWidth: determineMinWidth(), // ★ 固定の2000から、動的メソッドに差し替え
+      minWidth: determineMinWidth(),
       fixedTopRows: 1,
       sortColumnIndex: getSortColumnIndex(),
       sortAscending: _isAscending,
@@ -937,31 +908,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
-      ),
-    );
-  }
-
-  Widget _buildHelpIcon(String title, String content) {
-    return InkWell(
-      onTap: () {
-        showDialog(
-          context: context,
-          builder: (context) =>
-              AlertDialog(
-                title: Text(title),
-                content: Text(content),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('閉じる'),
-                  ),
-                ],
-              ),
-        );
-      },
-      child: const Padding(
-        padding: EdgeInsets.only(left: 4.0),
-        child: Icon(Icons.help_outline, color: Colors.grey, size: 16),
       ),
     );
   }

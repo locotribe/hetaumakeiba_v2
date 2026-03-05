@@ -1,70 +1,91 @@
-// lib/widgets/shutuba_tabs/info_tab.dart
-
-import 'package:data_table_2/data_table_2.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
-import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
-import 'package:hetaumakeiba_v2/widgets/leg_style_indicator.dart';
+import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 
-class InfoTabWidget extends StatelessWidget {
-  final List<PredictionHorseDetail> horses;
-  final Function(SortableColumn) onSort;
+// 1列目: 印・枠セル
+class MarkAndGateCell extends StatelessWidget {
+  final PredictionHorseDetail horse;
   final Widget Function(PredictionHorseDetail) buildMarkDropdown;
-  final Widget Function({
-  required List<DataColumn2> columns,
-  required List<PredictionHorseDetail> horses,
-  required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
-  }) buildDataTableForTab;
 
-  const InfoTabWidget({
+  const MarkAndGateCell({
     Key? key,
-    required this.horses,
-    required this.onSort,
+    required this.horse,
     required this.buildMarkDropdown,
-    required this.buildDataTableForTab,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return buildDataTableForTab(
-      columns: [
-        DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => onSort(SortableColumn.mark)),
-        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => onSort(SortableColumn.horseName)),
-        DataColumn2(label: const Text('脚質'), fixedWidth: 130, onSort: (i, asc) => onSort(SortableColumn.legStyle)),
-        const DataColumn2(label: Text('性齢'), fixedWidth: 40),
-        DataColumn2(label: const Text('斤量'), fixedWidth: 50, onSort: (i, asc) => onSort(SortableColumn.carriedWeight)),
-        DataColumn2(label: const Text('馬体重'), fixedWidth: 70, onSort: (i, asc) => onSort(SortableColumn.horseWeight)),
-        const DataColumn2(label: Text('前走馬体重'), fixedWidth: 70),
-      ],
-      horses: horses,
-      cellBuilder: (horse) {
-        String? parsedPreviousWeight;
-        if (horse.previousHorseWeight != null && horse.previousHorseWeight!.contains('(')) {
-          parsedPreviousWeight = horse.previousHorseWeight!.split('(').first;
-        } else if (horse.previousHorseWeight != null) {
-          parsedPreviousWeight = horse.previousHorseWeight;
-        }
-        return [
-          DataCell(
-            horse.isScratched
-                ? const Text('取消', style: TextStyle(color: Colors.red))
-                : buildMarkDropdown(horse),
-          ),
-          DataCell(
-            Text(
-              horse.horseName,
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.grey.shade200,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          horse.isScratched
+              ? const Text('取消', style: TextStyle(color: Colors.red, fontSize: 12))
+              : buildMarkDropdown(horse),
+          const SizedBox(height: 6),
+          Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: horse.gateNumber > 0 ? horse.gateNumber.gateBackgroundColor : Colors.white,
+              border: Border.all(color: horse.gateNumber > 0 ? horse.gateNumber.gateBackgroundColor : Colors.grey),
+            ),
+            child: Text(
+              horse.horseNumber.toString(),
               style: TextStyle(
-                decoration: horse.isScratched ? TextDecoration.lineThrough : null,
+                color: (horse.gateNumber.gateBackgroundColor == Colors.black) ? Colors.white : Colors.black87,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
-          DataCell(LegStyleIndicator(legStyleProfile: horse.legStyleProfile)),
-          DataCell(Text(horse.sexAndAge)),
-          DataCell(Text(horse.carriedWeight.toString())),
-          DataCell(Text(horse.horseWeight ?? '--')),
-          DataCell(Text(parsedPreviousWeight ?? '--')),
-        ];
-      },
+        ],
+      ),
+    );
+  }
+}
+
+// 2列目: 人気・オッズセル
+class OddsCell extends StatelessWidget {
+  final PredictionHorseDetail horse;
+
+  const OddsCell({Key? key, required this.horse}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: '${horse.popularity ?? '--'}',
+                style: const TextStyle(fontSize: 20), // ここだけサイズ15
+              ),
+              const TextSpan(
+                text: '\n人気',
+                style: TextStyle(fontSize: 10), // ここはサイズ10
+              ),
+            ],
+          ),
+          textAlign: TextAlign.right, // 親が右寄せ(CrossAxisAlignment.end)なので、文字自体も右寄せにしておくと綺麗です
+        ),
+        const SizedBox(height: 8),
+        Text(
+          horse.odds?.toString() ?? '--',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: (horse.odds != null && horse.odds! <= 9.9) ? Colors.red : Colors.black87,
+          ),
+        ),
+      ],
     );
   }
 }

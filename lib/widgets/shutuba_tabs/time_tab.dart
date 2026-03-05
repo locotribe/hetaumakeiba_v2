@@ -1,87 +1,71 @@
-// lib/widgets/shutuba_tabs/time_tab.dart
-
-import 'package:data_table_2/data_table_2.dart';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/models/race_data.dart';
-import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
-import 'package:just_the_tooltip/just_the_tooltip.dart';
 
-class TimeTabWidget extends StatelessWidget {
-  final List<PredictionHorseDetail> horses;
-  final Function(SortableColumn) onSort;
-  final Widget Function(PredictionHorseDetail) buildMarkDropdown;
-  final Widget Function({
-  required List<DataColumn2> columns,
-  required List<PredictionHorseDetail> horses,
-  required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
-  }) buildDataTableForTab;
+// 6列目・7列目: 時計・上がり最速セル（共通）
+class TrackStatsCell extends StatelessWidget {
+  final String? formattedValue;
+  final String? trackCondition;
+  final dynamic cushionValue;
+  final dynamic moistureGoal;
+  final dynamic moisture4c;
+  final String? venueAndDistance;
+  final Color textColor;
 
-  const TimeTabWidget({
+  const TrackStatsCell({
     Key? key,
-    required this.horses,
-    required this.onSort,
-    required this.buildMarkDropdown,
-    required this.buildDataTableForTab,
+    required this.formattedValue,
+    required this.trackCondition,
+    required this.cushionValue,
+    required this.moistureGoal,
+    required this.moisture4c,
+    required this.venueAndDistance,
+    required this.textColor,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return buildDataTableForTab(
-      columns: [
-        DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => onSort(SortableColumn.mark)),
-        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => onSort(SortableColumn.horseName)),
-        DataColumn2(label: const Text('持ち時計'), fixedWidth: 80, numeric: true, onSort: (i, asc) => onSort(SortableColumn.bestTime)),
-        const DataColumn2(label: Text('馬場\n(記録時)'), fixedWidth: 60),
-        DataColumn2(label: const Text('最速上がり'), fixedWidth: 80, numeric: true, onSort: (i, asc) => onSort(SortableColumn.fastestAgari)),
-      ],
-      horses: horses,
-      cellBuilder: (horse) {
-        final bestTime = horse.bestTimeStats;
-        final fastestAgari = horse.fastestAgariStats;
-        return [
-          DataCell(
-            horse.isScratched
-                ? const Text('取消', style: TextStyle(color: Colors.red))
-                : buildMarkDropdown(horse),
-          ),
-          DataCell(
+    return Container(
+      width: double.infinity,
+      alignment: Alignment.center,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
             Text(
-              horse.horseName,
-              style: TextStyle(
-                decoration: horse.isScratched ? TextDecoration.lineThrough : null,
-              ),
+              formattedValue ?? '--',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
             ),
-          ),
-          DataCell(
-            JustTheTooltip(
-              triggerMode: TooltipTriggerMode.tap,
-              backgroundColor: const Color.fromRGBO(0, 0, 0, 0.5),
-              content: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(bestTime != null ? '${bestTime.date}\n${bestTime.raceName}' : 'データなし',
-                  style: const TextStyle(color: Colors.white),),
-              ),
-              child: Text(bestTime?.formattedTime ?? '-'),
+            const SizedBox(height: 2),
+            Text(
+              '${trackCondition ?? '--'} / ${cushionValue != null ? 'C:$cushionValue' : '--'}',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: textColor),
             ),
-          ),
-          DataCell(Text(bestTime?.trackCondition ?? '-')),
-          DataCell(
-            JustTheTooltip(
-              triggerMode: TooltipTriggerMode.tap,
-              backgroundColor: const Color.fromRGBO(0, 0, 0, 0.5),
-              content: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(fastestAgari != null ? '${
-                    fastestAgari.date}\n${
-                    fastestAgari.raceName}\n馬場: ${
-                    fastestAgari.trackCondition}' : 'データなし',
-                  style: const TextStyle(color: Colors.white),),
-              ),
-              child: Text(fastestAgari?.formattedAgari ?? '-'),
+            const SizedBox(height: 2),
+            Text(
+              (moistureGoal != null || moisture4c != null)
+                  ? 'G:${moistureGoal ?? '-'}\n4c:${moisture4c ?? '-'}'
+                  : '--',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: textColor),
             ),
-          ),
-        ];
-      },
+            const SizedBox(height: 2),
+            Text(
+              (() {
+                final raw = venueAndDistance;
+                if (raw == null || raw.isEmpty) return '--';
+                final match = RegExp(r'^(.*?)([芝ダ障].*)$').firstMatch(raw);
+                if (match != null) {
+                  final v = match.group(1)!.replaceAll(RegExp(r'[0-9０-９\s]'), '');
+                  return '$v ${match.group(2)}';
+                }
+                return raw;
+              })(),
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: textColor),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
