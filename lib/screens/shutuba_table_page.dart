@@ -27,7 +27,9 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/performance_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/starters_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/time_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/training_tab.dart'; // ▼ 新規追加
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/training_tab.dart';
+import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
+import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
 
 enum SortableColumn {
   mark,
@@ -68,6 +70,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   final UserRepository _userRepo = UserRepository();
   final HorseProfileSyncService _horseProfileSyncService = HorseProfileSyncService();
 
+  // ▼ 新規追加: UI描画用の事前ロードデータキャッシュ ▼
+  final Map<String, String> _mfNameCache = {};
+  final Map<String, JockeyComboStats> _jockeyComboCache = {};
+  // ▲ 新規追加 ▲
+
   SortableColumn _sortColumn = SortableColumn.horseNumber;
   bool _isAscending = true;
   late TabController _tabController;
@@ -99,6 +106,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       for (var horse in data.horses) {
         final profile = await _horseRepo.getHorseProfile(horse.horseId);
         if (profile != null) {
+          _mfNameCache[horse.horseId] = profile.mfName;
           updatedHorses.add(PredictionHorseDetail(
             horseId: horse.horseId,
             horseNumber: horse.horseNumber,
@@ -134,6 +142,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             breederName: (profile.breederName.isNotEmpty) ? profile.breederName : horse.breederName,
             fatherName: (profile.fatherName.isNotEmpty) ? profile.fatherName : horse.fatherName,
             motherName: (profile.motherName.isNotEmpty) ? profile.motherName : horse.motherName,
+            mfName: (profile.mfName.isNotEmpty) ? profile.mfName : horse.mfName,
+            jockeyComboStats: horse.jockeyComboStats,
           ));
         } else {
           updatedHorses.add(horse);
@@ -186,6 +196,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             lastUpdatedAt: DateTime.now(),
           );
           await _raceRepo.insertOrUpdateShutubaTableCache(cache);
+          final enrichedData = await _getShutubaDataWithProfile(widget.raceId);
+          if (enrichedData != null) {
+            data = enrichedData;
+          }
         }
       }
 
@@ -380,8 +394,20 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           }
         }
       }
-
+      // ▼ 新規追加: 騎手とのコンビ成績を計算してキャッシュに保存 ▼
+      _jockeyComboCache[horse.horseId] = HorseStatsAnalyzer.analyzeJockeyCombo(
+        currentJockeyId: horse.jockeyId,
+        performanceRecords: pastRecords,
+        raceResults: pastRaceResults,
+      );
+      // ▲ 新規追加 ▲
       horse.legStyleProfile = LegStyleAnalyzer.getRunningStyle(pastRecords);
+      // ▼ 新規追加 (ここで騎手コンビ成績を計算してモデルに保持させる)
+      horse.jockeyComboStats = HorseStatsAnalyzer.analyzeJockeyCombo(
+        currentJockeyId: horse.jockeyId,
+        performanceRecords: pastRecords,
+        raceResults: pastRaceResults,
+      );
       horse.distanceCourseAptitudeStats = StatsAnalyzer.analyzeDistanceCourseAptitude(
         raceData: raceData,
         pastRecords: pastRecords,
@@ -453,7 +479,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                   Tab(text: '時計'),
                   Tab(text: '成績'),
                   Tab(text: 'メモ'),
-                  Tab(text: '調教'), // ▼ 新規追加
+                  Tab(text: '調教'),
                 ],
               ),
               Expanded(
@@ -676,7 +702,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             comparison = a.horseName.compareTo(b.horseName);
             break;
           case SortableColumn.legStyle:
-            const styleOrder = {'逃げ': 0, '先行': 1, '差し': 2, '追い込み': 3, '自在': 4, 'マクリ': 5, '不明': 99};
+            const styleOrder = {'逃げ': 0, '先行': 1, '差し': 2, '追込': 3, '自在': 4, 'マクリ': 5, '不明': 99};
             final aStyle = styleOrder[a.legStyleProfile?.primaryStyle] ?? 99;
             final bStyle = styleOrder[b.legStyleProfile?.primaryStyle] ?? 99;
             comparison = aStyle.compareTo(bStyle);
@@ -720,22 +746,39 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     required List<PredictionHorseDetail> horses,
     required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
   }) {
+    // ▼ 追加: 現在のソート項目(_sortColumn)に基づいて、どの列番号に矢印を出すか判定
+    int? getSortColumnIndex() {
+      // カラムリストの中から、onSortが設定されており、かつ現在のソート項目と一致するものを探す
+      // ※StartersTabWidgetの新しい列順(0:枠印, 1:人気, 3:所属調教師, 4:馬情報)に対応
+      for (int i = 0; i < columns.length; i++) {
+        final col = columns[i];
+        if (col.onSort != null) {
+          // 列のラベルや、期待されるソート項目から現在のインデックスを特定
+          if (_sortColumn == SortableColumn.horseNumber && i == 0) return 0;
+          if (_sortColumn == SortableColumn.odds && i == 1) return 1;
+          if (_sortColumn == SortableColumn.trainer && i == 3) return 3;
+          if (_sortColumn == SortableColumn.horseName && i == 4) return 4;
+        }
+      }
+      return null;
+    }
+
     return DataTable2(
       key: ValueKey(_predictionRaceData.hashCode),
       minWidth: 2000,
       fixedTopRows: 1,
-      sortColumnIndex: columns.indexWhere((c) => (c.onSort != null)),
+      sortColumnIndex: getSortColumnIndex(),
       sortAscending: _isAscending,
       columnSpacing: 6.0,
       headingRowHeight: 50,
-      dataRowHeight: 90,
+      dataRowHeight: 100,
       headingTextStyle: const TextStyle(
-        fontSize: 12.0, // ヘッダーの文字サイズ
+        fontSize: 11.0, // 2段表示に対応するため少し小さめに調整
         fontWeight: FontWeight.bold,
         color: Colors.black87,
       ),
       dataTextStyle: const TextStyle(
-        fontSize: 14.0, // セルの文字サイズ
+        fontSize: 12.0, // 凝縮レイアウトに合わせて14.0から調整
         color: Colors.black87,
       ),
       columns: columns,
@@ -829,7 +872,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   /// 馬番表示を作成
   Widget _buildHorseNumber(int horseNumber, int gateNumber) {
-    // 追加: 拡張メソッドを使って色を一度だけ取得する
     final frameColor = gateNumber.gateBackgroundColor;
 
     return Container(
@@ -837,7 +879,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       height: 24,
       decoration: BoxDecoration(
         border: Border.all(
-          color: frameColor, // 修正: _getGateColor(gateNumber) を変数に置き換え
+          color: frameColor,
           width: 2.0,
         ),
       ),
@@ -845,7 +887,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       child: Text(
         horseNumber.toString(),
         style: TextStyle(
-          // 修正: _getGateColor(gateNumber) を変数に置き換え
           color: frameColor == Colors.black ? Colors.black : Colors.black87,
           fontSize: 12,
           fontWeight: FontWeight.bold,

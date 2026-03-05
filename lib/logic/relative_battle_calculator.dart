@@ -146,7 +146,7 @@ class RelativeBattleCalculator {
     String style = profile?.primaryStyle ?? '自在';
     if (style == '逃げ') return _getRandom(_subjectNige);
     if (style == '先行') return _getRandom(_subjectSenko);
-    if (style == '差し' || style == '追い込み') return _getRandom(_subjectSashi);
+    if (style == '差し' || style == '追込') return _getRandom(_subjectSashi);
     return "自在性に富んだ取り口を見せ";
   }
 
@@ -439,7 +439,7 @@ class RelativeBattleCalculator {
         double cumulative = 0.0;
         bool determined = false;
         final dist = horse.legStyleProfile!.styleDistribution;
-        for (var style in ['逃げ', '先行', '差し', '追い込み']) {
+        for (var style in ['逃げ', '先行', '差し', '追込']) {
           cumulative += (dist[style] ?? 0.0);
           if (rand <= cumulative) {
             selectedStyle = style;
@@ -481,11 +481,11 @@ class RelativeBattleCalculator {
       if (pace == RacePace.slow) {
         if (style == '逃げ') paceBonus += 15.0;
         else if (style == '先行') paceBonus += 5.0;
-        else if (style == '追い込み') paceBonus -= 5.0;
+        else if (style == '追込') paceBonus -= 5.0;
       } else if (pace == RacePace.high) {
         if (style == '逃げ') paceBonus -= 10.0;
         else if (style == '差し') paceBonus += 5.0;
-        else if (style == '追い込み') paceBonus += 10.0;
+        else if (style == '追込') paceBonus += 10.0;
       }
       score += paceBonus;
       score += (_random.nextDouble() - 0.5) * 10.0;

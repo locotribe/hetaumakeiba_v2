@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/models/complex_aptitude_model.dart';
 import 'package:hetaumakeiba_v2/models/best_time_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/fastest_agari_stats_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
 
 /// レース全体の予想データを保持するコンテナです。
 class PredictionRaceData {
@@ -97,14 +98,15 @@ class PredictionHorseDetail {
   String? previousHorseWeight;
   String? previousJockey;
 
-  // ★ここから追加・整理: プロフィール情報
+  JockeyComboStats? jockeyComboStats;
+
   String? ownerName;
   String? ownerId;
   String? ownerImageLocalPath;
   String? breederName;
   String? fatherName;
   String? motherName;
-  // ★ここまで追加
+  String? mfName;
 
   PredictionHorseDetail({
     required this.horseId,
@@ -142,6 +144,8 @@ class PredictionHorseDetail {
     this.breederName,
     this.fatherName,
     this.motherName,
+    this.mfName,
+    this.jockeyComboStats,
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
@@ -192,13 +196,23 @@ class PredictionHorseDetail {
       'previousJockey': previousJockey,
       'bestTimeStats': bestTimeStats?.toMap(),
       'fastestAgariStats': fastestAgariStats?.toMap(),
-      // ★JSON出力に追加
       'ownerName': ownerName,
       'ownerId': ownerId,
       'ownerImageLocalPath': ownerImageLocalPath,
       'breederName': breederName,
       'fatherName': fatherName,
       'motherName': motherName,
+      'mfName': mfName,
+      'jockeyComboStats': jockeyComboStats != null ? {
+        'isFirstRide': jockeyComboStats!.isFirstRide,
+        'rideCount': jockeyComboStats!.rideCount,
+        'winRate': jockeyComboStats!.winRate,
+        'placeRate': jockeyComboStats!.placeRate,
+        'showRate': jockeyComboStats!.showRate,
+        'winRecoveryRate': jockeyComboStats!.winRecoveryRate,
+        'showRecoveryRate': jockeyComboStats!.showRecoveryRate,
+        'recordString': jockeyComboStats!.recordString,
+      } : null,
     };
   }
 
@@ -242,13 +256,25 @@ class PredictionHorseDetail {
       fastestAgariStats: json['fastestAgariStats'] != null
           ? FastestAgariStats.fromMap(json['fastestAgariStats'] as Map<String, dynamic>)
           : null,
-      // ★JSON読み込みに追加（ownerNameの重複を削除）
       ownerName: json['ownerName'] as String?,
       ownerId: json['ownerId'] as String?,
       ownerImageLocalPath: json['ownerImageLocalPath'] as String?,
       breederName: json['breederName'] as String?,
       fatherName: json['fatherName'] as String?,
       motherName: json['motherName'] as String?,
+      mfName: json['mfName'] as String?,
+      jockeyComboStats: json['jockeyComboStats'] != null
+          ? JockeyComboStats(
+        isFirstRide: json['jockeyComboStats']['isFirstRide'] as bool? ?? false,
+        rideCount: json['jockeyComboStats']['rideCount'] as int? ?? 0,
+        winRate: (json['jockeyComboStats']['winRate'] as num?)?.toDouble() ?? 0.0,
+        placeRate: (json['jockeyComboStats']['placeRate'] as num?)?.toDouble() ?? 0.0,
+        showRate: (json['jockeyComboStats']['showRate'] as num?)?.toDouble() ?? 0.0,
+        winRecoveryRate: (json['jockeyComboStats']['winRecoveryRate'] as num?)?.toDouble() ?? 0.0,
+        showRecoveryRate: (json['jockeyComboStats']['showRecoveryRate'] as num?)?.toDouble() ?? 0.0,
+        recordString: json['jockeyComboStats']['recordString'] as String? ?? '0-0-0-0',
+      )
+          : null,
     );
   }
 }

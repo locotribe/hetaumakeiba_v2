@@ -148,7 +148,7 @@ class LegStyleAnalyzer {
       '逃げ': (styleCounts['逃げ'] ?? 0) / totalRaces,
       '先行': (styleCounts['先行'] ?? 0) / totalRaces,
       '差し': (styleCounts['差し'] ?? 0) / totalRaces,
-      '追い込み': (styleCounts['追い込み'] ?? 0) / totalRaces,
+      '追込': (styleCounts['追込'] ?? 0) / totalRaces,
     };
 
     // ★追加: 勝率計算 (その脚質をとった回数のうち、勝った割合)
@@ -171,7 +171,7 @@ class LegStyleAnalyzer {
           .reduce((a, b) => a.value > b.value ? a : b);
 
       final hasFrontStyle = (styleDistribution['逃げ']! + styleDistribution['先行']!) > 0;
-      final hasBackStyle = (styleDistribution['差し']! + styleDistribution['追い込み']!) > 0;
+      final hasBackStyle = (styleDistribution['差し']! + styleDistribution['追込']!) > 0;
 
       if (topStyleEntry.value < 0.5 && hasFrontStyle && hasBackStyle) {
         primaryStyle = '自在';
@@ -242,7 +242,7 @@ class LegStyleAnalyzer {
       return '先行';
     }
     if (finalPositionRate >= 0.8 && agari <= 34.5) {
-      return '追い込み';
+      return '追込';
     }
     if (positionGain > 0.15) {
       return '差し';
@@ -266,7 +266,7 @@ class LegStyleAnalyzer {
       return '先行';
     }
     if (profile.finalPositionRate >= 0.8 && profile.agariTime <= 34.5) {
-      return '追い込み';
+      return '追込';
     }
     if (profile.positionGain > 0.15) {
       return '差し';

@@ -140,7 +140,7 @@ class ConditionMatchEngine {
           case '逃げ': shortStyle = '逃'; break;
           case '先行': shortStyle = '先'; break;
           case '差し': shortStyle = '差'; break;
-          case '追い込み': shortStyle = '追'; break;
+          case '追込': shortStyle = '追'; break;
           case 'マクリ': shortStyle = 'マ'; break;
         }
         legStyleCounts[shortStyle] = (legStyleCounts[shortStyle] ?? 0) + 1;

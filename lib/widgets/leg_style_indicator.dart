@@ -31,7 +31,7 @@ class LegStyleIndicator extends StatelessWidget {
       context: context,
       builder: (context) {
         final distribution = profile.styleDistribution;
-        const legStylesOrder = ['逃げ', '先行', '差し', '追い込み'];
+        const legStylesOrder = ['逃げ', '先行', '差し', '追込'];
 
         return AlertDialog(
           title: Text('脚質詳細 (${profile.primaryStyle})'),
@@ -87,7 +87,7 @@ class LegStyleIndicator extends StatelessWidget {
     }
 
     final distribution = legStyleProfile!.styleDistribution;
-    const legStylesOrder = ['逃げ', '先行', '差し', '追い込み'];
+    const legStylesOrder = ['逃げ', '先行', '差し', '追込'];
 
     return InkWell(
       onTap: () => _showLegStyleDetailsDialog(context, legStyleProfile!),

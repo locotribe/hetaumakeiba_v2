@@ -141,7 +141,7 @@ class RaceAnalyzer {
       final nigeRate = distribution['逃げ'] ?? 0.0;
       final senkoRate = distribution['先行'] ?? 0.0;
       final sashiRate = distribution['差し'] ?? 0.0;
-      final oikomiRate = distribution['追い込み'] ?? 0.0;
+      final oikomiRate = distribution['追込'] ?? 0.0;
 
       if ((nigeRate + senkoRate + sashiRate + oikomiRate) > 0) {
         initialPositionScore =
