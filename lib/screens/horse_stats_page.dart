@@ -14,12 +14,15 @@ import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
 
-// ▼ 新しく作成したタブのウィジェットをインポート
 import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/individual_stats_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/matchup_stats_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/jockey_combo_stats_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/condition_based_analysis_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/relative_battle_tab.dart';
+
+import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
+import 'package:hetaumakeiba_v2/models/training_time_model.dart';
+import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/training_time_chart_tab.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -51,10 +54,14 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   List<MatchupStats> _matchupStats = [];
   Map<String, JockeyComboStats> _jockeyComboStats = {};
 
+  final TrainingRepository _trainingRepository = TrainingRepository(); // 追加
+  Map<String, List<TrainingTimeModel>> _trainingDataMap = {}; // 追加
+  Map<String, List<HorseRaceRecord>> _pastRecordsMap = {}; // 既存のローカル変数をクラス変数に昇格させるか、再計算時に保持する
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _loadInitialData();
   }
 
@@ -114,6 +121,17 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     setState(() {
       _matchupStats = matchups;
       _jockeyComboStats = jockeyCombos;
+    });
+
+    final Map<String, List<TrainingTimeModel>> newTrainingDataMap = {};
+    for (final horse in widget.horses) {
+      final trainingTimes = await _trainingRepository.getTrainingTimesForHorse(horse.horseId);
+      newTrainingDataMap[horse.horseId] = trainingTimes;
+    }
+
+    setState(() {
+      _trainingDataMap = newTrainingDataMap;
+      _pastRecordsMap = allPerformanceRecords; // 過去成績もグラフに渡すために保持
     });
   }
 
@@ -235,6 +253,12 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         allPerformanceRecords: allPerformanceRecords,
       );
 
+      final Map<String, List<TrainingTimeModel>> newTrainingDataMap = {};
+      for (final horse in widget.horses) {
+        final trainingTimes = await _trainingRepository.getTrainingTimesForHorse(horse.horseId);
+        newTrainingDataMap[horse.horseId] = trainingTimes;
+      }
+
       final cacheToSave = HorseStatsCache(
         raceId: widget.raceId,
         statsMap: newStatsMap,
@@ -247,6 +271,8 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         _statsMap = newStatsMap;
         _matchupStats = newMatchupStats;
         _jockeyComboStats = newJockeyComboStats;
+        _trainingDataMap = newTrainingDataMap;
+        _pastRecordsMap = allPerformanceRecords;
         _isLoading = false;
       });
     } catch (e) {
@@ -262,28 +288,35 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (!_isLoading)
-          Align(
-            alignment: Alignment.centerRight,
-            child: IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () => _showConfirmationDialog(isRefresh: true),
-              tooltip: 'データを更新',
+        // ★Rowを使ってTabBarと更新ボタンを横1行に並べる
+        Row(
+          children: [
+            Expanded( // タブエリアに横幅を最大限使わせる
+              child: TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                tabs: const [
+                  Tab(text: '調教タイム'),
+                  Tab(text: '個別成績'),
+                  Tab(text: '対戦成績'),
+                  Tab(text: 'コンビ成績'),
+                  Tab(text: '好走条件'),
+                  Tab(text: '相対評価'),
+                ],
+                labelColor: Colors.blue,
+                unselectedLabelColor: Colors.black,
+                indicatorColor: Colors.blue,
+              ),
             ),
-          ),
-        TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: '個別成績'),
-            Tab(text: '対戦成績'),
-            Tab(text: 'コンビ成績'),
-            Tab(text: '好走条件'),
-            Tab(text: '相対評価'),
+            // ★タブの右端に更新ボタンを配置
+            if (!_isLoading)
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () => _showConfirmationDialog(isRefresh: true),
+                tooltip: 'データを更新',
+                color: Colors.blue, // タブの選択色に合わせると統一感が出ます
+              ),
           ],
-          labelColor: Colors.blue,
-          unselectedLabelColor: Colors.black,
-          indicatorColor: Colors.blue,
         ),
         if (_isLoading)
           LinearProgressIndicator(
@@ -338,6 +371,11 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     return TabBarView(
       controller: _tabController,
       children: [
+        TrainingTimeChartTab( // ★一番前に追加
+          horses: widget.horses,
+          trainingDataMap: _trainingDataMap,
+          pastRecordsMap: _pastRecordsMap,
+        ),
         IndividualStatsTab(
           horses: widget.horses,
           statsMap: _statsMap,

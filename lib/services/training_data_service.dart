@@ -9,6 +9,19 @@ import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 class TrainingDataService {
   final TrainingRepository _repository = TrainingRepository();
 
+  /// 文字列のタイムをdoubleに変換し、999.9などの異常値を除外します
+  double? _parseTime(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return null;
+    final time = double.tryParse(timeStr);
+    if (time == null) return null;
+
+    // 0秒以下、または150秒以上（6Fでも通常は90秒前後）のあり得ないタイムは計測エラーとしてnullにする
+    if (time <= 0.0 || time > 500.0) {
+      return null;
+    }
+    return time;
+  }
+
   /// pakara-keibaから対象レースに出走する全馬の調教データを取得し、DBに保存します。
   Future<void> fetchAndSaveTrainingData({
     required String raceId,
@@ -17,7 +30,6 @@ class TrainingDataService {
   }) async {
     if (horseIds.isEmpty) return;
 
-    // UrlGeneratorに追記したメソッドを使用してPOSTパラメータを生成
     final params = generatePakaraApiParams(
       raceId: raceId,
       raceDate: raceDate,
@@ -56,29 +68,21 @@ class TrainingDataService {
               final cyoukyou = horse['cyoukyou'] as List?;
               if (cyoukyou != null) {
                 for (var c in cyoukyou) {
-                  // 各ハロンタイムの文字列をdoubleに変換
-                  final f6Str = c['f6']?.toString() ?? '';
-                  final f5Str = c['f5']?.toString() ?? '';
-                  final f4Str = c['f4']?.toString() ?? '';
-                  final f3Str = c['f3']?.toString() ?? '';
-                  final f2Str = c['f2']?.toString() ?? '';
-                  final f1Str = c['f1']?.toString() ?? '';
-
-                  // kyuusyaフィールドには「栗東」「美浦」などの情報が入る
                   final locationStr = c['kyuusya']?.toString() ?? '不明';
 
+                  // ★修正: ヘッパーメソッドを経由して異常値をフィルタリング
                   allRecords.add(TrainingTimeModel(
                     horseId: hId,
                     trainingDate: c['date']?.toString() ?? '',
                     trainingTime: c['time']?.toString() ?? '',
                     trackType: trackType,
                     location: locationStr,
-                    f6: double.tryParse(f6Str),
-                    f5: double.tryParse(f5Str),
-                    f4: double.tryParse(f4Str),
-                    f3: double.tryParse(f3Str),
-                    f2: double.tryParse(f2Str),
-                    f1: double.tryParse(f1Str),
+                    f6: _parseTime(c['f6']?.toString()),
+                    f5: _parseTime(c['f5']?.toString()),
+                    f4: _parseTime(c['f4']?.toString()),
+                    f3: _parseTime(c['f3']?.toString()),
+                    f2: _parseTime(c['f2']?.toString()),
+                    f1: _parseTime(c['f1']?.toString()),
                     stableName: locationStr,
                   ));
                 }
