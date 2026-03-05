@@ -11,7 +11,8 @@ import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
 class HorseProfileScraperService {
-  final HorseRepository _horseRepository = HorseRepository();
+  // ★修正: インスタンスをstatic化して一元管理し、ローカルでの重複生成を防ぎます
+  static final HorseRepository _horseRepository = HorseRepository();
 
   static const Map<String, String> _headers = {
     'User-Agent':
@@ -21,31 +22,34 @@ class HorseProfileScraperService {
 
   /// 指定された馬IDのプロフィール（基本情報、馬主画像、血統）を取得し、DBに保存します。
   static Future<HorseProfile?> scrapeAndSaveProfile(String horseId) async {
-    final HorseRepository horseRepo = HorseRepository();
     print('DEBUG: scrapeAndSaveProfile START for ID: $horseId');
     try {
-      // ★修正: プロフィール取得専用のURLを使用 (/result/なし)
-      final url = generateNetkeibaHorseProfileUrl(horseId: horseId);
-      print('DEBUG: Requesting URL: $url');
+      // 1. プロフィールTOPから基本情報を取得
+      final profileUrl = generateNetkeibaHorseProfileUrl(horseId: horseId);
+      print('DEBUG: Requesting Profile URL: $profileUrl');
+      final profileResponse = await http.get(Uri.parse(profileUrl), headers: _headers);
 
-      final response = await http.get(Uri.parse(url), headers: _headers);
+      // 2. 血統ページから血統情報を取得 (★追加)
+      final pedigreeUrl = generateNetkeibaHorsePedigreeUrl(horseId: horseId);
+      print('DEBUG: Requesting Pedigree URL: $pedigreeUrl');
+      final pedigreeResponse = await http.get(Uri.parse(pedigreeUrl), headers: _headers);
 
-      if (response.statusCode != 200) {
-        print('DEBUG: [ERROR] Failed to fetch profile. Status: ${response.statusCode}');
+      if (profileResponse.statusCode != 200 || pedigreeResponse.statusCode != 200) {
+        print('DEBUG: [ERROR] Failed to fetch pages. Profile: ${profileResponse.statusCode}, Pedigree: ${pedigreeResponse.statusCode}');
         return null;
       }
 
-      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
-      final document = html.parse(decodedBody);
+      final profileDoc = html.parse(await CharsetConverter.decode('EUC-JP', profileResponse.bodyBytes));
+      final pedigreeDoc = html.parse(await CharsetConverter.decode('EUC-JP', pedigreeResponse.bodyBytes));
 
-      // 1. 基本情報の解析
-      final profileData = await _parseBasicInfo(horseId, document);
+      // 3. 基本情報の解析 (プロフィールTOPのHTMLを渡す)
+      final profileData = await _parseBasicInfo(horseId, profileDoc);
       print('DEBUG: Basic info parsed: $profileData');
 
-      // 2. 血統情報の解析
-      final pedigreeData = _parsePedigree(document);
+      // 4. 血統情報の解析 (血統ページのHTMLを渡す)
+      final pedigreeData = _parsePedigree(pedigreeDoc);
 
-      // 3. データの結合と保存
+      // 5. データの結合と保存
       final profile = HorseProfile(
         horseId: horseId,
         horseName: profileData['horseName'] ?? '',
@@ -68,7 +72,8 @@ class HorseProfileScraperService {
       );
 
       print('DEBUG: Saving profile to DB... (Owner Image Path: ${profile.ownerImageLocalPath})');
-      await horseRepo.insertOrUpdateHorseProfile(profile);
+      // ★修正: staticな _horseRepository を使用して保存
+      await _horseRepository.insertOrUpdateHorseProfile(profile);
       print('DEBUG: scrapeAndSaveProfile END (Success) for $horseId');
       return profile;
 
@@ -155,8 +160,6 @@ class HorseProfileScraperService {
         final filePath = '${saveDir.path}/owner_$ownerId.gif';
         final file = File(filePath);
 
-        // ファイルがあっても上書きダウンロードするか、存在確認するか
-        // デバッグのため、一旦毎回ダウンロードを試みる（もしくは存在確認ログを出す）
         if (await file.exists()) {
           print('DEBUG: Image file already exists at: $filePath');
           result['ownerImageLocalPath'] = filePath;
@@ -189,49 +192,56 @@ class HorseProfileScraperService {
     if (bloodTable != null) {
       final rows = bloodTable.querySelectorAll('tr');
       if (rows.isNotEmpty) {
-        // 父
-        final fTd = rows[0].querySelector('td');
-        if (fTd != null) {
-          result['fatherName'] = fTd.querySelector('a')?.text.trim() ?? fTd.text.trim();
-          final href = fTd.querySelector('a')?.attributes['href'];
-          if (href != null) {
-            final match = RegExp(r'/horse/ped/(\w+)/').firstMatch(href);
-            if (match != null) result['fatherId'] = match.group(1)!;
-          }
-          final tds = rows[0].querySelectorAll('td');
-          if (tds.length > 1) {
-            result['ffName'] = tds[1].querySelector('a')?.text.trim() ?? tds[1].text.trim();
-          }
+
+        // ★追加: 名前からカタカナ（改行前）のみを抽出するヘルパー
+        String cleanName(dom.Element? td) {
+          if (td == null) return '';
+          final text = td.text.trim();
+          if (text.isEmpty) return '';
+          return text.split('\n')[0].trim();
         }
-        // 父母
+
+        // ★追加: リンクからIDを抽出するヘルパー
+        String extractId(dom.Element? td) {
+          if (td == null) return '';
+          final href = td.querySelector('a')?.attributes['href'];
+          if (href == null) return '';
+          final match = RegExp(r'/horse/(?:ped/)?(\w+)').firstMatch(href);
+          return match?.group(1) ?? '';
+        }
+
+        // 父 (rows[0], td[0])
+        if (rows.isNotEmpty) {
+          final fTd = rows[0].querySelectorAll('td').isNotEmpty ? rows[0].querySelectorAll('td')[0] : null;
+          result['fatherName'] = cleanName(fTd);
+          result['fatherId'] = extractId(fTd);
+
+          // 父父 (rows[0], td[1])
+          final ffTd = rows[0].querySelectorAll('td').length > 1 ? rows[0].querySelectorAll('td')[1] : null;
+          result['ffName'] = cleanName(ffTd);
+        }
+
+        // 父母 (rows[8], td[0])
         if (rows.length > 8) {
           final fmTd = rows[8].querySelector('td');
-          if (fmTd != null) {
-            result['fmName'] = fmTd.querySelector('a')?.text.trim() ?? fmTd.text.trim();
-          }
+          result['fmName'] = cleanName(fmTd);
         }
-        // 母
+
+        // 母 (rows[16], td[0])
         if (rows.length > 16) {
           final mTd = rows[16].querySelector('td');
-          if (mTd != null) {
-            result['motherName'] = mTd.querySelector('a')?.text.trim() ?? mTd.text.trim();
-            final href = mTd.querySelector('a')?.attributes['href'];
-            if (href != null) {
-              final match = RegExp(r'/horse/ped/(\w+)/').firstMatch(href);
-              if (match != null) result['motherId'] = match.group(1)!;
-            }
-            final tds = rows[16].querySelectorAll('td');
-            if (tds.length > 1) {
-              result['mfName'] = tds[1].querySelector('a')?.text.trim() ?? tds[1].text.trim();
-            }
-          }
+          result['motherName'] = cleanName(mTd);
+          result['motherId'] = extractId(mTd);
+
+          // 母父 (rows[16], td[1])
+          final mfTd = rows[16].querySelectorAll('td').length > 1 ? rows[16].querySelectorAll('td')[1] : null;
+          result['mfName'] = cleanName(mfTd);
         }
-        // 母母
+
+        // 母母 (rows[24], td[0])
         if (rows.length > 24) {
           final mmTd = rows[24].querySelector('td');
-          if (mmTd != null) {
-            result['mmName'] = mmTd.querySelector('a')?.text.trim() ?? mmTd.text.trim();
-          }
+          result['mmName'] = cleanName(mmTd);
         }
       }
     }

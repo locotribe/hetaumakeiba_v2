@@ -219,4 +219,23 @@ class HorseRepository {
       return HorseMemo.fromMap(maps[i]);
     });
   }
+  // horse_repository.dart に追加
+
+  // ===========================================================================
+  // 緊急メンテナンス用：全競走馬IDの取得
+  // ===========================================================================
+  Future<List<String>> getAllHorseIds() async {
+    final db = await _db;
+    try {
+      // horseId カラムのみを取得
+      final maps = await db.query(
+        DbConstants.tableHorseProfiles,
+        columns: ['horseId'],
+      );
+      return maps.map((map) => map['horseId'] as String).toList();
+    } catch (e) {
+      print('DEBUG: [ERROR] getAllHorseIds failed: $e');
+      return [];
+    }
+  }
 }
