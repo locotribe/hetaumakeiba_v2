@@ -1,20 +1,20 @@
 // lib/widgets/shutuba_tabs/memo_tab.dart
 
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:data_table_2/data_table_2.dart';
+
 import 'package:csv/csv.dart';
+import 'package:data_table_2/data_table_2.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+import 'package:hetaumakeiba_v2/main.dart';
+import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
+import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
+import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/info_tab.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:hetaumakeiba_v2/main.dart'; // localUserId用
-import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
-import 'package:hetaumakeiba_v2/models/race_data.dart';
-import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
-import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart'; // SortableColumn用
 
 class _PastMemoDetail {
   final String raceName;
@@ -352,18 +352,14 @@ class _MemoTabWidgetState extends State<MemoTabWidget> {
         Expanded(
           child: widget.buildDataTableForTab(
             columns: [
-              DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => widget.onSort(SortableColumn.mark)),
+              DataColumn2(label: const Text('印\n枠'), fixedWidth: 40, onSort: (i, asc) => widget.onSort(SortableColumn.horseNumber)),
               DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => widget.onSort(SortableColumn.horseName)),
               const DataColumn2(label: Text('今回の予想'), size: ColumnSize.M),
               const DataColumn2(label: Text('過去メモ(直近5走)'), size: ColumnSize.L),
             ],
             horses: widget.horses,
             cellBuilder: (horse) => [
-              DataCell(
-                horse.isScratched
-                    ? const Text('取消', style: TextStyle(color: Colors.red))
-                    : widget.buildMarkDropdown(horse),
-              ),
+              DataCell(MarkAndGateCell(horse: horse, buildMarkDropdown: widget.buildMarkDropdown)),
               DataCell(
                 Text(
                   horse.horseName,

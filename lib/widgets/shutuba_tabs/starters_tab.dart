@@ -60,7 +60,7 @@ class StartersTabWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return buildDataTableForTab(
       columns: [
-        DataColumn2(label: const Text('印\n枠'), fixedWidth: 35, onSort: (i, asc) => onSort(SortableColumn.horseNumber)),
+        DataColumn2(label: const Text('枠\n印'), fixedWidth: 35, onSort: (i, asc) => onSort(SortableColumn.horseNumber)),
         DataColumn2(label: const Text('人\n気'), fixedWidth: 40, onSort: (i, asc) => onSort(SortableColumn.odds)),
         const DataColumn2(
           label: Center(

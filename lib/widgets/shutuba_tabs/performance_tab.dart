@@ -1,19 +1,20 @@
 // lib/widgets/shutuba_tabs/performance_tab.dart
 
-import 'package:flutter/material.dart';
 import 'package:data_table_2/data_table_2.dart';
-import 'package:hetaumakeiba_v2/main.dart'; // localUserId用
+import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
-import 'package:hetaumakeiba_v2/models/race_data.dart';
+import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
+import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
+import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
-import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
+import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
-import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart'; // SortableColumn用
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/info_tab.dart';
 
 class _PerformanceData {
   final List<HorseRaceRecord> records;
@@ -55,7 +56,7 @@ class PerformanceTabWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return buildDataTableForTab(
       columns: [
-        DataColumn2(label: const Text('印'), fixedWidth: 50, onSort: (i, asc) => onSort(SortableColumn.mark)),
+        DataColumn2(label: const Text('印\n枠'), fixedWidth: 40, onSort: (i, asc) => onSort(SortableColumn.horseNumber)),
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => onSort(SortableColumn.horseName)),
         const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
         const DataColumn2(label: SizedBox(width: 120, child: Text('前走'))),
@@ -70,11 +71,7 @@ class PerformanceTabWidget extends StatelessWidget {
       ],
       horses: horses,
       cellBuilder: (horse) => [
-        DataCell(
-          horse.isScratched
-              ? const Text('取消', style: TextStyle(color: Colors.red))
-              : buildMarkDropdown(horse),
-        ),
+        DataCell(MarkAndGateCell(horse: horse, buildMarkDropdown: buildMarkDropdown)),
         DataCell(
           Text(
             horse.horseName,

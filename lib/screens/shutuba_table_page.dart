@@ -4,15 +4,18 @@ import 'package:data_table_2/data_table_2.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/stats_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/main.dart';
-import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
@@ -23,14 +26,11 @@ import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/memo_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/performance_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/starters_tab.dart';
-import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/training_tab.dart';
-import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
-import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
-import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/user_mark_dropdown.dart';
+import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 
 enum SortableColumn {
-  mark,
   gateNumber,
   horseNumber,
   horseName,
@@ -78,9 +78,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   late TabController _tabController;
   String? _highlightedRaceId;
 
-  // ▼▼ 新規追加: 同コース限定モードの状態フラグ ▼▼
-  bool _isCourseOnlyMode = false;
-  // ▲▲ 新規追加 ▲▲
+  bool _isCourseOnlyMode = true;
 
   @override
   bool get wantKeepAlive => true;
@@ -555,7 +553,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                         ],
                       ),
                     ),
-                    // ▼▼ 新規追加: 同コース切り替えトグル ▼▼
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -572,14 +569,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                         ),
                       ],
                     ),
-                    // ▲▲ 新規追加 ▲▲
                     if (widget.raceResult == null)
                       Padding(
                         padding: const EdgeInsets.only(right: 8.0),
                         child: TextButton.icon(
                           onPressed: _updateDynamicData,
                           icon: const Icon(Icons.refresh, size: 16),
-                          label: const Text('オッズ更新', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          label: const Text('更新', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           style: TextButton.styleFrom(
                             backgroundColor: Colors.transparent,
                             foregroundColor: Colors.white,
@@ -605,12 +601,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                         }
 
                         switch (_sortColumn) {
-                          case SortableColumn.mark:
-                            const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '★': 5, '消': 6};
-                            final aMark = markOrder[a.userMark?.mark] ?? 99;
-                            final bMark = markOrder[b.userMark?.mark] ?? 99;
-                            comparison = aMark.compareTo(bMark);
-                            break;
                           case SortableColumn.gateNumber:
                             comparison = a.gateNumber.compareTo(b.gateNumber);
                             break;
@@ -673,18 +663,30 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                           StartersTabWidget(
                             horses: sortedHorses,
                             onSort: _onSort,
-                            buildMarkDropdown: _buildMarkDropdown,
+                            buildMarkDropdown: (horse) => UserMarkDropdown(
+                              horse: horse,
+                              raceId: widget.raceId,
+                              textColor: horse.gateNumber > 0 ? horse.gateNumber.gateTextColor : Colors.black87,
+                              onMarkChanged: (mark) {
+                                _handleMarkChanged(horse, mark);
+                              },
+                            ),
                             buildGateNumber: _buildGateNumber,
                             buildHorseNumber: _buildHorseNumber,
                             getHorseProfile: _horseRepo.getHorseProfile,
-                            isCourseOnlyMode: _isCourseOnlyMode, // ▼ 追加: モードを渡す
+                            isCourseOnlyMode: _isCourseOnlyMode,
                             buildDataTableForTab: _buildDataTableForTab,
                           ),
                           PerformanceTabWidget(
                             predictionRaceData: _predictionRaceData!,
                             horses: sortedHorses,
                             onSort: _onSort,
-                            buildMarkDropdown: _buildMarkDropdown,
+                            buildMarkDropdown: (horse) => UserMarkDropdown(
+                              horse: horse,
+                              raceId: widget.raceId,
+                              textColor: horse.gateNumber > 0 ? horse.gateNumber.gateTextColor : Colors.black87,
+                              onMarkChanged: (mark) => _handleMarkChanged(horse, mark),
+                            ),
                             buildDataTableForTab: _buildDataTableForTab,
                             highlightedRaceId: _highlightedRaceId,
                             onRaceHighlightChanged: (String raceId) {
@@ -702,7 +704,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             predictionRaceData: _predictionRaceData!,
                             horses: sortedHorses,
                             onSort: _onSort,
-                            buildMarkDropdown: _buildMarkDropdown,
+                            buildMarkDropdown: (horse) => UserMarkDropdown(
+                              horse: horse,
+                              raceId: widget.raceId,
+                              textColor: horse.gateNumber > 0 ? horse.gateNumber.gateTextColor : Colors.black87,
+                              onMarkChanged: (mark) => _handleMarkChanged(horse, mark),
+                            ),
                             buildDataTableForTab: _buildDataTableForTab,
                             reloadData: () {
                               _loadShutubaData(refresh: true);
@@ -784,12 +791,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         }
 
         switch (_sortColumn) {
-          case SortableColumn.mark:
-            const markOrder = {'◎': 0, '〇': 1, '▲': 2, '△': 3, '✕': 4, '★': 5, '消': 6};
-            final aMark = markOrder[a.userMark?.mark] ?? 99;
-            final bMark = markOrder[b.userMark?.mark] ?? 99;
-            comparison = aMark.compareTo(bMark);
-            break;
           case SortableColumn.gateNumber:
             comparison = a.gateNumber.compareTo(b.gateNumber);
             break;
@@ -842,6 +843,19 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         return _isAscending ? comparison : -comparison;
       });
     });
+  }
+
+  // 印が変更された時の共通処理
+  void _handleMarkChanged(PredictionHorseDetail horse, UserMark? newMark) {
+    if (newMark == null) {
+      if (horse.userMark != null) {
+        setState(() => horse.userMark = null);
+        _deleteMarkAndSaveInBackground(horse);
+      }
+    } else {
+      setState(() => horse.userMark = newMark);
+      _updateMarkAndSaveInBackground(newMark);
+    }
   }
 
   /// 各タブのDataTableを生成するための共通ラッパー
@@ -897,69 +911,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     );
   }
 
-  Widget _buildMarkDropdown(PredictionHorseDetail horse) {
-    return PopupMenuButton<String>(
-      constraints: const BoxConstraints(
-        minWidth: 2.0 * 24.0, // 最小幅を指定
-        maxWidth: 2.0 * 24.0,  // 最大幅を指定
-      ),
-
-      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-        ...['◎', '〇', '▲', '△', '✕', '★'].map((String value) {
-          return PopupMenuItem<String>(
-            value: value,
-            height: 36, // 高さを詰める
-            child: Center(child: Text(value)), // 中央揃えにする
-          );
-        }),
-        const PopupMenuDivider(),
-        const PopupMenuItem<String>(
-          value: '消',
-          height: 36, // 高さを詰める
-          child: Center(child: Text('消')), // 中央揃えにする
-        ),
-        const PopupMenuDivider(),
-        const PopupMenuItem<String>(
-          value: '--',
-          height: 36, // 高さを詰める
-          child: Center(child: Text('--')), // 中央揃えにする
-        ),
-      ],
-      onSelected: (String newValue) {
-        final userId = localUserId;
-        if (userId == null) return;
-
-        if (newValue == '--') {
-          if (horse.userMark != null) {
-            setState(() {
-              horse.userMark = null;
-            });
-            _deleteMarkAndSaveInBackground(horse);
-          }
-        } else {
-          final userMark = UserMark(
-            userId: userId,
-            raceId: widget.raceId,
-            horseId: horse.horseId,
-            mark: newValue,
-            timestamp: DateTime.now(),
-          );
-          setState(() {
-            horse.userMark = userMark;
-          });
-          _updateMarkAndSaveInBackground(userMark);
-        }
-      },
-      padding: EdgeInsets.zero,
-      child: Center(
-        child: Text(
-          horse.userMark?.mark ?? '--',
-          style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
-
   /// 枠番表示を作成
   Widget _buildGateNumber(int gateNumber) {
     return Container(
@@ -989,16 +940,16 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       width: 24,
       height: 24,
       decoration: BoxDecoration(
-        border: Border.all(
-          color: frameColor,
-          width: 2.0,
-        ),
+        color: frameColor, // 背景を枠色で塗りつぶす
+        // 1枠(白)の時だけ境界線が分かるようにグレーの枠を付ける
+        border: gateNumber == 1 ? Border.all(color: Colors.grey) : null,
       ),
       alignment: Alignment.center,
       child: Text(
         horseNumber.toString(),
         style: TextStyle(
-          color: frameColor == Colors.black ? Colors.black : Colors.black87,
+          // gate_color_utils.dart の gateTextColor を呼び出して適用
+          color: gateNumber.gateTextColor,
           fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
