@@ -162,14 +162,87 @@ class ShutubaTableScraperService {
     String venue = '';
     String raceNumber = '';
 
-    final raceData01Match =
-    RegExp(r'\s*(.*?)\s*(\d{1,2}R)')
-        .firstMatch(raceData01);
-    if (raceData01Match != null) {
-      venue = raceData01Match.group(1)?.trim() ?? '';
-      raceNumber = raceData01Match.group(2) ?? '';
+    // ▼▼ 新規追加: 16項目の環境データ用変数 ▼▼
+    String? trackType;
+    int? distanceValue;
+    String? direction;
+    String courseInOut = '';
+    String? weather;
+    String? trackCondition;
+    int? holdingTimes;
+    int? holdingDays;
+    String? raceCategory;
+    int? horseCount;
+    String? startTime;
+    int basePrize1st = 0;
+    int basePrize2nd = 0;
+    int basePrize3rd = 0;
+    int basePrize4th = 0;
+    int basePrize5th = 0;
+    // ▲▲ 新規追加 ▲▲
+
+    // ▼▼ raceData01 の解析 ("15:45発走 / 芝2000m (右 A) / 天候:晴 / 馬場:良" など) ▼▼
+    final timeMatch = RegExp(r'(\d{2}:\d{2})発走').firstMatch(raceData01);
+    if (timeMatch != null) startTime = timeMatch.group(1);
+
+    final trackDistMatch = RegExp(r'(芝|ダ|障)(\d+)m').firstMatch(raceData01);
+    if (trackDistMatch != null) {
+      trackType = trackDistMatch.group(1);
+      distanceValue = int.tryParse(trackDistMatch.group(2)!);
     }
 
+    final dirMatch = RegExp(r'\((右|左|直)(?:\s+([^)]+))?\)').firstMatch(raceData01);
+    if (dirMatch != null) {
+      direction = dirMatch.group(1);
+      if (dirMatch.group(2) != null) courseInOut = dirMatch.group(2)!.trim();
+    }
+
+    final weatherMatch = RegExp(r'天候:(\S+)').firstMatch(raceData01);
+    if (weatherMatch != null) weather = weatherMatch.group(1);
+
+    final condMatch = RegExp(r'馬場:(\S+)').firstMatch(raceData01);
+    if (condMatch != null) trackCondition = condMatch.group(1);
+
+    // ▼▼ raceData02 の解析 ("2回 中山 4日目 サラ系３歳 オープン (国際)(指) 馬齢 10頭\n本賞金:5400,2200,1400,810,540万円" など) ▼▼
+    final holdingTimesMatch = RegExp(r'(\d+)回').firstMatch(raceData02);
+    if (holdingTimesMatch != null) holdingTimes = int.tryParse(holdingTimesMatch.group(1)!);
+
+    // 会場(venue)の抽出: "2回 中山 4日目" から "中山" を取り出す
+    final venueMatch = RegExp(r'\d+回\s+(.+?)\s+\d+日目').firstMatch(raceData02);
+    if (venueMatch != null) {
+      venue = venueMatch.group(1)!.trim();
+    }
+
+    final holdingDaysMatch = RegExp(r'(\d+)日目').firstMatch(raceData02);
+    if (holdingDaysMatch != null) holdingDays = int.tryParse(holdingDaysMatch.group(1)!);
+
+    final categoryMatch = RegExp(r'日目\s+(.+?)\s+\d+頭').firstMatch(raceData02);
+    if (categoryMatch != null) raceCategory = categoryMatch.group(1)!.trim();
+
+    final horseCountMatch = RegExp(r'(\d+)頭').firstMatch(raceData02);
+    if (horseCountMatch != null) horseCount = int.tryParse(horseCountMatch.group(1)!);
+
+    final prizeMatch = RegExp(r'本賞金:?([0-9,]+)').firstMatch(raceData02);
+    if (prizeMatch != null) {
+      final prizes = prizeMatch.group(1)!.split(',');
+      if (prizes.isNotEmpty) basePrize1st = int.tryParse(prizes[0]) ?? 0;
+      if (prizes.length > 1) basePrize2nd = int.tryParse(prizes[1]) ?? 0;
+      if (prizes.length > 2) basePrize3rd = int.tryParse(prizes[2]) ?? 0;
+      if (prizes.length > 3) basePrize4th = int.tryParse(prizes[3]) ?? 0;
+      if (prizes.length > 4) basePrize5th = int.tryParse(prizes[4]) ?? 0;
+    }
+
+    // ▼▼ レース番号の確実な抽出 (文字列になければ raceId の末尾2桁から取得) ▼▼
+    final rnMatch = RegExp(r'(\d{1,2})R').firstMatch('$raceData01 $raceData02');
+    if (rnMatch != null) {
+      raceNumber = rnMatch.group(1)!;
+    } else {
+      if (raceId.length >= 2) {
+        raceNumber = int.tryParse(raceId.substring(raceId.length - 2))?.toString() ?? '';
+      }
+    }
+
+    // ▼▼ 既存の馬リスト生成ロジック (変更なし) ▼▼
     final List<PredictionHorseDetail> horses = horsesData.map((horseData) {
       final Map<String, dynamic> horseMap =
       Map<String, dynamic>.from(horseData);
@@ -207,11 +280,29 @@ class ShutubaTableScraperService {
       raceName: raceName,
       raceDate: raceDate,
       venue: venue,
-      raceNumber: raceNumber.replaceAll('R', ''),
+      raceNumber: raceNumber,
       shutubaTableUrl: generateShutubaUrl(raceId: raceId, type: 'shutuba'),
       raceGrade: raceGrade,
-      raceDetails1: '$raceData01 / $raceData02',
+      raceDetails1: '$raceData01 / $raceData02', // 既存の互換性維持
       horses: horses,
+      // ▼▼ 新規追加: 抽出した16項目の環境データをセット ▼▼
+      trackType: trackType,
+      distanceValue: distanceValue,
+      direction: direction,
+      courseInOut: courseInOut,
+      weather: weather,
+      trackCondition: trackCondition,
+      holdingTimes: holdingTimes,
+      holdingDays: holdingDays,
+      raceCategory: raceCategory,
+      horseCount: horseCount,
+      startTime: startTime,
+      basePrize1st: basePrize1st,
+      basePrize2nd: basePrize2nd,
+      basePrize3rd: basePrize3rd,
+      basePrize4th: basePrize4th,
+      basePrize5th: basePrize5th,
+      // ▲▲ 新規追加 ▲▲
     );
   }
 

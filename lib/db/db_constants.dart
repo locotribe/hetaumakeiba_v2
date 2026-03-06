@@ -2,7 +2,7 @@
 
 class DbConstants {
   static const String dbName = 'hetaumakeiba_v2.db';
-  static const int dbVersion = 11;
+  static const int dbVersion = 12; // 11 -> 12に更新
 
   // --- Tables ---
   static const String tableQrData = 'qr_data';
@@ -23,18 +23,47 @@ class DbConstants {
   static const String tableHorseProfiles = 'horse_profiles';
   static const String tableJyusyoRaces = 'jyusyo_races';
   static const String tableTrackConditions = 'track_conditions';
-  static const String tableRaceMemos = 'race_memos'; // 新規追加
-  static const String tableTrainingTimes = 'training_times'; // 調教データ用テーブル
+  static const String tableRaceMemos = 'race_memos';
+  static const String tableTrainingTimes = 'training_times';
+  // ▼▼ 新規追加: 統合レーステーブル ▼▼
+  static const String tableIntegratedRaces = 'integrated_races';
 
   // --- Common Columns ---
   static const String colId = 'id';
   static const String colUserId = 'userId';
+  static const String colRaceId = 'race_id';
+
+  // ▼▼ 新規追加: 統合レーステーブル用カラム ▼▼
+  static const String colTrackType = 'track_type';
+  static const String colDistanceValue = 'distance_value';
+  static const String colDirection = 'direction';
+  static const String colCourseInOut = 'course_in_out';
+  static const String colWeather = 'weather';
+  static const String colTrackCondition = 'track_condition';
+  static const String colHoldingTimes = 'holding_times';
+  static const String colHoldingDays = 'holding_days';
+  static const String colRaceCategory = 'race_category';
+  static const String colHorseCount = 'horse_count';
+  static const String colStartTime = 'start_time';
+  static const String colBasePrize1st = 'base_prize_1st';
+  static const String colBasePrize2nd = 'base_prize_2nd';
+  static const String colBasePrize3rd = 'base_prize_3rd';
+  static const String colBasePrize4th = 'base_prize_4th';
+  static const String colBasePrize5th = 'base_prize_5th';
+
+  static const String colHasShutuba = 'has_shutuba';
+  static const String colHasResult = 'has_result';
+  static const String colShutubaJson = 'shutuba_json';
+  static const String colResultJson = 'result_json';
+  static const String colShutubaLastUpdated = 'shutuba_last_updated';
+  static const String colResultLastUpdated = 'result_last_updated';
+  // ▲▲ 新規追加 ▲▲
 
   // --- Training Times Columns ---
   static const String colHorseId = 'horse_id';
   static const String colTrainingDate = 'training_date';
   static const String colTrainingTime = 'training_time';
-  static const String colTrackType = 'track_type';
+  static const String colTrackTypeForTraining = 'track_type'; // 既存との被り回避
   static const String colLocation = 'location';
   static const String colF6 = 'f6';
   static const String colF5 = 'f5';

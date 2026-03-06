@@ -273,7 +273,6 @@ class DbProvider {
       )
     ''');
 
-    // ▼ 新規追加: 調教データテーブル
     await db.execute('''
       CREATE TABLE ${DbConstants.tableTrainingTimes}(
         ${DbConstants.colHorseId} TEXT NOT NULL,
@@ -291,6 +290,36 @@ class DbProvider {
         PRIMARY KEY (${DbConstants.colHorseId}, ${DbConstants.colTrainingDate}, ${DbConstants.colTrainingTime}, ${DbConstants.colTrackType}, ${DbConstants.colLocation})
       )
     ''');
+
+    // ▼▼ 新規追加: 統合レーステーブル ▼▼
+    await db.execute('''
+      CREATE TABLE ${DbConstants.tableIntegratedRaces}(
+        ${DbConstants.colRaceId} TEXT PRIMARY KEY,
+        ${DbConstants.colTrackType} TEXT,
+        ${DbConstants.colDistanceValue} INTEGER,
+        ${DbConstants.colDirection} TEXT,
+        ${DbConstants.colCourseInOut} TEXT,
+        ${DbConstants.colWeather} TEXT,
+        ${DbConstants.colTrackCondition} TEXT,
+        ${DbConstants.colHoldingTimes} INTEGER,
+        ${DbConstants.colHoldingDays} INTEGER,
+        ${DbConstants.colRaceCategory} TEXT,
+        ${DbConstants.colHorseCount} INTEGER,
+        ${DbConstants.colStartTime} TEXT,
+        ${DbConstants.colBasePrize1st} INTEGER,
+        ${DbConstants.colBasePrize2nd} INTEGER,
+        ${DbConstants.colBasePrize3rd} INTEGER,
+        ${DbConstants.colBasePrize4th} INTEGER,
+        ${DbConstants.colBasePrize5th} INTEGER,
+        ${DbConstants.colHasShutuba} INTEGER DEFAULT 0,
+        ${DbConstants.colHasResult} INTEGER DEFAULT 0,
+        ${DbConstants.colShutubaJson} TEXT,
+        ${DbConstants.colResultJson} TEXT,
+        ${DbConstants.colShutubaLastUpdated} TEXT,
+        ${DbConstants.colResultLastUpdated} TEXT
+      )
+    ''');
+    // ▲▲ 新規追加 ▲▲
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -382,7 +411,6 @@ class DbProvider {
       } catch (e) { print('DEBUG: Migration error (v9->v10): $e'); }
     }
 
-    // ▼ 新規追加: バージョン10から11へのマイグレーション（調教データテーブルの追加）
     if (oldVersion < 11) {
       try {
         await db.execute('''
@@ -404,6 +432,40 @@ class DbProvider {
         ''');
       } catch (e) { print('DEBUG: Migration error (v10->v11): $e'); }
     }
+
+    // ▼▼ 新規追加: バージョン11から12へのマイグレーション ▼▼
+    if (oldVersion < 12) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS ${DbConstants.tableIntegratedRaces}(
+            ${DbConstants.colRaceId} TEXT PRIMARY KEY,
+            ${DbConstants.colTrackType} TEXT,
+            ${DbConstants.colDistanceValue} INTEGER,
+            ${DbConstants.colDirection} TEXT,
+            ${DbConstants.colCourseInOut} TEXT,
+            ${DbConstants.colWeather} TEXT,
+            ${DbConstants.colTrackCondition} TEXT,
+            ${DbConstants.colHoldingTimes} INTEGER,
+            ${DbConstants.colHoldingDays} INTEGER,
+            ${DbConstants.colRaceCategory} TEXT,
+            ${DbConstants.colHorseCount} INTEGER,
+            ${DbConstants.colStartTime} TEXT,
+            ${DbConstants.colBasePrize1st} INTEGER,
+            ${DbConstants.colBasePrize2nd} INTEGER,
+            ${DbConstants.colBasePrize3rd} INTEGER,
+            ${DbConstants.colBasePrize4th} INTEGER,
+            ${DbConstants.colBasePrize5th} INTEGER,
+            ${DbConstants.colHasShutuba} INTEGER DEFAULT 0,
+            ${DbConstants.colHasResult} INTEGER DEFAULT 0,
+            ${DbConstants.colShutubaJson} TEXT,
+            ${DbConstants.colResultJson} TEXT,
+            ${DbConstants.colShutubaLastUpdated} TEXT,
+            ${DbConstants.colResultLastUpdated} TEXT
+          )
+        ''');
+      } catch (e) { print('DEBUG: Migration error (v11->v12): $e'); }
+    }
+    // ▲▲ 新規追加 ▲▲
   }
 
   Future<void> _createCoursePresetsTable(Database db) async {
