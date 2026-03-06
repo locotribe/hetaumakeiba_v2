@@ -12,31 +12,22 @@ class StatsAnalyzer {
     required PredictionRaceData raceData,
     required List<HorseRaceRecord> pastRecords,
   }) {
-    final raceInfo = raceData.raceDetails1 ?? '';
-    if (raceInfo.isEmpty) return ComplexAptitudeStats();
+    final currentTrackType = raceData.trackType ?? '';
+    final currentDistance = raceData.distanceValue?.toString() ?? '';
 
-    final String currentTrackType = raceInfo.startsWith('障')
-        ? '障'
-        : (raceInfo.startsWith('ダ') ? 'ダ' : '芝');
-    final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceInfo);
-    final String currentDistance = distanceMatch?.group(1) ?? '';
-
-    if (currentDistance.isEmpty) return ComplexAptitudeStats();
+    if (currentTrackType.isEmpty || currentDistance.isEmpty) return ComplexAptitudeStats();
 
     final List<HorseRaceRecord> filteredRecords = pastRecords.where((record) {
+      // 過去レコードのトラック種別と距離の抽出（過去レコードは既存のままなのでここだけパース）
       final String recordTrackType = record.distance.startsWith('障')
           ? '障'
           : (record.distance.startsWith('ダ') ? 'ダ' : '芝');
-      final String recordDistance =
-      record.distance.replaceAll(RegExp(r'[^0-9]'), '');
+      final String recordDistance = record.distance.replaceAll(RegExp(r'[^0-9]'), '');
 
-      return recordTrackType == currentTrackType &&
-          recordDistance == currentDistance;
+      return recordTrackType == currentTrackType && recordDistance == currentDistance;
     }).toList();
 
-    if (filteredRecords.isEmpty) {
-      return ComplexAptitudeStats();
-    }
+    if (filteredRecords.isEmpty) return ComplexAptitudeStats();
 
     int winCount = 0;
     int placeCount = 0;
@@ -58,13 +49,11 @@ class StatsAnalyzer {
       winCount: winCount,
       placeCount: placeCount,
       showCount: showCount,
-      recordString:
-      '$winCount-${placeCount - winCount}-${showCount - placeCount}-$otherCount',
+      recordString: '$winCount-${placeCount - winCount}-${showCount - placeCount}-$otherCount',
     );
   }
 
-  /// ★追加: 枠順傾向の分析 (パーセンテージ区分)
-  /// 戻り値: {'inner': {winRate: 0.2, count: 5}, 'middle': ..., 'outer': ...}
+  /// 枠順傾向の分析 (パーセンテージ区分)
   static Map<String, Map<String, double>> analyzeGateTendency({
     required List<HorseRaceRecord> pastRecords,
   }) {
@@ -79,7 +68,6 @@ class StatsAnalyzer {
 
       if (rank == null || horseNum == null || totalHorses == null || totalHorses == 0) continue;
 
-      // 位置率 (Position Ratio)
       final double ratio = horseNum / totalHorses;
 
       if (ratio <= 0.33) {
@@ -127,27 +115,63 @@ class StatsAnalyzer {
     return null;
   }
 
+  /// 1. 同距離・全会場の持ち時計
   static BestTimeStats? analyzeBestTime({
     required PredictionRaceData raceData,
     required List<HorseRaceRecord> pastRecords,
   }) {
-    final venueName = raceData.venue;
-    final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceData.raceDetails1 ?? '');
-    if (distanceMatch == null) return null;
-    final currentDistance = distanceMatch.group(1)!;
+    final currentTrackType = raceData.trackType ?? '';
+    final currentDistance = raceData.distanceValue?.toString() ?? '';
+
+    if (currentTrackType.isEmpty || currentDistance.isEmpty) return null;
 
     final relevantRecords = pastRecords.where((record) {
-      final recordVenueMatch = record.venue.contains(venueName);
+      final String recordTrackType = record.distance.startsWith('障')
+          ? '障'
+          : (record.distance.startsWith('ダ') ? 'ダ' : '芝');
       final recordDistance = record.distance.replaceAll(RegExp(r'[^0-9]'), '');
-      return recordVenueMatch && recordDistance == currentDistance;
+
+      return recordTrackType == currentTrackType && recordDistance == currentDistance;
     }).toList();
 
     if (relevantRecords.isEmpty) return null;
 
+    return _getBestTimeStatsFromRecords(relevantRecords);
+  }
+
+  /// 2. 同距離・同場所の持ち時計 (新規追加)
+  static BestTimeStats? analyzeBestCourseTime({
+    required PredictionRaceData raceData,
+    required List<HorseRaceRecord> pastRecords,
+  }) {
+    final currentTrackType = raceData.trackType ?? '';
+    final currentDistance = raceData.distanceValue?.toString() ?? '';
+    final currentVenue = raceData.venue;
+
+    if (currentTrackType.isEmpty || currentDistance.isEmpty || currentVenue.isEmpty) return null;
+
+    final relevantRecords = pastRecords.where((record) {
+      final String recordTrackType = record.distance.startsWith('障')
+          ? '障'
+          : (record.distance.startsWith('ダ') ? 'ダ' : '芝');
+      final recordDistance = record.distance.replaceAll(RegExp(r'[^0-9]'), '');
+      final recordVenueMatch = record.venue.contains(currentVenue);
+
+      return recordTrackType == currentTrackType &&
+          recordDistance == currentDistance &&
+          recordVenueMatch;
+    }).toList();
+
+    if (relevantRecords.isEmpty) return null;
+
+    return _getBestTimeStatsFromRecords(relevantRecords);
+  }
+
+  static BestTimeStats? _getBestTimeStatsFromRecords(List<HorseRaceRecord> records) {
     HorseRaceRecord? bestTimeRecord;
     double minTimeInSeconds = double.infinity;
 
-    for (final record in relevantRecords) {
+    for (final record in records) {
       final timeInSeconds = _parseTimeToSeconds(record.time);
       if (timeInSeconds != null && timeInSeconds < minTimeInSeconds) {
         minTimeInSeconds = timeInSeconds;
@@ -163,21 +187,52 @@ class StatsAnalyzer {
       trackCondition: bestTimeRecord.trackCondition,
       raceName: bestTimeRecord.raceName,
       date: bestTimeRecord.date,
-      // ★追加: 馬場状態取得用および表示用のデータ
       sourceRaceId: bestTimeRecord.raceId,
       venueAndDistance: '${bestTimeRecord.venue} ${bestTimeRecord.distance}',
     );
   }
 
+  /// 3. 全成績（条件なし）の上がり最速
   static FastestAgariStats? analyzeFastestAgari({
     required List<HorseRaceRecord> pastRecords,
   }) {
     if (pastRecords.isEmpty) return null;
+    return _getFastestAgariStatsFromRecords(pastRecords);
+  }
 
+  /// 4. 同距離・同場所の上がり最速 (新規追加)
+  static FastestAgariStats? analyzeFastestCourseAgari({
+    required PredictionRaceData raceData,
+    required List<HorseRaceRecord> pastRecords,
+  }) {
+    final currentTrackType = raceData.trackType ?? '';
+    final currentDistance = raceData.distanceValue?.toString() ?? '';
+    final currentVenue = raceData.venue;
+
+    if (currentTrackType.isEmpty || currentDistance.isEmpty || currentVenue.isEmpty) return null;
+
+    final relevantRecords = pastRecords.where((record) {
+      final String recordTrackType = record.distance.startsWith('障')
+          ? '障'
+          : (record.distance.startsWith('ダ') ? 'ダ' : '芝');
+      final recordDistance = record.distance.replaceAll(RegExp(r'[^0-9]'), '');
+      final recordVenueMatch = record.venue.contains(currentVenue);
+
+      return recordTrackType == currentTrackType &&
+          recordDistance == currentDistance &&
+          recordVenueMatch;
+    }).toList();
+
+    if (relevantRecords.isEmpty) return null;
+
+    return _getFastestAgariStatsFromRecords(relevantRecords);
+  }
+
+  static FastestAgariStats? _getFastestAgariStatsFromRecords(List<HorseRaceRecord> records) {
     HorseRaceRecord? bestAgariRecord;
     double fastestAgari = double.infinity;
 
-    for (final record in pastRecords) {
+    for (final record in records) {
       final agariTime = double.tryParse(record.agari);
       if (agariTime != null && agariTime > 0 && agariTime < fastestAgari) {
         fastestAgari = agariTime;
@@ -193,7 +248,6 @@ class StatsAnalyzer {
       trackCondition: bestAgariRecord.trackCondition,
       raceName: bestAgariRecord.raceName,
       date: bestAgariRecord.date,
-      // ★追加: 馬場状態取得用および表示用のデータ
       sourceRaceId: bestAgariRecord.raceId,
       venueAndDistance: '${bestAgariRecord.venue} ${bestAgariRecord.distance}',
     );

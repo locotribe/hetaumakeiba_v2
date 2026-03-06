@@ -68,9 +68,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   final UserRepository _userRepo = UserRepository();
   final HorseProfileSyncService _horseProfileSyncService = HorseProfileSyncService();
 
-  // ▼▼ 新規追加 ▼▼
   final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
-  // ▲▲ 新規追加 ▲▲
 
   final Map<String, String> _mfNameCache = {};
   final Map<String, JockeyComboStats> _jockeyComboCache = {};
@@ -79,6 +77,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   bool _isAscending = true;
   late TabController _tabController;
   String? _highlightedRaceId;
+
+  // ▼▼ 新規追加: 同コース限定モードの状態フラグ ▼▼
+  bool _isCourseOnlyMode = false;
+  // ▲▲ 新規追加 ▲▲
 
   @override
   bool get wantKeepAlive => true;
@@ -131,6 +133,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             trackAptitudeLabel: horse.trackAptitudeLabel,
             bestTimeStats: horse.bestTimeStats,
             fastestAgariStats: horse.fastestAgariStats,
+            bestCourseTimeStats: horse.bestCourseTimeStats, // ▼ 追加
+            fastestCourseAgariStats: horse.fastestCourseAgariStats, // ▼ 追加
             overallScore: horse.overallScore,
             expectedValue: horse.expectedValue,
             legStyleProfile: horse.legStyleProfile,
@@ -161,6 +165,23 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         raceDetails1: data.raceDetails1,
         horses: updatedHorses,
         racePacePrediction: data.racePacePrediction,
+        // ▼ 追加: 環境データ
+        trackType: data.trackType,
+        distanceValue: data.distanceValue,
+        direction: data.direction,
+        courseInOut: data.courseInOut,
+        weather: data.weather,
+        trackCondition: data.trackCondition,
+        holdingTimes: data.holdingTimes,
+        holdingDays: data.holdingDays,
+        raceCategory: data.raceCategory,
+        horseCount: data.horseCount,
+        startTime: data.startTime,
+        basePrize1st: data.basePrize1st,
+        basePrize2nd: data.basePrize2nd,
+        basePrize3rd: data.basePrize3rd,
+        basePrize4th: data.basePrize4th,
+        basePrize5th: data.basePrize5th,
       );
     }
     return null;
@@ -412,6 +433,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       horse.trackAptitudeLabel = StatsAnalyzer.analyzeTrackAptitude(
         pastRecords: pastRecords,
       );
+
+      // ▼▼ 新規追加: 分析メソッドの呼び出しとデータ格納 ▼▼
+
+      // 1. 持ち時計（全成績）
       horse.bestTimeStats = StatsAnalyzer.analyzeBestTime(
         raceData: raceData,
         pastRecords: pastRecords,
@@ -429,6 +454,25 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         }
       }
 
+      // 2. 持ち時計（同コース限定）
+      horse.bestCourseTimeStats = StatsAnalyzer.analyzeBestCourseTime(
+        raceData: raceData,
+        pastRecords: pastRecords,
+      );
+      if (horse.bestCourseTimeStats?.sourceRaceId != null && horse.bestCourseTimeStats!.sourceRaceId!.length >= 10) {
+        final prefix10 = horse.bestCourseTimeStats!.sourceRaceId!.substring(0, 10);
+        final trackCondition = await _trackConditionRepo.getLatestTrackConditionByPrefix(prefix10);
+        if (trackCondition != null) {
+          final isDirt = horse.bestCourseTimeStats!.venueAndDistance?.contains('ダ') ?? false;
+          horse.bestCourseTimeStats = horse.bestCourseTimeStats!.copyWithTrackCondition(
+            cushionValue: trackCondition.cushionValue,
+            moistureGoal: isDirt ? trackCondition.moistureDirtGoal : trackCondition.moistureTurfGoal,
+            moisture4c: isDirt ? trackCondition.moistureDirt4c : trackCondition.moistureTurf4c,
+          );
+        }
+      }
+
+      // 3. 上がり最速（全成績）
       horse.fastestAgariStats = StatsAnalyzer.analyzeFastestAgari(
         pastRecords: pastRecords,
       );
@@ -444,6 +488,25 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           );
         }
       }
+
+      // 4. 上がり最速（同コース限定）
+      horse.fastestCourseAgariStats = StatsAnalyzer.analyzeFastestCourseAgari(
+        raceData: raceData,
+        pastRecords: pastRecords,
+      );
+      if (horse.fastestCourseAgariStats?.sourceRaceId != null && horse.fastestCourseAgariStats!.sourceRaceId!.length >= 10) {
+        final prefix10 = horse.fastestCourseAgariStats!.sourceRaceId!.substring(0, 10);
+        final trackCondition = await _trackConditionRepo.getLatestTrackConditionByPrefix(prefix10);
+        if (trackCondition != null) {
+          final isDirt = horse.fastestCourseAgariStats!.venueAndDistance?.contains('ダ') ?? false;
+          horse.fastestCourseAgariStats = horse.fastestCourseAgariStats!.copyWithTrackCondition(
+            cushionValue: trackCondition.cushionValue,
+            moistureGoal: isDirt ? trackCondition.moistureDirtGoal : trackCondition.moistureTurfGoal,
+            moisture4c: isDirt ? trackCondition.moistureDirt4c : trackCondition.moistureTurf4c,
+          );
+        }
+      }
+      // ▲▲ 新規追加ここまで ▲▲
     }
 
     raceData.racePacePrediction = RaceAnalyzer.predictRacePace(
@@ -492,6 +555,24 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                         ],
                       ),
                     ),
+                    // ▼▼ 新規追加: 同コース切り替えトグル ▼▼
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('同コース', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        Switch(
+                          value: _isCourseOnlyMode,
+                          onChanged: (value) {
+                            setState(() {
+                              _isCourseOnlyMode = value;
+                            });
+                          },
+                          activeColor: Colors.amber,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ],
+                    ),
+                    // ▲▲ 新規追加 ▲▲
                     if (widget.raceResult == null)
                       Padding(
                         padding: const EdgeInsets.only(right: 8.0),
@@ -554,16 +635,22 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             comparison = compareNullsLast(aWeight, bWeight);
                             break;
                           case SortableColumn.bestTime:
-                            final aTime = a.bestTimeStats?.timeInSeconds;
-                            final bTime = b.bestTimeStats?.timeInSeconds;
+                          // ▼▼ 変更: モードによってソート基準を切り替え ▼▼
+                            final aStats = _isCourseOnlyMode ? a.bestCourseTimeStats : a.bestTimeStats;
+                            final bStats = _isCourseOnlyMode ? b.bestCourseTimeStats : b.bestTimeStats;
+                            final aTime = aStats?.timeInSeconds;
+                            final bTime = bStats?.timeInSeconds;
                             if (aTime == null && bTime == null) comparison = 0;
                             else if (aTime == null) comparison = 1;
                             else if (bTime == null) comparison = -1;
                             else comparison = aTime.compareTo(bTime);
                             break;
                           case SortableColumn.fastestAgari:
-                            final aAgari = a.fastestAgariStats?.agariInSeconds;
-                            final bAgari = b.fastestAgariStats?.agariInSeconds;
+                          // ▼▼ 変更: モードによってソート基準を切り替え ▼▼
+                            final aStats = _isCourseOnlyMode ? a.fastestCourseAgariStats : a.fastestAgariStats;
+                            final bStats = _isCourseOnlyMode ? b.fastestCourseAgariStats : b.fastestAgariStats;
+                            final aAgari = aStats?.agariInSeconds;
+                            final bAgari = bStats?.agariInSeconds;
                             comparison = compareNullsLast(aAgari, bAgari);
                             break;
                           case SortableColumn.trainer:
@@ -590,6 +677,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             buildGateNumber: _buildGateNumber,
                             buildHorseNumber: _buildHorseNumber,
                             getHorseProfile: _horseRepo.getHorseProfile,
+                            isCourseOnlyMode: _isCourseOnlyMode, // ▼ 追加: モードを渡す
                             buildDataTableForTab: _buildDataTableForTab,
                           ),
                           PerformanceTabWidget(
@@ -732,13 +820,19 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             comparison = compareNullsLast(aWeight, bWeight);
             break;
           case SortableColumn.bestTime:
-            final aTime = a.bestTimeStats?.timeInSeconds;
-            final bTime = b.bestTimeStats?.timeInSeconds;
+          // ▼▼ 変更: モードによってソート基準を切り替え ▼▼
+            final aStats = _isCourseOnlyMode ? a.bestCourseTimeStats : a.bestTimeStats;
+            final bStats = _isCourseOnlyMode ? b.bestCourseTimeStats : b.bestTimeStats;
+            final aTime = aStats?.timeInSeconds;
+            final bTime = bStats?.timeInSeconds;
             comparison = compareNullsLast(aTime, bTime);
             break;
           case SortableColumn.fastestAgari:
-            final aAgari = a.fastestAgariStats?.agariInSeconds;
-            final bAgari = b.fastestAgariStats?.agariInSeconds;
+          // ▼▼ 変更: モードによってソート基準を切り替え ▼▼
+            final aStats = _isCourseOnlyMode ? a.fastestCourseAgariStats : a.fastestAgariStats;
+            final bStats = _isCourseOnlyMode ? b.fastestCourseAgariStats : b.fastestAgariStats;
+            final aAgari = aStats?.agariInSeconds;
+            final bAgari = bStats?.agariInSeconds;
             comparison = compareNullsLast(aAgari, bAgari);
             break;
           default:

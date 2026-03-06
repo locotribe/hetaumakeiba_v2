@@ -17,6 +17,7 @@ class StartersTabWidget extends StatelessWidget {
   final Widget Function(int) buildGateNumber;
   final Widget Function(int, int) buildHorseNumber;
   final Future<HorseProfile?> Function(String) getHorseProfile;
+  final bool isCourseOnlyMode; // ▼ 新規追加
   final Widget Function({
   required List<DataColumn2> columns,
   required List<PredictionHorseDetail> horses,
@@ -31,6 +32,7 @@ class StartersTabWidget extends StatelessWidget {
     required this.buildGateNumber,
     required this.buildHorseNumber,
     required this.getHorseProfile,
+    required this.isCourseOnlyMode, // ▼ 新規追加
     required this.buildDataTableForTab,
   }) : super(key: key);
 
@@ -80,20 +82,22 @@ class StartersTabWidget extends StatelessWidget {
         ),
         DataColumn2(label: const Text('馬情報'), size: ColumnSize.L, onSort: (i, asc) => onSort(SortableColumn.horseName)),
         DataColumn2(
-          label: const Center(
+          label: Center(
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text('持ち時計\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ', textAlign: TextAlign.center),
+              // ▼ ヘッダーの動的切り替え
+              child: Text(isCourseOnlyMode ? '同コース時計\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ' : '持ち時計\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ', textAlign: TextAlign.center),
             ),
           ),
           fixedWidth: 85,
           onSort: (i, asc) => onSort(SortableColumn.bestTime),
         ),
         DataColumn2(
-          label: const Center(
+          label: Center(
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text('上り最速\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ', textAlign: TextAlign.center),
+              // ▼ ヘッダーの動的切り替え
+              child: Text(isCourseOnlyMode ? '同コース上り\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ' : '上り最速\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ', textAlign: TextAlign.center),
             ),
           ),
           fixedWidth: 85,
@@ -107,47 +111,38 @@ class StartersTabWidget extends StatelessWidget {
         final String mf = (horse.mfName?.isNotEmpty == true) ? horse.mfName! : '--';
         final String owner = (horse.ownerName?.isNotEmpty == true) ? horse.ownerName! : '--';
 
-        final bestTimeColor = _getTrackColor(horse.bestTimeStats?.venueAndDistance);
-        final agariColor = _getTrackColor(horse.fastestAgariStats?.venueAndDistance);
+        // ▼ データの動的切り替え
+        final currentBestTime = isCourseOnlyMode ? horse.bestCourseTimeStats : horse.bestTimeStats;
+        final currentAgari = isCourseOnlyMode ? horse.fastestCourseAgariStats : horse.fastestAgariStats;
+
+        final bestTimeColor = _getTrackColor(currentBestTime?.venueAndDistance);
+        final agariColor = _getTrackColor(currentAgari?.venueAndDistance);
 
         return [
-          // 1列目: 印・枠 (info_tab.dart)
           DataCell(MarkAndGateCell(horse: horse, buildMarkDropdown: buildMarkDropdown)),
-
-          // 2列目: 人気・オッズ (info_tab.dart)
           DataCell(OddsCell(horse: horse)),
-
-          // 3列目: 騎手・斤量・馬主 (jockey_trainer_tab.dart)
           DataCell(JockeyProfileCell(horse: horse, owner: owner)),
-
-          // 4列目: 所属・調教師 (jockey_trainer_tab.dart)
           DataCell(TrainerCell(
             horse: horse,
             backgroundColor: _getAffiliationColor(horse.trainerAffiliation),
           )),
-
-          // 5列目: 馬情報 (このファイル内のクラスを使用)
           DataCell(HorseInfoCell(horse: horse, father: father, mother: mother, mf: mf)),
-
-          // 6列目: 持ち時計 (time_tab.dart)
           DataCell(TrackStatsCell(
-            formattedValue: horse.bestTimeStats?.formattedTime,
-            trackCondition: horse.bestTimeStats?.trackCondition,
-            cushionValue: horse.bestTimeStats?.cushionValue,
-            moistureGoal: horse.bestTimeStats?.moistureGoal,
-            moisture4c: horse.bestTimeStats?.moisture4c,
-            venueAndDistance: horse.bestTimeStats?.venueAndDistance,
+            formattedValue: currentBestTime?.formattedTime,
+            trackCondition: currentBestTime?.trackCondition,
+            cushionValue: currentBestTime?.cushionValue,
+            moistureGoal: currentBestTime?.moistureGoal,
+            moisture4c: currentBestTime?.moisture4c,
+            venueAndDistance: currentBestTime?.venueAndDistance,
             textColor: bestTimeColor,
           )),
-
-          // 7列目: 上がり最速 (time_tab.dart)
           DataCell(TrackStatsCell(
-            formattedValue: horse.fastestAgariStats?.formattedAgari,
-            trackCondition: horse.fastestAgariStats?.trackCondition,
-            cushionValue: horse.fastestAgariStats?.cushionValue,
-            moistureGoal: horse.fastestAgariStats?.moistureGoal,
-            moisture4c: horse.fastestAgariStats?.moisture4c,
-            venueAndDistance: horse.fastestAgariStats?.venueAndDistance,
+            formattedValue: currentAgari?.formattedAgari,
+            trackCondition: currentAgari?.trackCondition,
+            cushionValue: currentAgari?.cushionValue,
+            moistureGoal: currentAgari?.moistureGoal,
+            moisture4c: currentAgari?.moisture4c,
+            venueAndDistance: currentAgari?.venueAndDistance,
             textColor: agariColor,
           )),
         ];
@@ -156,7 +151,6 @@ class StartersTabWidget extends StatelessWidget {
   }
 }
 
-// 5列目: 馬情報セル
 class HorseInfoCell extends StatelessWidget {
   final PredictionHorseDetail horse;
   final String father;
