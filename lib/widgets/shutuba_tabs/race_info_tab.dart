@@ -35,6 +35,10 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
   Future<Map<String, String>?>? _jmaWeatherFuture;
   Future<Map<String, dynamic>?>? _pinpointWeatherFuture;
 
+  // ★追加: アプリ画面上で新旧データを比較するためのキャッシュ変数
+  TrackConditionRecord? _currentTrackRecord;
+  TrackConditionRecord? _cachedPrevRecord;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -130,13 +134,21 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
       setState(() {
         _trackConditionFuture = _trackConditionRepo.getLatestTrackConditionsForEachCourse().then((records) {
           try {
-            return records.firstWhere((r) {
+            final newRecord = records.firstWhere((r) {
               final idStr = r.trackConditionId.toString();
               if (idStr.length >= 6) {
                 return idStr.substring(4, 6) == venueCode;
               }
               return false;
             });
+
+            // ★追加: 取得したレコードが以前保持していたものと違う(IDが更新された)場合は、古い方をキャッシュに退避
+            if (_currentTrackRecord != null && _currentTrackRecord!.trackConditionId != newRecord.trackConditionId) {
+              _cachedPrevRecord = _currentTrackRecord;
+            }
+            _currentTrackRecord = newRecord;
+
+            return newRecord;
           } catch (e) {
             return null;
           }
@@ -470,37 +482,80 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               ),
               const SizedBox(height: 8),
 
-              // インサイトデータの再計算（km/hからm/sへの単位変換を適用して信憑性を確保）
-              ...[
-                WeatherAnalyzer.analyzeTrackRecovery(raceTime['radiation'] ?? 0.0, raceTime['evap'] ?? 0.0),
-                WeatherAnalyzer.analyzeHorseStamina(raceTime['apparentTemp'] ?? 0.0, (raceTime['humidity'] ?? 0).toDouble()),
-                // Open-Meteoのgusts(km/h)を3.6で割り、予報風速(m/s)と整合性を取る
-                WeatherAnalyzer.analyzeRaceRisk((raceTime['gusts'] ?? 0.0) / 3.6, raceTime['visibility'] ?? 20.0),
-                WeatherAnalyzer.analyzeSoilMoisture(raceTime['soilMoisture'] ?? 0.0),
-              ].map((insight) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: insight.color.withOpacity(0.05),
-                  border: Border(left: BorderSide(color: insight.color, width: 4)),
-                  borderRadius: const BorderRadius.only(topRight: Radius.circular(4), bottomRight: Radius.circular(4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(insight.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: insight.color)),
-                        // 単位や時刻の文脈を補足
-                        Text(insight.value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
-                      ],
+              // インサイトデータの再計算とJRA馬場状態予測の統合
+              FutureBuilder<TrackConditionRecord?>(
+                future: _trackConditionFuture,
+                builder: (context, trackSnapshot) {
+                  final trackRecord = trackSnapshot.data;
+                  final String venueCode = widget.predictionRaceData.raceId.length >= 6
+                      ? widget.predictionRaceData.raceId.substring(4, 6)
+                      : '00';
+
+                  // ▼ JRAデータの測定日とレース日の差分を計算してラベルを作成
+                  String dataLabel = "直近";
+                  if (trackRecord != null) {
+                    try {
+                      final jDate = DateTime.parse(trackRecord.date);
+                      final rMatch = RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(widget.predictionRaceData.raceDate);
+                      if (rMatch != null) {
+                        final rDate = DateTime(int.parse(rMatch.group(1)!), int.parse(rMatch.group(2)!), int.parse(rMatch.group(3)!));
+                        final diff = rDate.difference(jDate).inDays;
+                        if (diff == 0) {
+                          dataLabel = "本日朝";
+                        } else if (diff == 1) {
+                          dataLabel = "前日";
+                        } else {
+                          dataLabel = "${jDate.month}/${jDate.day}時点";
+                        }
+                      }
+                    } catch(e) {}
+                  }
+
+                  final insightsList = [
+                    WeatherAnalyzer.analyzeTrackRecovery(raceTime['radiation'] ?? 0.0, raceTime['evap'] ?? 0.0),
+                    WeatherAnalyzer.analyzeHorseStamina(raceTime['apparentTemp'] ?? 0.0, (raceTime['humidity'] ?? 0).toDouble()),
+                    // Open-Meteoのgusts(km/h)を3.6で割り、予報風速(m/s)と整合性を取る
+                    WeatherAnalyzer.analyzeRaceRisk((raceTime['gusts'] ?? 0.0) / 3.6, raceTime['visibility'] ?? 20.0),
+                    // ▼ 端末のキャッシュデータ(前回)と最新データ(今回)を比較し、アラート付きのインサイトを展開
+                    ...WeatherAnalyzer.analyzeTrackConditionInsights(
+                      venueCode: venueCode,
+                      trackType: widget.predictionRaceData.trackType ?? '芝',
+                      currentRecord: trackRecord,
+                      cachedRecord: _cachedPrevRecord, // 退避したキャッシュを渡す
+                      expectedPrecipitation: (raceTime['precipitation'] as num?)?.toDouble() ?? 0.0,
+                      expectedRadiation: (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,
+                      expectedSoilMoisture: (raceTime['soilMoisture'] as num?)?.toDouble(),
                     ),
-                    const SizedBox(height: 4),
-                    Text(insight.description, style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3)),
-                  ],
-                ),
-              )).toList(),
+                  ];
+
+                  return Column(
+                    children: insightsList.map((insight) => Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: insight.color.withOpacity(0.05),
+                        border: Border(left: BorderSide(color: insight.color, width: 4)),
+                        borderRadius: const BorderRadius.only(topRight: Radius.circular(4), bottomRight: Radius.circular(4)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(insight.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: insight.color)),
+                              // 単位や時刻の文脈を補足
+                              Text(insight.value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(insight.description, style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3)),
+                        ],
+                      ),
+                    )).toList(),
+                  );
+                },
+              ),
 
               const SizedBox(height: 16),
               const Text('🕒 午後の時系列変化', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
