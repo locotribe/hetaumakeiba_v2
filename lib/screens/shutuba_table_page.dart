@@ -29,6 +29,7 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/starters_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/training_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/user_mark_dropdown.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_info_tab.dart'; // ▼ 追加
 
 enum SortableColumn {
   gateNumber,
@@ -87,7 +88,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadShutubaData();
   }
 
@@ -163,7 +164,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         raceDetails1: data.raceDetails1,
         horses: updatedHorses,
         racePacePrediction: data.racePacePrediction,
-        // ▼ 追加: 環境データ
         trackType: data.trackType,
         distanceValue: data.distanceValue,
         direction: data.direction,
@@ -432,8 +432,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         pastRecords: pastRecords,
       );
 
-      // ▼▼ 新規追加: 分析メソッドの呼び出しとデータ格納 ▼▼
-
       // 1. 持ち時計（全成績）
       horse.bestTimeStats = StatsAnalyzer.analyzeBestTime(
         raceData: raceData,
@@ -504,7 +502,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           );
         }
       }
-      // ▲▲ 新規追加ここまで ▲▲
     }
 
     raceData.racePacePrediction = RaceAnalyzer.predictRacePace(
@@ -546,6 +543,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                         controller: _tabController,
                         isScrollable: true,
                         tabs: const [
+                          Tab(text: 'レース情報'),
                           Tab(text: '出走馬'),
                           Tab(text: '成績'),
                           Tab(text: 'メモ'),
@@ -660,6 +658,27 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                       return TabBarView(
                         controller: _tabController,
                         children: [
+                          RaceInfoTabWidget(
+                            predictionRaceData: _predictionRaceData!,
+                            horses: sortedHorses,
+                            buildMarkDropdown: (horse) => UserMarkDropdown(
+                              // ★ 確実な再描画のためのKey
+                              key: ValueKey('info_${horse.horseId}_${horse.userMark}'),
+                              horse: horse,
+                              raceId: widget.raceId,
+                              // ★ 原因はコレ！背景が白なので、枠色に関係なく文字は常に「黒」にする
+                              textColor: Colors.black87,
+                              onMarkChanged: (mark) {
+                                // ★ 即座に見た目を更新する
+                                setState(() {
+                                  horse.userMark = mark;
+                                });
+                                _handleMarkChanged(horse, mark);
+                              },
+                            ),
+                            buildGateNumber: _buildGateNumber,
+                            buildHorseNumber: _buildHorseNumber,
+                          ),
                           StartersTabWidget(
                             horses: sortedHorses,
                             onSort: _onSort,
@@ -940,15 +959,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       width: 24,
       height: 24,
       decoration: BoxDecoration(
-        color: frameColor, // 背景を枠色で塗りつぶす
-        // 1枠(白)の時だけ境界線が分かるようにグレーの枠を付ける
+        color: frameColor,
         border: gateNumber == 1 ? Border.all(color: Colors.grey) : null,
       ),
       alignment: Alignment.center,
       child: Text(
         horseNumber.toString(),
         style: TextStyle(
-          // gate_color_utils.dart の gateTextColor を呼び出して適用
           color: gateNumber.gateTextColor,
           fontSize: 12,
           fontWeight: FontWeight.bold,

@@ -99,3 +99,15 @@ String getPakaraHanroApiUrl() {
 String getPakaraWoodApiUrl() {
   return 'https://pakara-keiba.com/ajax/race/get_cyoukyou_wc.php';
 }
+
+String generateOpenMeteoUrl({
+  required double latitude,
+  required double longitude,
+}) {
+  return 'https://api.open-meteo.com/v1/forecast?'
+      'latitude=$latitude&'
+      'longitude=$longitude&'
+      'current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,weather_code&'
+      'hourly=temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,weather_code,apparent_temperature,shortwave_radiation,et0_fao_evapotranspiration,wind_gusts_10m,visibility,soil_moisture_0_to_1cm&'
+      'timezone=Asia%2FTokyo';
+}
