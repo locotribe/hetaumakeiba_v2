@@ -5,9 +5,9 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
-import 'package:hetaumakeiba_v2/services/jma_weather_service.dart'; // 気象庁APIサービスをインポート
-import 'package:hetaumakeiba_v2/services/open_meteo_service.dart'; // ▼ 追加
-import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart'; // 作成したファイルをインポート
+import 'package:hetaumakeiba_v2/services/jma_weather_service.dart';
+import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart'; //
 
 class RaceInfoTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
@@ -29,14 +29,12 @@ class RaceInfoTabWidget extends StatefulWidget {
   State<RaceInfoTabWidget> createState() => _RaceInfoTabWidgetState();
 }
 
-// ▼ AutomaticKeepAliveClientMixin を追加してタブの状態を保持する ▼
 class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKeepAliveClientMixin {
   final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
   Future<TrackConditionRecord?>? _trackConditionFuture;
   Future<Map<String, String>?>? _jmaWeatherFuture;
   Future<Map<String, dynamic>?>? _pinpointWeatherFuture;
 
-  // ▼ これを true にすることで、タブを切り替えても状態が保持される ▼
   @override
   bool get wantKeepAlive => true;
 
@@ -49,13 +47,11 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
   @override
   void didUpdateWidget(RaceInfoTabWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 印を変えただけ(同レース)ではリロードしないように、raceIdを比較
     if (widget.predictionRaceData.raceId != oldWidget.predictionRaceData.raceId) {
       _loadAllData();
     }
   }
 
-  // ▼ UI表示用に「3/8(日) 15:40」という分かりやすい文字列を作るメソッド
   String _getFormattedRaceTime() {
     final rawDate = widget.predictionRaceData.raceDate;
     final rawTime = widget.predictionRaceData.startTime ?? "未定";
@@ -74,26 +70,19 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     return rawTime;
   }
 
-  // ▼ 変更: どんな日付形式でも確実に判定する強力なロックメソッド
   bool _isWeatherLocked() {
     try {
       int year = DateTime.now().year;
       int month = DateTime.now().month;
       int day = DateTime.now().day;
-
-      // 正規表現を使って文字列の中から「4桁の数字(年)」「1〜2桁の数字(月)」「1〜2桁の数字(日)」を強引に抜き出す
-      // これにより "2024-03-08", "2024/03/08", "2024年3月8日", "20240308" など全てに対応可能
       final dateMatch = RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(widget.predictionRaceData.raceDate);
-
       if (dateMatch != null) {
         year = int.parse(dateMatch.group(1)!);
         month = int.parse(dateMatch.group(2)!);
         day = int.parse(dateMatch.group(3)!);
       } else {
-        // どうしても日付が取れない場合は、データを壊さないよう安全のために「ロック(true)」にする
         return true;
       }
-
       final timeStr = widget.predictionRaceData.startTime ?? "15:00";
       final timeParts = timeStr.split(':');
       int hour = 15;
@@ -102,15 +91,10 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
         hour = int.tryParse(timeParts[0]) ?? 15;
         minute = int.tryParse(timeParts[1]) ?? 0;
       }
-
       final raceDateTime = DateTime(year, month, day, hour, minute);
-
-      // ★ ロックする時刻 ＝ 発走時刻の「1時間後」
       final lockTime = raceDateTime.add(const Duration(hours: 1));
-
       return DateTime.now().isAfter(lockTime);
     } catch (e) {
-      // エラーが起きた場合も安全装置としてロック
       return true;
     }
   }
@@ -120,13 +104,13 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     setState(() {
       final venue = widget.predictionRaceData.venue;
       final raceId = widget.predictionRaceData.raceId;
-      final isLocked = _isWeatherLocked(); // ▼ ロック判定を実行
+      final isLocked = _isWeatherLocked();
 
       _jmaWeatherFuture = JmaWeatherService.fetchWeatherAndPop(
           venue,
           raceId,
           forceRefresh: forceRefresh,
-          isPastRace: isLocked // ロックされていれば過去レースとして扱う
+          isPastRace: isLocked
       );
 
       _pinpointWeatherFuture = OpenMeteoService.fetchDetailedWeather(
@@ -135,7 +119,7 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           widget.predictionRaceData.startTime ?? "15:00",
           raceId,
           forceRefresh: forceRefresh,
-          isPastRace: isLocked // ロックされていれば過去レースとして扱う
+          isPastRace: isLocked
       );
     });
   }
@@ -163,7 +147,7 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // ▼ AutomaticKeepAliveClientMixin に必須 ▼
+    super.build(context);
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,7 +160,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     );
   }
 
-  // 画面上部：レース情報ヘッダー
   Widget _buildRaceHeader(BuildContext context) {
     final gradeColor = getGradeColor(widget.predictionRaceData.raceGrade ?? '');
 
@@ -185,7 +168,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1行目: レース番号、レース名、グレード
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -236,7 +218,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
             ],
           ),
           const SizedBox(height: 12),
-          // 2行目: コース情報、発走時刻、天候、馬場 (元データ)
           Wrap(
             spacing: 12.0,
             runSpacing: 4.0,
@@ -248,23 +229,17 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
             ],
           ),
           const SizedBox(height: 8),
-          // 3行目: 開催、条件、頭数
           Text(
             '${widget.predictionRaceData.venue} ${widget.predictionRaceData.holdingTimes ?? ""} ${widget.predictionRaceData.holdingDays ?? ""} / ${widget.predictionRaceData.raceCategory ?? ""} / ${widget.predictionRaceData.horseCount ?? ""}頭',
             style: const TextStyle(fontSize: 12, color: Colors.black87),
           ),
           const SizedBox(height: 4),
-          // 4行目: 賞金
           Text(
             '本賞金: ${widget.predictionRaceData.basePrize1st ?? "-"}, ${widget.predictionRaceData.basePrize2nd ?? "-"}, ${widget.predictionRaceData.basePrize3rd ?? "-"}, ${widget.predictionRaceData.basePrize4th ?? "-"}, ${widget.predictionRaceData.basePrize5th ?? "-"}万円',
             style: const TextStyle(fontSize: 12, color: Colors.black54),
           ),
-
-          // ▼詳細な馬場状態（クッション値・含水率）▼
           _buildDetailedTrackCondition(),
-
           const SizedBox(height: 12),
-          // 気象庁とOpen-Meteoを縦に並べる
           _buildJmaWeather(),
           const SizedBox(height: 12),
           _buildPinpointWeather(),
@@ -273,7 +248,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     );
   }
 
-  // JRA発表の馬場詳細（クッション値・含水率）を描画するウィジェット
   Widget _buildDetailedTrackCondition() {
     if (_trackConditionFuture == null) return const SizedBox.shrink();
 
@@ -286,11 +260,9 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
             child: Text('馬場詳細データを取得中...', style: TextStyle(fontSize: 12, color: Colors.black54)),
           );
         }
-
         if (!snapshot.hasData || snapshot.data == null) {
           return const SizedBox.shrink();
         }
-
         final record = snapshot.data!;
         final dateStr = record.date.replaceAll('-', '/');
         final venueName = '${widget.predictionRaceData.venue}競馬場';
@@ -330,14 +302,12 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     );
   }
 
-  // ▼ 気象庁APIウィジェット（横幅いっぱい） ▼
   Widget _buildJmaWeather() {
     return FutureBuilder<Map<String, String>?>(
       future: _jmaWeatherFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const SizedBox.shrink();
         if (!snapshot.hasData) return const SizedBox.shrink();
-
         final data = snapshot.data!;
         return Container(
           width: double.infinity,
@@ -360,12 +330,10 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                       Text('気象庁 広域天気概況', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue)),
                     ],
                   ),
-                  // ★ 右上に発表時刻を表示
                   Text('${data['reportDatetime']} 発表', style: const TextStyle(fontSize: 10, color: Colors.black54)),
                 ],
               ),
               const SizedBox(height: 8),
-              // ★ 天気概況（解説文）をそのまま表示
               Text(
                 data['overviewText'] ?? '',
                 style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.4),
@@ -377,7 +345,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     );
   }
 
-  // ▼ Open-MeteoAPI（ピンポイント詳細・タイムライン） ▼
   Widget _buildPinpointWeather() {
     return FutureBuilder<Map<String, dynamic>?>(
       future: _pinpointWeatherFuture,
@@ -391,6 +358,14 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
         final current = data['current'];
         final raceTime = data['raceTime'];
         final List<dynamic> timeline = data['timeline'] ?? [];
+
+        // ▼ 解析インサイトを計算（WeatherAnalyzerを利用）
+        final insights = [
+          WeatherAnalyzer.analyzeTrackRecovery(raceTime['radiation'] ?? 0.0, raceTime['evap'] ?? 0.0),
+          WeatherAnalyzer.analyzeHorseStamina(raceTime['apparentTemp'] ?? 0.0, (raceTime['humidity'] ?? 0).toDouble()),
+          WeatherAnalyzer.analyzeRaceRisk(raceTime['gusts'] ?? 0.0, raceTime['visibility'] ?? 20.0),
+          WeatherAnalyzer.analyzeSoilMoisture(raceTime['soilMoisture'] ?? 0.0),
+        ];
 
         return Container(
           width: double.infinity,
@@ -430,8 +405,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                 ],
               ),
               const Divider(),
-
-              // ▼ 1. 現在の状況 ▼
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -445,6 +418,7 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                 spacing: 16.0,
                 runSpacing: 8.0,
                 children: [
+                  _buildTrackConditionItem('天気', WeatherAnalyzer.getWeatherText(current['weatherCode'] ?? 0)), //
                   _buildTrackConditionItem('気温', '${current['temp']}℃'),
                   _buildTrackConditionItem('湿度', '${current['humidity']}%'),
                   _buildTrackConditionItem('降水量', '${current['precipitation']} mm'),
@@ -453,14 +427,13 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                 ],
               ),
               const SizedBox(height: 12),
-
-              // ▼ 2. 発走時刻の予報 ▼
               Text('🏁 発走時刻 (${_getFormattedRaceTime()}) の予報', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 16.0,
                 runSpacing: 8.0,
                 children: [
+                  _buildTrackConditionItem('天気', WeatherAnalyzer.getWeatherText(raceTime['weatherCode'] ?? 0)), //
                   _buildTrackConditionItem('気温', '${raceTime['temp']}℃'),
                   _buildTrackConditionItem('湿度', '${raceTime['humidity']}%'),
                   _buildTrackConditionItem('降水確率', '${raceTime['pop']}%'),
@@ -470,7 +443,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                 ],
               ),
               const SizedBox(height: 12),
-
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -483,9 +455,54 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
                 ),
               ),
-              const SizedBox(height: 16),
 
-              // ▼ 3. 午後の時系列タイムライン ▼
+              // ▼ 📊 馬場・展開インサイトセクション（発走時刻予測に基づいていることを明示）
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  const Text('📊 馬場・展開インサイト', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  Text('(${widget.predictionRaceData.startTime ?? "15:45"}の予報に基づく)',
+                      style: const TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.normal)),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // インサイトデータの再計算（km/hからm/sへの単位変換を適用して信憑性を確保）
+              ...[
+                WeatherAnalyzer.analyzeTrackRecovery(raceTime['radiation'] ?? 0.0, raceTime['evap'] ?? 0.0),
+                WeatherAnalyzer.analyzeHorseStamina(raceTime['apparentTemp'] ?? 0.0, (raceTime['humidity'] ?? 0).toDouble()),
+                // Open-Meteoのgusts(km/h)を3.6で割り、予報風速(m/s)と整合性を取る
+                WeatherAnalyzer.analyzeRaceRisk((raceTime['gusts'] ?? 0.0) / 3.6, raceTime['visibility'] ?? 20.0),
+                WeatherAnalyzer.analyzeSoilMoisture(raceTime['soilMoisture'] ?? 0.0),
+              ].map((insight) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: insight.color.withOpacity(0.05),
+                  border: Border(left: BorderSide(color: insight.color, width: 4)),
+                  borderRadius: const BorderRadius.only(topRight: Radius.circular(4), bottomRight: Radius.circular(4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(insight.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: insight.color)),
+                        // 単位や時刻の文脈を補足
+                        Text(insight.value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(insight.description, style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3)),
+                  ],
+                ),
+              )).toList(),
+
+              const SizedBox(height: 16),
               const Text('🕒 午後の時系列変化', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               SingleChildScrollView(
@@ -493,7 +510,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: timeline.map((t) {
-                    // ★ 修正: キャッシュから読み込んだ際にもエラーにならないよう null 安全処理
                     final double precip = (t['precipitation'] as num?)?.toDouble() ?? 0.0;
                     return Container(
                       width: 50,
@@ -502,6 +518,9 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                         children: [
                           Text(t['time'], style: const TextStyle(fontSize: 10, color: Colors.black54)),
                           const SizedBox(height: 4),
+                          // WMOコードから天気の頭文字のみを表示
+                          Text(WeatherAnalyzer.getWeatherText(t['weatherCode'] ?? 0).substring(0, 1), style: const TextStyle(fontSize: 10, color: Colors.black87)),
+                          const SizedBox(height: 2),
                           Text('${t['temp']}℃', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           Text('${t['pop']}%', style: const TextStyle(fontSize: 10, color: Colors.blue)),
                           if (precip > 0)
@@ -520,7 +539,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     );
   }
 
-  // 馬場状態・天気項目の各項目を描画するヘルパー
   Widget _buildTrackConditionItem(String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -531,7 +549,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     );
   }
 
-  // 画面下部：簡易出馬表リスト
   Widget _buildSimpleShutubaList(BuildContext context) {
     final List<PredictionHorseDetail> displayHorses = List.from(widget.horses);
     displayHorses.sort((a, b) {
@@ -542,7 +559,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
       if (a.horseNumber <= 0 && b.horseNumber > 0) return 1;
       return a.horseName.compareTo(b.horseName);
     });
-
     return ListView.separated(
       physics: const NeverScrollableScrollPhysics(),
       shrinkWrap: true,
@@ -552,19 +568,14 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
         final horse = displayHorses[index];
         final bool isLowOdds = horse.odds != null && horse.odds! <= 9.9;
         final Color oddsColor = isLowOdds ? Colors.red : Colors.black87;
-
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
           child: Row(
             children: [
-              // 1. 馬番
               widget.buildHorseNumber(horse.horseNumber, horse.gateNumber),
               const SizedBox(width: 8),
-
-              // 2. 予想印
               SizedBox(
                 width: 50,
-                // ▼ 追加: 印が変わった時に確実に表示を更新（再構築）させるためのKey
                 child: KeyedSubtree(
                   key: ValueKey('${horse.horseId}_${horse.userMark.hashCode}'),
                   child: widget.buildMarkDropdown(horse),
