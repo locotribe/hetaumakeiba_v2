@@ -8,11 +8,9 @@ import '../models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import '../services/track_conditions_scraper_service.dart';
 
-// ★新規追加: どこからでもティッカーを更新できるようにする魔法の鍵
 final GlobalKey<TrackConditionTickerState> trackConditionTickerKey = GlobalKey<TrackConditionTickerState>();
 
 class TrackConditionTicker extends StatefulWidget {
-  // ★修正: keyをGlobalKeyとして受け取れるようにする
   TrackConditionTicker({Key? key}) : super(key: key ?? trackConditionTickerKey);
 
   @override
@@ -104,6 +102,12 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
   void _startSequence() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (!mounted) return;
+      // 画面幅が足りているか（全会場が一度に表示できるか）を判定
+      // 1会場の幅380 + 左の更新ボタン等の幅約50
+      final double requiredWidth = 380.0 * _records.length + 50.0;
+      if (MediaQuery.of(context).size.width >= requiredWidth) return;
+
       if (_scrollController.hasClients && _records.length > 1) {
         _currentIndex++;
         _scrollController.animateTo(
@@ -176,7 +180,6 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
           Expanded(
             child: _records.isEmpty
                 ? Center(
-              // ★ここが重要: リストが空の時に0除算が発生しないよう別の表示にする
               child: Text(
                 _isSyncing ? '最新データを取得中...' : 'データがありません',
                 style: const TextStyle(color: Colors.white54, fontSize: 12),
@@ -186,8 +189,9 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
               controller: _scrollController,
               scrollDirection: Axis.horizontal,
               physics: const NeverScrollableScrollPhysics(),
-              // ★重要: _records.isEmpty が true の時はここが実行されないため
-              // index % _records.length での 0除算エラーは発生しなくなります
+              // 画面幅が足りている場合は要素数分だけ表示、足りない場合は無限ループ（null）
+              itemCount: MediaQuery.of(context).size.width >= (380.0 * _records.length + 50.0) ? _records.length : null,
+
               itemBuilder: (context, index) {
                 final record = _records[index % _records.length];
                 final courseName = _getCourseName(record.trackConditionId);

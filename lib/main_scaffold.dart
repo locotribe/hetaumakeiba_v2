@@ -31,7 +31,9 @@ import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
-
+import 'package:responsive_framework/responsive_framework.dart';
+import 'package:hetaumakeiba_v2/screens/tablet/tablet_schedule_wrapper_page.dart';
+import 'package:hetaumakeiba_v2/screens/tablet/tablet_saved_tickets_list_page.dart';
 
 class MainScaffold extends StatefulWidget {
   final VoidCallback onLogout;
@@ -554,9 +556,21 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = ResponsiveBreakpoints.of(context).largerThan(MOBILE);
+
+// タブレット用のインデックスとページ構成を動的に生成
+    final int tabletIndex = _selectedIndex == 0 ? 0 : (_selectedIndex <= 2) ? 1 : _selectedIndex == 3 ? 2 : 3;
+    final List<Widget> tabletPages = [
+      _pages[0],
+      const TabletScheduleWrapperPage(),
+      const TabletSavedTicketsListPage(), // ★ここをタブレット専用ページに差し替え
+      _pages[4],
+    ];
+    final List<String> tabletPageTitles = ['ニュース', '開催・重賞一覧', '購入履歴', '集計'];
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_pageTitles[_selectedIndex]),
+        title: Text(isTablet ? tabletPageTitles[tabletIndex] : _pageTitles[_selectedIndex]),
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -697,11 +711,50 @@ class _MainScaffoldState extends State<MainScaffold> {
           ],
         ),
       ),
-      body: IndexedStack(
+      body: isTablet
+          ? Row(
+        children: [
+          NavigationRail(
+            backgroundColor: Colors.green[900], // 元のボトムナビと同じ背景色
+            selectedIndex: tabletIndex,
+            onDestinationSelected: (int index) {
+              // タブレットのメニューから本来のインデックス（0〜4）に変換して処理
+              int mappedIndex = index;
+              if (index == 1) mappedIndex = 1; // 開催・重賞
+              else if (index == 2) mappedIndex = 3; // 馬券履歴
+              else if (index == 3) mappedIndex = 4; // 集計
+              _onItemTapped(mappedIndex);
+            },
+            labelType: NavigationRailLabelType.all,
+            useIndicator: false, // ★追加: 選択時の丸い背景（インジケーター）を消す
+            minWidth: 72.0, // ★追加: 横幅をボトムナビのボタン幅に近づける
+            selectedIconTheme: const IconThemeData(color: Colors.white, size: 24), // サイズを固定
+            unselectedIconTheme: const IconThemeData(color: Colors.grey, size: 24), // サイズを固定
+            selectedLabelTextStyle: const TextStyle(color: Colors.white, fontSize: 14), // 選択時は少し文字を大きく(ボトムナビの標準挙動)
+            unselectedLabelTextStyle: const TextStyle(color: Colors.grey, fontSize: 12), // 未選択時は標準サイズ
+            destinations: const [
+              NavigationRailDestination(icon: Icon(Icons.home), label: Text('ニュース')),
+              NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('開催・重賞')),
+              NavigationRailDestination(icon: Icon(Icons.list_alt), label: Text('馬券履歴')),
+              NavigationRailDestination(icon: Icon(Icons.analytics), label: Text('集計')),
+            ],
+          ),
+          const VerticalDivider(thickness: 1, width: 1),
+          Expanded(
+            child: IndexedStack(
+              index: tabletIndex,
+              children: tabletPages,
+            ),
+          ),
+        ],
+      )
+          : IndexedStack(
         index: _selectedIndex,
         children: _pages,
       ),
-      bottomNavigationBar: BottomNavigationBar(
+      bottomNavigationBar: isTablet
+          ? null
+          : BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ニュース'),
           BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: '開催一覧'),

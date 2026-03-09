@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hetaumakeiba_v2/screens/auth_gate.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 
 
 // アプリ全体で利用する永続的なローカルIDを保持する変数
@@ -59,6 +60,14 @@ class MyApp extends StatelessWidget {
       supportedLocales: const [
         Locale('ja', ''),
       ],
+      builder: (context, child) => ResponsiveBreakpoints.builder(
+        child: child!,
+        breakpoints: [
+          const Breakpoint(start: 0, end: 450, name: MOBILE),
+          const Breakpoint(start: 451, end: 800, name: TABLET),
+          const Breakpoint(start: 801, end: 1920, name: DESKTOP),
+        ],
+      ),
       // アプリの開始点をMainScaffoldに変更
       home: const AuthGate(),
     );

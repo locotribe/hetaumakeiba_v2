@@ -539,12 +539,15 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
             padding: const EdgeInsets.all(8.0),
             child: Column(
               children: [
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: schedule.venues.map((venue) {
-                      return Container(
+                Container(
+                    width: double.infinity, // 横幅をいっぱいに広げる
+                    alignment: Alignment.topCenter, // 中身を上部の中央に配置
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: schedule.venues.map((venue) {
+                          return Container(
                         width: 180,
                         margin: const EdgeInsets.only(right: 8.0),
                         child: Column(
@@ -684,6 +687,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                       );
                     }).toList(),
                   ),
+                ),
                 ),
                 if (isFutureOrToday)
                   const Padding(
