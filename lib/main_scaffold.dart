@@ -45,6 +45,8 @@ class MainScaffold extends StatefulWidget {
 
 class _MainScaffoldState extends State<MainScaffold> {
   int _selectedIndex = 0;
+  // ★追加: Scaffoldを外部から操作するためのキー
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<SavedTicketsListPageState> _savedListKey =
   GlobalKey<SavedTicketsListPageState>();
   final GlobalKey<AnalyticsPageState> _analyticsPageKey = GlobalKey<AnalyticsPageState>();
@@ -558,28 +560,17 @@ class _MainScaffoldState extends State<MainScaffold> {
   Widget build(BuildContext context) {
     final isTablet = ResponsiveBreakpoints.of(context).largerThan(MOBILE);
 
-// タブレット用のインデックスとページ構成を動的に生成
+    // タブレット用のインデックスとページ構成を動的に生成
     final int tabletIndex = _selectedIndex == 0 ? 0 : (_selectedIndex <= 2) ? 1 : _selectedIndex == 3 ? 2 : 3;
     final List<Widget> tabletPages = [
       _pages[0],
       const TabletScheduleWrapperPage(),
-      const TabletSavedTicketsListPage(), // ★ここをタブレット専用ページに差し替え
+      const TabletSavedTicketsListPage(),
       _pages[4],
     ];
-    final List<String> tabletPageTitles = ['ニュース', '開催・重賞一覧', '購入履歴', '集計'];
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(isTablet ? tabletPageTitles[tabletIndex] : _pageTitles[_selectedIndex]),
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {
-              Scaffold.of(context).openDrawer();
-            },
-          ),
-        ),
-      ),
+      key: _scaffoldKey, // ★追加: キーをセット (上部の変数定義も忘れずに)
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -597,14 +588,14 @@ class _MainScaffoldState extends State<MainScaffold> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3), // 影の色（透過度調整可）
-                    offset: const Offset(0, 4),           // 影の位置（X, Y）
-                    blurRadius: 8,                        // 影のぼかし具合
-                    spreadRadius: 2,                      // 影の広がり
+                    color: Colors.black.withOpacity(0.3),
+                    offset: const Offset(0, 4),
+                    blurRadius: 8,
+                    spreadRadius: 2,
                   ),
                 ],
               ),
-              padding: const EdgeInsets.fromLTRB(16, 40, 16, 8), // 上部の余白(ステータスバー分)を追加
+              padding: const EdgeInsets.fromLTRB(16, 40, 16, 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -634,7 +625,6 @@ class _MainScaffoldState extends State<MainScaffold> {
                 ],
               ),
             ),
-
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text('ユーザー設定'),
@@ -649,7 +639,6 @@ class _MainScaffoldState extends State<MainScaffold> {
               },
             ),
             const Divider(),
-
             ListTile(
               leading: const Icon(Icons.home_work_outlined),
               title: const Text('ニュースフィード設定'),
@@ -683,87 +672,104 @@ class _MainScaffoldState extends State<MainScaffold> {
                 _importDatabase();
               },
             ),
-
             ListTile(
               leading: const Icon(Icons.upload_file),
               title: const Text('馬場データ(CSV)をインポート'),
               onTap: () {
-                Navigator.pop(context); // メニューを閉じる
-                _importTrackConditionsCsv(); // インポート処理を実行
+                Navigator.pop(context);
+                _importTrackConditionsCsv();
               },
             ),
-
             ListTile(
-              // enabled: !_isBusy, // 必要に応じて連打防止を追加してください
               leading: const Icon(Icons.library_books_outlined),
               title: const Text('メモ・総評の一括インポート(CSV)'),
               subtitle: const Text(
                 '複数レースのメモをまとめて取り込みます。',
-                style: TextStyle(fontSize: 12), // サブタイトルが少し長いので文字サイズを調整
+                style: TextStyle(fontSize: 12),
               ),
               onTap: () {
-                Navigator.pop(context); // ドロワーを閉じる
-                _importGlobalMemosFromCsv(); // 一括インポート処理を実行
+                Navigator.pop(context);
+                _importGlobalMemosFromCsv();
               },
             ),
-
             const Divider(),
           ],
         ),
       ),
-      body: isTablet
-          ? Row(
-        children: [
-          NavigationRail(
-            backgroundColor: Colors.green[900], // 元のボトムナビと同じ背景色
-            selectedIndex: tabletIndex,
-            onDestinationSelected: (int index) {
-              // タブレットのメニューから本来のインデックス（0〜4）に変換して処理
-              int mappedIndex = index;
-              if (index == 1) mappedIndex = 1; // 開催・重賞
-              else if (index == 2) mappedIndex = 3; // 馬券履歴
-              else if (index == 3) mappedIndex = 4; // 集計
-              _onItemTapped(mappedIndex);
-            },
-            labelType: NavigationRailLabelType.all,
-            useIndicator: false, // ★追加: 選択時の丸い背景（インジケーター）を消す
-            minWidth: 72.0, // ★追加: 横幅をボトムナビのボタン幅に近づける
-            selectedIconTheme: const IconThemeData(color: Colors.white, size: 24), // サイズを固定
-            unselectedIconTheme: const IconThemeData(color: Colors.grey, size: 24), // サイズを固定
-            selectedLabelTextStyle: const TextStyle(color: Colors.white, fontSize: 14), // 選択時は少し文字を大きく(ボトムナビの標準挙動)
-            unselectedLabelTextStyle: const TextStyle(color: Colors.grey, fontSize: 12), // 未選択時は標準サイズ
-            destinations: const [
-              NavigationRailDestination(icon: Icon(Icons.home), label: Text('ニュース')),
-              NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('開催・重賞')),
-              NavigationRailDestination(icon: Icon(Icons.list_alt), label: Text('馬券履歴')),
-              NavigationRailDestination(icon: Icon(Icons.analytics), label: Text('集計')),
-            ],
-          ),
-          const VerticalDivider(thickness: 1, width: 1),
-          Expanded(
-            child: IndexedStack(
-              index: tabletIndex,
-              children: tabletPages,
+      // ★追加: AppBarが消えた分、ステータスバーに被らないようにSafeAreaで包む
+      body: SafeArea(
+        child: isTablet
+            ? Row(
+          children: [
+            NavigationRail(
+              backgroundColor: Colors.green[900],
+              // ★追加: タブレット時は NavigationRail の一番上にメニューボタンを配置
+              leading: IconButton(
+                icon: const Icon(Icons.menu, color: Colors.white),
+                onPressed: () {
+                  _scaffoldKey.currentState?.openDrawer();
+                },
+              ),
+              selectedIndex: tabletIndex,
+              onDestinationSelected: (int index) {
+                // タブレットのメニューから本来のインデックス（0〜4）に変換して処理
+                int mappedIndex = index;
+                if (index == 1) mappedIndex = 1;
+                else if (index == 2) mappedIndex = 3;
+                else if (index == 3) mappedIndex = 4;
+                _onItemTapped(mappedIndex);
+              },
+              labelType: NavigationRailLabelType.all,
+              useIndicator: false,
+              minWidth: 72.0,
+              selectedIconTheme: const IconThemeData(color: Colors.white, size: 24),
+              unselectedIconTheme: const IconThemeData(color: Colors.grey, size: 24),
+              selectedLabelTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+              unselectedLabelTextStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+              destinations: const [
+                NavigationRailDestination(icon: Icon(Icons.home), label: Text('ニュース')),
+                NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('開催・重賞')),
+                NavigationRailDestination(icon: Icon(Icons.list_alt), label: Text('馬券履歴')),
+                NavigationRailDestination(icon: Icon(Icons.analytics), label: Text('集計')),
+              ],
             ),
-          ),
-        ],
-      )
-          : IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
+            const VerticalDivider(thickness: 1, width: 1),
+            Expanded(
+              child: IndexedStack(
+                index: tabletIndex,
+                children: tabletPages,
+              ),
+            ),
+          ],
+        )
+            : IndexedStack(
+          index: _selectedIndex,
+          children: _pages,
+        ),
       ),
       bottomNavigationBar: isTablet
           ? null
           : BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
+          // ★追加: スマホ版は一番左(index: 0)にメニューを配置
+          BottomNavigationBarItem(icon: Icon(Icons.menu), label: 'メニュー'),
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ニュース'),
           BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: '開催一覧'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞一覧'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '馬券履歴'),
           BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'),
         ],
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        // ★変更: 実際のページ(_selectedIndex)から+1ずらして表示を合わせる
+        currentIndex: _selectedIndex + 1,
+        onTap: (int index) {
+          if (index == 0) {
+            // ★メニューがタップされたらDrawerを開く
+            _scaffoldKey.currentState?.openDrawer();
+          } else {
+            // ★それ以外のタブがタップされたら、-1して本来のページを切り替える
+            _onItemTapped(index - 1);
+          }
+        },
       ),
       floatingActionButton: AnimatedSlide(
         duration: Duration(milliseconds: _selectedIndex == 0 ? 250 : 500),

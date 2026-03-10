@@ -866,13 +866,20 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildEfficiencyItem('回収率', '${recoveryRate.toStringAsFixed(1)}%', recoveryRate >= 100),
-                Container(width: 1, height: 20, color: Colors.grey.shade300),
-                _buildEfficiencyItem('的中率', '${hitRate.toStringAsFixed(1)}%', false),
-              ],
+            // ★変更点: FittedBoxを追加し、はみ出す場合は自動で縮小させる
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                // ★変更点: FittedBox内ではspaceAroundが効かないため、centerに変更し手動で余白を設ける
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildEfficiencyItem('回収率', '${recoveryRate.toStringAsFixed(1)}%', recoveryRate >= 100),
+                  const SizedBox(width: 16), // ★追加: 中央の線の左側の余白
+                  Container(width: 1, height: 20, color: Colors.grey.shade300),
+                  const SizedBox(width: 16), // ★追加: 中央の線の右側の余白
+                  _buildEfficiencyItem('的中率', '${hitRate.toStringAsFixed(1)}%', false),
+                ],
+              ),
             ),
           ),
         ],
