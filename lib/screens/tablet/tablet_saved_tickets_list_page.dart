@@ -161,44 +161,54 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Column(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ★変更点: 上部エリアを 30:70 で横並びに分割
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 左側 (30%): 年選択 ＋ 年次集計
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      children: [
-                        _buildYearSelector(),
-                        _buildYearlySummaryPanel(),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  // 右側 (70%): 月選択(1列) ＋ 月次集計バナー
-                  Expanded(
-                    flex: 7,
-                    child: Column(
-                      children: [
-                        _buildMonthSelector(),
-                        const SizedBox(height: 16),
-                        _buildMonthBanner(),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // 下部エリア: 購入履歴リスト
+              // 左側 (30%): 年選択 ＋ 年次集計
               Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : (_filteredTicketItems.isEmpty
-                    ? const Center(child: Text('この月の購入履歴はありません。', style: TextStyle(color: Colors.black54)))
-                    : _buildTicketList()
+                flex: 3,
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildYearSelector(),
+                      _buildYearlySummaryPanel(),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              // 右側 (70%): 月選択(1行) ＋ 月次集計バナー ＋ 購入履歴リスト
+              Expanded(
+                flex: 7,
+                child: Column(
+                  children: [
+                    // 月選択エリアを中央寄せにし、右側エリア内での幅を70%に制限
+                    Row(
+                      children: [
+                        const Spacer(flex: 1), // 左側の余白 (15%)
+                        Expanded(
+                          flex: 70, // 中央のコンテンツ (70%)
+                          child: SizedBox(
+                            height: 50, // ★左の年別タブと同じ高さに固定
+                            child: _buildMonthSelector(),
+                          ),
+                        ),
+                        const Spacer(flex: 1), // 右側の余白 (15%)
+                      ],
+                    ),
+                    const SizedBox(height: 2), // ★間のスペースをほぼ無くして上にずらす
+                    _buildMonthBanner(),
+                    const SizedBox(height: 16),
+                    // 下部エリア: 購入履歴リスト
+                    Expanded(
+                      child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : (_filteredTicketItems.isEmpty
+                          ? const Center(child: Text('この月の購入履歴はありません。', style: TextStyle(color: Colors.black54)))
+                          : _buildTicketList()
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -271,15 +281,9 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
     );
   }
 
-  // ★変更点: カレンダーを12列1行に変更
+  // ★変更点: GridViewをやめ、RowとExpandedを使って確実に1列で高さを50にフィットさせる
   Widget _buildMonthSelector() {
-    return GridView.count(
-      crossAxisCount: 12,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 0,
-      crossAxisSpacing: 0,
-      childAspectRatio: 1.5, // ボタンの縦横比を調整
+    return Row(
       children: List.generate(12, (index) {
         final month = index + 1;
         final isSelected = month == _selectedMonth;
@@ -303,28 +307,30 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
           fontWeight = FontWeight.normal;
         }
 
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              _selectedMonth = month;
-              _filterTickets();
-            });
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              border: Border.all(
-                color: Colors.grey.shade300,
-                width: 0.5,
+        return Expanded(
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                _selectedMonth = month;
+                _filterTickets();
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                border: Border.all(
+                  color: Colors.grey.shade300,
+                  width: 0.5,
+                ),
               ),
-            ),
-            child: Center(
-              child: Text(
-                '$month月',
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: fontWeight,
-                  fontSize: 12,
+              child: Center(
+                child: Text(
+                  '$month月',
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: fontWeight,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ),
@@ -348,9 +354,9 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)), // ★文字色を変更
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)), // ★モバイル版に合わせて白系に変更
           const SizedBox(width: 4),
-          Text(value, style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold)), // ★文字色を変更
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)), // ★モバイル版に合わせて白系に変更
         ],
       );
     }
@@ -360,9 +366,9 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9), // ★変更: 年次集計パネルと同じ背景色に統一
+        color: const Color(0xFF1A4314), // ★変更: モバイル版と同じダークグリーンに修正
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: const Color(0xFF1A4314)),
       ),
       child: Row(
         children: [
@@ -371,18 +377,18 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
             children: [
               Text(
                 '$_selectedMonth月',
-                style: const TextStyle(color: Colors.black87, fontSize: 28, fontWeight: FontWeight.bold, height: 1.1), // ★文字色を変更
+                style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, height: 1.1), // ★白に変更
               ),
               const SizedBox(height: 2),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade200, // ★背景を変更
+                  color: Colors.white, // ★白背景に変更
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   englishMonth,
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 11, fontWeight: FontWeight.bold), // ★文字色を変更
+                  style: const TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold), // ★黒に変更
                 ),
               ),
             ],
@@ -404,19 +410,26 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
             children: [
               Text(
                 '購入 ¥${formatMoney(stats.totalPurchase)}',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 11), // ★文字色を変更
+                style: const TextStyle(color: Colors.white70, fontSize: 11), // ★白系に変更
               ),
               Text(
                 '払戻 ¥${formatMoney(stats.totalPayout)}',
-                style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold), // ★文字色を変更
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), // ★白系に変更
               ),
               const SizedBox(height: 4),
-              Text(
-                '収支 ${stats.balance >= 0 ? '+' : ''}¥${formatMoney(stats.balance)}',
-                style: TextStyle(
-                  color: stats.balance >= 0 ? Colors.blue.shade700 : Colors.red.shade700, // ★文字色を変更
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
+              Container( // ★モバイル版に合わせて枠組みを追加
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  border: Border.all(color: stats.balance >= 0 ? Colors.yellow : Colors.redAccent),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '収支 ${stats.balance >= 0 ? '+' : ''}¥${formatMoney(stats.balance)}',
+                  style: TextStyle(
+                    color: stats.balance >= 0 ? Colors.yellow : Colors.redAccent, // ★背景に合わせて見やすく変更
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -426,7 +439,6 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
     );
   }
 
-  // ★修正箇所：チケットリスト全体
   Widget _buildTicketList() {
     final Map<String, List<TicketListItem>> groupedItems = {};
     for (final item in _filteredTicketItems) {
@@ -436,7 +448,7 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
 
     return Column(
       children: [
-        // 複数選択モード時のアクションバー
+        // 複数選択モード時のアクションバー (省略せずにそのまま配置)
         if (_isSelectionMode)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -482,6 +494,8 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
               ],
             ),
           ),
+
+        // メインのリスト部分
         Expanded(
           child: ListView.builder(
             itemCount: groups.length,
@@ -492,9 +506,9 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
                 height: 145, // オーバーフロー対策
                 child: Row(
                   children: [
-                    // 左側：レース情報カード (赤枠・400pxに拡大)
-                    SizedBox(
-                      width: 340,
+                    // ★変更点: 左側（レース情報カード）を Expanded(flex: 3) に変更
+                    Expanded(
+                      flex: 3,
                       child: Dismissible(
                         key: ValueKey('group_${group.first.raceId}_$index'),
                         direction: DismissDirection.endToStart,
@@ -526,8 +540,9 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // 右側：馬券横スクロールリスト (黄枠・各220px)
+                    // ★変更点: 右側（馬券横スクロールリスト）を Expanded(flex: 7) に変更
                     Expanded(
+                      flex: 7,
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -538,7 +553,7 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
                             final isSelected = ticketId != null && _selectedTicketIds.contains(ticketId);
 
                             return Container(
-                              width: 220,
+                              width: 220, // 個別の馬券カード幅は維持
                               margin: const EdgeInsets.only(right: 8.0),
                               child: Card(
                                 elevation: 2,
@@ -643,7 +658,6 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
     );
   }
 
-  // ★変更点: 常時表示されるように変更（開閉チェックを削除）
   Widget _buildYearlySummaryPanel() {
     if (_selectedYear == null) return const SizedBox.shrink();
 
