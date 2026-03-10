@@ -23,6 +23,7 @@ import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/relative_battle_tab.dar
 import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/training_time_chart_tab.dart';
+import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -221,7 +222,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             _loadingProgress = 0.5 + ((i + 1) / raceIdsToFetch.length * 0.5);
           });
           try {
-            final result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$raceId');
+            final result = await RaceResultScraperService.scrapeRaceDetails(generateRaceResultUrl(raceId));
             await _raceRepository.insertOrUpdateRaceResult(result);
             fetchedResults[raceId] = result;
             await Future.delayed(const Duration(milliseconds: 200));

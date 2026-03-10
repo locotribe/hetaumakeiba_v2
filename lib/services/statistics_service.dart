@@ -7,6 +7,7 @@ import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
+import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
 class StatisticsService {
   final RaceRepository _raceRepo = RaceRepository();
@@ -21,7 +22,7 @@ class StatisticsService {
     for (final pastId in pastRaceIds) {
       RaceResult? result = await _raceRepo.getRaceResult(pastId);
       if (result == null) {
-        result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
+        result = await RaceResultScraperService.scrapeRaceDetails(generateRaceResultUrl(pastId));
         await Future.delayed(const Duration(milliseconds: 200));
       }
       pastResults.add(result);

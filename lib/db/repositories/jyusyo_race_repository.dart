@@ -1,6 +1,5 @@
 // lib/db/repositories/jyusyo_race_repository.dart
 
-import 'package:sqflite/sqflite.dart';
 import 'package:hetaumakeiba_v2/db/db_provider.dart';
 import 'package:hetaumakeiba_v2/db/db_constants.dart';
 

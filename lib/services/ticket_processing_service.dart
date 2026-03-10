@@ -9,7 +9,6 @@ import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
-import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
@@ -124,8 +123,6 @@ class TicketProcessingService {
           );
           await ScraperService.syncNewHorseData([featuredRacePlaceholder]);
         }
-
-        await AnalyticsService().updateAggregatesOnResultConfirmed(raceId, userId);
       }
     } catch (e) {
       print('ERROR: バックグラウンドスクレイピング処理全体でエラーが発生しました: $e');

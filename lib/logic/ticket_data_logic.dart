@@ -1,20 +1,18 @@
 // lib/logic/ticket_data_logic.dart
 
 import 'dart:convert';
-import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
+
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
-import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'package:hetaumakeiba_v2/models/ticket_list_item.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/utils/url_generator.dart';
-import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
-import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
-import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
-import 'package:hetaumakeiba_v2/models/race_data.dart';
+import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
-import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/models/ticket_list_item.dart';
+import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
+import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
+import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
 class TicketDataLogic {
   final TicketRepository _ticketRepository = TicketRepository();

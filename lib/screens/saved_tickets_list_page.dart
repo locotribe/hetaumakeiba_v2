@@ -151,9 +151,6 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     });
   }
 
-  Future<void> _deleteAllData() async {
-  }
-
   @override
   Widget build(BuildContext context) {
     return Stack(

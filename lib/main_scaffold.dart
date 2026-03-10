@@ -12,11 +12,10 @@ import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
+import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
 import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
-import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
-import 'package:hetaumakeiba_v2/screens/analytics_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/home_page.dart';
 import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
@@ -24,16 +23,16 @@ import 'package:hetaumakeiba_v2/screens/jyusyoichiran_page.dart';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/race_schedule_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
+import 'package:hetaumakeiba_v2/screens/tablet/tablet_saved_tickets_list_page.dart';
+import 'package:hetaumakeiba_v2/screens/tablet/tablet_schedule_wrapper_page.dart';
 import 'package:hetaumakeiba_v2/screens/user_settings_page.dart';
 import 'package:hetaumakeiba_v2/widgets/track_condition_ticker.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:responsive_framework/responsive_framework.dart';
-import 'package:hetaumakeiba_v2/screens/tablet/tablet_schedule_wrapper_page.dart';
-import 'package:hetaumakeiba_v2/screens/tablet/tablet_saved_tickets_list_page.dart';
 
 class MainScaffold extends StatefulWidget {
   final VoidCallback onLogout;
@@ -45,11 +44,9 @@ class MainScaffold extends StatefulWidget {
 
 class _MainScaffoldState extends State<MainScaffold> {
   int _selectedIndex = 0;
-  // ★追加: Scaffoldを外部から操作するためのキー
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<SavedTicketsListPageState> _savedListKey =
   GlobalKey<SavedTicketsListPageState>();
-  final GlobalKey<AnalyticsPageState> _analyticsPageKey = GlobalKey<AnalyticsPageState>();
   final GlobalKey<RaceSchedulePageState> _raceScheduleKey = GlobalKey<RaceSchedulePageState>();
 
   final DbProvider _dbProvider = DbProvider();
@@ -526,7 +523,6 @@ class _MainScaffoldState extends State<MainScaffold> {
   }
 
   late final List<Widget> _pages;
-  static const List<String> _pageTitles = ['ニュース', '開催一覧', '重賞一覧', '購入履歴', '集計'];
 
   @override
   void initState() {
@@ -538,7 +534,6 @@ class _MainScaffoldState extends State<MainScaffold> {
       RaceSchedulePage(key: _raceScheduleKey),
       const JyusyoIchiranPage(),
       SavedTicketsListPage(key: _savedListKey),
-      AnalyticsPage(key: _analyticsPageKey),
     ];
   }
 
@@ -560,17 +555,15 @@ class _MainScaffoldState extends State<MainScaffold> {
   Widget build(BuildContext context) {
     final isTablet = ResponsiveBreakpoints.of(context).largerThan(MOBILE);
 
-    // タブレット用のインデックスとページ構成を動的に生成
-    final int tabletIndex = _selectedIndex == 0 ? 0 : (_selectedIndex <= 2) ? 1 : _selectedIndex == 3 ? 2 : 3;
+    final int tabletIndex = _selectedIndex == 0 ? 0 : (_selectedIndex <= 2) ? 1 : 2;
     final List<Widget> tabletPages = [
       _pages[0],
       const TabletScheduleWrapperPage(),
       const TabletSavedTicketsListPage(),
-      _pages[4],
     ];
 
     return Scaffold(
-      key: _scaffoldKey, // ★追加: キーをセット (上部の変数定義も忘れずに)
+      key: _scaffoldKey,
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -696,14 +689,12 @@ class _MainScaffoldState extends State<MainScaffold> {
           ],
         ),
       ),
-      // ★追加: AppBarが消えた分、ステータスバーに被らないようにSafeAreaで包む
       body: SafeArea(
         child: isTablet
             ? Row(
           children: [
             NavigationRail(
               backgroundColor: Colors.green[900],
-              // ★追加: タブレット時は NavigationRail の一番上にメニューボタンを配置
               leading: IconButton(
                 icon: const Icon(Icons.menu, color: Colors.white),
                 onPressed: () {
@@ -711,14 +702,15 @@ class _MainScaffoldState extends State<MainScaffold> {
                 },
               ),
               selectedIndex: tabletIndex,
+
               onDestinationSelected: (int index) {
-                // タブレットのメニューから本来のインデックス（0〜4）に変換して処理
                 int mappedIndex = index;
                 if (index == 1) mappedIndex = 1;
                 else if (index == 2) mappedIndex = 3;
-                else if (index == 3) mappedIndex = 4;
+
                 _onItemTapped(mappedIndex);
               },
+
               labelType: NavigationRailLabelType.all,
               useIndicator: false,
               minWidth: 72.0,
@@ -728,9 +720,8 @@ class _MainScaffoldState extends State<MainScaffold> {
               unselectedLabelTextStyle: const TextStyle(color: Colors.grey, fontSize: 12),
               destinations: const [
                 NavigationRailDestination(icon: Icon(Icons.home), label: Text('ニュース')),
-                NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('開催・重賞')),
+                NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('開催一覧')),
                 NavigationRailDestination(icon: Icon(Icons.list_alt), label: Text('馬券履歴')),
-                NavigationRailDestination(icon: Icon(Icons.analytics), label: Text('集計')),
               ],
             ),
             const VerticalDivider(thickness: 1, width: 1),
@@ -751,22 +742,17 @@ class _MainScaffoldState extends State<MainScaffold> {
           ? null
           : BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
-          // ★追加: スマホ版は一番左(index: 0)にメニューを配置
           BottomNavigationBarItem(icon: Icon(Icons.menu), label: 'メニュー'),
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ニュース'),
           BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: '開催一覧'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞一覧'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '馬券履歴'),
-          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '集計'),
         ],
-        // ★変更: 実際のページ(_selectedIndex)から+1ずらして表示を合わせる
         currentIndex: _selectedIndex + 1,
         onTap: (int index) {
           if (index == 0) {
-            // ★メニューがタップされたらDrawerを開く
             _scaffoldKey.currentState?.openDrawer();
           } else {
-            // ★それ以外のタブがタップされたら、-1して本来のページを切り替える
             _onItemTapped(index - 1);
           }
         },
@@ -811,7 +797,6 @@ class _MainScaffoldState extends State<MainScaffold> {
   }
 }
 
-// Expandable FAB 全体
 @immutable
 class ExpandableFab extends StatefulWidget {
   const ExpandableFab({

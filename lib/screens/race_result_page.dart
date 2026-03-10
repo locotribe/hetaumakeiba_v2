@@ -22,7 +22,6 @@ import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_review_edit_page.dart';
-import 'package:hetaumakeiba_v2/services/analytics_service.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
@@ -32,6 +31,7 @@ import 'package:hetaumakeiba_v2/widgets/race_review_card.dart';
 import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
 class PageData {
   final List<Map<String, dynamic>> parsedTickets;
@@ -224,10 +224,9 @@ class _RaceResultPageState extends State<RaceResultPage> {
       print('DEBUG: Refreshing race data for raceId: $raceId');
 
       // 1. レース結果のスクレイピング更新
-      final newRaceResult = await RaceResultScraperService.scrapeRaceDetails(
-          'https://db.netkeiba.com/race/$raceId'
+      await RaceResultScraperService.scrapeRaceDetails(
+          generateRaceResultUrl(raceId)
       );
-      await AnalyticsService().updateAggregatesOnResultConfirmed(newRaceResult.raceId, userId);
 
       final siblings = await _ticketRepo.getQrDataByRaceId(widget.raceId);
 

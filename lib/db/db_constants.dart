@@ -11,7 +11,6 @@ class DbConstants {
   static const String tableFeaturedRaces = 'featured_races';
   static const String tableUserMarks = 'user_marks';
   static const String tableUserFeeds = 'user_feeds';
-  static const String tableAnalyticsAggregates = 'analytics_aggregates';
   static const String tableHorseMemos = 'horse_memos';
   static const String tableUsers = 'users';
   static const String tableRaceStatistics = 'race_statistics';

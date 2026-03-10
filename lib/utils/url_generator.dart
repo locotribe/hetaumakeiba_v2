@@ -15,6 +15,11 @@ String generateNetkeibaUrl({
   return 'https://db.netkeiba.com/race/20$suffix';
 }
 
+/// レース結果詳細ページ（DB）のURLを生成します。
+String generateRaceResultUrl(String raceId) {
+  return 'https://db.netkeiba.com/race/$raceId';
+}
+
 /// 競走馬の戦績ページURLを生成します（レース結果一覧用）。
 String generateNetkeibaHorseUrl({
   required String horseId,

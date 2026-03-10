@@ -129,18 +129,6 @@ class DbProvider {
     ''');
 
     await db.execute('''
-      CREATE TABLE ${DbConstants.tableAnalyticsAggregates}(
-        aggregate_key TEXT NOT NULL,
-        userId TEXT NOT NULL,
-        total_investment INTEGER NOT NULL DEFAULT 0,
-        total_payout INTEGER NOT NULL DEFAULT 0,
-        hit_count INTEGER NOT NULL DEFAULT 0,
-        bet_count INTEGER NOT NULL DEFAULT 0,
-        PRIMARY KEY (aggregate_key, userId)
-      )
-    ''');
-
-    await db.execute('''
       CREATE TABLE ${DbConstants.tableHorseMemos}(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         userId TEXT NOT NULL,
@@ -291,7 +279,6 @@ class DbProvider {
       )
     ''');
 
-    // ▼▼ 新規追加: 統合レーステーブル ▼▼
     await db.execute('''
       CREATE TABLE ${DbConstants.tableIntegratedRaces}(
         ${DbConstants.colRaceId} TEXT PRIMARY KEY,
@@ -319,7 +306,6 @@ class DbProvider {
         ${DbConstants.colResultLastUpdated} TEXT
       )
     ''');
-    // ▲▲ 新規追加 ▲▲
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -433,7 +419,6 @@ class DbProvider {
       } catch (e) { print('DEBUG: Migration error (v10->v11): $e'); }
     }
 
-    // ▼▼ 新規追加: バージョン11から12へのマイグレーション ▼▼
     if (oldVersion < 12) {
       try {
         await db.execute('''
@@ -465,7 +450,11 @@ class DbProvider {
         ''');
       } catch (e) { print('DEBUG: Migration error (v11->v12): $e'); }
     }
-    // ▲▲ 新規追加 ▲▲
+    if (oldVersion < 13) {
+      try {
+        await db.execute('DROP TABLE IF EXISTS analytics_aggregates');
+      } catch (e) { print('Migration error (v12->v13): $e'); }
+    }
   }
 
   Future<void> _createCoursePresetsTable(Database db) async {
