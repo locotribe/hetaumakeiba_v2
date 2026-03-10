@@ -711,17 +711,17 @@ class _MainScaffoldState extends State<MainScaffold> {
                 _onItemTapped(mappedIndex);
               },
 
-              labelType: NavigationRailLabelType.all,
+              labelType: NavigationRailLabelType.none,
               useIndicator: false,
-              minWidth: 72.0,
+              minWidth: 56.0,
               selectedIconTheme: const IconThemeData(color: Colors.white, size: 24),
               unselectedIconTheme: const IconThemeData(color: Colors.grey, size: 24),
               selectedLabelTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
               unselectedLabelTextStyle: const TextStyle(color: Colors.grey, fontSize: 12),
               destinations: const [
-                NavigationRailDestination(icon: Icon(Icons.home), label: Text('ニュース')),
-                NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('開催一覧')),
-                NavigationRailDestination(icon: Icon(Icons.list_alt), label: Text('馬券履歴')),
+                NavigationRailDestination(icon: Icon(Icons.home), label: Text('')),
+                NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('開催')),
+                NavigationRailDestination(icon: Icon(Icons.list_alt), label: Text('馬券')),
               ],
             ),
             const VerticalDivider(thickness: 1, width: 1),

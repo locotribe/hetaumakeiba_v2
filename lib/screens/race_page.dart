@@ -239,25 +239,48 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    final appBarTitle = _predictionRaceData?.raceName ?? 'レース情報';
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(appBarTitle),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          // ▼ タブを5つに削減
-          tabs: const [
-            Tab(text: '出馬表'),     // 0
-            Tab(text: '過去分析'),   // 1
-            Tab(text: '出走馬分析'), // 2
-            Tab(text: '騎手特性'),   // 3
-            Tab(text: 'レース結果'), // 4
+      // SafeAreaでステータスバー（時計や電池アイコン）との被りを防ぐ
+      body: SafeArea(
+        child: Column(
+          children: [
+            // AppBarの代わりとなるカスタムヘッダー領域
+            Container(
+              color: Theme.of(context).primaryColor, // 既存の緑色の背景
+              child: Row(
+                children: [
+                  // 左端にスマートな戻るボタンを配置
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  // 残りのスペースにタブを配置
+                  Expanded(
+                    child: TabBar(
+                      controller: _tabController,
+                      isScrollable: true,
+                      indicatorColor: Colors.white,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.white70,
+                      tabs: const [
+                        Tab(text: '出馬表'),
+                        Tab(text: '過去分析'),
+                        Tab(text: '出走馬分析'),
+                        Tab(text: '騎手特性'),
+                        Tab(text: 'レース結果'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // 下のコンテンツ部分（出馬表など）
+            Expanded(
+              child: _buildBody(),
+            ),
           ],
         ),
       ),
-      body: _buildBody(),
     );
   }
 
@@ -270,7 +293,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           children: [
             TabBarView(
               controller: _tabController,
-              // ▼ ここもぴったり5つに修正
               children: [
                 ShutubaTablePage(raceId: widget.raceId),
                 const Center(child: CircularProgressIndicator()),
@@ -286,7 +308,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
       case RaceStatus.resultConfirmed:
         return TabBarView(
           controller: _tabController,
-          // ▼ AI関連ページを取り除き、ぴったり5つに修正
           children: [
             ShutubaTablePage(
               raceId: widget.raceId,
