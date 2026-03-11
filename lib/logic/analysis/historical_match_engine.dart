@@ -10,6 +10,9 @@ import '../analysis/historical_match_engine_factors/weight_factor.dart';
 import '../analysis/historical_match_engine_factors/frame_factor.dart';
 import '../analysis/historical_match_engine_factors/popularity_factor.dart';
 import '../analysis/historical_match_engine_factors/rotation_factor.dart';
+import '../analysis/historical_match_engine_factors/pedigree_factor.dart'; // ★追加
+import '../analysis/historical_match_engine_factors/track_condition_factor.dart'; // ★追加
+import 'package:hetaumakeiba_v2/models/horse_profile_model.dart'; // ★追加
 
 class HistoricalMatchEngine {
   // 各ファクターのインスタンス化
@@ -17,6 +20,8 @@ class HistoricalMatchEngine {
   final FrameFactor _frameFactor = FrameFactor();
   final PopularityFactor _popularityFactor = PopularityFactor();
   final RotationFactor _rotationFactor = RotationFactor();
+  final PedigreeFactor _pedigreeFactor = PedigreeFactor(); // ★追加
+  final TrackConditionFactor _trackConditionFactor = TrackConditionFactor(); // ★追加
 
   Map<String, dynamic> analyze({
     required String currentRaceName,
@@ -25,6 +30,9 @@ class HistoricalMatchEngine {
     required List<RaceResult> pastRaces,
     required Map<String, List<HorseRaceRecord>> currentHorseHistory,
     required Map<String, List<HorseRaceRecord>> pastTopHorseRecords,
+    required Map<String, HorseProfile> horseProfileMap, // ★追加
+    required CrossAnalysisResult pedigreeCrossResult, // ★追加
+    required TrackConditionTrendResult trackConditionTrendResult, // ★追加
   }) {
     // 1. 過去の上位馬抽出
     final topHorses = _extractTopHorses(pastRaces);
@@ -55,9 +63,11 @@ class HistoricalMatchEngine {
       bestZone: bestZone,
       bestRotation: favorableRotations.isNotEmpty ? favorableRotations.first : 'なし',
       bestPrevPop: '${avgPrevPop.toStringAsFixed(1)}番人気以内',
+      bestSire: pedigreeCrossResult.overallSires.isNotEmpty ? pedigreeCrossResult.overallSires.first.name : 'なし', // ★追加
+      avgCushion: trackConditionTrendResult.avgCushion, // ★追加
     );
 
-// ★波乱度（過去の上位馬の平均人気）の算出
+    // ★波乱度（過去の上位馬の平均人気）の算出
     double totalTopPop = 0.0;
     int topPopCount = 0;
     for (final r in pastRaces) {
@@ -83,17 +93,28 @@ class HistoricalMatchEngine {
       // 各ファクターに分析を委譲
       final weightRes = _weightFactor.analyze(horse, prevRecord, medianWeight);
       final frameRes = _frameFactor.analyze(horse.gateNumber, currentHorses.length, zoneWinRates, maxRate);
-
       final popRes = _popularityFactor.analyze(horse, history, currentRaceName, pastRaceVolatility);
       final rotRes = _rotationFactor.analyze(prevRecord, favorableRotations);
 
-      // 総合スコアの算出
-      double totalScore;
+      // ★新規追加: 血統と馬場の分析
+      final profile = horseProfileMap[horse.horseId];
+      final pedRes = _pedigreeFactor.analyze(profile: profile, crossResult: pedigreeCrossResult);
+      final tcRes = _trackConditionFactor.analyze(profile: profile, crossResult: pedigreeCrossResult);
+
+      // 基本スコアの算出 (血統を含めるように変更)
+      double baseScore;
       if (frameRes.isGateFixed) {
-        totalScore = (weightRes.score * 0.25) + (frameRes.score * 0.25) + (popRes.score * 0.25) + (rotRes.score * 0.25);
+        baseScore = (weightRes.score * 0.2) + (frameRes.score * 0.2) + (popRes.score * 0.2) + (rotRes.score * 0.2) + (pedRes.score * 0.2);
       } else {
-        totalScore = (weightRes.score * 0.33) + (popRes.score * 0.33) + (rotRes.score * 0.33);
+        baseScore = (weightRes.score * 0.25) + (popRes.score * 0.25) + (rotRes.score * 0.25) + (pedRes.score * 0.25);
       }
+
+      // ★新規追加: シナリオ別総合スコアの算出 (馬場ファクターを加味)
+      final Map<String, double> scenarioTotalScores = {
+        'high': (baseScore * 0.8) + (tcRes.scenarioScores['high']! * 0.2),
+        'standard': (baseScore * 0.8) + (tcRes.scenarioScores['standard']! * 0.2),
+        'low': (baseScore * 0.8) + (tcRes.scenarioScores['low']! * 0.2),
+      };
 
       int prevPop = 0;
       if (prevRecord != null) {
@@ -104,7 +125,7 @@ class HistoricalMatchEngine {
       results.add(HistoricalMatchModel(
         horseId: horse.horseId,
         horseName: horse.horseName,
-        totalScore: totalScore,
+        totalScore: baseScore, // ベーススコアをセット
         weightScore: weightRes.score,
         usedWeight: weightRes.usedWeight,
         weightDiff: weightRes.diff,
@@ -124,6 +145,10 @@ class HistoricalMatchEngine {
         rotationScore: rotRes.score,
         prevRaceName: rotRes.prevRaceName,
         rotDiagnosis: rotRes.diag,
+        pedigreeScore: pedRes.score, // ★追加
+        pedigreeDiag: pedRes.diag,   // ★追加
+        trackConditionScores: tcRes.scenarioScores, // ★追加
+        scenarioTotalScores: scenarioTotalScores,   // ★追加
         recentHistory: history,
       ));
     }
@@ -135,6 +160,8 @@ class HistoricalMatchEngine {
       'summary': summary,
     };
   }
+
+
 
   // --- ヘルパーメソッド群 (変更なし) ---
   Map<String, dynamic> _analyzePrevRaceTrends(List<_HorseContext> topHorses, List<RaceResult> pastRaces, Map<String, List<HorseRaceRecord>> pastRecords) {

@@ -1,16 +1,20 @@
 // lib/widgets/stats_match_tab.dart
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
-import 'package:hetaumakeiba_v2/models/race_data.dart';
-import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/services/historical_match_service.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart'; // ★追加
+import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart'; // ★追加
 import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_profile_model.dart'; // ★追加
+import 'package:hetaumakeiba_v2/models/race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart'; // ★追加
+import 'package:hetaumakeiba_v2/services/historical_match_service.dart';
+import 'package:intl/intl.dart';
 
 // 類似度データを保持するクラス
 class SimilarityData {
@@ -70,6 +74,9 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
   // 類似度分析の結果保持用
   Map<String, List<SimilarityData>> _similarityAllMatches = {};
   Map<String, SimilarityData?> _similarityBestFirstPlace = {};
+
+  // ★新規追加: 馬場シナリオの表示状態管理 (デフォルトで標準をONにする)
+  final Set<String> _visibleTcScenarios = {'standard'};
 
   @override
   void initState() {
@@ -213,7 +220,53 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       final volatilityAnalyzer = VolatilityAnalyzer();
       final volResult = volatilityAnalyzer.analyze(pastRaces);
 
-      // 5. HistoricalMatchEngineによる分析
+      // --- ★ここからが追加忘れのコード: 血統と馬場データの取得・集計 ---
+      final tcRepo = TrackConditionRepository();
+      final Map<String, TrackConditionRecord> trackConditionMap = {};
+      for (final race in pastRaces) {
+        if (race.raceId.length >= 10) {
+          String prefix10 = race.raceId.substring(0, 10);
+          final tc = await tcRepo.getLatestTrackConditionByPrefix(prefix10);
+          if (tc != null) trackConditionMap[race.raceId] = tc;
+        }
+      }
+
+      final Map<String, HorseProfile> horseProfileMap = {};
+      // 今回の出走馬のプロフィール
+      for (final horse in widget.horses) {
+        final profile = await _horseRepo.getHorseProfile(horse.horseId);
+        if (profile != null) horseProfileMap[horse.horseId] = profile;
+      }
+      // 比較用ターゲットがあればそれも
+      if (widget.comparisonTargets != null) {
+        for (final horse in widget.comparisonTargets!) {
+          final profile = await _horseRepo.getHorseProfile(horse.horseId);
+          if (profile != null) horseProfileMap[horse.horseId] = profile;
+        }
+      }
+      // 過去上位馬のプロフィール
+      for (final race in pastRaces) {
+        for (final horse in race.horseResults) {
+          int rank = int.tryParse(horse.rank ?? '') ?? 0;
+          if (rank >= 1 && rank <= 3 && horse.horseId.isNotEmpty) {
+            if (!horseProfileMap.containsKey(horse.horseId)) {
+              final profile = await _horseRepo.getHorseProfile(horse.horseId);
+              if (profile != null) horseProfileMap[horse.horseId] = profile;
+            }
+          }
+        }
+      }
+
+      // 新しいアナライザーの実行
+      final trackConditionTrendResult = TrackConditionTrendAnalyzer().analyze(trackConditionMap);
+      final pedigreeCrossResult = PedigreeCrossAnalyzer().analyze(
+        pastRaces: pastRaces,
+        trackConditionMap: trackConditionMap,
+        horseProfileMap: horseProfileMap,
+      );
+      // --- ★追加コードここまで ---
+
+      // 5. HistoricalMatchEngineによる分析 (引数に上記データを追加)
       final analysisResult = _engine.analyze(
         currentRaceName: widget.raceName,
         pastRaceVolatility: volResult.averagePopularity,
@@ -221,9 +274,12 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         pastRaces: pastRaces,
         currentHorseHistory: currentHorseHistory,
         pastTopHorseRecords: pastTopHorseRecords,
+        horseProfileMap: horseProfileMap, // ★追加
+        pedigreeCrossResult: pedigreeCrossResult, // ★追加
+        trackConditionTrendResult: trackConditionTrendResult, // ★追加
       );
 
-      // 比較対象(予想データ)の分析
+      // 比較対象(予想データ)の分析 (こちらにも引数を追加)
       if (widget.comparisonTargets != null && widget.comparisonTargets!.isNotEmpty) {
         final predictionAnalysis = _engine.analyze(
           currentRaceName: widget.raceName,
@@ -232,6 +288,9 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           pastRaces: pastRaces,
           currentHorseHistory: currentHorseHistory,
           pastTopHorseRecords: pastTopHorseRecords,
+          horseProfileMap: horseProfileMap, // ★追加
+          pedigreeCrossResult: pedigreeCrossResult, // ★追加
+          trackConditionTrendResult: trackConditionTrendResult, // ★追加
         );
         final predList = predictionAnalysis['results'] as List<HistoricalMatchModel>;
         _predictionResultMap = {for (var e in predList) e.horseId: e};
@@ -388,6 +447,37 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     return Column(
       children: [
         if (_summary != null) _buildTrendHeader(_summary!),
+
+        // ★新規追加: 馬場シナリオ切替ボタン
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Wrap(
+            spacing: 8.0,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const Text("馬場シナリオ: ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              FilterChip(
+                label: const Text("硬(高速)"),
+                selected: _visibleTcScenarios.contains('high'),
+                onSelected: (selected) => setState(() => selected ? _visibleTcScenarios.add('high') : _visibleTcScenarios.remove('high')),
+                visualDensity: VisualDensity.compact,
+              ),
+              FilterChip(
+                label: const Text("標準"),
+                selected: _visibleTcScenarios.contains('standard'),
+                onSelected: (selected) => setState(() => selected ? _visibleTcScenarios.add('standard') : _visibleTcScenarios.remove('standard')),
+                visualDensity: VisualDensity.compact,
+              ),
+              FilterChip(
+                label: const Text("軟(時計掛)"),
+                selected: _visibleTcScenarios.contains('low'),
+                onSelected: (selected) => setState(() => selected ? _visibleTcScenarios.add('low') : _visibleTcScenarios.remove('low')),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+
         Expanded(
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
@@ -443,39 +533,44 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       maxScore = _results.map((e) => e.totalScore).reduce((a, b) => a > b ? a : b);
     }
 
-    // 比較モードかどうか
     final isComparisonMode = widget.comparisonTargets != null;
 
     return DataTable(
       headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
-      columnSpacing: 20,
+      columnSpacing: 16, // 少し詰める
       columns: [
         if (isComparisonMode) const DataColumn(label: Text('着順/印')),
         const DataColumn(label: Text('馬名')),
         const DataColumn(label: Text('類似馬(1着)')),
-        const DataColumn(label: Text('総合シンクロ')),
+        const DataColumn(label: Text('総合ｼﾝｸﾛ')),
+
+        // ★新規追加: 馬場シナリオ別の列
+        if (_visibleTcScenarios.contains('high')) const DataColumn(label: Text('硬(高速)', style: TextStyle(color: Colors.orange))),
+        if (_visibleTcScenarios.contains('standard')) const DataColumn(label: Text('標準', style: TextStyle(color: Colors.green))),
+        if (_visibleTcScenarios.contains('low')) const DataColumn(label: Text('軟(時計掛)', style: TextStyle(color: Colors.blue))),
+
+        // ★新規追加: 血統列
+        const DataColumn(label: Text('血統')),
+
         const DataColumn(label: Text('人気妙味')),
         const DataColumn(label: Text('信頼度(格)')),
         const DataColumn(label: Text('馬体重')),
         const DataColumn(label: Text('枠順')),
       ],
       rows: _results.map((item) {
-        // 予想データの対応データを取得
         final predictionItem = _predictionResultMap[item.horseId];
 
-        // 予想データから印を取得
         String? userMark;
         if (isComparisonMode && widget.comparisonTargets != null) {
           final target = widget.comparisonTargets!.firstWhere(
                   (h) => h.horseId == item.horseId,
-              orElse: () => widget.comparisonTargets![0] // ダミー
+              orElse: () => widget.comparisonTargets![0]
           );
           if (target.horseId == item.horseId) {
             userMark = target.userMark?.mark;
           }
         }
 
-        // 着順データの取得
         String? rankStr;
         if (isComparisonMode) {
           final currentHorse = widget.horses.firstWhere((h) => h.horseId == item.horseId, orElse: () => widget.horses[0]);
@@ -488,37 +583,78 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           if (isComparisonMode)
             DataCell(Row(
               children: [
-                if (rankStr != null)
-                  Text(rankStr, style: const TextStyle(fontWeight: FontWeight.bold)),
+                if (rankStr != null) Text(rankStr, style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(width: 4),
                 if (userMark != null)
                   Container(
                     padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _getMarkColor(userMark),
-                    ),
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: _getMarkColor(userMark)),
                     child: Text(userMark, style: const TextStyle(color: Colors.white, fontSize: 10)),
                   ),
               ],
             )),
           DataCell(Text(item.horseName, style: const TextStyle(fontWeight: FontWeight.bold))),
-          // 類似馬(1着)セル
           DataCell(_buildSimilarityCell(item.horseId, item.horseName)),
-
           DataCell(_buildTotalScoreCell(item.totalScore, maxScore, predictionItem?.totalScore)),
+
+          // ★新規追加: 馬場シナリオ別のセル
+          if (_visibleTcScenarios.contains('high'))
+            DataCell(_buildScenarioScoreCell(item.scenarioTotalScores['high'] ?? 0.0, maxScore)),
+          if (_visibleTcScenarios.contains('standard'))
+            DataCell(_buildScenarioScoreCell(item.scenarioTotalScores['standard'] ?? 0.0, maxScore)),
+          if (_visibleTcScenarios.contains('low'))
+            DataCell(_buildScenarioScoreCell(item.scenarioTotalScores['low'] ?? 0.0, maxScore)),
+
+          // ★新規追加: 血統セル
+          DataCell(_buildPedigreeCell(item)),
+
           DataCell(InkWell(
             onTap: () => _showPopularityDetailDialog(context, item),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-              child: _buildPopularityCell(item),
-            ),
+            child: Padding(padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0), child: _buildPopularityCell(item)),
           )),
           DataCell(_buildRotationCell(item)),
           DataCell(_buildWeightDetailCell(item, predictionItem)),
           DataCell(_buildFrameDetailCell(item)),
         ]);
       }).toList(),
+    );
+  }
+
+  // ★新規追加: シナリオ別スコアの描画
+  Widget _buildScenarioScoreCell(double score, double maxScore) {
+    Color color;
+    String rank;
+    if (score >= maxScore && score > 0) { rank = 'S'; color = Colors.red; }
+    else if (score >= 90) { rank = 'A'; color = Colors.deepOrange; }
+    else if (score >= 80) { rank = 'B'; color = Colors.orange; }
+    else if (score >= 70) { rank = 'C'; color = Colors.amber.shade700; }
+    else if (score >= 60) { rank = 'D'; color = Colors.blue; }
+    else if (score >= 50) { rank = 'E'; color = Colors.indigo; }
+    else { rank = 'F'; color = Colors.grey; }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('${score.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14)),
+        const SizedBox(width: 4),
+        Container(width: 16, height: 16, alignment: Alignment.center, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)), child: Text(rank, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+      ],
+    );
+  }
+
+  // ★新規追加: 血統スコアの描画
+  Widget _buildPedigreeCell(HistoricalMatchModel item) {
+    Color color = Colors.black;
+    if (item.pedigreeScore >= 80) color = Colors.red;
+    else if (item.pedigreeScore >= 60) color = Colors.orange[800]!;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text('${item.pedigreeScore.toStringAsFixed(0)}点', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+        Text(item.pedigreeDiag, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      ],
     );
   }
 
