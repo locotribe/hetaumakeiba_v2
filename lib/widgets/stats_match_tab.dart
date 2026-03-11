@@ -3,17 +3,18 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
-import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart'; // ★追加
-import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart'; // ★追加
+import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart'; // ★追加
 import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_profile_model.dart'; // ★追加
+import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/models/track_conditions_model.dart'; // ★追加
-import 'package:hetaumakeiba_v2/services/historical_match_service.dart';
+import 'package:hetaumakeiba_v2/models/relative_evaluation_model.dart';
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:intl/intl.dart';
 
 // 類似度データを保持するクラス
@@ -58,7 +59,6 @@ class StatsMatchTab extends StatefulWidget {
 }
 
 class _StatsMatchTabState extends State<StatsMatchTab> {
-  final HistoricalMatchService _service = HistoricalMatchService();
   final HistoricalMatchEngine _engine = HistoricalMatchEngine();
   final RaceRepository _raceRepo = RaceRepository();
   final HorseRepository _horseRepo = HorseRepository();
@@ -75,8 +75,16 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
   Map<String, List<SimilarityData>> _similarityAllMatches = {};
   Map<String, SimilarityData?> _similarityBestFirstPlace = {};
 
-  // ★新規追加: 馬場シナリオの表示状態管理 (デフォルトで標準をONにする)
-  final Set<String> _visibleTcScenarios = {'standard'};
+  // ★新規追加: シミュレーション条件の排他選択
+  String _selectedPace = 'average'; // 'average', 'S', 'M', 'H'
+  String _selectedTrackCondition = 'average'; // 'average', 'high', 'standard', 'low'
+  bool _isDirt = false; // 芝かダートかの判定用
+
+  // ★新規追加: ペースシミュレーション結果保持用
+  Map<String, RelativeEvaluationResult> _relativeBattleResults = {};
+
+  // ★新規追加: 馬場状態の過去傾向データ保持用 (動的ラベル生成に使用)
+  TrackConditionTrendResult? _trackConditionTrendResult;
 
   @override
   void initState() {
@@ -138,19 +146,21 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       // 基準日を「対象レースの開催日」にする
       String targetRaceDateStr;
 
-      // まず結果データ(RaceResult)から日付を探す
+      // まず出馬表キャッシュ(ShutubaTableCache)から芝・ダート判定を取得する
+      final targetCache = await _raceRepo.getShutubaTableCache(widget.raceId);
+      if (targetCache != null) {
+        _isDirt = targetCache.predictionRaceData.trackType?.contains('ダ') ?? false;
+      }
+
+      // 日付の取得: まず結果データ(RaceResult)から探し、無ければキャッシュから探す
       final targetResult = await _raceRepo.getRaceResult(widget.raceId);
       if (targetResult != null) {
         targetRaceDateStr = targetResult.raceDate;
+      } else if (targetCache != null) {
+        targetRaceDateStr = targetCache.predictionRaceData.raceDate;
       } else {
-        // なければ出馬表キャッシュ(ShutubaTableCache)から日付を探す
-        final targetCache = await _raceRepo.getShutubaTableCache(widget.raceId);
-        if (targetCache != null) {
-          targetRaceDateStr = targetCache.predictionRaceData.raceDate;
-        } else {
-          // それでもなければ（稀なケース）、今日の日付をフォールバックとして使う
-          targetRaceDateStr = DateFormat('yyyy/MM/dd').format(DateTime.now());
-        }
+        // それでもなければ（稀なケース）、今日の日付をフォールバックとして使う
+        targetRaceDateStr = DateFormat('yyyy/MM/dd').format(DateTime.now());
       }
 
       for (final currentHorse in widget.horses) {
@@ -259,12 +269,35 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
 
       // 新しいアナライザーの実行
       final trackConditionTrendResult = TrackConditionTrendAnalyzer().analyze(trackConditionMap);
+      _trackConditionTrendResult = trackConditionTrendResult; // ★状態変数に保持
       final pedigreeCrossResult = PedigreeCrossAnalyzer().analyze(
         pastRaces: pastRaces,
         trackConditionMap: trackConditionMap,
         horseProfileMap: horseProfileMap,
       );
+
+      // ★新規追加: 出走馬の過去レースの馬場データを一括取得
+      final Map<String, TrackConditionRecord> horsePastTrackConditions = {};
+      for (final records in currentHorseHistory.values) {
+        for (final rec in records) {
+          if (rec.raceId.length >= 10 && !horsePastTrackConditions.containsKey(rec.raceId)) {
+            String prefix10 = rec.raceId.substring(0, 10);
+            final tc = await tcRepo.getLatestTrackConditionByPrefix(prefix10);
+            if (tc != null) {
+              horsePastTrackConditions[rec.raceId] = tc;
+            }
+          }
+        }
+      }
       // --- ★追加コードここまで ---
+
+      // ★新規追加: ペース別シミュレーションの実行 (RelativeBattleCalculator)
+      final relativeCalculator = RelativeBattleCalculator();
+      final relResults = relativeCalculator.runSimulation(
+        widget.horses,
+        horsePerformanceMap: currentHorseHistory,
+      );
+      _relativeBattleResults = {for (var r in relResults) r.horseId: r};
 
       // 5. HistoricalMatchEngineによる分析 (引数に上記データを追加)
       final analysisResult = _engine.analyze(
@@ -274,9 +307,11 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         pastRaces: pastRaces,
         currentHorseHistory: currentHorseHistory,
         pastTopHorseRecords: pastTopHorseRecords,
-        horseProfileMap: horseProfileMap, // ★追加
-        pedigreeCrossResult: pedigreeCrossResult, // ★追加
-        trackConditionTrendResult: trackConditionTrendResult, // ★追加
+        horseProfileMap: horseProfileMap,
+        pedigreeCrossResult: pedigreeCrossResult,
+        trackConditionTrendResult: _trackConditionTrendResult!,
+        horsePastTrackConditions: horsePastTrackConditions, // ★新規追加
+        isDirt: _isDirt, // ★新規追加
       );
 
       // 比較対象(予想データ)の分析 (こちらにも引数を追加)
@@ -288,9 +323,11 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           pastRaces: pastRaces,
           currentHorseHistory: currentHorseHistory,
           pastTopHorseRecords: pastTopHorseRecords,
-          horseProfileMap: horseProfileMap, // ★追加
-          pedigreeCrossResult: pedigreeCrossResult, // ★追加
-          trackConditionTrendResult: trackConditionTrendResult, // ★追加
+          horseProfileMap: horseProfileMap,
+          pedigreeCrossResult: pedigreeCrossResult,
+          trackConditionTrendResult: _trackConditionTrendResult!,
+          horsePastTrackConditions: horsePastTrackConditions, // ★新規追加
+          isDirt: _isDirt, // ★新規追加
         );
         final predList = predictionAnalysis['results'] as List<HistoricalMatchModel>;
         _predictionResultMap = {for (var e in predList) e.horseId: e};
@@ -305,6 +342,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           _similarityAllMatches = tempSimilarityAllMatches;
           _similarityBestFirstPlace = tempSimilarityBestFirstPlace;
           _isLoading = false;
+          _sortResults(); // 分析完了後に動的スコアでソート
         });
       }
     } catch (e) {
@@ -384,7 +422,150 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     return totalScore / count;
   }
 
-  // --- 以下、ヘルパー ---
+  // --- ★新規追加: 動的スコアの計算とソート ---
+  double _calculateDynamicScore(HistoricalMatchModel item) {
+    // 1. ペーススコアの取得 (RelativeBattleCalculatorのシミュレーション勝率を100点満点に変換)
+    double paceScore = 0.0;
+    if (_selectedPace != 'average') {
+      final relResult = _relativeBattleResults[item.horseId];
+      if (relResult != null) {
+        RacePace targetPace;
+        if (_selectedPace == 'S') targetPace = RacePace.slow;
+        else if (_selectedPace == 'H') targetPace = RacePace.high;
+        else targetPace = RacePace.middle;
+
+        // 指定ペースの勝率(0.0~1.0)を100倍してスコア化
+        final winRate = relResult.scenarioWinRates[targetPace] ?? 0.0;
+        paceScore = winRate * 100.0;
+      }
+    }
+
+    // 2. 馬場シナリオスコアの取得
+    double trackScore = 0.0;
+    if (_selectedTrackCondition != 'average') {
+      trackScore = item.trackConditionScores[_selectedTrackCondition] ?? 0.0;
+    }
+
+    // 3. 総合スコアの算出
+    if (_selectedTrackCondition == 'average' && _selectedPace == 'average') {
+      return item.totalScore;
+    } else {
+      // ベーススコアの比重調整（条件が追加されるごとにベースの比重を減らす）
+      double baseWeight = 1.0;
+      double trackWeight = 0.0;
+      double paceWeight = 0.0;
+
+      if (_selectedTrackCondition != 'average') {
+        baseWeight -= 0.2;
+        trackWeight = 0.2;
+      }
+      if (_selectedPace != 'average') {
+        baseWeight -= 0.2;
+        paceWeight = 0.2;
+      }
+
+      // ベーススコア + 馬場スコア + ペーススコア
+      return (item.totalScore * baseWeight) + (trackScore * trackWeight) + (paceScore * paceWeight);
+    }
+  }
+
+  void _sortResults() {
+    _results.sort((a, b) => _calculateDynamicScore(b).compareTo(_calculateDynamicScore(a)));
+  }
+
+  String _getTrackConditionLabel(String condition) {
+    if (condition == 'average') return '過去平均';
+    if (!_isDirt) {
+      final avg = _trackConditionTrendResult?.avgCushion ?? 9.5;
+      if (condition == 'high') return 'ｸｯｼｮﾝ(${(avg + 0.3).toStringAsFixed(1)}以上)';
+      if (condition == 'standard') return 'ｸｯｼｮﾝ(標:${avg.toStringAsFixed(1)})';
+      if (condition == 'low') return 'ｸｯｼｮﾝ(${(avg - 0.3).toStringAsFixed(1)}以下)';
+    } else {
+      final avg = _trackConditionTrendResult?.avgDirtMoisture ?? 8.0;
+      if (condition == 'low') return '含水率(${(avg >= 2.0 ? avg - 2.0 : 0).toStringAsFixed(1)}%以下)';
+      if (condition == 'standard') return '含水率(標:${avg.toStringAsFixed(1)}%)';
+      if (condition == 'high') return '含水率(${(avg + 2.0).toStringAsFixed(1)}%以上)';
+    }
+    return '';
+  }
+
+  String _getShortTrackConditionLabel(String condition) {
+    if (condition == 'average') return '過去平均';
+    if (!_isDirt) {
+      if (condition == 'high') return '硬(高速)';
+      if (condition == 'standard') return '標準';
+      if (condition == 'low') return '軟(時計掛)';
+    } else {
+      if (condition == 'low') return '乾燥(良)';
+      if (condition == 'standard') return '標準';
+      if (condition == 'high') return '湿潤(重/不)';
+    }
+    return '';
+  }
+
+  Widget _buildSimulationOptions() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text("ペース: ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Wrap(
+                  spacing: 4.0,
+                  children: [
+                    _buildChoiceChip('過去平均', 'average', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
+                    _buildChoiceChip('S(スロー)', 'S', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
+                    _buildChoiceChip('M(ミドル)', 'M', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
+                    _buildChoiceChip('H(ハイ)', 'H', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Text("馬場シナリオ: ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Wrap(
+                  spacing: 4.0,
+                  children: [
+                    _buildChoiceChip('過去平均', 'average', _selectedTrackCondition, (val) => setState(() { _selectedTrackCondition = val; _sortResults(); })),
+                    if (!_isDirt) ...[
+                      _buildChoiceChip(_getTrackConditionLabel('high'), 'high', _selectedTrackCondition, (val) => setState(() { _selectedTrackCondition = val; _sortResults(); })),
+                      _buildChoiceChip(_getTrackConditionLabel('standard'), 'standard', _selectedTrackCondition, (val) => setState(() { _selectedTrackCondition = val; _sortResults(); })),
+                      _buildChoiceChip(_getTrackConditionLabel('low'), 'low', _selectedTrackCondition, (val) => setState(() { _selectedTrackCondition = val; _sortResults(); })),
+                    ] else ...[
+                      _buildChoiceChip(_getTrackConditionLabel('low'), 'low', _selectedTrackCondition, (val) => setState(() { _selectedTrackCondition = val; _sortResults(); })),
+                      _buildChoiceChip(_getTrackConditionLabel('standard'), 'standard', _selectedTrackCondition, (val) => setState(() { _selectedTrackCondition = val; _sortResults(); })),
+                      _buildChoiceChip(_getTrackConditionLabel('high'), 'high', _selectedTrackCondition, (val) => setState(() { _selectedTrackCondition = val; _sortResults(); })),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChoiceChip(String label, String value, String groupValue, Function(String) onSelected) {
+    return ChoiceChip(
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      selected: groupValue == value,
+      onSelected: (selected) {
+        if (selected) onSelected(value);
+      },
+      visualDensity: VisualDensity.compact,
+    );
+  }
+  // ---------------------------------------------
 
   /// 文字列日付をDateTimeに変換 (ソート用に使用)
   DateTime? _parseDate(String dateStr) {
@@ -448,35 +629,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       children: [
         if (_summary != null) _buildTrendHeader(_summary!),
 
-        // ★新規追加: 馬場シナリオ切替ボタン
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Wrap(
-            spacing: 8.0,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              const Text("馬場シナリオ: ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              FilterChip(
-                label: const Text("硬(高速)"),
-                selected: _visibleTcScenarios.contains('high'),
-                onSelected: (selected) => setState(() => selected ? _visibleTcScenarios.add('high') : _visibleTcScenarios.remove('high')),
-                visualDensity: VisualDensity.compact,
-              ),
-              FilterChip(
-                label: const Text("標準"),
-                selected: _visibleTcScenarios.contains('standard'),
-                onSelected: (selected) => setState(() => selected ? _visibleTcScenarios.add('standard') : _visibleTcScenarios.remove('standard')),
-                visualDensity: VisualDensity.compact,
-              ),
-              FilterChip(
-                label: const Text("軟(時計掛)"),
-                selected: _visibleTcScenarios.contains('low'),
-                onSelected: (selected) => setState(() => selected ? _visibleTcScenarios.add('low') : _visibleTcScenarios.remove('low')),
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-        ),
+        // ★新規追加: シミュレーション条件の排他選択UI
+        _buildSimulationOptions(),
 
         Expanded(
           child: SingleChildScrollView(
@@ -530,28 +684,28 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
   Widget _buildResultTable() {
     double maxScore = 0.0;
     if (_results.isNotEmpty) {
-      maxScore = _results.map((e) => e.totalScore).reduce((a, b) => a > b ? a : b);
+      maxScore = _results.map((e) => _calculateDynamicScore(e)).reduce((a, b) => a > b ? a : b);
     }
 
     final isComparisonMode = widget.comparisonTargets != null;
 
     return DataTable(
       headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
-      columnSpacing: 16, // 少し詰める
+      columnSpacing: 16,
       columns: [
         if (isComparisonMode) const DataColumn(label: Text('着順/印')),
         const DataColumn(label: Text('馬名')),
         const DataColumn(label: Text('類似馬(1着)')),
         const DataColumn(label: Text('総合ｼﾝｸﾛ')),
 
-        // ★新規追加: 馬場シナリオ別の列
-        if (_visibleTcScenarios.contains('high')) const DataColumn(label: Text('硬(高速)', style: TextStyle(color: Colors.orange))),
-        if (_visibleTcScenarios.contains('standard')) const DataColumn(label: Text('標準', style: TextStyle(color: Colors.green))),
-        if (_visibleTcScenarios.contains('low')) const DataColumn(label: Text('軟(時計掛)', style: TextStyle(color: Colors.blue))),
+        // ★追加: 選択されたペースシナリオの個別スコア列
+        if (_selectedPace != 'average')
+          DataColumn(label: Text('$_selectedPaceペース', style: const TextStyle(color: Colors.red))),
 
-        // ★新規追加: 血統列
+        // 選択された馬場シナリオの個別スコア列
+        if (_selectedTrackCondition != 'average')
+          DataColumn(label: Text(_getShortTrackConditionLabel(_selectedTrackCondition), style: const TextStyle(color: Colors.indigo))),
         const DataColumn(label: Text('血統')),
-
         const DataColumn(label: Text('人気妙味')),
         const DataColumn(label: Text('信頼度(格)')),
         const DataColumn(label: Text('馬体重')),
@@ -559,6 +713,18 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       ],
       rows: _results.map((item) {
         final predictionItem = _predictionResultMap[item.horseId];
+        final dynamicScore = _calculateDynamicScore(item);
+        final predictionDynamicScore = predictionItem != null ? _calculateDynamicScore(predictionItem) : null;
+
+        // ★追加: 行ごとのペーススコア計算
+        double paceScore = 0.0;
+        if (_selectedPace != 'average') {
+          final relResult = _relativeBattleResults[item.horseId];
+          if (relResult != null) {
+            RacePace targetPace = _selectedPace == 'S' ? RacePace.slow : (_selectedPace == 'H' ? RacePace.high : RacePace.middle);
+            paceScore = (relResult.scenarioWinRates[targetPace] ?? 0.0) * 100.0;
+          }
+        }
 
         String? userMark;
         if (isComparisonMode && widget.comparisonTargets != null) {
@@ -595,17 +761,16 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
             )),
           DataCell(Text(item.horseName, style: const TextStyle(fontWeight: FontWeight.bold))),
           DataCell(_buildSimilarityCell(item.horseId, item.horseName)),
-          DataCell(_buildTotalScoreCell(item.totalScore, maxScore, predictionItem?.totalScore)),
+          DataCell(_buildTotalScoreCell(dynamicScore, maxScore, predictionDynamicScore)),
 
-          // ★新規追加: 馬場シナリオ別のセル
-          if (_visibleTcScenarios.contains('high'))
-            DataCell(_buildScenarioScoreCell(item.scenarioTotalScores['high'] ?? 0.0, maxScore)),
-          if (_visibleTcScenarios.contains('standard'))
-            DataCell(_buildScenarioScoreCell(item.scenarioTotalScores['standard'] ?? 0.0, maxScore)),
-          if (_visibleTcScenarios.contains('low'))
-            DataCell(_buildScenarioScoreCell(item.scenarioTotalScores['low'] ?? 0.0, maxScore)),
+          // ★追加: 選択されたペースシナリオの個別スコアセル
+          if (_selectedPace != 'average')
+            DataCell(_buildScenarioScoreCell(paceScore)),
 
-          // ★新規追加: 血統セル
+          // 選択された馬場シナリオの個別スコアセル
+          if (_selectedTrackCondition != 'average')
+            DataCell(_buildScenarioScoreCell(item.trackConditionScores[_selectedTrackCondition] ?? 0.0)),
+
           DataCell(_buildPedigreeCell(item)),
 
           DataCell(InkWell(
@@ -621,16 +786,15 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
   }
 
   // ★新規追加: シナリオ別スコアの描画
-  Widget _buildScenarioScoreCell(double score, double maxScore) {
+  Widget _buildScenarioScoreCell(double score) {
     Color color;
     String rank;
-    if (score >= maxScore && score > 0) { rank = 'S'; color = Colors.red; }
-    else if (score >= 90) { rank = 'A'; color = Colors.deepOrange; }
-    else if (score >= 80) { rank = 'B'; color = Colors.orange; }
-    else if (score >= 70) { rank = 'C'; color = Colors.amber.shade700; }
-    else if (score >= 60) { rank = 'D'; color = Colors.blue; }
-    else if (score >= 50) { rank = 'E'; color = Colors.indigo; }
-    else { rank = 'F'; color = Colors.grey; }
+    if (score >= 90) { rank = 'S'; color = Colors.red; }
+    else if (score >= 80) { rank = 'A'; color = Colors.deepOrange; }
+    else if (score >= 70) { rank = 'B'; color = Colors.orange; }
+    else if (score >= 60) { rank = 'C'; color = Colors.amber.shade700; }
+    else if (score >= 50) { rank = 'D'; color = Colors.blue; }
+    else { rank = 'E'; color = Colors.grey; }
 
     return Row(
       mainAxisSize: MainAxisSize.min,

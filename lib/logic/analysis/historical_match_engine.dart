@@ -13,6 +13,7 @@ import '../analysis/historical_match_engine_factors/rotation_factor.dart';
 import '../analysis/historical_match_engine_factors/pedigree_factor.dart'; // ★追加
 import '../analysis/historical_match_engine_factors/track_condition_factor.dart'; // ★追加
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart'; // ★追加
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart'; // ★新規追加: TrackConditionRecord用
 
 class HistoricalMatchEngine {
   // 各ファクターのインスタンス化
@@ -30,9 +31,11 @@ class HistoricalMatchEngine {
     required List<RaceResult> pastRaces,
     required Map<String, List<HorseRaceRecord>> currentHorseHistory,
     required Map<String, List<HorseRaceRecord>> pastTopHorseRecords,
-    required Map<String, HorseProfile> horseProfileMap, // ★追加
-    required CrossAnalysisResult pedigreeCrossResult, // ★追加
-    required TrackConditionTrendResult trackConditionTrendResult, // ★追加
+    required Map<String, HorseProfile> horseProfileMap,
+    required CrossAnalysisResult pedigreeCrossResult,
+    required TrackConditionTrendResult trackConditionTrendResult,
+    required Map<String, TrackConditionRecord> horsePastTrackConditions, // ★新規追加: 個別の馬の馬場データ
+    required bool isDirt, // ★新規追加: 芝・ダート判定
   }) {
     // 1. 過去の上位馬抽出
     final topHorses = _extractTopHorses(pastRaces);
@@ -99,7 +102,12 @@ class HistoricalMatchEngine {
       // ★新規追加: 血統と馬場の分析
       final profile = horseProfileMap[horse.horseId];
       final pedRes = _pedigreeFactor.analyze(profile: profile, crossResult: pedigreeCrossResult);
-      final tcRes = _trackConditionFactor.analyze(profile: profile, crossResult: pedigreeCrossResult);
+      final tcRes = _trackConditionFactor.analyze(
+        history: history,
+        horsePastTrackConditions: horsePastTrackConditions,
+        isDirt: isDirt,
+        trendResult: trackConditionTrendResult,
+      );
 
       // 基本スコアの算出 (血統を含めるように変更)
       double baseScore;

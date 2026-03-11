@@ -14,7 +14,7 @@ class PedigreeFactor {
     required CrossAnalysisResult crossResult,
   }) {
     if (profile == null || profile.fatherName.isEmpty) {
-      return PedigreeFactorResult(score: 50.0, diag: 'データなし');
+      return PedigreeFactorResult(score: 40.0, diag: 'データなし');
     }
 
     double score = 40.0; // 基本点
@@ -33,18 +33,27 @@ class PedigreeFactor {
         .firstWhere((e) => e.name == bm, orElse: () => PedigreeCount('', 0))
         .count;
 
-    if (sireCount >= 2) {
-      score += 40.0;
-      diag = '父特注';
+    // 父の好走回数に応じたグラデーション評価
+    if (sireCount >= 3) {
+      score += 45.0; // 85点
+      diag = '父特注(S)';
+    } else if (sireCount == 2) {
+      score += 30.0; // 70点
+      diag = '父好相性(A)';
     } else if (sireCount == 1) {
-      score += 20.0;
-      diag = '父好走あり';
+      score += 15.0; // 55点
+      diag = '父実績あり(B)';
     }
 
-    if (bmCount >= 1) {
-      score += 20.0;
+    // 母父の好走回数に応じたグラデーション評価
+    if (bmCount >= 2) {
+      score += 15.0;
+      if (diag == '標準') diag = '母父好相性';
+      else diag += '・母父◎';
+    } else if (bmCount == 1) {
+      score += 5.0;
       if (diag == '標準') diag = '母父実績あり';
-      else diag += '・母父も';
+      else diag += '・母父○';
     }
 
     return PedigreeFactorResult(score: score.clamp(0.0, 100.0), diag: diag);
