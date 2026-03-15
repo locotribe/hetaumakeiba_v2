@@ -16,6 +16,8 @@ import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
 import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/screens/jockey_stats_page.dart';
 // ▲ AIページのインポート2つを削除済み
+// 追加するコード
+import 'package:hetaumakeiba_v2/widgets/race_page_tabs/race_detail_tab.dart';
 
 enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
 
@@ -107,7 +109,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   void initState() {
     super.initState();
     // ▼ 7 から 5 に変更
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _determineRaceStatus();
   }
 
@@ -310,6 +312,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                         Tab(text: '出走馬分析'),
                         Tab(text: '騎手特性'),
                         Tab(text: 'レース結果'),
+                        Tab(text: 'レース詳細'),
                       ],
                     ),
                   ),
@@ -380,6 +383,11 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),
             RaceResultPage(raceId: widget.raceId, qrData: widget.qrData),
+            RaceDetailTab(
+              raceId: widget.raceId,
+              raceResult: _raceResult,
+              predictionHorses: _predictionRaceData?.horses,
+            ),
           ],
         );
     }
