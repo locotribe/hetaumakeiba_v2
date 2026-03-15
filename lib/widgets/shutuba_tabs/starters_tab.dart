@@ -190,7 +190,20 @@ class HorseInfoCell extends StatelessWidget {
         ),
         Text('母: $mother (母父: $mf)', style: const TextStyle(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
-        Text('馬体重: ${horse.horseWeight ?? '--'} (前走: ${horse.previousHorseWeight ?? '--'})', style: const TextStyle(fontSize: 10)),
+        // --- ▼▼ 馬体重の表示ロジック修正 ▼▼ ---
+        Builder(
+            builder: (context) {
+              final hw = horse.horseWeight ?? '';
+              if (hw.contains('(')) {
+                // 増減カッコが含まれている＝レース結果から取得した当日馬体重
+                return Text('馬体重: (当日: $hw)', style: const TextStyle(fontSize: 10));
+              } else {
+                // それ以外＝通常の出馬表表示
+                return Text('馬体重: ${hw.isEmpty ? '--' : hw} (前走: ${horse.previousHorseWeight ?? '--'})', style: const TextStyle(fontSize: 10));
+              }
+            }
+        ),
+        // --- ▲▲ 馬体重の表示ロジック修正 ▲▲ ---
         const SizedBox(height: 2),
         LegStyleIndicator(legStyleProfile: horse.legStyleProfile),
       ],

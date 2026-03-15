@@ -122,6 +122,27 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
     final dbResult = await _raceRepo.getRaceResult(widget.raceId);
 
     if (shutubaCache != null) {
+      // --- ▼▼ 馬体重のマージ処理追加 ▼▼ ---
+      if (dbResult != null) {
+        for (var shutubaHorse in shutubaCache.predictionRaceData.horses) {
+          try {
+            final resultHorse = dbResult.horseResults.firstWhere(
+                  (hr) => hr.horseId == shutubaHorse.horseId,
+            );
+            if (resultHorse.horseWeight.isNotEmpty && resultHorse.horseWeight != '--') {
+              final weightMatch = RegExp(r'(\d+)\((.*?)\)').firstMatch(resultHorse.horseWeight);
+              if (weightMatch != null) {
+                shutubaHorse.horseWeight = weightMatch.group(1);
+              } else if (RegExp(r'^\d+$').hasMatch(resultHorse.horseWeight)) {
+                shutubaHorse.horseWeight = resultHorse.horseWeight;
+              }
+            }
+          } catch (_) {
+            // 一致する馬が見つからない場合はスキップ
+          }
+        }
+      }
+      // --- ▲▲ 馬体重のマージ処理追加 ▲▲ ---
       setState(() {
         _predictionRaceData = shutubaCache.predictionRaceData;
         _raceResult = dbResult;
@@ -221,6 +242,27 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
       }
 
       if (mounted) {
+        // --- ▼▼ 馬体重のマージ処理追加 ▼▼ ---
+        if (_predictionRaceData != null) {
+          for (var shutubaHorse in _predictionRaceData!.horses) {
+            try {
+              final resultHorse = result.horseResults.firstWhere(
+                    (hr) => hr.horseId == shutubaHorse.horseId,
+              );
+              if (resultHorse.horseWeight.isNotEmpty && resultHorse.horseWeight != '--') {
+                final weightMatch = RegExp(r'(\d+)\((.*?)\)').firstMatch(resultHorse.horseWeight);
+                if (weightMatch != null) {
+                  shutubaHorse.horseWeight = weightMatch.group(1);
+                } else if (RegExp(r'^\d+$').hasMatch(resultHorse.horseWeight)) {
+                  shutubaHorse.horseWeight = resultHorse.horseWeight;
+                }
+              }
+            } catch (_) {
+              // 一致する馬が見つからない場合はスキップ
+            }
+          }
+        }
+        // --- ▲▲ 馬体重のマージ処理追加 ▲▲ ---
         setState(() {
           _raceResult = result;
           _status = RaceStatus.resultConfirmed;

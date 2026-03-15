@@ -222,6 +222,22 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         }
       }
 
+      // --- ▼▼ レース結果がある場合、当日の馬体重をマージする処理 ▼▼ ---
+      if (data != null && widget.raceResult != null) {
+        for (var horse in data.horses) {
+          try {
+            final resultHorse = widget.raceResult!.horseResults.firstWhere(
+                  (hr) => hr.horseId == horse.horseId,
+            );
+            if (resultHorse.horseWeight.isNotEmpty && resultHorse.horseWeight != '--') {
+              // 増減込みの馬体重をそのまま上書きする（例: "480(+2)"）
+              horse.horseWeight = resultHorse.horseWeight;
+            }
+          } catch (_) {}
+        }
+      }
+      // --- ▲▲ レース結果がある場合、当日の馬体重をマージする処理 ▲▲ ---
+
       if (mounted) {
         if (data != null) {
           if (widget.onDataRefreshed != null) {
