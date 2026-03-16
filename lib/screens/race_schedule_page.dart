@@ -275,6 +275,25 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         // 通常アクセス時: まずDBを確認
         schedule = await _raceRepository.getRaceSchedule(dateString);
 
+        // 過去日かつ不完全なデータ（レース数が少ない）場合は自動的に更新する
+        if (schedule != null) {
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          if (date.isBefore(today)) {
+            bool isIncomplete = false;
+            for (final venue in schedule.venues) {
+              // メインレース等しか保存されていない状態を検知（全レース揃っていない）
+              if (venue.races.length <= 5) {
+                isIncomplete = true;
+                break;
+              }
+            }
+            if (isIncomplete) {
+              schedule = await _scraperService.scrapeRaceSchedule(date);
+            }
+          }
+        }
+
         // DBになければ（初アクセスなら）Webから取得
         schedule ??= await _scraperService.scrapeRaceSchedule(date);
       }
@@ -322,11 +341,23 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     final isPastDate = scheduleDate.isBefore(DateTime(now.year, now.month, now.day));
     final timeRegex = RegExp(r'(\d{1,2}):(\d{2})');
 
+    bool needUpdateDb = false;
+
     for (final venue in schedule.venues) {
       for (final race in venue.races) {
         if (!mounted) return;
 
         if (_raceStatusMap[race.raceId] == true) continue;
+
+        // 過去日の場合は無条件で確定済みとし、通信や待機をスキップする
+        if (isPastDate) {
+          setState(() {
+            _raceStatusMap[race.raceId] = true;
+          });
+          race.isConfirmed = true;
+          needUpdateDb = true;
+          continue;
+        }
 
         if (!isPastDate) {
           final match = timeRegex.firstMatch(race.details);
@@ -355,12 +386,17 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
             });
 
             race.isConfirmed = true;
-            await _raceRepository.insertOrUpdateRaceSchedule(schedule);
+            needUpdateDb = true;
           }
         } catch (e) {
           print('Error checking status for ${race.raceId}: $e');
         }
       }
+    }
+
+    // 更新があった場合のみ、最後に一度だけDBを更新する
+    if (needUpdateDb) {
+      await _raceRepository.insertOrUpdateRaceSchedule(schedule);
     }
   }
 
