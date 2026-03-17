@@ -1,8 +1,9 @@
-// main_scaffold.dart
+// lib/main_scaffold.dart
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:archive/archive.dart'; // ★追加: ZIP圧縮用
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -26,9 +27,11 @@ import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/tablet/tablet_saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/tablet/tablet_schedule_wrapper_page.dart';
 import 'package:hetaumakeiba_v2/screens/user_settings_page.dart';
+import 'package:hetaumakeiba_v2/services/local_auth_service.dart'; // ★追加: パスワードハッシュ化用
 import 'package:hetaumakeiba_v2/widgets/track_condition_ticker.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,9 +63,67 @@ class _MainScaffoldState extends State<MainScaffold> {
   String _displayName = '';
   File? _profileImageFile;
 
-  /// データベースをバックアップファイルとして共有する
+  /// アプリ全体のデータ（DB・画像・設定）をZIP化し、専用パスワードで保護して共有する
   Future<void> _backupDatabase() async {
     if (!mounted) return;
+
+    // 1. バックアップ専用パスワードの設定ダイアログ
+    String? password = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        String input = '';
+        bool obscureText = true;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('バックアップの作成'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('このバックアップファイルを復元する際に必要となる「専用パスワード」を設定してください。', style: TextStyle(fontSize: 13)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    obscureText: obscureText,
+                    onChanged: (val) => input = val,
+                    decoration: InputDecoration(
+                      labelText: 'バックアップ用パスワード',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () {
+                          setState(() {
+                            obscureText = !obscureText;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, null),
+                  child: const Text('キャンセル'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (input.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('パスワードを入力してください')));
+                      return;
+                    }
+                    Navigator.pop(context, input);
+                  },
+                  child: const Text('作成'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (password == null) return; // キャンセル時
 
     setState(() {
       _isBusy = true;
@@ -70,19 +131,73 @@ class _MainScaffoldState extends State<MainScaffold> {
 
     try {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('バックアップを準備中...')),
+        const SnackBar(content: Text('バックアップを作成中...\n(画像データを含むため少し時間がかかります)')),
       );
 
+      final archive = Archive();
+
+      // 2. SharedPreferencesのデータとパスワードのハッシュ値をメタデータとして保存
+      final prefs = await SharedPreferences.getInstance();
+      final prefsMap = <String, dynamic>{};
+      for (final key in prefs.getKeys()) {
+        prefsMap[key] = prefs.get(key);
+      }
+      final metaMap = {
+        'password_hash': LocalAuthService().hashPassword(password),
+        'shared_preferences': prefsMap,
+      };
+      final metaData = utf8.encode(jsonEncode(metaMap));
+      archive.addFile(ArchiveFile('backup_meta.json', metaData.length, metaData));
+
+      // 3. データベースファイルの追加
+      await _dbProvider.closeDb(); // 一旦閉じて安全にコピー
       final databasePath = await getDatabasesPath();
       final dbPath = p.join(databasePath, DbConstants.dbName);
+      final dbFile = File(dbPath);
+      if (dbFile.existsSync()) {
+        final dbBytes = await dbFile.readAsBytes();
+        archive.addFile(ArchiveFile(DbConstants.dbName, dbBytes.length, dbBytes));
+      }
+
+      // 4. 画像ファイル群（勝負服・プロフィール画像）の追加
+      final appDir = await getApplicationDocumentsDirectory();
+
+      final ownerImagesDir = Directory(p.join(appDir.path, 'owner_images'));
+      if (ownerImagesDir.existsSync()) {
+        final files = ownerImagesDir.listSync(recursive: true).whereType<File>();
+        for (final file in files) {
+          final relPath = p.relative(file.path, from: appDir.path);
+          final bytes = await file.readAsBytes();
+          // Windowsのバックスラッシュをスラッシュに変換（ZIPの標準仕様）
+          archive.addFile(ArchiveFile(relPath.replaceAll('\\', '/'), bytes.length, bytes));
+        }
+      }
+
+      // プロフィール画像の追加
+      final appDirFiles = appDir.listSync().whereType<File>();
+      for (final file in appDirFiles) {
+        final basename = p.basename(file.path);
+        if (basename.startsWith('profile_picture_')) {
+          final bytes = await file.readAsBytes();
+          archive.addFile(ArchiveFile(basename, bytes.length, bytes));
+        }
+      }
+
+      // 5. ZIP化して共有
+      final zipData = ZipEncoder().encode(archive);
+      if (zipData == null) throw Exception('ZIPの作成に失敗しました');
+
       final now = DateTime.now();
       final formatter = DateFormat('yyyy-MM-dd_HH-mm');
       final formattedDate = formatter.format(now);
-      final fileName = 'hetaumakeiba_backup_$formattedDate.db';
+      final fileName = 'hetaumakeiba_backup_$formattedDate.zip';
 
-      final xFile = XFile(dbPath, name: fileName);
+      final tempDir = await getTemporaryDirectory();
+      final zipFile = File(p.join(tempDir.path, fileName));
+      await zipFile.writeAsBytes(zipData);
 
-      await Share.shareXFiles([xFile], text: 'データベースのバックアップ');
+      final xFile = XFile(zipFile.path, name: fileName);
+      await Share.shareXFiles([xFile], text: 'アプリデータのバックアップ');
 
     } catch (e) {
       if (mounted) {
@@ -99,110 +214,32 @@ class _MainScaffoldState extends State<MainScaffold> {
     }
   }
 
-  /// ファイルからデータベースをインポート（復元）する
+  /// メイン画面でのインポートは安全のためログアウトを促す
   Future<void> _importDatabase() async {
-    if (!mounted) return;
-
-    final confirm = await showDialog<bool>(
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('データをインポート'),
-        content: const Text(
-            'ファイルからデータを復元します。\n現在のデータは全て上書きされ、この操作は取り消せません。よろしいですか？'),
+        title: const Text('データのインポートについて'),
+        content: const Text('データの不整合や他ユーザーのデータを上書きしてしまう事故を防ぐため、\nバックアップからの復元はログアウト後の「ログイン画面」から行ってください。\n\nログアウトしてログイン画面に戻りますか？'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.pop(context),
             child: const Text('キャンセル'),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('インポート実行', style: TextStyle(color: Colors.red)),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              widget.onLogout();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            child: const Text('ログアウト'),
           ),
         ],
       ),
     );
-
-    if (confirm != true) return;
-
-    setState(() {
-      _isBusy = true;
-    });
-
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-      );
-
-      if (result == null || result.files.single.path == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ファイル選択がキャンセルされました。')),
-          );
-        }
-        setState(() { _isBusy = false; });
-        return;
-      }
-
-      if (!mounted) return;
-
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 24),
-              Text("インポート処理中..."),
-            ],
-          ),
-        ),
-      );
-
-      final sourcePath = result.files.single.path!;
-
-      await _dbProvider.closeDb();
-
-      final databasePath = await getDatabasesPath();
-      final destinationPath = p.join(databasePath, DbConstants.dbName);
-      final sourceFile = File(sourcePath);
-      await sourceFile.copy(destinationPath);
-
-      if (!mounted) return;
-      Navigator.of(context).pop();
-
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Text('インポート完了'),
-          content: const Text('データのインポートが完了しました。変更を正しく反映させるには、アプリを一度完全に終了してから、再度起動してください。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-
-    } catch (e) {
-      if (mounted) {
-        if(Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('インポート中にエラーが発生しました: $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isBusy = false;
-        });
-      }
-    }
   }
+
+// （以降のコードは全く変更なしのため省略）
 
   Future<void> _loadUserInfoForDrawer() async {
     if (localUserId == null) return;
