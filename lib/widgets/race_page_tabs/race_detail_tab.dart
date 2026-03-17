@@ -352,10 +352,23 @@ class RaceDetailTab extends StatelessWidget {
     Widget trackContainer = Container(
       height: containerHeight,
       decoration: BoxDecoration(
-        color: const Color(0xFF8BC34A),
         borderRadius: BorderRadius.circular(4),
+        // ▼ 変更点：単色のcolorを削除し、gradientでゼブラ模様を追加
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment(0.08, 0.0), // 縞の幅。数値を小さくすると縞が細かくなります
+          colors: [
+            Color(0xFF8BC34A), // 明るい芝
+            Color(0xFF8BC34A),
+            Color(0xFF7CB342), // 濃い芝
+            Color(0xFF7CB342),
+          ],
+          stops: [0.0, 0.5, 0.5, 1.0],
+          tileMode: TileMode.repeated,
+        ),
       ),
       child: Stack(
+        // ... 以降は元のコードと同じ
         clipBehavior: Clip.none,
         children: [
           SingleChildScrollView(
@@ -375,7 +388,10 @@ class RaceDetailTab extends StatelessWidget {
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      const Positioned.fill(child: ColoredBox(color: Colors.transparent)),
+                      // ▼ ここを変更: 透明なBoxの代わりに、先ほど作った芝生テクスチャを配置
+                      const Positioned.fill(
+                        child: CustomPaint(painter: GrassTexturePainter()),
+                      ),
                       ...horseWidgets,
                     ],
                   ),
@@ -686,11 +702,24 @@ class RaceDetailTab extends StatelessWidget {
     return Container(
       height: maxNeededHeight,
       decoration: BoxDecoration(
-        color: const Color(0xFF8BC34A).withOpacity(0.9),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: Colors.white, width: 2),
+        // ▼ 変更点：単色を削除し、透過つきのゼブラ模様を追加
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: const Alignment(0.08, 0.0),
+          colors: [
+            const Color(0xFF8BC34A).withOpacity(0.9),
+            const Color(0xFF8BC34A).withOpacity(0.9),
+            const Color(0xFF7CB342).withOpacity(0.9),
+            const Color(0xFF7CB342).withOpacity(0.9),
+          ],
+          stops: const [0.0, 0.5, 0.5, 1.0],
+          tileMode: TileMode.repeated,
+        ),
       ),
       child: Stack(
+        // ... 以降は元のコードと同じ
         children: [
           // スクロールする馬たち
           SingleChildScrollView(
@@ -705,7 +734,14 @@ class RaceDetailTab extends StatelessWidget {
                 width: trackWidth,
                 child: Stack(
                   clipBehavior: Clip.none,
-                  children: horseWidgets,
+                  children: [
+                    // ▼ 1. ここに追加: 芝生テクスチャを背景として一番下に配置
+                    const Positioned.fill(
+                      child: CustomPaint(painter: GrassTexturePainter()),
+                    ),
+                    // ▼ 2. 変更: horseWidgets の前に「...」をつけてリストを展開する
+                    ...horseWidgets,
+                  ],
                 ),
               ),
             ),
@@ -1308,4 +1344,39 @@ class _BlinkingRedHorseMarkerState extends State<BlinkingRedHorseMarker> with Si
       ),
     );
   }
+}
+// ==========================================
+// ▼ 新規追加: 芝生のランダムなドット（テクスチャ）を描画するクラス
+// ==========================================
+class GrassTexturePainter extends CustomPainter {
+  const GrassTexturePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // シードを固定して、画面が再描画されてもドットの位置が変わらない（チラつかない）ようにする
+    final random = math.Random(42);
+
+    // 背景の緑に馴染むように、半透明の黒（濃い影）と白（光の反射）を用意
+    final paintDark = Paint()..color = Colors.black.withValues(alpha: 0.06);
+    final paintLight = Paint()..color = Colors.white.withValues(alpha: 0.12);
+
+    // 描画領域の広さに応じてドットの数を計算（密度を調整したい場合は 100 の数値を変更）
+    int dotCount = (size.width * size.height / 50).toInt();
+
+    for (int i = 0; i < dotCount; i++) {
+      double x = random.nextDouble() * size.width;
+      double y = random.nextDouble() * size.height;
+      double radius = random.nextDouble() * 1.2 + 0.5; // 0.5〜1.7のランダムなサイズ
+
+      // ランダムに濃いドットと薄いドットを散りばめる
+      if (random.nextBool()) {
+        canvas.drawCircle(Offset(x, y), radius, paintDark);
+      } else {
+        canvas.drawCircle(Offset(x, y), radius, paintLight);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
