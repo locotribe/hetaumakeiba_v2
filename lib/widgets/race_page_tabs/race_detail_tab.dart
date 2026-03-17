@@ -119,7 +119,6 @@ class RaceDetailTab extends StatelessWidget {
   /// 1つのコーナーごとのコースと馬の配置を描画する
   Widget _buildCornerTrack(BuildContext context, String passage, List<HorseResult> horses, {required bool isLeft, required bool isRight}) {
 
-    // ▼ 追加: 1着の馬の番号をあらかじめ取得しておく
     String firstPlaceNum = "";
     try {
       firstPlaceNum = horses.firstWhere((h) => h.rank == '1').horseNumber;
@@ -175,6 +174,20 @@ class RaceDetailTab extends StatelessWidget {
     if (currentToken.isNotEmpty) currentGroup.add(currentToken);
     if (currentGroup.isNotEmpty) items.add(List<String>.from(currentGroup));
 
+    // ▼ 追加: 縦に並ぶ最大頭数を計算
+    int maxVerticalCount = 1;
+    for (var item in items) {
+      if (item is List<String> && item.length > maxVerticalCount) {
+        maxVerticalCount = item.length;
+      }
+    }
+
+    // 馬の配置間隔とコンテナの高さの自動計算
+    double verticalPitch = 28.0; // 馬アイコンのサイズ(24) + 余白
+    double startY = 32.0; // 上部のコーナー名テロップ用の余白
+    double containerHeight = startY + (maxVerticalCount * verticalPitch) + 8.0;
+    containerHeight = math.max(containerHeight, 80.0); // 最低高さを保証
+
     double currentX = 70.0;
     List<Widget> horseWidgets = [];
     List<String> top3Horses = [];
@@ -202,215 +215,187 @@ class RaceDetailTab extends StatelessWidget {
           }
 
           String frameNumStr = "1";
+          String rankStr = ""; // ▼ 追加: 着順を取得する変数を追加
           for (var h in horses) {
             if (h.horseNumber == horseToken) {
               frameNumStr = h.frameNumber;
+              rankStr = h.rank; // ▼ 着順を保存
               break;
             }
           }
 
-          // ▼ 修正: Y座標の配置領域を圧縮し、上下のテロップ（帯）に被らないようにする
-          // 利用可能領域を y=36 から y=100 (幅64px) に限定
-          // ▼ ループの中の horseWidgets.add の直前を修正します
+          // ▼ 追加: 着順によってアイコンとフォントのサイズを変更する
+          double markerSize = 24.0;
+          double markerFontSize = 12.0;
+          if (rankStr == '1') {
+            markerSize = 30.0; // 1着は一番大きく
+            markerFontSize = 15.0;
+          } else if (rankStr == '2' || rankStr == '3') {
+            markerSize = 28.0; // 2, 3着も少し大きく
+            markerFontSize = 14.0;
+          }
 
-          double yPos = (count == 1) ? 68.0 : 36.0 + (j * (64.0 / (count - 1)));
+          double yPos = startY + (j * verticalPitch);
           double xPos = currentX;
           if (isLeading) xPos -= 12.0;
 
-          // ▼ 追加: 1着馬なら赤い影、それ以外（先頭含む）は影なしの空リストを渡す
-          bool isFirstPlace = (horseToken == firstPlaceNum);
-          List<BoxShadow> shadowStyle = isFirstPlace
-              ? const [BoxShadow(color: Colors.red, blurRadius: 5.0, spreadRadius: 1.0, offset: Offset(1, 2))]
-              : const [];
+          // ▼ 追加: 大きくなった分、中心位置をずらして元の座標の中心に合わせる
+          double offsetAdjust = (markerSize - 24.0) / 2;
+
+          bool isFirstPlace = (rankStr == '1');
 
           horseWidgets.add(
             Positioned(
-              left: isLeft ? null : xPos,
-              right: isLeft ? xPos : null,
-              top: yPos,
+              left: isLeft ? null : xPos - offsetAdjust,          // ▼ offsetAdjustを引く
+              right: isLeft ? (xPos - offsetAdjust) : null,       // ▼ offsetAdjustを引く
+              top: yPos - offsetAdjust,                           // ▼ offsetAdjustを引く
               child: _buildHorseMarker(
                 horseToken,
                 frameNumStr,
-                customShadow: shadowStyle, // ▼ 影のスタイルを適用
+                isBlinkingRed: isFirstPlace,
+                size: markerSize,        // ▼ 変更したサイズを渡す
+                fontSize: markerFontSize,  // ▼ 変更したフォントサイズを渡す
               ),
             ),
           );
         }
       }
     }
-    // 1. デバイスの画面幅を取得（左右の親パディング16px×2を引いた値）
+
     double screenWidth = MediaQuery.of(context).size.width - 32;
     double lineOffset = math.max(screenWidth * 0.2, 170.0);
-    // 2. trackWidthを「馬の配置に必要な幅」と「画面幅」の大きい方に設定
-    // これにより、画面が広い時は画面いっぱいに広がり、狭い時はスクロール可能になります
     double trackWidth = math.max(currentX + 50.0, screenWidth);
 
-    // 左上のコーナー名テロップ (少しコンパクトに)
     Widget headerOverlay = Positioned(
       top: 6,
       left: isLeft ? null : 6,
       right: isLeft ? 6 : null,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          isLeft ? '$title ⇨' : '⇦ $title',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+      child: IgnorePointer( // ← ここに IgnorePointer を追加
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            isLeft ? '$title ⇨' : '⇦ $title',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+          ),
         ),
       ),
     );
 
-    // 下部の先頭3頭表示テロップ (縦並び＆勝負服・人気・オッズ表示)
-    Widget bottomOverlay = Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        // 背景色を透明に変更
-        color: Colors.transparent,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min, // 最小の高さにする
-          children: [
-            // 縦に並べる
-            ...top3Horses.map((horseNum) {
-              String fNum = "1";
-              String horseId = "";
-              for (var h in horses) {
-                if (h.horseNumber == horseNum) {
-                  fNum = h.frameNumber;
-                  horseId = h.horseId; // 検索のためにIDを保持
-                  break;
-                }
+    // ▼ 修正: オーバーレイをやめ、緑の枠の下に配置するためのWidgetを作成
+    Widget top3Widget = Padding(
+      padding: const EdgeInsets.only(top: 8.0, bottom: 16.0), // 緑枠との隙間
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: top3Horses.map((horseNum) {
+          String fNum = "1";
+          String horseId = "";
+          for (var h in horses) {
+            if (h.horseNumber == horseNum) {
+              fNum = h.frameNumber;
+              horseId = h.horseId;
+              break;
+            }
+          }
+
+          String? ownerImagePath;
+          String popAndOddsText = "";
+
+          if (predictionHorses != null && horseId.isNotEmpty) {
+            try {
+              final matchedHorse = predictionHorses!.firstWhere((p) => p.horseId == horseId);
+              ownerImagePath = matchedHorse.ownerImageLocalPath;
+
+              String pop = matchedHorse.popularity != null ? '${matchedHorse.popularity}人気' : '';
+              String odds = matchedHorse.odds != null ? '${matchedHorse.odds}倍' : '';
+              if (pop.isNotEmpty || odds.isNotEmpty) {
+                popAndOddsText = '$pop ${odds.isNotEmpty ? '($odds)' : ''}'.trim();
               }
+            } catch (e) {}
+          }
 
-              // predictionHorses から勝負服パス・人気・オッズを取得
-              String? ownerImagePath;
-              String popAndOddsText = ""; // 表示用のテキスト
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 3.0, offset: Offset(1, 2))],
+                  ),
+                  child: _buildHorseMarker(horseNum, fNum, size: 18, fontSize: 10),
+                ),
+                const SizedBox(width: 8),
+                if (ownerImagePath != null && ownerImagePath.isNotEmpty)
+                  Image.file(File(ownerImagePath), width: 20, height: 20, fit: BoxFit.contain, errorBuilder: (c, e, s) => const SizedBox(width: 20, height: 20))
+                else
+                  const SizedBox(width: 20, height: 20),
+                if (popAndOddsText.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    popAndOddsText,
+                    style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
 
-              if (predictionHorses != null && horseId.isNotEmpty) {
-                try {
-                  final matchedHorse = predictionHorses!.firstWhere(
-                          (p) => p.horseId == horseId
-                  );
-                  ownerImagePath = matchedHorse.ownerImageLocalPath;
-
-                  // ▼ 人気とオッズの文字列を組み立てる
-                  String pop = matchedHorse.popularity != null ? '${matchedHorse.popularity}人気' : '';
-                  String odds = matchedHorse.odds != null ? '${matchedHorse.odds}倍' : '';
-
-                  if (pop.isNotEmpty || odds.isNotEmpty) {
-                    // 例: "1人気 (2.5倍)" のような形にする
-                    popAndOddsText = '$pop ${odds.isNotEmpty ? '($odds)' : ''}'.trim();
-                  }
-                } catch (e) {
-                  // 見つからない場合は無視
-                }
-              }
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 5.0),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 番号の丸アイコン（影付き）
-                    Container(
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black54,
-                            blurRadius: 3.0,
-                            offset: Offset(1, 2),
-                          ),
-                        ],
-                      ),
-                      child: _buildHorseMarker(horseNum, fNum, size: 18, fontSize: 10),
-                    ),
-                    const SizedBox(width: 8),
-
-                    // 勝負服画像
-                    if (ownerImagePath != null && ownerImagePath.isNotEmpty)
-                      Image.file(
-                        File(ownerImagePath),
-                        width: 20,
-                        height: 20,
-                        fit: BoxFit.contain,
-                        errorBuilder: (c, e, s) => const SizedBox(width: 20, height: 20),
-                      )
-                    else
-                      const SizedBox(width: 20, height: 20), // 画像がない場合のスペース
-
-                    // ▼ 追加: 人気とオッズを表示
-                    if (popAndOddsText.isNotEmpty) ...[
-                      const SizedBox(width: 8), // 画像との隙間
-                      Text(
-                        popAndOddsText,
-                        style: const TextStyle(
-                          fontSize: 11, // 小さめの文字サイズ
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w500, // 少しだけ太字にして見やすく
-                        ),
-                      ),
+    // ▼ 修正: 自動計算した高さを持つ緑のトラック部分
+    Widget trackContainer = Container(
+      height: containerHeight,
+      decoration: BoxDecoration(
+        color: const Color(0xFF8BC34A),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            reverse: isLeft,
+            physics: const ClampingScrollPhysics(),
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: isLeft ? 40.0 : lineOffset,
+                right: isLeft ? lineOffset : 40.0,
+              ),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                child: SizedBox(
+                  width: trackWidth,
+                  height: containerHeight,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Positioned.fill(child: ColoredBox(color: Colors.transparent)),
+                      ...horseWidgets,
                     ],
-                  ],
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Container(
-        height: 130, // 高さを160に拡張
-        decoration: BoxDecoration(
-          color: const Color(0xFF8BC34A),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              reverse: isLeft,
-              physics: const ClampingScrollPhysics(), // スクロールの感触を安定させる
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: isLeft ? 40.0 : lineOffset,
-                  right: isLeft ? lineOffset : 40.0,
-                ),
-                child: GestureDetector(
-                  // behavior を opaque にすることで、透明な部分でもタッチイベントを拾うようになります
-                  behavior: HitTestBehavior.opaque,
-                  child: SizedBox(
-                    width: trackWidth,
-                    height: 160, // コンテナと同じ高さに合わせる
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // ▼ 追加: 背面全体をカバーする透明な箱（当たり判定用）
-                        const Positioned.fill(
-                          child: ColoredBox(color: Colors.transparent),
-                        ),
-                        ...horseWidgets,
-                      ],
-                    ),
                   ),
                 ),
               ),
             ),
-            headerOverlay,
-            bottomOverlay,
-          ],
-        ),
+          ),
+          // IgnorePointerでラップして、コーナー名の上でもスクロール可能にする
+          headerOverlay,
+        ],
       ),
+    );
+
+    // ▼ 最終的にトラックと先頭3頭情報を縦に並べて返す
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        trackContainer,
+        top3Widget,
+      ],
     );
   }
 
@@ -458,13 +443,23 @@ class RaceDetailTab extends StatelessWidget {
     if (currentToken.isNotEmpty) currentGroup.add(currentToken);
     if (currentGroup.isNotEmpty) items.add(List<String>.from(currentGroup));
 
+    // ▼ _buildCornerTrack と同様のロジックでY座標を計算する
+    int maxVerticalCount = 1;
+    for (var item in items) {
+      if (item is List<String> && item.length > maxVerticalCount) {
+        maxVerticalCount = item.length;
+      }
+    }
+
+    double verticalPitch = 28.0;
+    double startY = 32.0;
+
     for (var item in items) {
       if (item is List<String>) {
         int count = item.length;
         for (int j = 0; j < count; j++) {
           String horseToken = item[j].replaceAll('*', '');
-          // コーナーと同じ圧縮されたY座標式を使用
-          double yPos = (count == 1) ? 68.0 : 36.0 + (j * (64.0 / (count - 1)));
+          double yPos = startY + (j * verticalPitch);
           yMap[horseToken] = yPos;
         }
       }
@@ -540,7 +535,7 @@ class RaceDetailTab extends StatelessWidget {
       currentX += marginPx;
       double finalY = lastCornerYMap[horse.horseNumber] ?? 68.0;
 
-      // 衝突回避
+      // 衝突回避（当たり判定はデフォルトの24のままで計算してレイアウト崩れを防ぎます）
       bool hasOverlap() {
         Rect currentRect = Rect.fromLTWH(currentX, finalY, 24, 24);
         for (var rect in placedRects) {
@@ -552,15 +547,34 @@ class RaceDetailTab extends StatelessWidget {
       while (hasOverlap()) { finalY += 26.0; }
 
       placedRects.add(Rect.fromLTWH(currentX, finalY, 24, 24));
-      // 下の上がりテロップ（高さ30）に被らないようにmaxNeededHeightを自動拡張
       maxNeededHeight = math.max(maxNeededHeight, finalY + 60.0);
+
+      // ▼ 追加: 着順によってサイズを変更する
+      double markerSize = 24.0;
+      double markerFontSize = 12.0;
+      if (horse.rank == '1') {
+        markerSize = 30.0;
+        markerFontSize = 15.0;
+      } else if (horse.rank == '2' || horse.rank == '3') {
+        markerSize = 28.0;
+        markerFontSize = 14.0;
+      }
+
+      // ▼ 追加: 大きくなった分、中心位置をずらす
+      double offsetAdjust = (markerSize - 24.0) / 2;
 
       horseWidgets.add(
         Positioned(
-          left: isLeft ? null : currentX,
-          right: isLeft ? currentX : null,
-          top: finalY,
-          child: _buildHorseMarker(horse.horseNumber, horse.frameNumber),
+          left: isLeft ? null : currentX - offsetAdjust,           // ▼ offsetAdjustを引く
+          right: isLeft ? (currentX - offsetAdjust) : null,        // ▼ offsetAdjustを引く
+          top: finalY - offsetAdjust,                              // ▼ offsetAdjustを引く
+          child: _buildHorseMarker(
+            horse.horseNumber,
+            horse.frameNumber,
+            isBlinkingRed: horse.rank == '1',
+            size: markerSize,        // ▼ サイズを渡す
+            fontSize: markerFontSize,  // ▼ フォントサイズを渡す
+          ),
         ),
       );
     }
@@ -749,7 +763,17 @@ class RaceDetailTab extends StatelessWidget {
   }
 
   /// 枠色に合わせた馬の丸アイコンを生成
-  Widget _buildHorseMarker(String horseNum, String frameNum, {double size = 24, double fontSize = 12, List<BoxShadow>? customShadow}) {
+  Widget _buildHorseMarker(String horseNum, String frameNum, {double size = 24, double fontSize = 12, bool isBlinkingRed = false}) {
+    // 1着馬の場合は、アニメーションする専用のウィジェットを返す
+    if (isBlinkingRed) {
+      return BlinkingRedHorseMarker(
+        horseNum: horseNum,
+        frameNum: frameNum,
+        size: size,
+        fontSize: fontSize,
+      );
+    }
+
     Color bgColor = frameNum.gateBackgroundColor;
     Color textColor = frameNum.gateTextColor;
     bool hasBorder = frameNum == "1" || frameNum == "8" || frameNum.isEmpty;
@@ -761,10 +785,8 @@ class RaceDetailTab extends StatelessWidget {
         color: bgColor,
         shape: BoxShape.circle,
         border: hasBorder ? Border.all(color: Colors.black26, width: 1) : null,
-        // ▼ customShadowが渡された場合はそれを使用（空なら影なし）、nullならデフォルトの影
-        boxShadow: customShadow != null
-            ? (customShadow.isEmpty ? null : customShadow)
-            : const [BoxShadow(color: Colors.black38, blurRadius: 2, offset: Offset(1, 1))],
+        // ▼ 1着以外のすべての馬に薄い影を適用
+        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 2, offset: Offset(1, 1))],
       ),
       alignment: Alignment.center,
       child: Text(
@@ -1195,6 +1217,93 @@ class RaceResultBoard extends StatelessWidget {
             fontFamily: 'monospace',
             fontWeight: FontWeight.bold,
             height: 1.1
+        ),
+      ),
+    );
+  }
+}
+// ==========================================
+// ▼ 新規追加: 点滅する1着馬のマーカーウィジェット
+// ==========================================
+class BlinkingRedHorseMarker extends StatefulWidget {
+  final String horseNum;
+  final String frameNum;
+  final double size;
+  final double fontSize;
+
+  const BlinkingRedHorseMarker({
+    super.key,
+    required this.horseNum,
+    required this.frameNum,
+    this.size = 24,
+    this.fontSize = 12,
+  });
+
+  @override
+  State<BlinkingRedHorseMarker> createState() => _BlinkingRedHorseMarkerState();
+}
+
+class _BlinkingRedHorseMarkerState extends State<BlinkingRedHorseMarker> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    // 1秒かけてゆっくり点滅（往復）させる
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+
+    // 最小0.3 〜 最大1.0 の間でなめらかに変化する値を生成
+    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Color bgColor = widget.frameNum.gateBackgroundColor;
+    Color textColor = widget.frameNum.gateTextColor;
+    bool hasBorder = widget.frameNum == "1" || widget.frameNum == "8" || widget.frameNum.isEmpty;
+
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: BoxDecoration(
+            color: bgColor,
+            shape: BoxShape.circle,
+            border: hasBorder ? Border.all(color: Colors.black26, width: 1) : null,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.red.withOpacity(_animation.value), // 透明度が変化
+                blurRadius: 3.0 + (_animation.value * 4.0),     // ぼかし具合が変化
+                spreadRadius: 1.0 + (_animation.value * 2.0),   // 広がりが変化
+                offset: const Offset(0, 0),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: child,
+        );
+      },
+      child: Text(
+        widget.horseNum,
+        style: TextStyle(
+          color: textColor,
+          fontSize: widget.fontSize,
+          fontWeight: FontWeight.bold,
+          height: 1.0,
         ),
       ),
     );
