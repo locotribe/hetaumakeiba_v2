@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import '../services/track_conditions_scraper_service.dart';
+import '../services/cloud_sync_service.dart'; // ★追加
 
 final GlobalKey<TrackConditionTickerState> trackConditionTickerKey = GlobalKey<TrackConditionTickerState>();
 
@@ -21,6 +22,7 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
   final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
   List<TrackConditionRecord> _records = [];
   bool _isSyncing = false;
+  bool _needsCloudSync = false; // ★追加: クラウド同期が必要かどうかのフラグ
   final ScrollController _scrollController = ScrollController();
   Timer? _timer;
   int _currentIndex = 0;
@@ -29,7 +31,7 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
   @override
   void initState() {
     super.initState();
-    loadData(); // ★修正: _loadData() から loadData() に変更
+    loadData();
   }
 
   @override
@@ -39,13 +41,15 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
     super.dispose();
   }
 
-  // ★修正: このメソッドを他のファイルから呼び出せるようにする（publicにする）
   Future<void> loadData() async {
     if (!mounted) return;
     setState(() => _isSyncing = true);
 
     try {
-      // ★SharedPreferencesから最終取得時刻を読み込む
+      // ★追加: クラウド同期の必要性をチェック
+      final cloudSyncService = CloudSyncService();
+      final needsSync = await cloudSyncService.checkSyncRequired();
+
       final prefs = await SharedPreferences.getInstance();
       final lastScrapedStr = prefs.getString('last_track_condition_scrape_time');
       if (lastScrapedStr != null) {
@@ -69,6 +73,7 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
 
       if (mounted) {
         setState(() {
+          _needsCloudSync = needsSync; // ★追加
           _records = filteredRecords;
           _isSyncing = false;
         });
@@ -84,21 +89,34 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
   Future<void> _handleRefresh() async {
     setState(() => _isSyncing = true);
 
-    // （削除処理は消し、正しいスクレイパーだけを実行します）
-    await TrackConditionsScraperService.scrapeAndSave();
+    if (_needsCloudSync) {
+      // ★追加: クラウドからのインポートを実行
+      final cloudSyncService = CloudSyncService();
+      final success = await cloudSyncService.importFromCloud();
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('クラウドから過去データを補完しました'), backgroundColor: Colors.green),
+        );
+      }
+    } else {
+      // 従来のスクレイピング
+      await TrackConditionsScraperService.scrapeAndSave();
+    }
 
     // 取得時刻を現在時刻で更新
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('last_track_condition_scrape_time', DateTime.now().toIso8601String());
 
     // ティッカーの表示データを再読み込み
-    await loadData(); // ★修正: _loadData() から loadData() に変更
+    await loadData();
 
     if (mounted) {
-      setState(() => _isSyncing = false);
+      setState(() {
+        _isSyncing = false;
+        _needsCloudSync = false; // ★追加: リフレッシュ後はフラグを落とす
+      });
     }
   }
-
   void _startSequence() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
@@ -140,7 +158,6 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. データが空、かつ更新中でもない場合は何も表示しない
     if (_records.isEmpty && !_isSyncing) return const SizedBox.shrink();
 
     return Container(
@@ -149,11 +166,11 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 左端：更新ボタンまたは読み込み中インジケーター
+          // ★変更: 更新ボタンのUIを必要性に応じて切り替え
           Container(
             width: 48,
-            height: 64, // ティッカー全体の高さ(64)と一致させる
-            alignment: Alignment.center, // 常にContainerのど真ん中に配置
+            height: 64,
+            alignment: Alignment.center,
             child: _isSyncing
                 ? const SizedBox(
               width: 20,
@@ -163,15 +180,39 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
                 color: Colors.orange,
               ),
             )
-                : IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              icon: const Icon(Icons.refresh, color: Colors.orange, size: 22),
-              onPressed: _handleRefresh,
+                : Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: Icon(
+                      _needsCloudSync ? Icons.cloud_download : Icons.refresh,
+                      color: _needsCloudSync ? Colors.redAccent : Colors.orange,
+                      size: 22
+                  ),
+                  onPressed: _handleRefresh,
+                ),
+                if (_needsCloudSync)
+                  Positioned(
+                    right: 4,
+                    top: 12,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 8,
+                        minHeight: 8,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
 
-          // 仕切り線（Paddingからconstを外してエラーを回避）
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: const VerticalDivider(color: Colors.white24, width: 1),
@@ -189,7 +230,6 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
               controller: _scrollController,
               scrollDirection: Axis.horizontal,
               physics: const NeverScrollableScrollPhysics(),
-              // 画面幅が足りている場合は要素数分だけ表示、足りない場合は無限ループ（null）
               itemCount: MediaQuery.of(context).size.width >= (380.0 * _records.length + 50.0) ? _records.length : null,
 
               itemBuilder: (context, index) {
@@ -199,14 +239,12 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
                 final dateFull = record.date.replaceAll("-", "/");
 
                 return Container(
-                  // ★オーバーフロー防止のため幅を固定し、適切な余白を設定
                   width: 380,
                   padding: const EdgeInsets.only(left: 8, right: 16, top: 10),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      // ブロック1: 開催場・日付・更新時刻
                       Column(
                         mainAxisAlignment: MainAxisAlignment.start,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,8 +257,6 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
                               style: const TextStyle(color: Colors.white70, fontSize: 10)),
                         ],
                       ),
-
-                      // ブロック2: 芝クッション値
                       Column(
                         mainAxisAlignment: MainAxisAlignment.start,
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -230,8 +266,6 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
                               style: const TextStyle(color: Colors.greenAccent, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
                         ],
                       ),
-
-                      // ブロック3: 芝含水率
                       Column(
                         mainAxisAlignment: MainAxisAlignment.start,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,8 +285,6 @@ class TrackConditionTickerState extends State<TrackConditionTicker> {
                           ),
                         ],
                       ),
-
-                      // ブロック4: ダート含水率
                       Column(
                         mainAxisAlignment: MainAxisAlignment.start,
                         crossAxisAlignment: CrossAxisAlignment.start,

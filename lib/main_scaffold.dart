@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:archive/archive.dart'; // ★追加: ZIP圧縮用
+import 'package:archive/archive.dart';
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -27,7 +27,7 @@ import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/tablet/tablet_saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/tablet/tablet_schedule_wrapper_page.dart';
 import 'package:hetaumakeiba_v2/screens/user_settings_page.dart';
-import 'package:hetaumakeiba_v2/services/local_auth_service.dart'; // ★追加: パスワードハッシュ化用
+import 'package:hetaumakeiba_v2/services/local_auth_service.dart';
 import 'package:hetaumakeiba_v2/widgets/track_condition_ticker.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
@@ -259,55 +259,6 @@ class _MainScaffoldState extends State<MainScaffold> {
             prefs.getString('display_name_${localUserId!}') ?? user?.username ?? '';
         _profileImageFile = newImageFile;
       });
-    }
-  }
-
-  Future<void> _importTrackConditionsCsv() async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-        withData: true,
-      );
-
-      if (result != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('CSVデータを読み込んでいます...')),
-        );
-
-        String csvString = "";
-
-        if (result.files.single.bytes != null) {
-          csvString = utf8.decode(result.files.single.bytes!);
-        } else if (result.files.single.path != null) {
-          File file = File(result.files.single.path!);
-          csvString = await file.readAsString();
-        }
-
-        if (csvString.isEmpty) throw Exception("ファイルの内容を読み込めませんでした");
-
-        final resultCounts = await _trackConditionRepository.importTrackConditionsFromCsv(csvString);
-        int inserted = resultCounts['inserted'] ?? 0;
-        int duplicates = resultCounts['duplicates'] ?? 0;
-
-        if (!mounted) return;
-
-        String message = '✅ インポート完了: $inserted件追加しました';
-        if (duplicates > 0) {
-          message += '（既に登録済みの $duplicates件 はスキップしました）';
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), backgroundColor: Colors.green),
-        );
-
-        trackConditionTickerKey.currentState?.loadData();
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ インポート失敗: $e'), backgroundColor: Colors.red),
-      );
     }
   }
 
@@ -700,14 +651,6 @@ class _MainScaffoldState extends State<MainScaffold> {
               onTap: () {
                 Navigator.of(context).pop();
                 _importDatabase();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.upload_file),
-              title: const Text('馬場データ(CSV)をインポート'),
-              onTap: () {
-                Navigator.pop(context);
-                _importTrackConditionsCsv();
               },
             ),
             ListTile(

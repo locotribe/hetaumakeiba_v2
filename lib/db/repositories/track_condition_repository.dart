@@ -128,7 +128,7 @@ class TrackConditionRepository {
       rethrow;
     }
   }
-// ★追加: レースIDの先頭10桁から、当日の最新の馬場状態レコードを取得するメソッド
+  // レースIDの先頭10桁から、当日の最新の馬場状態レコードを取得するメソッド
   Future<TrackConditionRecord?> getLatestTrackConditionByPrefix(String prefix10) async {
     final db = await _dbProvider.database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -144,5 +144,17 @@ class TrackConditionRepository {
       return TrackConditionRecord.fromJson(maps.first);
     }
     return null;
+  }
+
+  /// 【追加】指定した日付のデータが存在するかチェックするメソッド（分岐Aの判定用）
+  Future<bool> hasDataForDate(String date) async {
+    final db = await _dbProvider.database;
+    final count = Sqflite.firstIntValue(await db.query(
+      DbConstants.tableTrackConditions,
+      columns: ['COUNT(*)'],
+      where: 'date = ?',
+      whereArgs: [date],
+    ));
+    return count != null && count > 0;
   }
 }

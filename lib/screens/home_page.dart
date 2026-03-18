@@ -9,6 +9,7 @@ import 'package:hetaumakeiba_v2/main.dart';
 import 'package:hetaumakeiba_v2/widgets/track_condition_ticker.dart';
 import 'package:hetaumakeiba_v2/services/track_conditions_scraper_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hetaumakeiba_v2/services/cloud_sync_service.dart'; // ★追加
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -32,7 +33,25 @@ class _HomePageState extends State<HomePage> {
   Future<void> _checkAndAutoScrape() async {
     final prefs = await SharedPreferences.getInstance();
     final lastScraped = prefs.getString('last_track_condition_scrape_time');
+    final localVersion = prefs.getInt('track_condition_csv_version') ?? 0;
     final now = DateTime.now();
+
+    // ★追加: 新規インストール時（ローカルバージョンが0、かつDBが空である前提で、lastScrapedがnullの場合とみなす）
+    if (localVersion == 0 && lastScraped == null) {
+      // バックグラウンドで強制的にクラウドからインポート
+      final cloudSyncService = CloudSyncService();
+      await cloudSyncService.importFromCloud();
+      await prefs.setString('last_track_condition_scrape_time', now.toIso8601String());
+
+      if (mounted) {
+        setState(() {
+          _refreshFeeds();
+        });
+        // Tickerの再描画を促す
+        trackConditionTickerKey.currentState?.loadData();
+      }
+      return; // 強制インポートした場合は、直後のスクレイピングはスキップ
+    }
 
     bool shouldScrape = false;
     if (lastScraped == null) {
@@ -53,6 +72,7 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           _refreshFeeds(); // ついでにフィードも更新
         });
+        trackConditionTickerKey.currentState?.loadData();
       }
     }
   }
