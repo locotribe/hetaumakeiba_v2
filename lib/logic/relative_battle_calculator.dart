@@ -4,9 +4,11 @@ import 'dart:math';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/stats_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine_factors/training_factor.dart';
 import '../models/relative_evaluation_model.dart';
 
 /// 相対評価シミュレーションを実行する計算クラス
@@ -19,14 +21,16 @@ class RelativeBattleCalculator {
         int iterations = 100,
         Map<String, JockeyStats>? jockeyStats,
         Map<String, List<HorseRaceRecord>>? horsePerformanceMap,
+        Map<String, List<TrainingTimeModel>>? trainingDataMap, // ★追加
       }) {
     if (horses.length < 2) return [];
 
     // ★今回のレースの総頭数を取得 (パーセンテージ計算用)
     int totalHorses = horses.length;
 
+    // ★修正: _prepareStaticData に trainingDataMap を渡すように修正
     final List<_HorseStaticData> staticDataList = horses
-        .map((h) => _prepareStaticData(h, totalHorses, jockeyStats, horsePerformanceMap))
+        .map((h) => _prepareStaticData(h, totalHorses, jockeyStats, horsePerformanceMap, trainingDataMap))
         .toList();
 
     // 各シナリオを実行
@@ -109,7 +113,8 @@ class RelativeBattleCalculator {
         },
         jockeyDetails: staticData.jockeyDetails,
         compatibilityDetails: staticData.compatibilityDetails,
-        gateDetails: staticData.gateDetails, // ★追加
+        gateDetails: staticData.gateDetails,
+        trainingDetails: staticData.trainingDetails, // ★追加
         scenarioWinRates: scenarioWinRates,
         scenarioRanks: scenarioRanks,
       ));
@@ -201,7 +206,8 @@ class RelativeBattleCalculator {
           'aptitude': 0.0,
           'jockey': 0.0,
           'compatibility': 0.0,
-          'gate': 0.0, // ★追加
+          'gate': 0.0,
+          'training': 0.0, // ★追加
         }
     };
 
@@ -232,7 +238,8 @@ class RelativeBattleCalculator {
         'aptitude': acc['aptitude']! / iterations,
         'jockey': acc['jockey']! / iterations,
         'compatibility': acc['compatibility']! / iterations,
-        'gate': acc['gate']! / iterations, // ★追加
+        'gate': acc['gate']! / iterations,
+        'training': acc['training']! / iterations, // ★追加
       };
 
       results.add(RelativeEvaluationResult(
@@ -248,7 +255,8 @@ class RelativeBattleCalculator {
         factorScores: factorScores,
         jockeyDetails: staticData.jockeyDetails,
         compatibilityDetails: staticData.compatibilityDetails,
-        gateDetails: staticData.gateDetails, // ★追加
+        gateDetails: staticData.gateDetails,
+        trainingDetails: staticData.trainingDetails, // ★追加
         scenarioWinRates: {},
         scenarioRanks: {},
       ));
@@ -258,9 +266,10 @@ class RelativeBattleCalculator {
 
   _HorseStaticData _prepareStaticData(
       PredictionHorseDetail horse,
-      int totalHorses, // ★追加
+      int totalHorses,
       Map<String, JockeyStats>? jockeyStats,
       Map<String, List<HorseRaceRecord>>? horsePerformanceMap,
+      Map<String, List<TrainingTimeModel>>? trainingDataMap, // ★追加
       ) {
     double baseAbility = 50.0;
     if (horse.overallScore != null) {
@@ -330,7 +339,7 @@ class RelativeBattleCalculator {
       'score': 0,
     };
 
-    // --- ★追加: 枠順評価 & 傾向データ取得 ---
+    // --- 枠順評価 & 傾向データ取得 ---
     double gateScore = 0.0;
     Map<String, dynamic> gDetails = {
       'gateNumber': horse.horseNumber,
@@ -396,6 +405,22 @@ class RelativeBattleCalculator {
       }
     }
 
+    // --- ★追加: 調教評価 ---
+    final tf = TrainingFactor();
+
+    // ★修正: 対象馬のID、全馬の調教データマップ、対象馬の性齢を渡す (完全相対評価化)
+    final tResult = tf.evaluate(horse.horseId, trainingDataMap ?? {}, horse.sexAndAge);
+
+    double trainingScore = tResult.score;
+    Map<String, dynamic> tDetails = {
+      'rank': tResult.rank,
+      'score': tResult.score,
+      'diagnosis': tResult.diagnosis,
+      'course': tResult.course,
+      'timeStr': tResult.timeStr,
+      'lapStr': tResult.lapStr,
+    };
+
     double? currentOdds;
     if (horse.effectiveOdds != null) {
       currentOdds = double.tryParse(horse.effectiveOdds!);
@@ -405,18 +430,20 @@ class RelativeBattleCalculator {
 
     return _HorseStaticData(
       horseId: horse.horseId,
-      horseNumber: horse.horseNumber, // ★追加
+      horseNumber: horse.horseNumber,
       horseName: horse.horseName,
       popularity: horse.popularity,
       baseAbility: baseAbility,
       aptitudeScore: aptitudeScore,
       jockeyScore: jockeyScore,
       compatibilityScore: compatibilityScore,
-      gateScore: gateScore, // ★追加
+      gateScore: gateScore,
+      trainingScore: trainingScore, // ★追加
       jockeyDetails: jDetails,
       compatibilityDetails: cDetails,
-      gateDetails: gDetails, // ★追加
-      gateTendency: gateTendency, // ★追加
+      gateDetails: gDetails,
+      trainingDetails: tDetails, // ★追加
+      gateTendency: gateTendency,
       currentOdds: currentOdds,
       legStyleProfile: horse.legStyleProfile,
     );
@@ -466,7 +493,7 @@ class RelativeBattleCalculator {
     for (var horse in staticDataList) {
       // 基礎スコア合計
       double score = horse.baseAbility + horse.aptitudeScore +
-          horse.jockeyScore + horse.compatibilityScore + horse.gateScore;
+          horse.jockeyScore + horse.compatibilityScore + horse.gateScore + horse.trainingScore; // ★追加
 
       double styleQualityBonus = 0.0;
       final style = currentStyles[horse.horseId]!;
@@ -498,6 +525,7 @@ class RelativeBattleCalculator {
       scoreAccumulator[horse.horseId]!['jockey'] = scoreAccumulator[horse.horseId]!['jockey']! + horse.jockeyScore;
       scoreAccumulator[horse.horseId]!['compatibility'] = scoreAccumulator[horse.horseId]!['compatibility']! + horse.compatibilityScore;
       scoreAccumulator[horse.horseId]!['gate'] = scoreAccumulator[horse.horseId]!['gate']! + horse.gateScore;
+      scoreAccumulator[horse.horseId]!['training'] = scoreAccumulator[horse.horseId]!['training']! + horse.trainingScore; // ★追加
     }
 
     // 総当たり戦
@@ -509,7 +537,7 @@ class RelativeBattleCalculator {
         double strA = currentStrengths[horseA.horseId]!;
         double strB = currentStrengths[horseB.horseId]!;
 
-        // ★追加: 相対位置補正 (Relative Position Logic)
+        // 相対位置補正 (Relative Position Logic)
         // 馬番が確定している場合のみ発動
         if (horseA.horseNumber > 0 && horseB.horseNumber > 0) {
           // AがBより内側にいる場合
@@ -553,35 +581,39 @@ class RelativeBattleCalculator {
 
 class _HorseStaticData {
   final String horseId;
-  final int horseNumber; // ★追加
+  final int horseNumber;
   final String horseName;
   final int? popularity;
   final double baseAbility;
   final double aptitudeScore;
   final double jockeyScore;
   final double compatibilityScore;
-  final double gateScore; // ★追加
+  final double gateScore;
+  final double trainingScore; // ★追加
   final Map<String, dynamic> jockeyDetails;
   final Map<String, dynamic> compatibilityDetails;
-  final Map<String, dynamic> gateDetails; // ★追加
-  final Map<String, Map<String, double>> gateTendency; // ★追加
+  final Map<String, dynamic> gateDetails;
+  final Map<String, dynamic> trainingDetails; // ★追加
+  final Map<String, Map<String, double>> gateTendency;
   final double? currentOdds;
   final LegStyleProfile? legStyleProfile;
 
   _HorseStaticData({
     required this.horseId,
-    required this.horseNumber, // ★追加
+    required this.horseNumber,
     required this.horseName,
     this.popularity,
     required this.baseAbility,
     required this.aptitudeScore,
     required this.jockeyScore,
     required this.compatibilityScore,
-    required this.gateScore, // ★追加
+    required this.gateScore,
+    required this.trainingScore, // ★追加
     required this.jockeyDetails,
     required this.compatibilityDetails,
-    required this.gateDetails, // ★追加
-    required this.gateTendency, // ★追加
+    required this.gateDetails,
+    required this.trainingDetails, // ★追加
+    required this.gateTendency,
     this.currentOdds,
     this.legStyleProfile,
   });

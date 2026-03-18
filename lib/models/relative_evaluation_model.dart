@@ -45,8 +45,11 @@ class RelativeEvaluationResult {
   /// 相性（コンビ）評価の詳細データ
   final Map<String, dynamic>? compatibilityDetails;
 
-  /// ★追加: 枠順評価の詳細データ（ダイアログ表示用）
+  /// 枠順評価の詳細データ（ダイアログ表示用）
   final Map<String, dynamic>? gateDetails;
+
+  /// ★追加: 調教評価の詳細データ（ダイアログ表示用）
+  final Map<String, dynamic>? trainingDetails;
 
   /// ペース別シミュレーション勝率
   final Map<RacePace, double> scenarioWinRates;
@@ -67,7 +70,8 @@ class RelativeEvaluationResult {
     required this.factorScores,
     this.jockeyDetails,
     this.compatibilityDetails,
-    this.gateDetails, // ★追加
+    this.gateDetails,
+    this.trainingDetails, // ★追加
     this.scenarioWinRates = const {},
     this.scenarioRanks = const {},
   });

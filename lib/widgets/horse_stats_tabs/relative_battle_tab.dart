@@ -6,16 +6,19 @@ import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 
 class RelativeBattleTab extends StatefulWidget {
   final List<PredictionHorseDetail> horses;
   final PredictionRaceData? raceData;
+  final Map<String, List<TrainingTimeModel>>? trainingDataMap;
 
   const RelativeBattleTab({
     super.key,
     required this.horses,
     this.raceData,
+    this.trainingDataMap,
   });
 
   @override
@@ -64,6 +67,7 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
       iterations: 100,
       jockeyStats: jockeyStats,
       horsePerformanceMap: horsePerformanceMap,
+      trainingDataMap: widget.trainingDataMap, // ★修正: 親から渡されたマップをそのまま渡す
     );
 
     if (mounted) {
@@ -76,7 +80,7 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     }
   }
 
-  // ★追加: 場所を確実に特定するメソッド
+  // 場所を確実に特定するメソッド
   String _resolveVenue(PredictionRaceData? data) {
     if (data == null) return '';
 
@@ -104,7 +108,7 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     return '';
   }
 
-  // ★追加: 距離抽出メソッド
+  // 距離抽出メソッド
   String _extractDistance(String raceInfo) {
     final distanceMatch = RegExp(r'(芝|ダ|障)[^0-9]*?(\d+)m').firstMatch(raceInfo);
     if (distanceMatch != null) {
@@ -150,12 +154,11 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     }
   }
 
-  // ダイアログ表示メソッド
+  // 騎手詳細ダイアログ
   void _showJockeyDetails(BuildContext context, RelativeEvaluationResult result) {
     final details = result.jockeyDetails;
     if (details == null) return;
 
-    // コース情報の生成
     String courseInfo = "全場成績";
     String venueName = "";
     String distanceStr = "";
@@ -173,7 +176,6 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
       }
     }
 
-    // 騎手データの取得
     JockeyStats? fullStats;
     if (_jockeyStats != null) {
       try {
@@ -184,7 +186,6 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
 
     List<Widget> content = [];
 
-    // --- 【上段】本コース実績セクション ---
     if (venueName.isNotEmpty && distanceStr.isNotEmpty) {
       content.add(Text("【本コース ($venueName$distanceStr)】",
           style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)));
@@ -211,7 +212,6 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
       content.add(const Divider());
     }
 
-    // --- 【下段】評価採用データセクション ---
     content.add(const Text("【評価採用データ】", style: TextStyle(fontWeight: FontWeight.bold)));
     content.add(_detailRow("採用元", details['source']));
     content.add(_detailRow("騎乗回数", "${details['raceCount']}回"));
@@ -292,6 +292,36 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     );
   }
 
+  // 調教詳細ダイアログ
+  void _showTrainingDetails(BuildContext context, RelativeEvaluationResult result) {
+    final details = result.trainingDetails;
+    if (details == null) return;
+
+    final String rank = details['rank'] ?? 'B';
+    final double score = details['score'] ?? 0.0;
+    final String course = details['course'] ?? '-';
+    final String timeStr = details['timeStr'] ?? '-';
+    final String lapStr = details['lapStr'] ?? '-';
+    final String diagnosis = details['diagnosis'] ?? '-';
+
+    _showScoreDetailsDialog(
+        context,
+        horseName: result.horseName,
+        subTitle: '調教評価 (直近データ)',
+        score: score.toInt(),
+        content: [
+          _detailRow("評価ランク", rank),
+          _detailRow("コース", course),
+          _detailRow("全体時計", timeStr),
+          _detailRow("上がり2F", lapStr),
+          const Divider(),
+          const Text("評価理由", style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(diagnosis, style: const TextStyle(fontSize: 14)),
+        ]
+    );
+  }
+
   Widget _tendencyRow(String label, Map<String, dynamic>? data) {
     if (data == null) return _detailRow(label, "-");
     double winRate = data['winRate'] ?? 0.0;
@@ -311,6 +341,13 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     else if (score >= 35) { rankStr = 'S'; rankColor = Colors.red; }
     else if (score >= 25) { rankStr = 'A'; rankColor = Colors.orange; }
     else if (score >= 15) { rankStr = 'B'; rankColor = Colors.amber; }
+
+    // ▼ 修正箇所：完全一致(==)を廃止し、TrainingFactorと同じ閾値の範囲指定(>=)に変更 ▼
+    else if (score >= 7) { rankStr = 'S'; rankColor = Colors.red; }
+    else if (score >= 3) { rankStr = 'A'; rankColor = Colors.orange; }
+    else if (score >= -1) { rankStr = 'B'; rankColor = Colors.grey; }
+    else { rankStr = 'C'; rankColor = Colors.blueGrey; }
+    // ▲ 修正箇所：ここまで ▲
 
     showDialog(
       context: context,
@@ -334,7 +371,7 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(color: rankColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                  child: Text("$rankStr ($score点)", style: TextStyle(color: rankColor, fontWeight: FontWeight.bold, fontSize: 18)),
+                  child: Text("$rankStr (${score > 0 ? '+' : ''}$score点)", style: TextStyle(color: rankColor, fontWeight: FontWeight.bold, fontSize: 18)),
                 ),
               ],
             ),
@@ -494,6 +531,11 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
         onSort: (idx, asc) => _sort((r) => r.factorScores['gate'] ?? 0, idx, asc),
       ),
       DataColumn(
+        label: const Text('調教', style: TextStyle(fontWeight: FontWeight.bold)),
+        numeric: true,
+        onSort: (idx, asc) => _sort((r) => r.factorScores['training'] ?? 0, idx, asc),
+      ),
+      DataColumn(
         label: const Text('妙味', style: TextStyle(fontWeight: FontWeight.bold)),
         numeric: true,
         onSort: (idx, asc) => _sort((r) => r.factorScores['value'] ?? 0, idx, asc),
@@ -518,6 +560,8 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     final gateRank = _getRankInList(result.factorScores['gate'] ?? 0, (r) => r.factorScores['gate'] ?? 0, descending: true);
     final bool isGateDetermined = result.gateDetails?['isDetermined'] ?? false;
     final Color? gateColor = isGateDetermined ? _getRankColor(gateRank) : null;
+
+    final trainingRank = _getRankInList(result.factorScores['training'] ?? 0, (r) => r.factorScores['training'] ?? 0, descending: true);
 
     final bool isRedOdds = result.odds < 10.0 && result.odds > 0;
     final TextStyle oddsStyle = isRedOdds
@@ -645,10 +689,23 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
         InkWell(
           onTap: () => _showGateDetails(context, result),
           child: Container(
-            color: gateColor, // 色判定結果を適用
+            color: gateColor,
             alignment: Alignment.center,
             child: Text(
               (result.factorScores['gate'] ?? 0).toStringAsFixed(0),
+              style: const TextStyle(decoration: TextDecoration.underline, decorationStyle: TextDecorationStyle.dotted),
+            ),
+          ),
+        ),
+      ),
+      DataCell(
+        InkWell(
+          onTap: () => _showTrainingDetails(context, result),
+          child: Container(
+            color: _getRankColor(trainingRank),
+            alignment: Alignment.center,
+            child: Text(
+              (result.factorScores['training'] ?? 0).toStringAsFixed(0),
               style: const TextStyle(decoration: TextDecoration.underline, decorationStyle: TextDecorationStyle.dotted),
             ),
           ),
