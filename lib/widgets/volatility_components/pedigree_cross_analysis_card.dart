@@ -5,8 +5,10 @@ class PedigreeCrossAnalysisCard extends StatelessWidget {
   final CrossAnalysisResult result;
   final VoidCallback? onFetchPedigree;
   final bool isFetching;
-  final int currentFetchCount; // ★追加: 現在の取得件数
-  final int totalFetchCount;   // ★追加: 全体の取得件数
+  final int currentFetchCount;
+  final int totalFetchCount;
+  final int missingPedigreeCount; // ★追加: 不足している血統データの数
+  final int totalTargetHorseCount; // ★追加: 対象馬の総数
 
   const PedigreeCrossAnalysisCard({
     super.key,
@@ -15,60 +17,68 @@ class PedigreeCrossAnalysisCard extends StatelessWidget {
     this.isFetching = false,
     this.currentFetchCount = 0,
     this.totalFetchCount = 0,
+    this.missingPedigreeCount = 0,
+    this.totalTargetHorseCount = 0,
   });
+
+  // データが1件でも不足している場合のUI
+  Widget _buildIncompleteDataCard() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Text(
+                '好走血統 × 馬場状態 クロス分析',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '対象馬$totalTargetHorseCount頭のうち、$missingPedigreeCount頭の血統データが不足しているため、正確な分析を表示できません。',
+                style: const TextStyle(fontSize: 13, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              isFetching
+                  ? Column(
+                children: [
+                  SizedBox(
+                    width: 200,
+                    child: LinearProgressIndicator(
+                      value: totalFetchCount > 0 ? currentFetchCount / totalFetchCount : null,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '取得中... $currentFetchCount / $totalFetchCount 頭',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
+                  ),
+                ],
+              )
+                  : ElevatedButton.icon(
+                onPressed: onFetchPedigree,
+                icon: const Icon(Icons.download),
+                label: const Text('不足している血統情報を取得'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    // ★修正: データがない場合は取得ボタンを表示するカードを返す
-    if (result.overallSires.isEmpty) {
-      return Card(
-        elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: SizedBox(
-            width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const Text(
-                  '好走血統 × 馬場状態 クロス分析',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  '過去上位馬の血統データが不足しているため、分析を表示できません。',
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                isFetching
-                    ? Column(
-                  children: [
-                    SizedBox(
-                      width: 200,
-                      child: LinearProgressIndicator(
-                        // totalFetchCountが0より大きい場合のみ割合を計算
-                        value: totalFetchCount > 0 ? currentFetchCount / totalFetchCount : null,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '取得中... $currentFetchCount / $totalFetchCount 頭',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
-                    ),
-                  ],
-                )
-                    : ElevatedButton.icon(
-                  onPressed: onFetchPedigree,
-                  icon: const Icon(Icons.download),
-                  label: const Text('過去上位馬の血統情報を取得'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+    // 1件でもデータが不足している場合は、取得専用画面のみを表示
+    if (missingPedigreeCount > 0) {
+      return _buildIncompleteDataCard();
     }
 
+    // データが完全に揃っている場合のみ、分析結果を表示する
     return Card(
       elevation: 2,
       child: Padding(

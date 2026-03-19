@@ -7,7 +7,7 @@ import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart'
 import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart'; // ★追加
+import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
 import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
@@ -75,15 +75,15 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
   Map<String, List<SimilarityData>> _similarityAllMatches = {};
   Map<String, SimilarityData?> _similarityBestFirstPlace = {};
 
-  // ★新規追加: シミュレーション条件の排他選択
+  // シミュレーション条件の排他選択
   String _selectedPace = 'average'; // 'average', 'S', 'M', 'H'
   String _selectedTrackCondition = 'average'; // 'average', 'high', 'standard', 'low'
   bool _isDirt = false; // 芝かダートかの判定用
 
-  // ★新規追加: ペースシミュレーション結果保持用
+  // ペースシミュレーション結果保持用
   Map<String, RelativeEvaluationResult> _relativeBattleResults = {};
 
-  // ★新規追加: 馬場状態の過去傾向データ保持用 (動的ラベル生成に使用)
+  // 馬場状態の過去傾向データ保持用 (動的ラベル生成に使用)
   TrackConditionTrendResult? _trackConditionTrendResult;
 
   @override
@@ -230,7 +230,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       final volatilityAnalyzer = VolatilityAnalyzer();
       final volResult = volatilityAnalyzer.analyze(pastRaces);
 
-      // --- ★ここからが追加忘れのコード: 血統と馬場データの取得・集計 ---
+      // --- 血統と馬場データの取得・集計 ---
       final tcRepo = TrackConditionRepository();
       final Map<String, TrackConditionRecord> trackConditionMap = {};
       for (final race in pastRaces) {
@@ -276,7 +276,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         horseProfileMap: horseProfileMap,
       );
 
-      // ★新規追加: 出走馬の過去レースの馬場データを一括取得
+      // 出走馬の過去レースの馬場データを一括取得
       final Map<String, TrackConditionRecord> horsePastTrackConditions = {};
       for (final records in currentHorseHistory.values) {
         for (final rec in records) {
@@ -289,9 +289,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           }
         }
       }
-      // --- ★追加コードここまで ---
 
-      // ★新規追加: ペース別シミュレーションの実行 (RelativeBattleCalculator)
+      // ペース別シミュレーションの実行 (RelativeBattleCalculator)
       final relativeCalculator = RelativeBattleCalculator();
       final relResults = relativeCalculator.runSimulation(
         widget.horses,
@@ -310,8 +309,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         horseProfileMap: horseProfileMap,
         pedigreeCrossResult: pedigreeCrossResult,
         trackConditionTrendResult: _trackConditionTrendResult!,
-        horsePastTrackConditions: horsePastTrackConditions, // ★新規追加
-        isDirt: _isDirt, // ★新規追加
+        horsePastTrackConditions: horsePastTrackConditions,
+        isDirt: _isDirt,
       );
 
       // 比較対象(予想データ)の分析 (こちらにも引数を追加)
@@ -326,8 +325,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           horseProfileMap: horseProfileMap,
           pedigreeCrossResult: pedigreeCrossResult,
           trackConditionTrendResult: _trackConditionTrendResult!,
-          horsePastTrackConditions: horsePastTrackConditions, // ★新規追加
-          isDirt: _isDirt, // ★新規追加
+          horsePastTrackConditions: horsePastTrackConditions,
+          isDirt: _isDirt,
         );
         final predList = predictionAnalysis['results'] as List<HistoricalMatchModel>;
         _predictionResultMap = {for (var e in predList) e.horseId: e};
@@ -422,7 +421,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     return totalScore / count;
   }
 
-  // --- ★新規追加: 動的スコアの計算とソート ---
+  // --- 動的スコアの計算とソート ---
   double _calculateDynamicScore(HistoricalMatchModel item) {
     // 1. ペーススコアの取得 (RelativeBattleCalculatorのシミュレーション勝率を100点満点に変換)
     double paceScore = 0.0;
@@ -477,9 +476,9 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     if (condition == 'average') return '過去平均';
     if (!_isDirt) {
       final avg = _trackConditionTrendResult?.avgCushion ?? 9.5;
-      if (condition == 'high') return 'ｸｯｼｮﾝ(${(avg + 0.3).toStringAsFixed(1)}以上)';
-      if (condition == 'standard') return 'ｸｯｼｮﾝ(標:${avg.toStringAsFixed(1)})';
-      if (condition == 'low') return 'ｸｯｼｮﾝ(${(avg - 0.3).toStringAsFixed(1)}以下)';
+      if (condition == 'high') return '(${(avg + 0.3).toStringAsFixed(1)}以上)';
+      if (condition == 'standard') return '(標:${avg.toStringAsFixed(1)})';
+      if (condition == 'low') return '(${(avg - 0.3).toStringAsFixed(1)}以下)';
     } else {
       final avg = _trackConditionTrendResult?.avgDirtMoisture ?? 8.0;
       if (condition == 'low') return '含水率(${(avg >= 2.0 ? avg - 2.0 : 0).toStringAsFixed(1)}%以下)';
@@ -518,9 +517,9 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
                   spacing: 4.0,
                   children: [
                     _buildChoiceChip('過去平均', 'average', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
-                    _buildChoiceChip('S(スロー)', 'S', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
-                    _buildChoiceChip('M(ミドル)', 'M', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
-                    _buildChoiceChip('H(ハイ)', 'H', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
+                    _buildChoiceChip('S', 'S', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
+                    _buildChoiceChip('M', 'M', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
+                    _buildChoiceChip('H', 'H', _selectedPace, (val) => setState(() { _selectedPace = val; _sortResults(); })),
                   ],
                 ),
               ),
@@ -529,7 +528,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           const SizedBox(height: 4),
           Row(
             children: [
-              const Text("馬場シナリオ: ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text("クッション値: ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               const SizedBox(width: 8),
               Expanded(
                 child: Wrap(
@@ -629,7 +628,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       children: [
         if (_summary != null) _buildTrendHeader(_summary!),
 
-        // ★新規追加: シミュレーション条件の排他選択UI
+        // シミュレーション条件の排他選択UI
         _buildSimulationOptions(),
 
         Expanded(
@@ -698,7 +697,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         const DataColumn(label: Text('類似馬(1着)')),
         const DataColumn(label: Text('総合ｼﾝｸﾛ')),
 
-        // ★追加: 選択されたペースシナリオの個別スコア列
+        // 選択されたペースシナリオの個別スコア列
         if (_selectedPace != 'average')
           DataColumn(label: Text('$_selectedPaceペース', style: const TextStyle(color: Colors.red))),
 
@@ -716,7 +715,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         final dynamicScore = _calculateDynamicScore(item);
         final predictionDynamicScore = predictionItem != null ? _calculateDynamicScore(predictionItem) : null;
 
-        // ★追加: 行ごとのペーススコア計算
+        // 行ごとのペーススコア計算
         double paceScore = 0.0;
         if (_selectedPace != 'average') {
           final relResult = _relativeBattleResults[item.horseId];
@@ -763,7 +762,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           DataCell(_buildSimilarityCell(item.horseId, item.horseName)),
           DataCell(_buildTotalScoreCell(dynamicScore, maxScore, predictionDynamicScore)),
 
-          // ★追加: 選択されたペースシナリオの個別スコアセル
+          // 選択されたペースシナリオの個別スコアセル
           if (_selectedPace != 'average')
             DataCell(_buildScenarioScoreCell(paceScore)),
 
@@ -785,7 +784,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     );
   }
 
-  // ★新規追加: シナリオ別スコアの描画
+  // シナリオ別スコアの描画
   Widget _buildScenarioScoreCell(double score) {
     Color color;
     String rank;
@@ -806,7 +805,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     );
   }
 
-  // ★新規追加: 血統スコアの描画
+  // 血統スコアの描画
   Widget _buildPedigreeCell(HistoricalMatchModel item) {
     Color color = Colors.black;
     if (item.pedigreeScore >= 80) color = Colors.red;

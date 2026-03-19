@@ -34,7 +34,7 @@ class VolatilityAnalysisTab extends StatefulWidget {
 
 class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
   final RaceRepository _raceRepo = RaceRepository();
-  final HorseRepository _horseRepo = HorseRepository(); // ★追加: 血統情報取得用
+  final HorseRepository _horseRepo = HorseRepository(); // 血統情報取得用
   final VolatilityAnalyzer _analyzer = VolatilityAnalyzer();
   bool _isLoading = true;
 
@@ -46,18 +46,22 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
   HorseWeightAnalysisResult? _horseWeightResult;
   LapTimeAnalysisResult? _lapTimeResult;
 
-  // ★追加: 新機能の解析結果を保持する変数
+  // 新機能の解析結果を保持する変数
   TrackConditionTrendResult? _trackConditionTrendResult;
   CrossAnalysisResult? _pedigreeCrossResult;
 
-  // ★追加: 過去の上位3頭と馬場状態を保持する変数
+  // 過去の上位3頭と馬場状態を保持する変数
   List<PastRaceTop3Result>? _pastTop3Result;
   final Map<String, TrackConditionRecord> _trackConditionMap = {};
 
-  // ★追加: 血統情報取得のローディング状態と進捗を管理
+  // 血統情報取得のローディング状態と進捗を管理
   bool _isFetchingPedigree = false;
   int _currentPedigreeFetchCount = 0;
   int _totalPedigreeToFetch = 0;
+
+  // ★追加: 対象となる馬の総数と、不足している数
+  int _totalTargetHorseCount = 0;
+  int _missingPedigreeCount = 0;
 
   @override
   void initState() {
@@ -73,7 +77,7 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
       final race = await _raceRepo.getRaceResult(id);
       if (race != null) pastRaces.add(race);
 
-      // ★修正: レースIDから先頭10桁(プレフィックス)を切り出して当日の馬場状態を検索
+      // レースIDから先頭10桁(プレフィックス)を切り出して当日の馬場状態を検索
       if (id.length >= 10) {
         String prefix10 = id.substring(0, 10);
         final tc = await tcRepo.getLatestTrackConditionByPrefix(prefix10);
@@ -83,12 +87,16 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
         }
       }
     }
-    // ★新規追加: 過去レースの1〜3着馬のプロフィール（血統）をDBから取得する
+    // 過去レースの1〜3着馬のプロフィール（血統）をDBから取得する
     Map<String, HorseProfile> horseProfileMap = {};
+    Set<String> targetHorseIds = {}; // ★追加: 対象馬のIDを格納
+    int missingCount = 0; // ★追加: 不足数のカウント
+
     for (final race in pastRaces) {
       for (final horse in race.horseResults) {
         int rank = int.tryParse(horse.rank ?? '') ?? 0;
         if (rank >= 1 && rank <= 3 && horse.horseId.isNotEmpty) {
+          targetHorseIds.add(horse.horseId); // ★追加: 1〜3着馬のIDをSetに追加（同着対応）
           if (!horseProfileMap.containsKey(horse.horseId)) {
             final profile = await _horseRepo.getHorseProfile(horse.horseId);
             if (profile != null) {
@@ -96,6 +104,14 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
             }
           }
         }
+      }
+    }
+
+    // ★追加: 対象馬の総数と、データが不足している馬を正確にカウント
+    for (final horseId in targetHorseIds) {
+      final profile = horseProfileMap[horseId];
+      if (profile == null || profile.fatherName.isEmpty) {
+        missingCount++;
       }
     }
 
@@ -111,7 +127,7 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
         _pastTop3Result = PastTopHorsesAnalyzer().analyze(pastRaces);
         _lapTimeResult = LapTimeAnalyzer().analyze(pastRaces);
 
-        // ★新規追加: 新しいアナライザーの実行
+        // 新しいアナライザーの実行
         _trackConditionTrendResult = TrackConditionTrendAnalyzer().analyze(_trackConditionMap);
         _pedigreeCrossResult = PedigreeCrossAnalyzer().analyze(
           pastRaces: pastRaces,
@@ -119,12 +135,16 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
           horseProfileMap: horseProfileMap,
         );
 
+        // ★追加: カウントを状態に保存
+        _totalTargetHorseCount = targetHorseIds.length;
+        _missingPedigreeCount = missingCount;
+
         _isLoading = false;
       });
     }
   }
 
-  // ★新規追加: 不足している血統情報を取得するメソッド
+  // 不足している血統情報を取得するメソッド
   Future<void> _fetchMissingPedigreeData() async {
     setState(() {
       _isFetchingPedigree = true;
@@ -213,23 +233,25 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
           if (_payoutResult != null) PayoutComparisonCard(result: _payoutResult!),
           const SizedBox(height: 16),
 
-          // ★修正: 抜け落ちていた人気別成績チャートを復活
+          // 抜け落ちていた人気別成績チャートを復活
           if (_popularityResult != null) PopularityChartCard(result: _popularityResult!),
           const SizedBox(height: 16),
 
-          // ★新規追加: 馬場状態の傾向カード
+          // 馬場状態の傾向カード
           if (_trackConditionTrendResult != null) ...[
             TrackConditionTrendCard(result: _trackConditionTrendResult!),
             const SizedBox(height: 16),
           ],
 
-          // ★新規追加: 血統クロス分析カード
+          // 血統クロス分析カード
           if (_pedigreeCrossResult != null) ...[
             PedigreeCrossAnalysisCard(
               result: _pedigreeCrossResult!,
               isFetching: _isFetchingPedigree,
-              currentFetchCount: _currentPedigreeFetchCount,  // ★追加: 現在の取得件数
-              totalFetchCount: _totalPedigreeToFetch,         // ★追加: 全体の取得件数
+              currentFetchCount: _currentPedigreeFetchCount,  // 現在の取得件数
+              totalFetchCount: _totalPedigreeToFetch,         // 全体の取得件数
+              missingPedigreeCount: _missingPedigreeCount,    // ★追加: 不足している血統データの数
+              totalTargetHorseCount: _totalTargetHorseCount,  // ★追加: 対象馬の総数
               onFetchPedigree: _fetchMissingPedigreeData,
             ),
             const SizedBox(height: 16),
