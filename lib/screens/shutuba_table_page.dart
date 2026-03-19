@@ -567,22 +567,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                         ],
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('同コース', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                        Switch(
-                          value: _isCourseOnlyMode,
-                          onChanged: (value) {
-                            setState(() {
-                              _isCourseOnlyMode = value;
-                            });
-                          },
-                          activeColor: Colors.amber,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ],
-                    ),
                     if (widget.raceResult == null)
                       Padding(
                         padding: const EdgeInsets.only(right: 8.0),
@@ -698,6 +682,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                           StartersTabWidget(
                             horses: sortedHorses,
                             onSort: _onSort,
+                            currentSortColumn: _sortColumn, // ▼ 新規追加
+                            isSortAscending: _isAscending,  // ▼ 新規追加
                             buildMarkDropdown: (horse) => UserMarkDropdown(
                               horse: horse,
                               raceId: widget.raceId,
@@ -710,6 +696,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             buildHorseNumber: _buildHorseNumber,
                             getHorseProfile: _horseRepo.getHorseProfile,
                             isCourseOnlyMode: _isCourseOnlyMode,
+                            onCourseModeChanged: (value) {
+                              setState(() {
+                                _isCourseOnlyMode = value;
+                              });
+                            },
                             buildDataTableForTab: _buildDataTableForTab,
                           ),
                           PerformanceTabWidget(

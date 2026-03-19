@@ -13,11 +13,14 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/time_tab.dart';
 class StartersTabWidget extends StatelessWidget {
   final List<PredictionHorseDetail> horses;
   final Function(SortableColumn) onSort;
+  final SortableColumn? currentSortColumn; // ▼ 新規追加: 現在のソート対象カラム
+  final bool isSortAscending; // ▼ 新規追加: 昇順・降順の状態
   final Widget Function(PredictionHorseDetail) buildMarkDropdown;
   final Widget Function(int) buildGateNumber;
   final Widget Function(int, int) buildHorseNumber;
   final Future<HorseProfile?> Function(String) getHorseProfile;
-  final bool isCourseOnlyMode; // ▼ 新規追加
+  final bool isCourseOnlyMode;
+  final Function(bool) onCourseModeChanged;
   final Widget Function({
   required List<DataColumn2> columns,
   required List<PredictionHorseDetail> horses,
@@ -28,11 +31,14 @@ class StartersTabWidget extends StatelessWidget {
     Key? key,
     required this.horses,
     required this.onSort,
+    required this.currentSortColumn, // ▼ 新規追加
+    required this.isSortAscending, // ▼ 新規追加
     required this.buildMarkDropdown,
     required this.buildGateNumber,
     required this.buildHorseNumber,
     required this.getHorseProfile,
-    required this.isCourseOnlyMode, // ▼ 新規追加
+    required this.isCourseOnlyMode,
+    required this.onCourseModeChanged,
     required this.buildDataTableForTab,
   }) : super(key: key);
 
@@ -54,6 +60,18 @@ class StartersTabWidget extends StatelessWidget {
     if (venueAndDistance.contains('芝')) return Colors.green.shade700;
     if (venueAndDistance.contains('ダ')) return Colors.brown.shade700;
     return Colors.black87;
+  }
+
+  // ▼ 新規追加: カスタムソートアイコンを描画するメソッド
+  Widget _buildSortIcon(SortableColumn column) {
+    if (currentSortColumn != column) {
+      return const SizedBox(width: 16); // ソートされていない時は余白のみ
+    }
+    return Icon(
+      isSortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+      size: 16,
+      color: Colors.black54,
+    );
   }
 
   @override
@@ -80,28 +98,97 @@ class StartersTabWidget extends StatelessWidget {
           ),
           fixedWidth: 35,
         ),
-        DataColumn2(label: const Text('馬情報'), size: ColumnSize.L, onSort: (i, asc) => onSort(SortableColumn.horseName)),
         DataColumn2(
-          label: Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              // ▼ ヘッダーの動的切り替え
-              child: Text(isCourseOnlyMode ? '同コース時計\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ' : '持ち時計\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ', textAlign: TextAlign.center),
+          label: InkWell(
+            onTap: () => onSort(SortableColumn.horseName),
+            child: Row(
+              children: [
+                const Text('馬情報'),
+                const SizedBox(width: 4),
+                _buildSortIcon(SortableColumn.horseName),
+                const Spacer(),
+                // ▼ 変更: スイッチ部分がヘッダーの高さ(50)をピッタリ満たすようにContainerのheightを指定
+                _OversizedBackground(
+                  color: Colors.grey.shade200,
+                  overspan: 8.0,
+                  child: Container(
+                    height: 50, // ← 変更: DataTable2の headingRowHeight と同じ高さに固定
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('同コース', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        Switch(
+                          value: isCourseOnlyMode,
+                          onChanged: onCourseModeChanged,
+                          activeColor: Colors.amber,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          fixedWidth: 85,
-          onSort: (i, asc) => onSort(SortableColumn.bestTime),
+          size: ColumnSize.L,
         ),
         DataColumn2(
-          label: Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              // ▼ ヘッダーの動的切り替え
-              child: Text(isCourseOnlyMode ? '同コース上り\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ' : '上り最速\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ', textAlign: TextAlign.center),
+          label: InkWell(
+            onTap: () => onSort(SortableColumn.bestTime),
+            // ▼ 変更: 背景を左右にはみ出させて隙間を消す
+            child: _OversizedBackground(
+              color: Colors.grey.shade200,
+              overspan: 8.0, // 左右に8pxずつはみ出して隣の背景と結合させる
+              child: Container(
+                width: double.infinity,
+                height: double.infinity,
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(isCourseOnlyMode ? '同コース時計\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ' : '持ち時計\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ', textAlign: TextAlign.center),
+                    ),
+                    const SizedBox(width: 2),
+                    _buildSortIcon(SortableColumn.bestTime),
+                  ],
+                ),
+              ),
             ),
           ),
           fixedWidth: 85,
-          onSort: (i, asc) => onSort(SortableColumn.fastestAgari),
+        ),
+        DataColumn2(
+          label: InkWell(
+            onTap: () => onSort(SortableColumn.fastestAgari),
+            // ▼ 変更: 背景を左右にはみ出させて隙間を消す
+            child: _OversizedBackground(
+              color: Colors.grey.shade200,
+              overspan: 8.0, // 左の時計列の背景と結合させる
+              child: Container(
+                width: double.infinity,
+                height: double.infinity,
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(isCourseOnlyMode ? '同コース上り\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ' : '上り最速\n馬場/ｸｯｼｮﾝ値\n含水 : ｺﾞｰﾙ前\n　　　4ｺｰﾅｰ', textAlign: TextAlign.center),
+                    ),
+                    const SizedBox(width: 2),
+                    _buildSortIcon(SortableColumn.fastestAgari),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          fixedWidth: 85,
         ),
       ],
       horses: horses,
@@ -111,7 +198,6 @@ class StartersTabWidget extends StatelessWidget {
         final String mf = (horse.mfName?.isNotEmpty == true) ? horse.mfName! : '--';
         final String owner = (horse.ownerName?.isNotEmpty == true) ? horse.ownerName! : '--';
 
-        // ▼ データの動的切り替え
         final currentBestTime = isCourseOnlyMode ? horse.bestCourseTimeStats : horse.bestTimeStats;
         final currentAgari = isCourseOnlyMode ? horse.fastestCourseAgariStats : horse.fastestAgariStats;
 
@@ -190,7 +276,6 @@ class HorseInfoCell extends StatelessWidget {
         ),
         Text('母: $mother (母父: $mf)', style: const TextStyle(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
-        // --- ▼▼ 馬体重の表示ロジック修正 ▼▼ ---
         Builder(
             builder: (context) {
               final hw = horse.horseWeight ?? '';
@@ -203,9 +288,39 @@ class HorseInfoCell extends StatelessWidget {
               }
             }
         ),
-        // --- ▲▲ 馬体重の表示ロジック修正 ▲▲ ---
         const SizedBox(height: 2),
         LegStyleIndicator(legStyleProfile: horse.legStyleProfile),
+      ],
+    );
+  }
+}
+// ▼ 変更: 上下のはみ出しを無くし、左右のみはみ出させるように修正
+class _OversizedBackground extends StatelessWidget {
+  final Widget child;
+  final Color color;
+  final double overspan;
+
+  const _OversizedBackground({
+    Key? key,
+    required this.child,
+    required this.color,
+    this.overspan = 10.0,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        Positioned(
+          left: -overspan,
+          right: -overspan,
+          top: 0,    // ← 変更: 縦のはみ出しを 0 にしてデータ行への侵食を防ぐ
+          bottom: 0, // ← 変更: 縦のはみ出しを 0 にしてデータ行への侵食を防ぐ
+          child: Container(color: color),
+        ),
+        child,
       ],
     );
   }
