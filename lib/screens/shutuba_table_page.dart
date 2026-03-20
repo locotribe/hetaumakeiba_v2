@@ -184,7 +184,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
     return null;
   }
-
+  int _tableUpdateKey = DateTime.now().millisecondsSinceEpoch;
   Future<void> _loadShutubaData({bool refresh = false}) async {
     if (!refresh) {
       setState(() {
@@ -222,7 +222,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         }
       }
 
-      // --- ▼▼ レース結果がある場合、当日の馬体重をマージする処理 ▼▼ ---
       if (data != null && widget.raceResult != null) {
         for (var horse in data.horses) {
           try {
@@ -236,7 +235,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           } catch (_) {}
         }
       }
-      // --- ▲▲ レース結果がある場合、当日の馬体重をマージする処理 ▲▲ ---
 
       if (mounted) {
         if (data != null) {
@@ -244,11 +242,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             widget.onDataRefreshed!(data);
           }
         }
-
-        setState(() {
-          _predictionRaceData = data;
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _predictionRaceData = data;
+            _tableUpdateKey = DateTime.now().millisecondsSinceEpoch; // 追加
+            _isLoading = false;
+          });
+        }
 
         if (data != null) {
           _horseProfileSyncService.syncMissingHorseProfiles(data.horses, (updatedHorseId) async {
@@ -270,6 +270,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           _isLoading = false;
         });
       }
+      rethrow; // ▼ 握りつぶさずに上位に投げる
     }
   }
 
@@ -392,10 +393,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
       if (memosMap.containsKey(horse.horseId)) {
         horse.userMemo = memosMap[horse.horseId];
-        if (memosMap[horse.horseId]!.odds != null) {
+        // ▼ 変更: スクレイピングでオッズが取れなかった時だけメモのオッズを参考値として入れる
+        if (horse.odds == null && memosMap[horse.horseId]!.odds != null) {
           horse.odds = memosMap[horse.horseId]!.odds;
         }
-        if (memosMap[horse.horseId]!.popularity != null) {
+        if (horse.popularity == null && memosMap[horse.horseId]!.popularity != null) {
           horse.popularity = memosMap[horse.horseId]!.popularity;
         }
       }
@@ -623,7 +625,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             comparison = compareNullsLast(aWeight, bWeight);
                             break;
                           case SortableColumn.bestTime:
-                          // ▼▼ 変更: モードによってソート基準を切り替え ▼▼
                             final aStats = _isCourseOnlyMode ? a.bestCourseTimeStats : a.bestTimeStats;
                             final bStats = _isCourseOnlyMode ? b.bestCourseTimeStats : b.bestTimeStats;
                             final aTime = aStats?.timeInSeconds;
@@ -634,7 +635,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             else comparison = aTime.compareTo(bTime);
                             break;
                           case SortableColumn.fastestAgari:
-                          // ▼▼ 変更: モードによってソート基準を切り替え ▼▼
                             final aStats = _isCourseOnlyMode ? a.fastestCourseAgariStats : a.fastestAgariStats;
                             final bStats = _isCourseOnlyMode ? b.fastestCourseAgariStats : b.fastestAgariStats;
                             final aAgari = aStats?.agariInSeconds;
@@ -662,14 +662,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             predictionRaceData: _predictionRaceData!,
                             horses: sortedHorses,
                             buildMarkDropdown: (horse) => UserMarkDropdown(
-                              // ★ 確実な再描画のためのKey
                               key: ValueKey('info_${horse.horseId}_${horse.userMark}'),
                               horse: horse,
                               raceId: widget.raceId,
-                              // ★ 原因はコレ！背景が白なので、枠色に関係なく文字は常に「黒」にする
                               textColor: Colors.black87,
                               onMarkChanged: (mark) {
-                                // ★ 即座に見た目を更新する
                                 setState(() {
                                   horse.userMark = mark;
                                 });
@@ -682,8 +679,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                           StartersTabWidget(
                             horses: sortedHorses,
                             onSort: _onSort,
-                            currentSortColumn: _sortColumn, // ▼ 新規追加
-                            isSortAscending: _isAscending,  // ▼ 新規追加
+                            currentSortColumn: _sortColumn,
+                            isSortAscending: _isAscending,
                             buildMarkDropdown: (horse) => UserMarkDropdown(
                               horse: horse,
                               raceId: widget.raceId,
@@ -847,7 +844,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             comparison = compareNullsLast(aWeight, bWeight);
             break;
           case SortableColumn.bestTime:
-          // ▼▼ 変更: モードによってソート基準を切り替え ▼▼
             final aStats = _isCourseOnlyMode ? a.bestCourseTimeStats : a.bestTimeStats;
             final bStats = _isCourseOnlyMode ? b.bestCourseTimeStats : b.bestTimeStats;
             final aTime = aStats?.timeInSeconds;
@@ -855,7 +851,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             comparison = compareNullsLast(aTime, bTime);
             break;
           case SortableColumn.fastestAgari:
-          // ▼▼ 変更: モードによってソート基準を切り替え ▼▼
             final aStats = _isCourseOnlyMode ? a.fastestCourseAgariStats : a.fastestAgariStats;
             final bStats = _isCourseOnlyMode ? b.fastestCourseAgariStats : b.fastestAgariStats;
             final aAgari = aStats?.agariInSeconds;
@@ -914,7 +909,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }
 
     return DataTable2(
-      key: ValueKey(_predictionRaceData.hashCode),
+      key: ValueKey('${_predictionRaceData.hashCode}_$_tableUpdateKey'),
       minWidth: determineMinWidth(),
       fixedTopRows: 1,
       sortColumnIndex: getSortColumnIndex(),
