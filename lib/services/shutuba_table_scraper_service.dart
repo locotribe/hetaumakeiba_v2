@@ -58,9 +58,12 @@ class ShutubaTableScraperService {
         }
       },
       onReceivedError: (controller, request, error) {
-        if (!completer.isCompleted) {
-          completer.completeError(
-              Exception("Failed to load page: ${error.description}"));
+        // [修正] メインフレーム（ページ本体）のエラーのみをキャッチし、サブリソース（動画や広告など）のエラーは無視する (v.1.0)
+        if (request.isForMainFrame == true) {
+          if (!completer.isCompleted) {
+            completer.completeError(
+                Exception("Failed to load page: ${error.description}"));
+          }
         }
       },
     );
@@ -135,9 +138,12 @@ class ShutubaTableScraperService {
         }
       },
       onReceivedError: (controller, request, error) {
-        if (!completer.isCompleted) {
-          completer.completeError(
-              Exception("Failed to load page: ${error.description}"));
+        // [修正] メインフレーム（ページ本体）のエラーのみをキャッチし、サブリソース（動画や広告など）のエラーは無視する (v.1.0)
+        if (request.isForMainFrame == true) {
+          if (!completer.isCompleted) {
+            completer.completeError(
+                Exception("Failed to load page: ${error.description}"));
+          }
         }
       },
     );
