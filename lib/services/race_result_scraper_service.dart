@@ -20,19 +20,12 @@ class RaceResultScraperService {
 
   /// URLからレースIDを抽出するヘルパー関数
   static String? getRaceIdFromUrl(String url) {
-    final uri = Uri.parse(url);
-    final pathSegments = uri.pathSegments;
-    if (uri.path.contains('/race/')) {
-      final raceId = uri.queryParameters['race_id'];
-      if (raceId != null) return raceId;
-      if (pathSegments.length > 1 && pathSegments[0] == 'race') {
-        return pathSegments[1];
-      }
+    // 従来のURL解析ロジックを削除し、12桁の連続した数字を直接抽出する
+    final match = RegExp(r'\d{12}').firstMatch(url);
+    if (match != null) {
+      return match.group(0);
     }
-    if (uri.host == 'db.netkeiba.com' && pathSegments.contains('race') && pathSegments.last.isNotEmpty) {
-      return pathSegments.last;
-    }
-    return uri.queryParameters['race_id'];
+    return null;
   }
 
   static Future<bool> isRaceResultConfirmed(String raceId) async {
@@ -133,12 +126,16 @@ class RaceResultScraperService {
       final cells = rows[i].querySelectorAll('td');
       if (cells.length < 21) continue;
 
+      // [修正] netkeibaのレース結果テーブル列数（標準21列 / プレミアム仕様25列以上）に応じて取得インデックスのオフセットを動的に設定する (v.1.0)
+      final int offset = cells.length >= 25 ? 4 : 0;
+
       final horseLink = cells[3].querySelector('a');
       final horseId = horseLink?.attributes['href']
           ?.split('/')
           .lastWhere((part) => part.isNotEmpty, orElse: () => '') ??
           '';
-      final trainerText = _safeGetText(cells[18].querySelector('a'));
+
+      final trainerText = _safeGetText(cells[18 + offset].querySelector('a'));
       String trainerAffiliation = '';
       String trainerName = trainerText;
 
@@ -167,15 +164,15 @@ class RaceResultScraperService {
         jockeyId: jockeyId,
         time: _safeGetText(cells[7]),
         margin: _safeGetText(cells[8]),
-        cornerRanking: _safeGetText(cells[10]),
-        agari: _safeGetText(cells[11].querySelector('span')),
-        odds: _safeGetText(cells[12]),
-        popularity: _safeGetText(cells[13]),
-        horseWeight: _safeGetText(cells[14]),
+        cornerRanking: _safeGetText(cells[10 + offset]),
+        agari: _safeGetText(cells[11 + offset].querySelector('span')),
+        odds: _safeGetText(cells[12 + offset]),
+        popularity: _safeGetText(cells[13 + offset]),
+        horseWeight: _safeGetText(cells[14 + offset]),
         trainerName: trainerName,
         trainerAffiliation: trainerAffiliation,
-        ownerName: _safeGetText(cells[19].querySelector('a')),
-        prizeMoney: _safeGetText(cells[20]),
+        ownerName: _safeGetText(cells[19 + offset].querySelector('a')),
+        prizeMoney: _safeGetText(cells[20 + offset]),
       ));
     }
     return results;

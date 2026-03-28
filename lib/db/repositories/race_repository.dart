@@ -10,77 +10,25 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
-import 'package:hetaumakeiba_v2/models/race_data.dart'; // ▼ 新規追加: 出馬表データ復元用
 
 class RaceRepository {
   final DbProvider _dbProvider = DbProvider();
 
-// ▼▼ 新規追加: 新テーブルへの安全なUPSERT（既存データを保持しながら上書き） ▼▼
-  Future<void> _upsertIntegratedRace(String raceId, Map<String, dynamic> newData) async {
-    final db = await _dbProvider.database;
-    // 既存レコードを取得
-    final existing = await db.query(
-      DbConstants.tableIntegratedRaces,
-      where: '${DbConstants.colRaceId} = ?',
-      whereArgs: [raceId],
-      limit: 1,
-    );
-
-    Map<String, dynamic> rowToInsert = {};
-    if (existing.isNotEmpty) {
-      // 既存レコードがある場合はベースとして引き継ぐ
-      rowToInsert.addAll(existing.first);
-    } else {
-      rowToInsert[DbConstants.colRaceId] = raceId;
-    }
-
-    // 今回更新するデータで上書き
-    rowToInsert.addAll(newData);
-
-    await db.insert(
-      DbConstants.tableIntegratedRaces,
-      rowToInsert,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-  // ▲▲ 新規追加 ▲▲
-
   // ===========================================================================
-  // レース結果 (race_results -> integrated_races)
+  // レース結果 (race_results)
   // ===========================================================================
 
   Future<RaceResult?> getRaceResult(String raceId) async {
     final db = await _dbProvider.database;
-
-    // ▼ 1. 新テーブルから検索
-    final newMaps = await db.query(
-      DbConstants.tableIntegratedRaces,
-      where: '${DbConstants.colRaceId} = ? AND ${DbConstants.colHasResult} = 1',
+    final maps = await db.query(
+      DbConstants.tableRaceResults,
+      where: 'race_id = ?',
       whereArgs: [raceId],
       limit: 1,
     );
 
-    if (newMaps.isNotEmpty) {
-      final jsonString = newMaps.first[DbConstants.colResultJson] as String?;
-      if (jsonString != null) {
-        return raceResultFromJson(jsonString);
-      }
-    }
-
-    // ▼ 2. なければ旧テーブルから検索
-    final oldMaps = await db.query(
-      DbConstants.tableRaceResults,
-      where: 'race_id = ?',
-      whereArgs: [raceId],
-    );
-
-    if (oldMaps.isNotEmpty) {
-      final result = raceResultFromJson(oldMaps.first['race_result_json'] as String);
-
-      // ▼ 3. 旧テーブルにデータがあれば、新テーブルへ統合保存（クッション移行）
-      await insertOrUpdateRaceResult(result);
-
-      return result;
+    if (maps.isNotEmpty) {
+      return raceResultFromJson(maps.first['race_result_json'] as String);
     }
     return null;
   }
@@ -106,15 +54,15 @@ class RaceRepository {
   }
 
   Future<int> insertOrUpdateRaceResult(RaceResult raceResult) async {
-    // ▼ 新テーブルへの統合保存に書き換え
-    final Map<String, dynamic> newData = {
-      DbConstants.colHasResult: 1,
-      DbConstants.colResultJson: raceResultToJson(raceResult),
-      DbConstants.colResultLastUpdated: DateTime.now().toIso8601String(),
-    };
-
-    await _upsertIntegratedRace(raceResult.raceId, newData);
-    return 1; // 互換性維持のため
+    final db = await _dbProvider.database;
+    return await db.insert(
+      DbConstants.tableRaceResults,
+      {
+        'race_id': raceResult.raceId,
+        'race_result_json': raceResultToJson(raceResult),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<Map<String, RaceResult>> getAllRaceResults() async {
@@ -315,91 +263,39 @@ class RaceRepository {
   }
 
   // ===========================================================================
-  // 出馬表キャッシュ (shutuba_table_cache -> integrated_races)
+  // 出馬表キャッシュ (shutuba_table_cache)
   // ===========================================================================
 
   Future<ShutubaTableCache?> getShutubaTableCache(String raceId) async {
     final db = await _dbProvider.database;
-
-    // ▼ 1. 新テーブルから検索
-    final newMaps = await db.query(
-      DbConstants.tableIntegratedRaces,
-      where: '${DbConstants.colRaceId} = ? AND ${DbConstants.colHasShutuba} = 1',
-      whereArgs: [raceId],
-      limit: 1,
-    );
-
-    if (newMaps.isNotEmpty) {
-      final map = newMaps.first;
-      final jsonString = map[DbConstants.colShutubaJson] as String?;
-      final lastUpdatedStr = map[DbConstants.colShutubaLastUpdated] as String?;
-      if (jsonString != null && lastUpdatedStr != null) {
-        final data = PredictionRaceData.fromJson(jsonDecode(jsonString));
-        return ShutubaTableCache(
-          raceId: raceId,
-          predictionRaceData: data,
-          lastUpdatedAt: DateTime.parse(lastUpdatedStr),
-        );
-      }
-    }
-
-    // ▼ 2. なければ旧テーブルから検索
-    final oldMaps = await db.query(
+    final maps = await db.query(
       DbConstants.tableShutubaTableCache,
       where: 'race_id = ?',
       whereArgs: [raceId],
       limit: 1,
     );
 
-    if (oldMaps.isNotEmpty) {
-      final cache = ShutubaTableCache.fromMap(oldMaps.first);
-
-      // ▼ 3. 旧テーブルにデータがあれば、新テーブルへ統合保存（クッション移行）
-      // ※ Phase 1の補完ロジックを通った16項目の環境データも抽出して保存される
-      await insertOrUpdateShutubaTableCache(cache);
-
-      return cache;
+    if (maps.isNotEmpty) {
+      return ShutubaTableCache.fromMap(maps.first);
     }
     return null;
   }
 
   Future<void> insertOrUpdateShutubaTableCache(ShutubaTableCache cache) async {
-    final data = cache.predictionRaceData;
-
-    // ▼ 新テーブルへの統合保存に書き換え（16項目の細分化データを抽出してセット）
-    final Map<String, dynamic> newData = {
-      DbConstants.colTrackType: data.trackType,
-      DbConstants.colDistanceValue: data.distanceValue,
-      DbConstants.colDirection: data.direction,
-      DbConstants.colCourseInOut: data.courseInOut,
-      DbConstants.colWeather: data.weather,
-      DbConstants.colTrackCondition: data.trackCondition,
-      DbConstants.colHoldingTimes: data.holdingTimes,
-      DbConstants.colHoldingDays: data.holdingDays,
-      DbConstants.colRaceCategory: data.raceCategory,
-      DbConstants.colHorseCount: data.horseCount,
-      DbConstants.colStartTime: data.startTime,
-      DbConstants.colBasePrize1st: data.basePrize1st,
-      DbConstants.colBasePrize2nd: data.basePrize2nd,
-      DbConstants.colBasePrize3rd: data.basePrize3rd,
-      DbConstants.colBasePrize4th: data.basePrize4th,
-      DbConstants.colBasePrize5th: data.basePrize5th,
-      DbConstants.colHasShutuba: 1,
-      DbConstants.colShutubaJson: jsonEncode(data.toJson()),
-      DbConstants.colShutubaLastUpdated: cache.lastUpdatedAt.toIso8601String(),
-    };
-
-    await _upsertIntegratedRace(cache.raceId, newData);
+    final db = await _dbProvider.database;
+    await db.insert(
+      DbConstants.tableShutubaTableCache,
+      cache.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<void> insertShutubaTableCache(ShutubaTableCache cache) async {
-    // 内部実装は insertOrUpdateShutubaTableCache と同一
     await insertOrUpdateShutubaTableCache(cache);
   }
 
-
   // ===========================================================================
-  // レース総評メモ (race_memos) ▼ 新規追加
+  // レース総評メモ (race_memos)
   // ===========================================================================
 
   Future<RaceMemo?> getRaceMemo(String userId, String raceId) async {
