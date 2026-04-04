@@ -17,6 +17,7 @@ import 'package:hetaumakeiba_v2/screens/jockey_stats_page.dart';
 import 'package:hetaumakeiba_v2/widgets/race_page_tabs/race_detail_tab.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:hetaumakeiba_v2/screens/odds_page.dart';
 
 enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
 
@@ -52,32 +53,26 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
 
   // メソッドをFuture<PredictionRaceData>にし、asyncを追加
   Future<PredictionRaceData> _createPredictionDataFromRaceResult(RaceResult raceResult) async {
-    // 現在の端末のドキュメントディレクトリを取得（バックアップ復元時の絶対パスズレ対策）
     final dir = await getApplicationDocumentsDirectory();
     final currentOwnerImagesDir = '${dir.path}/owner_images';
 
-    // Future.waitを使って、全ての馬のDB照合を非同期で行う
     final horses = await Future.wait(raceResult.horseResults.map((hr) async {
       final weightMatch = RegExp(r'(\d+)\((.*?)\)').firstMatch(hr.horseWeight);
       final trainerName = hr.trainerName;
       final trainerAffiliation = hr.trainerAffiliation;
 
-      // DBから馬のプロフィールを取得
       final profile = await _horseRepo.getHorseProfile(hr.horseId);
       String ownerImagePath = '';
 
       if (profile != null && profile.ownerImageLocalPath.isNotEmpty) {
         final savedPath = profile.ownerImageLocalPath;
 
-        // パスズレ対策：保存されている絶対パスからファイル名(owner_xxx.gif)だけを抽出し、現在の端末のパスと結合する
         final fileName = savedPath.split('/').last;
         final currentFilePath = '$currentOwnerImagesDir/$fileName';
 
-        // 念のため、再構築したパスにファイルが存在するかチェック
         if (await File(currentFilePath).exists()) {
           ownerImagePath = currentFilePath;
         } else if (await File(savedPath).exists()) {
-          // 移行前など、そのままのパスで存在する場合はそのまま使う
           ownerImagePath = savedPath;
         }
       }
@@ -97,7 +92,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         popularity: int.tryParse(hr.popularity),
         horseWeight: weightMatch?.group(1),
         isScratched: int.tryParse(hr.rank) == null,
-        ownerImageLocalPath: ownerImagePath, // ★取得した正しいパスをセット
+        ownerImageLocalPath: ownerImagePath,
       );
     }).toList());
 
@@ -134,8 +129,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    // ▼ 7 から 5 に変更
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _determineRaceStatus();
   }
 
@@ -150,7 +144,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
     final dbResult = await _raceRepo.getRaceResult(widget.raceId);
 
     if (shutubaCache != null) {
-      // ▼▼ 今回追加：キャッシュから読み込んだ馬の勝負服パスを現在の端末のものに再構築する ▼▼
       final dir = await getApplicationDocumentsDirectory();
       final currentOwnerImagesDir = '${dir.path}/owner_images';
 
@@ -168,12 +161,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           }
         }
       }
-      // ▲▲ 追加ここまで ▲▲
-
-      // --- ▼▼ 馬体重のマージ処理追加 ▼▼ ---
       if (dbResult != null) {
         for (var shutubaHorse in shutubaCache.predictionRaceData.horses) {
-// ... 以下、既存のコードそのまま ...
           try {
             final resultHorse = dbResult.horseResults.firstWhere(
                   (hr) => hr.horseId == shutubaHorse.horseId,
@@ -187,20 +176,16 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               }
             }
           } catch (_) {
-            // 一致する馬が見つからない場合はスキップ
           }
         }
       }
-      // --- ▲▲ 馬体重のマージ処理追加 ▲▲ ---
       setState(() {
         _predictionRaceData = shutubaCache.predictionRaceData;
         _raceResult = dbResult;
         _status = RaceStatus.resultConfirmed;
-        // ▼ 5 から 4 に変更
-        _tabController.animateTo(dbResult != null ? 4 : 0);
+        _tabController.animateTo(dbResult != null ? 5 : 0);
       });
 
-      // --- 追加ロジック開始 ---
       try {
         final dateStr = shutubaCache.predictionRaceData.raceDate;
         final details = shutubaCache.predictionRaceData.raceDetails1 ?? '';
@@ -240,20 +225,18 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
       } catch (e) {
         print('Auto-check result error: $e');
       }
-      // --- 追加ロジック終了 ---
 
       return;
     }
 
     if (dbResult != null) {
-      // ▼ 非同期メソッドになったため、awaitで待ってから結果を変数に入れる
       final generatedPredictionData = await _createPredictionDataFromRaceResult(dbResult);
 
       setState(() {
         _raceResult = dbResult;
-        _predictionRaceData = generatedPredictionData; // ▼ 取得したデータをセット
+        _predictionRaceData = generatedPredictionData;
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(4);
+        _tabController.animateTo(5);
       });
       return;
     }
@@ -293,7 +276,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
       }
 
       if (mounted) {
-        // --- ▼▼ 馬体重のマージ処理追加 ▼▼ ---
         if (_predictionRaceData != null) {
           for (var shutubaHorse in _predictionRaceData!.horses) {
             try {
@@ -309,16 +291,13 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                 }
               }
             } catch (_) {
-              // 一致する馬が見つからない場合はスキップ
             }
           }
         }
-        // --- ▲▲ 馬体重のマージ処理追加 ▲▲ ---
         setState(() {
           _raceResult = result;
           _status = RaceStatus.resultConfirmed;
-          // ▼ 5 から 4 に変更
-          _tabController.animateTo(4);
+          _tabController.animateTo(5);
         });
       }
     } catch (e) {
@@ -357,6 +336,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                       unselectedLabelColor: Colors.white70,
                       tabs: const [
                         Tab(text: '出馬表'),
+                        Tab(text: 'オッズ分析'),
                         Tab(text: '過去分析'),
                         Tab(text: '出走馬分析'),
                         Tab(text: '騎手特性'),
@@ -389,7 +369,9 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               controller: _tabController,
               children: [
                 ShutubaTablePage(raceId: widget.raceId),
+                const Center(child: Text('オッズを取得中...')), // 仮
                 const Center(child: CircularProgressIndicator()),
+                const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
@@ -410,6 +392,12 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               raceResult: _raceResult,
               onDataRefreshed: _onShutubaDataRefreshed,
             ),
+            // ★追加: オッズページ
+            if (_predictionRaceData != null)
+              OddsPage(raceData: _predictionRaceData!)
+            else
+              const Center(child: Text('出馬表データを読み込んでいます...')),
+
             if (_predictionRaceData != null)
               RaceStatisticsPage(
                 raceId: widget.raceId,

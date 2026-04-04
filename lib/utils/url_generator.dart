@@ -116,3 +116,19 @@ String generateOpenMeteoUrl({
       'hourly=temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,weather_code,apparent_temperature,shortwave_radiation,et0_fao_evapotranspiration,wind_gusts_10m,visibility,soil_moisture_0_to_1cm&'
       'timezone=Asia%2FTokyo';
 }
+
+// [追加] オッズページ取得用のURL生成メソッド (v.1.0)
+/// netkeibaのオッズ一覧ページのURLを生成します。
+/// [raceId] 202606030311 などの12桁のレースID
+/// [oddsType] 取得したい券種のタイプ。
+///   - 'b1': 単勝・複勝
+///   - 'b4': 馬連
+///   - 'b5': ワイド
+///   - 'b6': 馬単
+String generateOddsUrl({
+  required String raceId,
+  required String oddsType,
+}) {
+  // housiki=c0 と rf=shutuba_submenu は現状の仕様に合わせて固定で付与
+  return 'https://race.netkeiba.com/odds/index.html?type=$oddsType&race_id=$raceId&housiki=c0&rf=shutuba_submenu';
+}
