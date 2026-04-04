@@ -44,3 +44,5 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+# [追加] テスト用ミニアプリフォルダーを Git 管理から除外 (v.1.0)
+test_apps/
