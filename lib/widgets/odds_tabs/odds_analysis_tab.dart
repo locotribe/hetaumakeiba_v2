@@ -5,6 +5,29 @@ import 'package:flutter/material.dart';
 import '../../models/race_data.dart';
 import '../../utils/gate_color_utils.dart';
 
+// [修正] 変数名の差し戻しと1番人気の特別分岐追加 (v9.0)
+class _MacroData {
+  final int horseNumber;
+  final int ninki;
+  final double odds;
+  final double support;
+  final double gapToNext;
+  final bool isDansou;
+  final int dansouCountBefore;
+  final bool isJustAfterDansou;
+
+  _MacroData({
+    required this.horseNumber,
+    required this.ninki,
+    required this.odds,
+    required this.support,
+    required this.gapToNext,
+    required this.isDansou,
+    required this.dansouCountBefore,
+    required this.isJustAfterDansou,
+  });
+}
+
 class _HorseAnalysis {
   final PredictionHorseDetail horse;
   final int ninki;
@@ -45,6 +68,11 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
   List<_HorseAnalysis> _analyzedList = [];
   bool _hasSufficientData = false;
   String _recommendedApproach = '';
+
+  double _sTop3 = 0.0;
+  String _raceClass = '';
+  List<_MacroData> _macroDataList = [];
+  int _totalDansouCount = 0;
 
   @override
   void initState() {
@@ -93,6 +121,48 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
     for (int i = 0; i < sortedTansho.length; i++) {
       ninkiMap[sortedTansho[i].key] = i + 1;
     }
+
+    double sTop3Sum = 0.0;
+    List<_MacroData> macroList = [];
+    int currentDansouCount = 0;
+
+    for (int i = 0; i < sortedTansho.length; i++) {
+      int horseNum = sortedTansho[i].key;
+      double odds = sortedTansho[i].value;
+      double support = 0.8 / odds;
+      if (i < 3) sTop3Sum += support;
+
+      double gapToNext = 1.0;
+      bool isDansou = false;
+      if (i < sortedTansho.length - 1) {
+        gapToNext = sortedTansho[i + 1].value / odds;
+        if (gapToNext >= 1.5) {
+          isDansou = true;
+        }
+      }
+
+      bool isJustAfterDansou = (i > 0) && (sortedTansho[i].value / sortedTansho[i - 1].value >= 1.5);
+
+      macroList.add(_MacroData(
+        horseNumber: horseNum,
+        ninki: i + 1,
+        odds: odds,
+        support: support,
+        gapToNext: gapToNext,
+        isDansou: isDansou,
+        dansouCountBefore: currentDansouCount,
+        isJustAfterDansou: isJustAfterDansou,
+      ));
+
+      if (isDansou) currentDansouCount++;
+    }
+
+    double sTop3Pct = sTop3Sum * 100;
+    String rClass = '';
+    if (sTop3Pct >= 75.0) rClass = '超安定型 (A級)';
+    else if (sTop3Pct >= 60.0) rClass = '安定型 (B級上位)';
+    else if (sTop3Pct >= 45.0) rClass = '標準型 (B級)';
+    else rClass = '波乱含み型 (C級)';
 
     List<int> parseCombo(String combo) {
       String s = combo;
@@ -287,7 +357,7 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
       h.reason = '厳しい基準からは漏れましたが、無印の伏兵陣の中では最も連勝馬券（ワイド等）で怪しい支持を集めている1頭です。100円だけ夢を買うならこの馬です。';
     }
 
-    // [修正] 人気がある（単勝9.9倍以下）のに印がなかった馬を「危険な人気馬」として強調抽出 (v5.0)
+    // 人気がある（単勝9.9倍以下）のに印がなかった馬を「危険な人気馬」として強調抽出
     for (var h in list.where((e) => e.mark.isEmpty && e.tanshoOdds <= 9.9)) {
       h.mark = '危';
       h.type = '危険な人気馬';
@@ -322,20 +392,93 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
     bool hasTaikou = list.any((e) => e.mark == '○');
     int holeCount = list.where((e) => e.mark == '★' || e.mark == '△').length;
 
+    String baseApproach = '';
     if (!hasHonmei) {
-      _recommendedApproach = '大混戦。プロの明確な資金集中が見られません。見送り（ケン）を推奨するか、買う場合は▲や★の単複・ワイドの手広く薄い狙いが無難です。';
+      baseApproach = '大混戦。プロの明確な資金集中が見られません。見送り（ケン）を推奨するか、買う場合は▲や★の単複・ワイドの手広く薄い狙いが無難です。';
     } else if (hasHonmei && hasTaikou && holeCount <= 1) {
-      _recommendedApproach = '上位拮抗。◎と○の馬連・ワイド1点、または◎からの単勝を推奨します。波乱の可能性は低めです。';
+      baseApproach = '上位拮抗。◎と○の馬連・ワイド1点、または◎からの単勝を推奨します。波乱の可能性は低めです。';
     } else if (hasHonmei && holeCount >= 2) {
-      _recommendedApproach = 'ヒモ荒れ警戒。◎を軸とした馬連流し、または◎から手広く流す三連複フォーメーションを推奨します。';
+      baseApproach = 'ヒモ荒れ警戒。◎を軸とした馬連流し、または◎から手広く流す三連複フォーメーションを推奨します。';
     } else {
-      _recommendedApproach = '軸信頼。◎からの馬連・馬単流しを推奨します。';
+      baseApproach = '軸信頼。◎からの馬連・馬単流しを推奨します。';
     }
+
+    String macroContext = '【$rClass】上位3頭の支持率合計は${sTop3Pct.toStringAsFixed(1)}%。レース全体で断層を${currentDansouCount}箇所検知しました。\n\n';
 
     setState(() {
       _analyzedList = list;
       _hasSufficientData = true;
+      _sTop3 = sTop3Pct;
+      _raceClass = rClass;
+      _macroDataList = macroList;
+      _totalDansouCount = currentDansouCount;
+      _recommendedApproach = macroContext + baseApproach;
     });
+  }
+
+  // [修正] 1番人気の特別分岐を追加 (v9.0)
+  String _getMacroEvaluationText(_MacroData data, double sTop3Pct, int totalDansou, bool isFirstFavIsolated) {
+    String raceTier = 'C級';
+    if (sTop3Pct >= 75.0) raceTier = 'A級';
+    else if (sTop3Pct >= 45.0) raceTier = 'B級';
+
+    int oddsTier = 4;
+    String oddsTierName = '大穴層';
+    if (data.odds < 10.0) { oddsTier = 1; oddsTierName = 'コア層'; }
+    else if (data.odds < 20.0) { oddsTier = 2; oddsTierName = '伏兵層'; }
+    else if (data.odds < 50.0) { oddsTier = 3; oddsTierName = '中穴層'; }
+
+    String pos = '';
+    if (totalDansou == 0) pos = 'NONE';
+    else if (data.dansouCountBefore == 0) pos = 'INSIDE';
+    else if (data.isJustAfterDansou) pos = 'JUST_AFTER';
+    else pos = 'OUTSIDE';
+
+    // 1番人気の孤立（単独断層内）に関する特別分岐
+    if (pos == 'INSIDE' && data.ninki == 1 && isFirstFavIsolated) {
+      if (data.odds < 2.0) {
+        return '【$raceTier/絶対軸】第1断層に守られた単独のトップ層。逆らいづらい絶対的な中心馬です。';
+      } else {
+        return '【$raceTier/作られた1強】単独で断層の内側にいますが、オッズ的に絶対の信頼は置けません。単勝の過剰売れの可能性があり、過信は禁物です。';
+      }
+    }
+
+    // 2番人気の特別分岐（1番人気が単独で抜けている場合）
+    if (pos == 'JUST_AFTER' && data.ninki == 2 && isFirstFavIsolated) {
+      return '【$raceTier/逆転候補】1番人気を単独で追う2番手筆頭。前方の壁（1番人気）が崩れた際、真っ先に逆転の使者となる絶好のポジションです。';
+    }
+
+    // 既存の30パターン分岐
+    String prefix = '【$raceTier/$oddsTierName】';
+
+    if (raceTier == 'A級') {
+      if (oddsTier == 1 && pos == 'INSIDE') return '$prefix 第1断層の内側に位置する強固な上位グループ。順当な能力勝負において中心となる存在です。';
+      if (oddsTier == 1 && pos == 'JUST_AFTER') return '$prefix 断層の直後に位置。軸馬には劣るものの、ヒモとしては最有力であり馬券圏内確保の確率は高いです。';
+      if (oddsTier <= 2 && pos == 'JUST_AFTER') return '$prefix 堅いレースにおける波乱の急先鋒。上位陣が崩れた際、真っ先に漁夫の利を得る展開待ちのポジションです。';
+      if (pos == 'OUTSIDE' || pos == 'NONE') return '$prefix 上位に強固な壁が存在する堅いレース質。このポジションから上位に食い込むのは統計的に至難の業であり、基本はケン（見送り）推奨です。';
+      return '$prefix 堅く収まる確率が高いレース質において、上位勢の牙城を崩すには厳しい立ち位置です。';
+    }
+    else if (raceTier == 'B級') {
+      if (oddsTier == 1 && pos == 'INSIDE') return '$prefix 断層内側の上位グループ。能力は上位ですが、絶対的な壁ではないため伏兵の台頭に注意が必要な立ち位置です。';
+      if (oddsTier == 2 && pos == 'INSIDE') return '$prefix 混戦気味の上位グループ。能力差が少ないため、展開次第でアタマ（1着）まで狙える妙味のあるポジションです。';
+      if (oddsTier <= 3 && pos == 'JUST_AFTER') return '$prefix 断層直後の隠れ軸候補。能力の壁を越える一撃を秘めており、中穴狙いのフォーメーションに組み込みたい存在です。';
+      if (oddsTier == 3 && pos == 'OUTSIDE') return '$prefix 複数の断層の外側。能力的には劣勢ですが、B級特有のヒモ荒れに乗じて3着に滑り込むフロックの余地はあります。';
+      if (oddsTier == 4) return '$prefix B級レースとはいえ、このオッズ帯まで波乱が及ぶ可能性は低いです。手広く買う場合のヒモ穴の端に留めるのが無難です。';
+      return '$prefix 標準的なレース質における$oddsTierName。展開次第で浮上の余地を残すポジションです。';
+    }
+    else {
+      if (pos == 'NONE') {
+        if (oddsTier == 1) return '$prefix 断層のない大混戦における上位人気。能力差がほぼないため、過剰人気による期待値の低下には警戒が必要です。';
+        if (oddsTier == 2) return '$prefix 大混戦の$oddsTierName。上位との間に明確な能力の壁（断層）が存在しないため、オッズほどの差はありません。展開次第で一発が狙える美味しい存在です。';
+        if (oddsTier == 3) return '$prefix 波乱含みのレース質であり、このオッズ帯でも十分に台頭の資格があります。手広く網を張るなら押さえておきたい一頭です。';
+        return '$prefix オッズほどの能力差がない大混戦。資金に余裕があれば、大波乱の使者として宝くじ感覚で狙う価値はあります。';
+      } else {
+        if (oddsTier == 1 && pos == 'INSIDE') return '$prefix 波乱含みの中で断層に守られた存在。ただし全体の支持率は低いため、過信は禁物の危うい軸候補です。';
+        if (oddsTier <= 3 && pos == 'JUST_AFTER') return '$prefix 大荒れレースにおける断層直後の特注馬。大衆の評価以上に一発の魅力を秘めており、波乱の主役になり得るポジションです。';
+        if (oddsTier == 4) return '$prefix 荒れるレースとはいえ、前方に断層（壁）を抱えるこの位置からの巻き返しは困難です。';
+        return '$prefix 波乱含みのC級レース。上位陣との間に壁はありますが、全体の能力値が低いため、展開一つで壁を突破できる可能性があります。';
+      }
+    }
   }
 
   int _getMarkPriority(String mark) {
@@ -387,6 +530,150 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
     );
   }
 
+  Widget _buildMacroAnalysisWidget() {
+    if (_macroDataList.isEmpty) return const SizedBox.shrink();
+
+    double maxSupport = _macroDataList.fold(0.0, (m, d) => max(m, d.support));
+    if (maxSupport == 0) maxSupport = 1.0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2128),
+        borderRadius: BorderRadius.circular(8.0),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Race Odds Analysis',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Row(
+                    children: [
+                      Text('TOP 3 支持率', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      SizedBox(width: 12),
+                      Text('レース格付', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text('${_sTop3.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 16),
+                      Text(_raceClass.split(' ').first, style: TextStyle(color: _sTop3 >= 60 ? Colors.amber : Colors.orange, fontSize: 15, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white70),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text('支持率(%) = 0.8 / オッズ', style: TextStyle(color: Colors.white, fontSize: 10)),
+            ),
+          ),
+          const SizedBox(height: 24),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: _macroDataList.map((data) {
+                double support = data.support;
+                double gap = data.gapToNext;
+                double barHeight = (support / maxSupport) * 80.0;
+                bool isTop3 = data.ninki <= 3;
+                bool isDansou = data.isDansou;
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text('${(support * 100).toStringAsFixed(1)}%', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: 48,
+                          height: barHeight,
+                          decoration: BoxDecoration(
+                            color: isTop3 ? Colors.blue.shade200 : Colors.grey.shade500,
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.white70),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text('${data.ninki}番人気', style: const TextStyle(color: Colors.white, fontSize: 10)),
+                        ),
+                        const SizedBox(height: 4),
+                        Text('${data.odds}倍', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                      ],
+                    ),
+                    if (data.ninki < _macroDataList.length)
+                      Container(
+                        width: isDansou ? 56 : 32,
+                        height: 140,
+                        alignment: Alignment.center,
+                        child: isDansou
+                            ? Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text(
+                              '断層\n${gap.toStringAsFixed(1)}x',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.pink.shade300,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(width: 2, height: 70, color: Colors.pink.shade300),
+                            const SizedBox(height: 28),
+                          ],
+                        )
+                            : Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text('${gap.toStringAsFixed(1)}x', style: const TextStyle(color: Colors.white30, fontSize: 10)),
+                            const SizedBox(height: 40),
+                          ],
+                        ),
+                      ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_hasSufficientData) {
@@ -408,6 +695,9 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
         ),
       );
     }
+
+    // 1番人気が単独で断層内にいるかどうかのフラグ
+    bool isFirstFavIsolated = _macroDataList.isNotEmpty && _macroDataList.first.isDansou;
 
     return ListView(
       padding: const EdgeInsets.all(8.0),
@@ -435,6 +725,8 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
             ],
           ),
         ),
+
+        _buildMacroAnalysisWidget(),
 
         Container(
           margin: const EdgeInsets.only(bottom: 12.0),
@@ -467,14 +759,23 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
           final isDream = analysis.mark == '夢';
           final isDanger = analysis.mark == '危' || analysis.mark == '消';
           final isNegative = isDanger || analysis.mark == '静';
-
-          // [修正] 単勝9.9倍以下を「赤いオッズ」として判定 (v5.0)
           final isRedOdds = analysis.tanshoOdds <= 9.9;
 
           Color markColor = Colors.black87;
           if (isDream) markColor = Colors.pink.shade700;
           else if (isDanger) markColor = Colors.red.shade900;
           else if (isNegative) markColor = Colors.grey.shade600;
+
+          // 該当馬のマクロデータを取得し、3Dマトリクステキストを生成
+          final macroData = _macroDataList.firstWhere(
+                  (m) => m.horseNumber == horse.horseNumber,
+              orElse: () => _MacroData(horseNumber: horse.horseNumber, ninki: 0, odds: 0, support: 0, gapToNext: 0, isDansou: false, dansouCountBefore: 0, isJustAfterDansou: false)
+          );
+
+          String macroText = '';
+          if (macroData.ninki > 0) {
+            macroText = _getMacroEvaluationText(macroData, _sTop3, _totalDansouCount, isFirstFavIsolated);
+          }
 
           return Card(
             elevation: isDream ? 2 : 1,
@@ -537,7 +838,6 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
                         '(${analysis.ninki}番人気 / ',
                         style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                       ),
-                      // [修正] 単勝9.9倍以下の場合は赤太字で表示 (v5.0)
                       Text(
                         '${analysis.tanshoOdds.toStringAsFixed(1)}倍',
                         style: TextStyle(
@@ -566,9 +866,16 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '※ ${analysis.reason}',
+                    '※ 資金動向： ${analysis.reason}',
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade800, height: 1.4),
                   ),
+                  if (macroText.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '■ 統計配置： $macroText',
+                      style: TextStyle(fontSize: 13, color: Colors.indigo.shade800, height: 1.4, fontWeight: FontWeight.w500),
+                    ),
+                  ],
                 ],
               ),
             ),
