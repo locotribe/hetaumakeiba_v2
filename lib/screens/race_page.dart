@@ -18,6 +18,7 @@ import 'package:hetaumakeiba_v2/widgets/race_page_tabs/race_detail_tab.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:hetaumakeiba_v2/screens/odds_page.dart';
+import 'package:hetaumakeiba_v2/widgets/rating_analysis_tab.dart';
 
 enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
 
@@ -129,7 +130,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _determineRaceStatus();
   }
 
@@ -183,7 +184,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _predictionRaceData = shutubaCache.predictionRaceData;
         _raceResult = dbResult;
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(dbResult != null ? 5 : 0);
+        _tabController.animateTo(dbResult != null ? 6 : 0);
       });
 
       try {
@@ -236,7 +237,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _raceResult = dbResult;
         _predictionRaceData = generatedPredictionData;
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(5);
+        _tabController.animateTo(6);
       });
       return;
     }
@@ -297,7 +298,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         setState(() {
           _raceResult = result;
           _status = RaceStatus.resultConfirmed;
-          _tabController.animateTo(5);
+          _tabController.animateTo(6);
         });
       }
     } catch (e) {
@@ -336,6 +337,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                       unselectedLabelColor: Colors.white70,
                       tabs: const [
                         Tab(text: '出馬表'),
+                        Tab(text: '能力分析(Rt)'),
                         Tab(text: 'オッズ分析'),
                         Tab(text: '過去分析'),
                         Tab(text: '出走馬分析'),
@@ -369,7 +371,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               controller: _tabController,
               children: [
                 ShutubaTablePage(raceId: widget.raceId),
-                const Center(child: Text('オッズを取得中...')), // 仮
+                const Center(child: Text('レーティング算出中...')), // ★追加
+                const Center(child: Text('オッズを取得中...')),
                 const Center(child: CircularProgressIndicator()),
                 const Center(child: Text('レース結果を取得中です...')),
                 const Center(child: Text('レース結果を取得中です...')),
@@ -392,7 +395,13 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               raceResult: _raceResult,
               onDataRefreshed: _onShutubaDataRefreshed,
             ),
-            // ★追加: オッズページ
+
+            // ★追加: レーティング分析タブのコンテンツ
+            if (_predictionRaceData != null)
+              RatingAnalysisTab(horses: _predictionRaceData!.horses)
+            else
+              const Center(child: CircularProgressIndicator()),
+
             if (_predictionRaceData != null)
               OddsPage(raceData: _predictionRaceData!)
             else
