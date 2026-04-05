@@ -201,6 +201,7 @@ class DbProvider {
       CREATE TABLE ${DbConstants.tableHorseProfiles}(
         horseId TEXT PRIMARY KEY,
         horseName TEXT,
+        gender TEXT, -- [追加] 性別カラム (v.13)
         birthday TEXT,
         ownerId TEXT,
         ownerName TEXT,
@@ -453,6 +454,8 @@ class DbProvider {
     if (oldVersion < 13) {
       try {
         await db.execute('DROP TABLE IF EXISTS analytics_aggregates');
+        // [追加] horse_profilesテーブルにgenderカラムを追加 (v.13)
+        await db.execute('ALTER TABLE ${DbConstants.tableHorseProfiles} ADD COLUMN gender TEXT');
       } catch (e) { print('Migration error (v12->v13): $e'); }
     }
   }

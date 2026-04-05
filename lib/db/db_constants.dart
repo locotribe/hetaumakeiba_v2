@@ -2,7 +2,8 @@
 
 class DbConstants {
   static const String dbName = 'hetaumakeiba_v2.db';
-  static const int dbVersion = 12; // 11 -> 12に更新
+  // [修正] 12 -> 13に更新 (v.13)
+  static const int dbVersion = 13;
 
   // --- Tables ---
   static const String tableQrData = 'qr_data';
@@ -24,7 +25,7 @@ class DbConstants {
   static const String tableTrackConditions = 'track_conditions';
   static const String tableRaceMemos = 'race_memos';
   static const String tableTrainingTimes = 'training_times';
-  // ▼▼ 新規追加: 統合レーステーブル ▼▼
+  // 統合レーステーブル
   static const String tableIntegratedRaces = 'integrated_races';
 
   // --- Common Columns ---
@@ -32,7 +33,7 @@ class DbConstants {
   static const String colUserId = 'userId';
   static const String colRaceId = 'race_id';
 
-  // ▼▼ 新規追加: 統合レーステーブル用カラム ▼▼
+  // 統合レーステーブル用カラム
   static const String colTrackType = 'track_type';
   static const String colDistanceValue = 'distance_value';
   static const String colDirection = 'direction';
@@ -56,13 +57,12 @@ class DbConstants {
   static const String colResultJson = 'result_json';
   static const String colShutubaLastUpdated = 'shutuba_last_updated';
   static const String colResultLastUpdated = 'result_last_updated';
-  // ▲▲ 新規追加 ▲▲
 
   // --- Training Times Columns ---
   static const String colHorseId = 'horse_id';
   static const String colTrainingDate = 'training_date';
   static const String colTrainingTime = 'training_time';
-  static const String colTrackTypeForTraining = 'track_type'; // 既存との被り回避
+  static const String colTrackTypeForTraining = 'track_type';
   static const String colLocation = 'location';
   static const String colF6 = 'f6';
   static const String colF5 = 'f5';

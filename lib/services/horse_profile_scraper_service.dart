@@ -53,6 +53,8 @@ class HorseProfileScraperService {
       final profile = HorseProfile(
         horseId: horseId,
         horseName: profileData['horseName'] ?? '',
+        // [追加] 性別データを渡す (v.13)
+        gender: profileData['gender'] ?? '',
         birthday: profileData['birthday'] ?? '',
         ownerId: profileData['ownerId'] ?? '',
         ownerName: profileData['ownerName'] ?? '',
@@ -127,6 +129,15 @@ class HorseProfileScraperService {
 
     result['ownerId'] = ownerId;
     result['ownerName'] = ownerName;
+
+    // [追加] txt_01クラスから性別を抽出 (v.13)
+    final txt01 = document.querySelector('p.txt_01')?.text ?? '';
+    final genderMatch = RegExp(r'(牡|牝|セ)').firstMatch(txt01);
+    if (genderMatch != null) {
+      result['gender'] = genderMatch.group(1)!;
+    } else {
+      result['gender'] = '';
+    }
 
     // その他の情報
     final thList = document.querySelectorAll('th');
