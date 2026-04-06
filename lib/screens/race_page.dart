@@ -18,7 +18,7 @@ import 'package:hetaumakeiba_v2/widgets/race_page_tabs/race_detail_tab.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:hetaumakeiba_v2/screens/odds_page.dart';
-import 'package:hetaumakeiba_v2/widgets/rating_analysis_tab.dart';
+import 'package:hetaumakeiba_v2/widgets/rating/rating_analysis_tab.dart';
 
 enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
 
@@ -396,9 +396,13 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               onDataRefreshed: _onShutubaDataRefreshed,
             ),
 
-            // ★追加: レーティング分析タブのコンテンツ
+            // ★修正：引数に raceDate も渡す
             if (_predictionRaceData != null)
-              RatingAnalysisTab(horses: _predictionRaceData!.horses)
+              RatingAnalysisTab(
+                horses: _predictionRaceData!.horses,
+                raceName: _predictionRaceData!.raceName,
+                raceDate: _predictionRaceData!.raceDate,
+              )
             else
               const Center(child: CircularProgressIndicator()),
 

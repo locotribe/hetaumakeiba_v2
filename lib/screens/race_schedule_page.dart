@@ -41,7 +41,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   void initState() {
     super.initState();
     _currentDate = DateTime.now();
-
     _loadDataForWeek(isInitial: true);
   }
 
@@ -55,15 +54,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   void _calculateWeek(DateTime date) {
     if (!mounted) return;
     setState(() {
-      // 1. 渡された日付（日曜基準）をそのままセットする（月曜への強制変換を廃止）
       _currentDate = date;
-
-      // 2. カレンダー表示用（月〜日）の計算はローカル変数で行う
-      //    (Dartのweekdayは 月=1 ... 日=7)
       final int daysToSubtract = date.weekday - 1;
       final DateTime monday = date.subtract(Duration(days: daysToSubtract));
-
-      // 3. 表示用の日付リストを生成
       _weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
 
       _isDataLoaded = false;
@@ -72,7 +65,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       _availableDates.clear();
       _raceSchedules.clear();
 
-      // タブコントローラーの破棄
       if (_tabController != null) {
         _tabController!.removeListener(_handleTabSelection);
         _tabController!.dispose();
@@ -81,15 +73,12 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       _raceStatusMap.clear();
     });
 
-    // 4. データ読み込み開始（日付指定あり）
     _loadDataForWeek(isInitial: false);
   }
 
-  /// スケジュールデータから初期ステータス（確定済みかどうか）を読み込む
   void _initializeStatusMapFromSchedule(RaceSchedule schedule) {
     for (final venue in schedule.venues) {
       for (final race in venue.races) {
-        // DBに保存されていた情報で「確定済み」ならマップに反映
         if (race.isConfirmed) {
           _raceStatusMap[race.raceId] = true;
         }
@@ -107,14 +96,11 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
 
     try {
-      // 初期ロード以外で、既に週構成(_weekDates)が決まっている場合はキャッシュを確認
       if (!isInitial && _weekDates.isNotEmpty) {
-        // 週を一意に識別するキー（週の月曜日の日付文字列）を使用
         final weekKey = DateFormat('yyyyMMdd').format(_weekDates.first);
         final cachedDates = await _raceRepository.getWeekCache(weekKey);
 
         if (cachedDates != null && cachedDates.isNotEmpty) {
-          // キャッシュヒット：スクレイピングせずにUI構築へ
           _setupTabs(cachedDates);
           if (mounted) {
             setState(() {
@@ -133,13 +119,12 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         },
       );
 
-      // データなし（未来の週など）
       if (dates.isEmpty) {
         if (mounted) {
           setState(() {
             _isLoading = false;
             _availableDates = [];
-            _isDataLoaded = true; // ロード完了とするがデータなし
+            _isDataLoaded = true;
           });
         }
         return;
@@ -164,7 +149,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         });
       }
     } catch (e) {
-      print('Error in _loadDataForWeek: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -208,23 +192,31 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     if (parsedDates.isNotEmpty) {
       final lastDate = parsedDates.last;
-
-      // 日曜日(7)までの差分を足す（火曜(2)なら+5日、日曜(7)なら+0日）
       final int daysToAdd = DateTime.sunday - lastDate.weekday;
       final DateTime targetSunday = lastDate.add(Duration(days: daysToAdd));
 
       _currentDate = targetSunday;
-
-      // カレンダー表示用の月曜日（日曜から6日前）
       final DateTime monday = _currentDate.subtract(const Duration(days: 6));
       _weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
     }
 
-    int initialIndex = _availableDates
-        .indexOf(DateFormat('yyyy-MM-dd').format(parsedDates.last));
+    // ★修正: 「今日」または「今日以降で最も近い日」を探すロジック
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    int initialIndex = -1;
 
+    for (int i = 0; i < _availableDates.length; i++) {
+      final date = DateFormat('yyyy-MM-dd').parse(_availableDates[i]);
+      // 今日と一致、または今日より未来の日付が見つかったらそこを初期位置にする
+      if (date.isAtSameMomentAs(today) || date.isAfter(today)) {
+        initialIndex = i;
+        break;
+      }
+    }
+
+    // 全て過去の日付だった場合は、一番新しい日（リストの最後）を選択
     if (initialIndex == -1) {
-      initialIndex = _availableDates.isNotEmpty ? _availableDates.length - 1 : 0;
+      initialIndex = _availableDates.length - 1;
     }
 
     if (_tabController != null) {
@@ -242,8 +234,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
   void _handleTabSelection() {
     if (_tabController == null) return;
-
-    // タブ切り替えアニメーション中は発火させない（完了時のみ処理）
     if (_tabController!.indexIsChanging) return;
 
     final index = _tabController!.index;
@@ -251,7 +241,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     final dateStr = _availableDates[index];
 
-    // まだデータを持っていない日付の場合のみ取得しに行く
     if (!_raceSchedules.containsKey(dateStr)) {
       _fetchDataForDate(dateStr);
     }
@@ -269,20 +258,16 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       RaceSchedule? schedule;
 
       if (forceRefresh) {
-        // プルダウン更新（forceRefresh = true）の時は、強制的にWebから取得
         schedule = await _scraperService.scrapeRaceSchedule(date);
       } else {
-        // 通常アクセス時: まずDBを確認
         schedule = await _raceRepository.getRaceSchedule(dateString);
 
-        // 過去日かつ不完全なデータ（レース数が少ない）場合は自動的に更新する
         if (schedule != null) {
           final now = DateTime.now();
           final today = DateTime(now.year, now.month, now.day);
           if (date.isBefore(today)) {
             bool isIncomplete = false;
             for (final venue in schedule.venues) {
-              // メインレース等しか保存されていない状態を検知（全レース揃っていない）
               if (venue.races.length <= 5) {
                 isIncomplete = true;
                 break;
@@ -294,17 +279,13 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           }
         }
 
-        // DBになければ（初アクセスなら）Webから取得
         schedule ??= await _scraperService.scrapeRaceSchedule(date);
       }
 
       if (schedule != null) {
-        // データを取得できたら（DB/Web問わず）状態を初期化し、DBに保存（更新）する
         _initializeStatusMapFromSchedule(schedule);
         await _raceRepository.insertOrUpdateRaceSchedule(schedule);
-
         await _jyusyoService.reflectScheduleDataToJyusyoRaces(schedule);
-
         _checkRaceStatusesForSchedule(schedule);
       }
 
@@ -314,7 +295,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         });
       }
     } catch (e) {
-      print("Error fetching data for $dateString: $e");
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('データ取得エラー: $e')));
@@ -349,7 +329,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
         if (_raceStatusMap[race.raceId] == true) continue;
 
-        // 過去日の場合は無条件で確定済みとし、通信や待機をスキップする
         if (isPastDate) {
           setState(() {
             _raceStatusMap[race.raceId] = true;
@@ -394,7 +373,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       }
     }
 
-    // 更新があった場合のみ、最後に一度だけDBを更新する
     if (needUpdateDb) {
       await _raceRepository.insertOrUpdateRaceSchedule(schedule);
     }
@@ -529,10 +507,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
               labelColor: Colors.blue,
               unselectedLabelColor: Colors.black,
               tabs: _availableDates.map((dateStr) {
-                final date =
-                DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
-                final dayOfWeek = _raceSchedules[dateStr]?.dayOfWeek ??
-                    DateFormat.E('ja').format(date);
+                final date = DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
+                final dayOfWeek = DateFormat.E('ja').format(date);
                 return Tab(text: '${DateFormat('M/d').format(date)}($dayOfWeek)');
               }).toList(),
             )
@@ -566,6 +542,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final bool isFutureOrToday = !scheduleDate.isBefore(today);
+
     return LayoutBuilder(builder: (context, constraints) {
       return SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -576,154 +553,154 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
             child: Column(
               children: [
                 Container(
-                    width: double.infinity, // 横幅をいっぱいに広げる
-                    alignment: Alignment.topCenter, // 中身を上部の中央に配置
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: schedule.venues.map((venue) {
-                          return Container(
-                        width: 180,
-                        margin: const EdgeInsets.only(right: 8.0),
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8.0),
-                              color: Colors.grey[200],
-                              child: Center(
-                                child: Text(
-                                  venue.venueTitle,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                  textAlign: TextAlign.center,
+                  width: double.infinity,
+                  alignment: Alignment.topCenter,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: schedule.venues.map((venue) {
+                        return Container(
+                          width: 180,
+                          margin: const EdgeInsets.only(right: 8.0),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8.0),
+                                color: Colors.grey[200],
+                                child: Center(
+                                  child: Text(
+                                    venue.venueTitle,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold),
+                                    textAlign: TextAlign.center,
+                                  ),
                                 ),
                               ),
-                            ),
-                            ...venue.races.map((race) {
-                              bool isRaceSet = race.raceId.isNotEmpty;
-                              final isConfirmed =
-                                  _raceStatusMap[race.raceId] ?? false;
-                              return InkWell(
-                                onTap: isRaceSet
-                                    ? () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => RacePage(
-                                        raceId: race.raceId,
-                                        raceDate: schedule.date,
-                                      ),
-                                    ),
-                                  );
-                                }
-                                    : null,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 8.0, horizontal: 4.0),
-                                  decoration: BoxDecoration(
-                                      border: Border(
-                                          bottom: BorderSide(
-                                              color: Colors.grey.shade300))),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                    CrossAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 8.0),
-                                        decoration: BoxDecoration(
-                                          color: isConfirmed
-                                              ? Colors.redAccent
-                                              : Colors.blueAccent,
-                                          borderRadius:
-                                          BorderRadius.circular(4.0),
+                              ...venue.races.map((race) {
+                                bool isRaceSet = race.raceId.isNotEmpty;
+                                final isConfirmed =
+                                    _raceStatusMap[race.raceId] ?? false;
+                                return InkWell(
+                                  onTap: isRaceSet
+                                      ? () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => RacePage(
+                                          raceId: race.raceId,
+                                          raceDate: schedule.date,
                                         ),
-                                        child: Center(
-                                          child: Text(
-                                            race.raceNumber,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
+                                      ),
+                                    );
+                                  }
+                                      : null,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8.0, horizontal: 4.0),
+                                    decoration: BoxDecoration(
+                                        border: Border(
+                                            bottom: BorderSide(
+                                                color: Colors.grey.shade300))),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                      CrossAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 8.0),
+                                          decoration: BoxDecoration(
+                                            color: isConfirmed
+                                                ? Colors.redAccent
+                                                : Colors.blueAccent,
+                                            borderRadius:
+                                            BorderRadius.circular(4.0),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              race.raceNumber,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Flexible(
-                                                  child: Text(
-                                                    race.raceName,
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      fontWeight:
-                                                      FontWeight.bold,
-                                                      color: isRaceSet
-                                                          ? Colors.black
-                                                          : Colors.grey,
-                                                    ),
-                                                    overflow:
-                                                    TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                if (isRaceSet &&
-                                                    race.grade.isNotEmpty)
-                                                  Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 2),
-                                                    decoration: BoxDecoration(
-                                                      color: getGradeColor(
-                                                          race.grade),
-                                                      borderRadius:
-                                                      BorderRadius.circular(
-                                                          8),
-                                                    ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Flexible(
                                                     child: Text(
-                                                      race.grade,
-                                                      style: const TextStyle(
-                                                          fontSize: 10,
-                                                          color: Colors.white,
-                                                          fontWeight:
-                                                          FontWeight.bold),
+                                                      race.raceName,
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight:
+                                                        FontWeight.bold,
+                                                        color: isRaceSet
+                                                            ? Colors.black
+                                                            : Colors.grey,
+                                                      ),
+                                                      overflow:
+                                                      TextOverflow.ellipsis,
                                                     ),
                                                   ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 4),
-                                            if (isRaceSet &&
-                                                race.details.isNotEmpty)
-                                              Text(
-                                                race.details,
-                                                style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.black87),
-                                                overflow: TextOverflow.ellipsis,
+                                                  const SizedBox(width: 8),
+                                                  if (isRaceSet &&
+                                                      race.grade.isNotEmpty)
+                                                    Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: getGradeColor(
+                                                            race.grade),
+                                                        borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                      ),
+                                                      child: Text(
+                                                        race.grade,
+                                                        style: const TextStyle(
+                                                            fontSize: 10,
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                            FontWeight.bold),
+                                                      ),
+                                                    ),
+                                                ],
                                               ),
-                                          ],
+                                              const SizedBox(height: 4),
+                                              if (isRaceSet &&
+                                                  race.details.isNotEmpty)
+                                                Text(
+                                                  race.details,
+                                                  style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.black87),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              );
-                            })
-                          ],
-                        ),
-                      );
-                    }).toList(),
+                                );
+                              })
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
                   ),
-                ),
                 ),
                 if (isFutureOrToday)
                   const Padding(
