@@ -34,7 +34,7 @@ class VolatilityAnalysisTab extends StatefulWidget {
 
 class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
   final RaceRepository _raceRepo = RaceRepository();
-  final HorseRepository _horseRepo = HorseRepository(); // 血統情報取得用
+  final HorseRepository _horseRepo = HorseRepository();
   final VolatilityAnalyzer _analyzer = VolatilityAnalyzer();
   bool _isLoading = true;
 
@@ -59,7 +59,6 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
   int _currentPedigreeFetchCount = 0;
   int _totalPedigreeToFetch = 0;
 
-  // ★追加: 対象となる馬の総数と、不足している数
   int _totalTargetHorseCount = 0;
   int _missingPedigreeCount = 0;
 
@@ -89,14 +88,14 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
     }
     // 過去レースの1〜3着馬のプロフィール（血統）をDBから取得する
     Map<String, HorseProfile> horseProfileMap = {};
-    Set<String> targetHorseIds = {}; // ★追加: 対象馬のIDを格納
-    int missingCount = 0; // ★追加: 不足数のカウント
+    Set<String> targetHorseIds = {};
+    int missingCount = 0;
 
     for (final race in pastRaces) {
       for (final horse in race.horseResults) {
         int rank = int.tryParse(horse.rank ?? '') ?? 0;
         if (rank >= 1 && rank <= 3 && horse.horseId.isNotEmpty) {
-          targetHorseIds.add(horse.horseId); // ★追加: 1〜3着馬のIDをSetに追加（同着対応）
+          targetHorseIds.add(horse.horseId);
           if (!horseProfileMap.containsKey(horse.horseId)) {
             final profile = await _horseRepo.getHorseProfile(horse.horseId);
             if (profile != null) {
@@ -107,7 +106,6 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
       }
     }
 
-    // ★追加: 対象馬の総数と、データが不足している馬を正確にカウント
     for (final horseId in targetHorseIds) {
       final profile = horseProfileMap[horseId];
       if (profile == null || profile.fatherName.isEmpty) {
@@ -135,7 +133,6 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
           horseProfileMap: horseProfileMap,
         );
 
-        // ★追加: カウントを状態に保存
         _totalTargetHorseCount = targetHorseIds.length;
         _missingPedigreeCount = missingCount;
 
@@ -226,45 +223,35 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // 1. 波乱度
           VolatilityCard(res: _volatilityResult!),
           const SizedBox(height: 16),
+          // 2. 過去レース上位3頭と馬場状態
           PastTopHorsesCard(pastTop3Result: _pastTop3Result, trackConditionMap: _trackConditionMap),
           const SizedBox(height: 16),
-          if (_payoutResult != null) PayoutComparisonCard(result: _payoutResult!),
-          const SizedBox(height: 16),
-
-          // 抜け落ちていた人気別成績チャートを復活
-          if (_popularityResult != null) PopularityChartCard(result: _popularityResult!),
-          const SizedBox(height: 16),
-
-          // 馬場状態の傾向カード
+          // 3. 過去の馬場状態の傾向
           if (_trackConditionTrendResult != null) ...[
             TrackConditionTrendCard(result: _trackConditionTrendResult!),
             const SizedBox(height: 16),
           ],
-
-          // 血統クロス分析カード
+          // 4. 好走血統 × 馬場状態クロス分析
           if (_pedigreeCrossResult != null) ...[
             PedigreeCrossAnalysisCard(
               result: _pedigreeCrossResult!,
               isFetching: _isFetchingPedigree,
-              currentFetchCount: _currentPedigreeFetchCount,  // 現在の取得件数
-              totalFetchCount: _totalPedigreeToFetch,         // 全体の取得件数
-              missingPedigreeCount: _missingPedigreeCount,    // ★追加: 不足している血統データの数
-              totalTargetHorseCount: _totalTargetHorseCount,  // ★追加: 対象馬の総数
+              currentFetchCount: _currentPedigreeFetchCount,
+              totalFetchCount: _totalPedigreeToFetch,
+              missingPedigreeCount: _missingPedigreeCount,
+              totalTargetHorseCount: _totalTargetHorseCount,
               onFetchPedigree: _fetchMissingPedigreeData,
             ),
             const SizedBox(height: 16),
           ],
-
-          if (_frameResult != null) FrameChartCard(result: _frameResult!),
-          const SizedBox(height: 16),
-          if (_legStyleResult != null) LegStyleChartCard(result: _legStyleResult!),
-          const SizedBox(height: 16),
-          if (_horseWeightResult != null) HorseWeightCard(result: _horseWeightResult!),
-          const SizedBox(height: 16),
+          // 5. ラップタイム・ペース分析
           if (_lapTimeResult != null) LapTimeChartCard(result: _lapTimeResult!),
-          const SizedBox(height: 32), // 下部の余白
+
+          const SizedBox(height: 32),
+          // ※配当、人気、枠番、脚質、馬体重のカードは各タブへ移植されたため削除
         ],
       ),
     );

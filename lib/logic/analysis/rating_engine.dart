@@ -2,7 +2,6 @@
 import 'dart:math';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 
-/// 1戦ごとの分析結果
 class RatingAnalyzedResult {
   final HorseRaceRecord record;
   final double raceRating;
@@ -23,16 +22,15 @@ class RatingAnalyzedResult {
   });
 }
 
-/// 馬ごとの全体評価プロファイル（今回拡張された指標）
 class HorseRatingProfile {
   final String horseId;
   final List<RatingAnalyzedResult> history;
   final double latestTrend;
-  final String stabilityRank; // A:安定, B:普通, C:ムラ
-  final String momentumStatus; // 上昇期, 反動警戒など
-  final bool isClassCleared; // 今回のクラス基準点を超えた実績があるか
-  final double bestRatingWeight; // 過去最高Rtを出した時の斤量
-  final int bestRatingMonth; // 過去最高Rtを出した時の月
+  final String stabilityRank;
+  final String momentumStatus;
+  final bool isClassCleared;
+  final double bestRatingWeight;
+  final int bestRatingMonth;
 
   HorseRatingProfile({
     required this.horseId,
@@ -46,7 +44,6 @@ class HorseRatingProfile {
   });
 }
 
-/// 基準斤量算出ロジック
 class WeightAllowanceCalculator {
   static double calculateBaseWeight(int age, String gender, int raceMonth) {
     double baseWeight = 58.0;
@@ -62,7 +59,6 @@ class WeightAllowanceCalculator {
   }
 }
 
-/// 高度レーティング計算エンジン
 class AdvancedRatingEngine {
   static const double wClass  = 0.70;
   static const double wPerf   = 0.25;
@@ -80,7 +76,6 @@ class AdvancedRatingEngine {
     return 80.0;
   }
 
-  /// 過去戦績を分析し、高度なプロフィールを作成する
   static HorseRatingProfile analyze(List<HorseRaceRecord> history, String horseId, String gender, String currentRaceName) {
     if (history.isEmpty) {
       return HorseRatingProfile(horseId: horseId, history: [], latestTrend: 0, stabilityRank: 'C', momentumStatus: 'データなし', isClassCleared: false, bestRatingWeight: 0, bestRatingMonth: 0);
@@ -89,7 +84,6 @@ class AdvancedRatingEngine {
     List<RatingAnalyzedResult> results = [];
     List<double> rollingRatings = [];
 
-    // 時系列順（古い順）にソート
     final sortedHistory = List<HorseRaceRecord>.from(history);
     sortedHistory.sort((a, b) => a.date.compareTo(b.date));
 
@@ -130,13 +124,13 @@ class AdvancedRatingEngine {
       double raceRating = (base * wClass) + (base * (0.9 + 0.2 * relPerf) * wPerf) + (wCorrection * wWeight);
       double trend = rollingRatings.isEmpty ? raceRating : rollingRatings.reduce((a, b) => a + b) / rollingRatings.length;
 
+      // ★修正：閾値を ±2.1 に厳格化し、ノイズを排除
       String level = "Mid";
       if (rollingRatings.isNotEmpty) {
-        if (raceRating > trend + 2.0) level = "High";
-        else if (raceRating < trend - 2.0) level = "Low";
+        if (raceRating >= trend + 2.1) level = "High";
+        else if (raceRating <= trend - 2.1) level = "Low";
       }
 
-      // 最高レーティング時の記録を更新
       if (raceRating > maxRt) {
         maxRt = raceRating;
         bestWeight = actualWeight;
@@ -149,13 +143,10 @@ class AdvancedRatingEngine {
       if (rollingRatings.length > 3) rollingRatings.removeAt(0);
     }
 
-    // --- 高度な分析指標の計算 ---
     final currentBaseRating = getBaseRating(currentRaceName);
     bool isClassCleared = maxRt >= currentBaseRating;
-
     double latestTrend = results.last.trendRating;
 
-    // 安定度計算 (標準偏差)
     String stabilityRank = 'C';
     if (results.length >= 3) {
       final recentRts = results.sublist(max(0, results.length - 5)).map((e) => e.raceRating).toList();
@@ -168,14 +159,13 @@ class AdvancedRatingEngine {
       stabilityRank = 'データ不足';
     }
 
-    // 状態サイクル (モメンタム) の判定
     String momentumStatus = '平行線';
     if (results.length >= 2) {
       final last = results.last;
       final prev = results[results.length - 2];
       if (last.levelGrade == 'High') {
         momentumStatus = '反動警戒';
-      } else if (last.levelGrade == 'Low' && prev.levelGrade == 'Low' && maxRt >= latestTrend + 2.0) {
+      } else if (last.levelGrade == 'Low' && prev.levelGrade == 'Low' && maxRt >= latestTrend + 2.1) { // 基準を2.1に
         momentumStatus = '叩き一変注意';
       } else if (last.raceRating > prev.raceRating && prev.raceRating > (results.length >= 3 ? results[results.length - 3].raceRating : 0)) {
         momentumStatus = '上昇期';

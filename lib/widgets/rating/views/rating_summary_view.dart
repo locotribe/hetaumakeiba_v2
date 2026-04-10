@@ -78,7 +78,10 @@ class RatingSummaryView extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(lastPerf != null ? lastPerf.raceRating.toStringAsFixed(1) : '-', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                RatingLevelBadge(level: lastPerf?.levelGrade ?? 'None'),
+                RatingLevelBadge(
+                  level: lastPerf?.levelGrade ?? 'None',
+                  rankStr: lastPerf?.record.rank ?? '99',
+                ),
               ],
             )),
           ],

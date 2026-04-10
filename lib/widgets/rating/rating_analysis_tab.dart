@@ -117,7 +117,10 @@ class _RatingAnalysisTabState extends State<RatingAnalysisTab> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text('Rt: ${res.raceRating.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    RatingLevelBadge(level: res.levelGrade),
+                    RatingLevelBadge(
+                      level: res.levelGrade,
+                      rankStr: res.record.rank,
+                    ),
                   ],
                 ),
               );

@@ -1,7 +1,6 @@
 // lib/screens/race_statistics_page.dart
 
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
@@ -15,6 +14,14 @@ import 'package:hetaumakeiba_v2/widgets/past_race_selection_dialog.dart';
 import 'package:hetaumakeiba_v2/widgets/stats_match_tab.dart';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_analysis_tab.dart';
+
+// ★追加：各カードウィジェットとアナライザーのインポート
+import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
+import 'package:hetaumakeiba_v2/widgets/volatility_components/payout_comparison_card.dart';
+import 'package:hetaumakeiba_v2/widgets/volatility_components/popularity_chart_card.dart';
+import 'package:hetaumakeiba_v2/widgets/volatility_components/frame_chart_card.dart';
+import 'package:hetaumakeiba_v2/widgets/volatility_components/leg_style_chart_card.dart';
+import 'package:hetaumakeiba_v2/widgets/volatility_components/horse_weight_card.dart';
 
 class RaceStatisticsPage extends StatefulWidget {
   final String raceId;
@@ -42,6 +49,9 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   bool _hasCacheData = false;
   bool get _showResultTab => _hasCacheData && _resultHorses != null;
 
+  // ★追加：グラフ描画のために過去レース(RaceResult)のリストを保持する変数
+  List<RaceResult> _pastRaces = [];
+
   final Map<String, String> bettingDict = {
     '1': '単勝',
     '2': '複勝',
@@ -60,10 +70,9 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     _loadShutubaData();
   }
 
-// 出馬表データの読み込み
+  // 出馬表データの読み込み
   Future<void> _loadShutubaData() async {
     try {
-      // 1. まず出馬表キャッシュを確認（未来～直近のレース / 予想データ）
       final cache = await _raceRepo.getShutubaTableCache(widget.raceId);
       if (cache != null) {
         _horses = cache.predictionRaceData.horses;
@@ -72,7 +81,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         _hasCacheData = false;
       }
 
-      // 2. 確定したレース結果を確認（過去のレース / 結果データ）
       final RaceResult? result = await _raceRepo.getRaceResult(widget.raceId);
       if (result != null) {
         _resultHorses = _convertResultsToDetails(result.horseResults, useRankAsPopularity: true);
@@ -92,8 +100,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     }
   }
 
-  /// 結果データ(HorseResult)を表示用データ(PredictionHorseDetail)に変換するヘルパー
-  /// [useRankAsPopularity]: trueの場合、着順(Rank)をPopularityに入れて「結果分析」で着順表示に使う
   List<PredictionHorseDetail> _convertResultsToDetails(List<HorseResult> results, {bool useRankAsPopularity = false}) {
     return results.map((res) {
       final int hNum = int.tryParse(res.horseNumber) ?? 0;
@@ -101,7 +107,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       final double weight = double.tryParse(res.weightCarried) ?? 57.0;
       final double? oddsVal = double.tryParse(res.odds);
 
-      // 人気・着順の処理
       int? popVal;
       if (useRankAsPopularity) {
         popVal = int.tryParse(res.rank);
@@ -109,7 +114,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         popVal = int.tryParse(res.popularity);
       }
 
-      // 出走取消判定
       final bool isScratched = int.tryParse(res.rank) == null;
 
       return PredictionHorseDetail(
@@ -134,13 +138,23 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     }).toList();
   }
 
+  // 統計データの読み込みと、グラフ描画に必要な過去レース詳細の取得
   void _checkAndLoadStatistics() {
     setState(() {
-      _statisticsFuture = _raceRepo.getRaceStatistics(widget.raceId);
+      _statisticsFuture = _raceRepo.getRaceStatistics(widget.raceId).then((stats) async {
+        if (stats != null) {
+          // statsに記録されている分析対象のRaceIDリストを使ってRaceResultを取得
+          final pastIds = stats.analyzedRacesList.map((e) => e['raceId'] as String).toList();
+          if (pastIds.isNotEmpty) {
+            final resultsMap = await _raceRepo.getMultipleRaceResults(pastIds);
+            _pastRaces = resultsMap.values.toList();
+          }
+        }
+        return stats;
+      });
     });
   }
 
-  /// データ取得のメインロジック
   void _startFetchingProcess() async {
     showDialog(
       context: context,
@@ -150,7 +164,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       },
     );
 
-    // 1. 踏み台経由でDB一覧を取得
     final PastRaceIdResult result = await _pastRaceIdFetcher.fetchPastRaceIds(widget.raceId, widget.raceName);
 
     if (mounted) Navigator.of(context).pop();
@@ -164,7 +177,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       return;
     }
 
-    // 2. 選択・確認ダイアログを表示
     if (mounted) {
       final List<PastRaceItem>? selectedItems = await showDialog<List<PastRaceItem>>(
         context: context,
@@ -175,7 +187,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         ),
       );
 
-      // 3. ユーザーが取得開始を選択した場合
       if (selectedItems != null && selectedItems.isNotEmpty) {
         final List<String> idsToFetch = selectedItems.map((e) => e.raceId).toList();
 
@@ -184,19 +195,22 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             raceId: widget.raceId,
             raceName: widget.raceName,
             pastRaceIds: idsToFetch,
-          );
+          ).then((stats) async {
+            if (stats != null) {
+              final resultsMap = await _raceRepo.getMultipleRaceResults(idsToFetch);
+              _pastRaces = resultsMap.values.toList();
+            }
+            return stats;
+          });
         });
       }
     }
   }
 
-  /// 再取得ボタン用のメソッド
-  /// 既存の _startFetchingProcess を呼び出してダイアログを開く
   void _refetchDetailedData() {
     _startFetchingProcess();
   }
 
-  /// データ不足時に表示する再取得促進ビュー
   Widget _buildRefetchView(String title) {
     return Center(
       child: Column(
@@ -281,22 +295,43 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
                   return TabBarView(
                     children: [
+                      // 総合
                       VolatilityAnalysisTab(
                         targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                       ),
                       // 1. 配当
-                      _buildTabContent(child: _buildPayoutTable(data['payoutStats'] ?? const {})),
+                      _buildTabContent(child: Column(children: [
+                        if (_pastRaces.isNotEmpty) PayoutComparisonCard(result: PayoutAnalyzer().analyze(_pastRaces)),
+                        const SizedBox(height: 16),
+                        _buildPayoutTable(data['payoutStats'] ?? const {}),
+                      ])),
                       // 2. 人気
-                      _buildTabContent(child: _buildPopularityTable(data['popularityStats'] ?? const {})),
+                      _buildTabContent(child: Column(children: [
+                        if (_pastRaces.isNotEmpty) PopularityChartCard(result: PopularityAnalyzer().analyze(_pastRaces)),
+                        const SizedBox(height: 16),
+                        _buildPopularityTable(data['popularityStats'] ?? const {}),
+                      ])),
                       // 3. 枠番
-                      _buildTabContent(child: _buildFrameStatsCard(data['frameStats'] ?? const {})),
+                      _buildTabContent(child: Column(children: [
+                        if (_pastRaces.isNotEmpty) FrameChartCard(result: FrameAnalyzer().analyze(_pastRaces)),
+                        const SizedBox(height: 16),
+                        _buildFrameStatsCard(data['frameStats'] ?? const {}),
+                      ])),
                       // 4. 脚質
-                      _buildTabContent(child: _buildLegStyleStatsCard(data['legStyleStats'] ?? const {})),
+                      _buildTabContent(child: Column(children: [
+                        if (_pastRaces.isNotEmpty) LegStyleChartCard(result: LegStyleAnalyzer().analyze(_pastRaces)),
+                        const SizedBox(height: 16),
+                        _buildLegStyleStatsCard(data['legStyleStats'] ?? const {}),
+                      ])),
                       // 5. 馬体重
-                      _buildTabContent(child: _buildHorseWeightStatsCard(
-                          data['horseWeightChangeStats'] ?? const {},
-                          (data['avgWinningHorseWeight'] ?? 0.0).toDouble()
-                      )),
+                      _buildTabContent(child: Column(children: [
+                        if (_pastRaces.isNotEmpty) HorseWeightCard(result: HorseWeightAnalyzer().analyze(_pastRaces)),
+                        const SizedBox(height: 16),
+                        _buildHorseWeightStatsCard(
+                            data['horseWeightChangeStats'] ?? const {},
+                            (data['avgWinningHorseWeight'] ?? 0.0).toDouble()
+                        ),
+                      ])),
                       // 6. 騎手
                       _buildTabContent(child: _buildJockeyStatsTable(data['jockeyStats'] ?? const {})),
                       // 7. 調教師
@@ -307,7 +342,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                           : DetailedAnalysisTab(
                         raceId: widget.raceId,
                         raceName: widget.raceName,
-                        horses: _horses, // 現在の馬データ(名前マッピング用)
+                        horses: _horses,
                         targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                       ),
                       // 9. 傾向マッチ (予想データ)
@@ -319,15 +354,16 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                         horses: _horses,
                         targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                       ),
+                      // 10. 結果分析
                       if (_showResultTab)
                         StatsMatchTab(
                           raceId: widget.raceId,
                           raceName: widget.raceName,
-                          horses: _resultHorses!, // 結果データ
+                          horses: _resultHorses!,
                           targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
-                          comparisonTargets: _horses, // 比較対象(予想データ)
+                          comparisonTargets: _horses,
                         ),
-                      // 10. 分析対象
+                      // 11. 分析対象
                       stats.analyzedRacesList.isEmpty
                           ? _buildRefetchView('分析対象レース一覧')
                           : Column(
@@ -400,7 +436,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       child: child,
     );
   }
-
 
   Widget _buildPayoutTable(Map<String, dynamic> stats) {
     final currencyFormatter = NumberFormat.decimalPattern('ja');
@@ -537,7 +572,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     final sortedKeys = stats.keys.toList()..sort((a, b) {
       final indexA = order.indexOf(a);
       final indexB = order.indexOf(b);
-      // orderにないキーは後ろへ
       if (indexA == -1) return 1;
       if (indexB == -1) return -1;
       return indexA.compareTo(indexB);

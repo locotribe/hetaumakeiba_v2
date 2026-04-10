@@ -211,15 +211,17 @@ class FrameAnalyzer {
   }
 }
 
-// 4. 脚質
+// 4. 脚質の分析結果クラスを拡張
 class LegStyleAnalysisResult {
   final Map<String, int> winCounts;
-  final Map<String, int> showCounts;
+  final Map<String, int> placeCounts; // ★追加: 2着数
+  final Map<String, int> showCounts;  // ★追加: 3着数
   final Map<String, int> totalCounts;
 
   LegStyleAnalysisResult({
     required this.winCounts,
-    required this.showCounts,
+    required this.placeCounts, // ★追加
+    required this.showCounts,  // ★追加
     required this.totalCounts,
   });
 }
@@ -227,36 +229,45 @@ class LegStyleAnalysisResult {
 class LegStyleAnalyzer {
   LegStyleAnalysisResult analyze(List<RaceResult> pastRaces) {
     final winCounts = <String, int>{};
-    final showCounts = <String, int>{};
+    final placeCounts = <String, int>{}; // ★追加
+    final showCounts = <String, int>{};  // ★追加
     final totalCounts = <String, int>{};
 
+    // ★修正: 判定ロジックを精細化（逃げと先行を分離、差しと追込の基準設定）
     String determineLegStyle(String? cornerStr) {
       if (cornerStr == null || cornerStr.isEmpty) return '不明';
       final corners = cornerStr.split('-');
       if (corners.isEmpty) return '不明';
+
       final lastCornerStr = corners.last.replaceAll(RegExp(r'[^0-9]'), '');
       final pos = int.tryParse(lastCornerStr);
       if (pos == null) return '不明';
-      if (pos <= 3) return '逃げ・先行';
-      if (pos <= 8) return '差し';
-      return '追込';
+
+      if (pos == 1) return '逃げ';       // 1番手のみ逃げ
+      if (pos <= 5) return '先行';      // 2〜5番手
+      if (pos <= 10) return '差し';     // 6〜10番手
+      return '追込';                    // 11番手以降
     }
 
     for (final r in pastRaces) {
       for (final h in r.horseResults) {
         int rank = int.tryParse(h.rank ?? '') ?? 0;
         String style = determineLegStyle(h.cornerRanking);
+
         if (style != '不明') {
           totalCounts[style] = (totalCounts[style] ?? 0) + 1;
+          // 各着順ごとにカウント
           if (rank == 1) winCounts[style] = (winCounts[style] ?? 0) + 1;
-          if (rank >= 1 && rank <= 3) showCounts[style] = (showCounts[style] ?? 0) + 1;
+          if (rank == 2) placeCounts[style] = (placeCounts[style] ?? 0) + 1;
+          if (rank == 3) showCounts[style] = (showCounts[style] ?? 0) + 1;
         }
       }
     }
 
     return LegStyleAnalysisResult(
       winCounts: winCounts,
-      showCounts: showCounts,
+      placeCounts: placeCounts, // ★追加
+      showCounts: showCounts,   // ★追加
       totalCounts: totalCounts,
     );
   }
