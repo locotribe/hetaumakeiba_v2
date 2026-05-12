@@ -1,13 +1,16 @@
 // lib/widgets/shutuba_tabs/race_info_tab.dart
 
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart'; // [追加] グラフ描画用 (v.2.0)
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/services/jma_weather_service.dart';
 import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart'; //
+import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
+import 'package:hetaumakeiba_v2/db/course_elevations.dart'; // [追加] コースデータ参照用 (v.2.0)
+import 'package:hetaumakeiba_v2/logic/elevation_logic.dart'; // [追加] 描画ロジック用 (v.2.0)
 
 class RaceInfoTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
@@ -35,7 +38,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
   Future<Map<String, String>?>? _jmaWeatherFuture;
   Future<Map<String, dynamic>?>? _pinpointWeatherFuture;
 
-  // ★追加: アプリ画面上で新旧データを比較するためのキャッシュ変数
   TrackConditionRecord? _currentTrackRecord;
   TrackConditionRecord? _cachedPrevRecord;
 
@@ -54,6 +56,19 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     if (widget.predictionRaceData.raceId != oldWidget.predictionRaceData.raceId) {
       _loadAllData();
     }
+  }
+
+  // [追加] UI表示用の文字列からDB検索用のトラックタイプキーへ変換するマッピングロジック (v.2.0)
+  String _mapToTrackTypeKey() {
+    final tt = widget.predictionRaceData.trackType ?? '';
+    final dir = widget.predictionRaceData.direction ?? '';
+    final inOut = widget.predictionRaceData.courseInOut ?? '';
+
+    if (tt.contains('ダ')) return 'dirt';
+    if (dir.contains('直')) return 'shiba_straight';
+    if (inOut.contains('外')) return 'shiba_outer';
+    if (inOut.contains('内')) return 'shiba_inner';
+    return 'shiba';
   }
 
   String _getFormattedRaceTime() {
@@ -142,7 +157,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               return false;
             });
 
-            // ★追加: 取得したレコードが以前保持していたものと違う(IDが更新された)場合は、古い方をキャッシュに退避
             if (_currentTrackRecord != null && _currentTrackRecord!.trackConditionId != newRecord.trackConditionId) {
               _cachedPrevRecord = _currentTrackRecord;
             }
@@ -250,12 +264,153 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
             '本賞金: ${widget.predictionRaceData.basePrize1st ?? "-"}, ${widget.predictionRaceData.basePrize2nd ?? "-"}, ${widget.predictionRaceData.basePrize3rd ?? "-"}, ${widget.predictionRaceData.basePrize4th ?? "-"}, ${widget.predictionRaceData.basePrize5th ?? "-"}万円',
             style: const TextStyle(fontSize: 12, color: Colors.black54),
           ),
+          // [追加] 高低差グラフセクションの挿入 (v.2.0)
+          _buildElevationChartSection(),
           _buildDetailedTrackCondition(),
           const SizedBox(height: 12),
           _buildJmaWeather(),
           const SizedBox(height: 12),
           _buildPinpointWeather(),
         ],
+      ),
+    );
+  }
+
+  // [追加] コース高低差グラフ構築用のメインウィジェット (v.2.0)
+  Widget _buildElevationChartSection() {
+    final venueCode = widget.predictionRaceData.raceId.length >= 6
+        ? widget.predictionRaceData.raceId.substring(4, 6)
+        : null;
+
+    // [修正] distanceValueがintやdynamicであっても安全にStringへ変換してパースする (v.2.1)
+    final distance = int.tryParse(widget.predictionRaceData.distanceValue?.toString() ?? '');
+
+    if (venueCode == null || distance == null) return const SizedBox.shrink();
+
+    // トラックタイプのキーを特定してコースデータを検索
+    final trackTypeKey = _mapToTrackTypeKey();
+    final raceCourse = CourseElevations.findRaceCourse(venueCode, distance, trackTypeKey);
+
+    if (raceCourse == null) return const SizedBox.shrink();
+
+    // 描画用データの生成
+    final drawData = ElevationLogic.generateRaceChartData(raceCourse);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16.0, bottom: 8.0),
+      padding: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 32, right: 8, bottom: 4),
+            child: SizedBox(
+              height: 30,
+              child: Row(
+                children: raceCourse.sections.map((sec) {
+                  final d = sec.endDistance - sec.startDistance;
+                  return Expanded(
+                    flex: (d * 10).toInt(),
+                    child: Center(
+                      child: Text(
+                        ElevationLogic.translateSectionName(sec.name),
+                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.black54),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 140,
+            child: _buildRaceChart(raceCourse, drawData),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // [修正] fl_chart を使用したグラフ本体（横線の表示ルールと間隔を改善） (v.2.2)
+  Widget _buildRaceChart(RaceCourseData race, ChartDrawData drawData) {
+    final raceDist = race.raceDistance.toDouble();
+    double minY = drawData.spots.map((s) => s.y).reduce((a, b) => a < b ? a : b) - 1.0;
+    double maxY = drawData.spots.map((s) => s.y).reduce((a, b) => a > b ? a : b) + 1.5;
+
+    final List<VerticalLine> vLines = [];
+    final List<VerticalRangeAnnotation> ranges = [];
+    final stripeColors = [Colors.black.withOpacity(0.01), Colors.black.withOpacity(0.03)];
+
+    for (int i = 0; i < race.sections.length; i++) {
+      final sec = race.sections[i];
+      vLines.add(VerticalLine(x: sec.startDistance, color: Colors.black12, strokeWidth: 0.5, dashArray: [4, 4]));
+      ranges.add(VerticalRangeAnnotation(x1: sec.startDistance, x2: sec.endDistance, color: stripeColors[i % 2]));
+    }
+
+    // スタートとゴール線
+    vLines.add(VerticalLine(x: 0, color: Colors.blueAccent.withOpacity(0.5), strokeWidth: 2));
+    vLines.add(VerticalLine(x: raceDist, color: Colors.redAccent.withOpacity(0.5), strokeWidth: 2));
+
+    return LineChart(
+      LineChartData(
+        minX: 0, maxX: raceDist, minY: minY, maxY: maxY,
+        gridData: FlGridData(
+          show: true,
+          verticalInterval: 200,
+          // [追加] 水平グリッドを0.5m間隔で引く (v.2.2)
+          horizontalInterval: 0.5,
+          getDrawingVerticalLine: (_) => const FlLine(color: Colors.black12, strokeWidth: 0.5),
+          // [修正] 1m単位は青の実線、それ以外（0.5m等）は薄い点線にする (v.2.2)
+          getDrawingHorizontalLine: (value) {
+            if (value % 1.0 == 0.0) {
+              return FlLine(color: Colors.blueAccent.withOpacity(0.3), strokeWidth: 0.8);
+            }
+            return const FlLine(color: Colors.black12, strokeWidth: 0.5, dashArray: [3, 3]);
+          },
+        ),
+        rangeAnnotations: RangeAnnotations(verticalRangeAnnotations: ranges),
+        extraLinesData: ExtraLinesData(verticalLines: vLines),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true, reservedSize: 22, interval: 400,
+              getTitlesWidget: (val, _) {
+                if (val < 0 || val > raceDist) return const SizedBox.shrink();
+                return Text('${val.toInt()}m', style: const TextStyle(color: Colors.black38, fontSize: 8));
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 32,
+                  // [修正] Y軸のメモリラベルも0.5m間隔に変更 (v.2.2)
+                  interval: 0.5,
+                  getTitlesWidget: (v, _) => Text('${v.toStringAsFixed(1)}m', style: const TextStyle(color: Colors.black38, fontSize: 8))
+              )
+          ),
+        ),
+        lineBarsData: [LineChartBarData(
+            spots: drawData.spots,
+            isCurved: true,
+            gradient: drawData.lineGradient,
+            barWidth: 2.0,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(show: true, gradient: drawData.areaGradient)
+        )],
+        lineTouchData: LineTouchData(
+            touchTooltipData: LineTouchTooltipData(
+                getTooltipColor: (_) => Colors.black87,
+                getTooltipItems: (ss) => ss.map((s) => LineTooltipItem('${s.x.toInt()}m\n${s.y.toStringAsFixed(2)}m', const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))).toList()
+            )
+        ),
+        borderData: FlBorderData(show: true, border: Border.all(color: Colors.black12)),
       ),
     );
   }
@@ -313,6 +468,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
       },
     );
   }
+
+  // ... (以降のメソッドは変更なしのため省略)
 
   Widget _buildJmaWeather() {
     return FutureBuilder<Map<String, String>?>(
