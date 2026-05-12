@@ -335,7 +335,7 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     );
   }
 
-  // [修正] fl_chart を使用したグラフ本体（横線の表示ルールと間隔を改善） (v.2.2)
+  // [修正] withOpacityの非推奨警告を解消しwithValuesへ移行 (v.2.3)
   Widget _buildRaceChart(RaceCourseData race, ChartDrawData drawData) {
     final raceDist = race.raceDistance.toDouble();
     double minY = drawData.spots.map((s) => s.y).reduce((a, b) => a < b ? a : b) - 1.0;
@@ -343,7 +343,7 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
 
     final List<VerticalLine> vLines = [];
     final List<VerticalRangeAnnotation> ranges = [];
-    final stripeColors = [Colors.black.withOpacity(0.01), Colors.black.withOpacity(0.03)];
+    final stripeColors = [Colors.black.withValues(alpha: 0.01), Colors.black.withValues(alpha: 0.03)];
 
     for (int i = 0; i < race.sections.length; i++) {
       final sec = race.sections[i];
@@ -352,8 +352,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     }
 
     // スタートとゴール線
-    vLines.add(VerticalLine(x: 0, color: Colors.blueAccent.withOpacity(0.5), strokeWidth: 2));
-    vLines.add(VerticalLine(x: raceDist, color: Colors.redAccent.withOpacity(0.5), strokeWidth: 2));
+    vLines.add(VerticalLine(x: 0, color: Colors.blueAccent.withValues(alpha: 0.5), strokeWidth: 2));
+    vLines.add(VerticalLine(x: raceDist, color: Colors.redAccent.withValues(alpha: 0.5), strokeWidth: 2));
 
     return LineChart(
       LineChartData(
@@ -361,13 +361,11 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
         gridData: FlGridData(
           show: true,
           verticalInterval: 200,
-          // [追加] 水平グリッドを0.5m間隔で引く (v.2.2)
           horizontalInterval: 0.5,
           getDrawingVerticalLine: (_) => const FlLine(color: Colors.black12, strokeWidth: 0.5),
-          // [修正] 1m単位は青の実線、それ以外（0.5m等）は薄い点線にする (v.2.2)
           getDrawingHorizontalLine: (value) {
             if (value % 1.0 == 0.0) {
-              return FlLine(color: Colors.blueAccent.withOpacity(0.3), strokeWidth: 0.8);
+              return FlLine(color: Colors.blueAccent.withValues(alpha: 0.3), strokeWidth: 0.8);
             }
             return const FlLine(color: Colors.black12, strokeWidth: 0.5, dashArray: [3, 3]);
           },
@@ -390,7 +388,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               sideTitles: SideTitles(
                   showTitles: true,
                   reservedSize: 32,
-                  // [修正] Y軸のメモリラベルも0.5m間隔に変更 (v.2.2)
                   interval: 0.5,
                   getTitlesWidget: (v, _) => Text('${v.toStringAsFixed(1)}m', style: const TextStyle(color: Colors.black38, fontSize: 8))
               )
