@@ -3,7 +3,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hetaumakeiba_v2/utils/url_generator.dart'; // URL生成のインポートを追加
+import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
 class OpenMeteoService {
   static const Map<String, Map<String, double>> _venueCoords = {
@@ -70,7 +70,6 @@ class OpenMeteoService {
     final lat = coords['lat']!;
     final lon = coords['lon']!;
 
-    // ▼ 修正: url_generator の共通関数を使用
     final url = Uri.parse(generateOpenMeteoUrl(latitude: lat, longitude: lon));
 
     try {
@@ -95,7 +94,6 @@ class OpenMeteoService {
           'precipitation': (current['precipitation'] as num?)?.toDouble() ?? 0.0,
           'windSpeed': (current['wind_speed_10m'] as num?)?.toDouble() ?? 0.0,
           'windDirText': _getWindDirectionText((current['wind_direction_10m'] as num?)?.toDouble() ?? 0.0),
-          // ▼ 追加: 現在の天気コード
           'weatherCode': (current['weather_code'] as num?)?.toInt() ?? 0,
         };
 
@@ -125,7 +123,6 @@ class OpenMeteoService {
           final hour = dt.hour;
 
           if (dt.year == raceDate.year && dt.month == raceDate.month && dt.day == raceDate.day) {
-
             if (hour == targetHour && raceTimeData == null) {
               raceTimeData = {
                 'temp': (hourly['temperature_2m'][i] as num?)?.toDouble() ?? 0.0,
@@ -134,7 +131,6 @@ class OpenMeteoService {
                 'precipitation': (hourly['precipitation'][i] as num?)?.toDouble() ?? 0.0,
                 'windSpeed': (hourly['wind_speed_10m'][i] as num?)?.toDouble() ?? 0.0,
                 'windDir': (hourly['wind_direction_10m'][i] as num?)?.toDouble() ?? 0.0,
-                // ▼ 追加: 解析 4 項目用のデータ
                 'weatherCode': (hourly['weather_code'][i] as num?)?.toInt() ?? 0,
                 'apparentTemp': (hourly['apparent_temperature'][i] as num?)?.toDouble() ?? 0.0,
                 'radiation': (hourly['shortwave_radiation'][i] as num?)?.toDouble() ?? 0.0,
@@ -152,7 +148,6 @@ class OpenMeteoService {
                 'pop': (hourly['precipitation_probability'][i] as num?)?.toInt() ?? 0,
                 'precipitation': (hourly['precipitation'][i] as num?)?.toDouble() ?? 0.0,
                 'windSpeed': (hourly['wind_speed_10m'][i] as num?)?.toDouble() ?? 0.0,
-                // ▼ 追加: タイムライン用天気コード
                 'weatherCode': (hourly['weather_code'][i] as num?)?.toInt() ?? 0,
               });
             }
@@ -161,10 +156,28 @@ class OpenMeteoService {
 
         if (raceTimeData == null) return null;
 
+        // [追加] 日次(週間)データのパース (v.3.0)
+        final daily = data['daily'];
+        List<Map<String, dynamic>> dailyData = [];
+        if (daily != null) {
+          final dailyTimes = List<String>.from(daily['time']);
+          for (int i = 0; i < dailyTimes.length; i++) {
+            dailyData.add({
+              'date': dailyTimes[i],
+              'weatherCode': (daily['weather_code'][i] as num?)?.toInt() ?? 0,
+              'tempMax': (daily['temperature_2m_max'][i] as num?)?.toDouble() ?? 0.0,
+              'tempMin': (daily['temperature_2m_min'][i] as num?)?.toDouble() ?? 0.0,
+              'precipitationSum': (daily['precipitation_sum'][i] as num?)?.toDouble() ?? 0.0,
+              'evapoTranspiration': (daily['et0_fao_evapotranspiration'][i] as num?)?.toDouble() ?? 0.0,
+            });
+          }
+        }
+
         final result = {
           'current': currentData,
           'raceTime': raceTimeData,
           'timeline': timeline,
+          'daily': dailyData, // [追加] (v.3.0)
           'windAnalysis': _analyzeWindEffect(venue, raceTimeData['windDir']),
           'windDirText': _getWindDirectionText(raceTimeData['windDir']),
         };

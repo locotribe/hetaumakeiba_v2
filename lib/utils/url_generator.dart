@@ -34,7 +34,7 @@ String generateNetkeibaHorseProfileUrl({
   return 'https://db.netkeiba.com/horse/$horseId/';
 }
 
-/// ★追加: 競走馬の血統ページURLを生成します。
+/// 競走馬の血統ページURLを生成します。
 String generateNetkeibaHorsePedigreeUrl({
   required String horseId,
 }) {
@@ -105,6 +105,7 @@ String getPakaraWoodApiUrl() {
   return 'https://pakara-keiba.com/ajax/race/get_cyoukyou_wc.php';
 }
 
+// [修正] 日次データ(過去7日分と予報)のパラメータを追加 (v.3.0)
 String generateOpenMeteoUrl({
   required double latitude,
   required double longitude,
@@ -114,10 +115,11 @@ String generateOpenMeteoUrl({
       'longitude=$longitude&'
       'current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,weather_code&'
       'hourly=temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,weather_code,apparent_temperature,shortwave_radiation,et0_fao_evapotranspiration,wind_gusts_10m,visibility,soil_moisture_0_to_1cm&'
+      'daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,et0_fao_evapotranspiration&'
+      'past_days=7&'
       'timezone=Asia%2FTokyo';
 }
 
-// [追加] オッズページ取得用のURL生成メソッド (v.1.0)
 /// netkeibaのオッズ一覧ページのURLを生成します。
 /// [raceId] 202606030311 などの12桁のレースID
 /// [oddsType] 取得したい券種のタイプ。

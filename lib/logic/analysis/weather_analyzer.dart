@@ -17,8 +17,47 @@ class WeatherInsight {
   });
 }
 
+// [追加] JRA予測用のデータクラス群 (v.4.0)
+class JraConditionPrediction {
+  final String conditionText;
+  final String leaningText;
+  final Color color;
+  JraConditionPrediction({required this.conditionText, required this.leaningText, required this.color});
+}
+
+class WeatherAnalysisResult {
+  final List<WeatherInsight> insights;
+  final JraConditionPrediction? jraPrediction;
+  WeatherAnalysisResult(this.insights, this.jraPrediction);
+}
+
 class WeatherAnalyzer {
-  /// WMO天気コードを日本語に変換 (WMO準拠)
+  // [追加] JRA馬場状態の基準テーブル (v.4.0)
+  static final Map<String, Map<String, List<double>>> _jraTurfBounds = {
+    '札幌': {'良': [0, 15], '稍重': [14, 18], '重': [17, 21], '不良': [20, 100]},
+    '函館': {'良': [0, 15], '稍重': [14, 18], '重': [17, 21], '不良': [20, 100]},
+    '福島': {'良': [0, 15], '稍重': [13, 17], '重': [15, 19], '不良': [17, 100]},
+    '新潟': {'良': [0, 15], '稍重': [13, 17], '重': [15, 19], '不良': [17, 100]},
+    '中山': {'良': [0, 13], '稍重': [11, 15], '重': [14, 18], '不良': [17, 100]},
+    '東京': {'良': [0, 19], '稍重': [17, 21], '重': [18, 23], '不良': [20, 100]},
+    '中京': {'良': [0, 14], '稍重': [12, 16], '重': [14, 17], '不良': [16, 100]},
+    '京都': {'良': [0, 13], '稍重': [11, 14], '重': [13, 16], '不良': [14, 100]},
+    '阪神': {'良': [0, 14], '稍重': [12, 16], '重': [14, 18], '不良': [16, 100]},
+    '小倉': {'良': [0, 10], '稍重': [8, 12], '重': [10, 14], '不良': [12, 100]},
+  };
+
+  static final Map<String, List<double>> _jraDirtBounds = {
+    '良': [0, 9], '稍重': [7, 13], '重': [11, 16], '不良': [14, 100]
+  };
+
+  static String getVenueName(String code) {
+    const map = {
+      '01': '札幌', '02': '函館', '03': '福島', '04': '新潟', '05': '東京',
+      '06': '中山', '07': '中京', '08': '京都', '09': '阪神', '10': '小倉'
+    };
+    return map[code] ?? '東京';
+  }
+
   static String getWeatherText(int code) {
     if (code == 0) return '晴れ';
     if (code >= 1 && code <= 3) return '曇り';
@@ -31,7 +70,6 @@ class WeatherAnalyzer {
     return '不明';
   }
 
-  /// 1. 馬場状態の回復・悪化を予測するデータ
   static WeatherInsight analyzeTrackRecovery(double radiation, double evap) {
     String desc = "標準的な馬場の乾燥条件です。";
     Color color = Colors.grey;
@@ -50,7 +88,6 @@ class WeatherAnalyzer {
     );
   }
 
-  /// 2. 馬のスタミナと「隠れた暑さ」
   static WeatherInsight analyzeHorseStamina(double apparentTemp, double humidity) {
     String desc = "馬にとって比較的過ごしやすい気候条件です。";
     Color color = Colors.green;
@@ -66,7 +103,6 @@ class WeatherAnalyzer {
     );
   }
 
-  /// 3. レース展開への影響（風の不確定要素）
   static WeatherInsight analyzeRaceRisk(double gusts, double visibility) {
     String desc = "気象条件による展開の紛れは少ない見込みです。";
     Color color = Colors.blue;
@@ -85,7 +121,6 @@ class WeatherAnalyzer {
     );
   }
 
-  /// 4. 土壌水分量（究極の馬場指数）
   static WeatherInsight analyzeSoilMoisture(double moisture) {
     return WeatherInsight(
       label: "推定地中水分量",
@@ -95,47 +130,163 @@ class WeatherAnalyzer {
     );
   }
 
-  /// 5. キャッシュデータ(前回)と最新データ(今回)を比較・判定する動的馬場シミュレーション
-  static List<WeatherInsight> analyzeTrackConditionInsights({
+  // [追加] JRA予測状態の計算ロジック (v.4.0)
+  static JraConditionPrediction _calculateJraPrediction(
+      String venue,
+      bool isDirt,
+      double moisture,
+      double? cushion,
+      String trend,
+      ) {
+    Map<String, List<double>> bounds;
+    if (isDirt) {
+      bounds = _jraDirtBounds;
+    } else {
+      String key = _jraTurfBounds.containsKey(venue) ? venue : '東京';
+      bounds = _jraTurfBounds[key]!;
+    }
+
+    List<String> conditions = ['良', '稍重', '重', '不良'];
+    List<String> matched = [];
+    for (String c in conditions) {
+      if (moisture >= bounds[c]![0] && moisture <= bounds[c]![1]) {
+        matched.add(c);
+      }
+    }
+
+    String baseCondition = '良';
+    if (matched.isEmpty) {
+      if (moisture < bounds['良']![0]) baseCondition = '良';
+      else baseCondition = '不良';
+    } else if (matched.length == 1) {
+      baseCondition = matched.first;
+    } else {
+      // 悪化トレンド、またはフラットの場合は「重めバイアス」
+      if (trend == '悪化' || trend == 'フラット') {
+        baseCondition = matched.last;
+      } else {
+        baseCondition = matched.first;
+      }
+    }
+
+    // 芝の場合、クッション値による補正
+    if (!isDirt && cushion != null) {
+      int idx = conditions.indexOf(baseCondition);
+      if (cushion >= 9.5 && idx > 0) {
+        baseCondition = conditions[idx - 1];
+      } else if (cushion < 8.0 && idx < 3) {
+        baseCondition = conditions[idx + 1];
+      }
+    }
+
+    // 「寄り」の判定
+    int fIdx = conditions.indexOf(baseCondition);
+    String leaning = "";
+    double lowerBound = bounds[baseCondition]![0];
+    double upperBound = bounds[baseCondition]![1];
+    double center = lowerBound == 0 ? upperBound - 2.0 :
+    upperBound == 100 ? lowerBound + 2.0 :
+    (lowerBound + upperBound) / 2.0;
+
+    bool leansLighter = (fIdx > 0) && (moisture <= bounds[conditions[fIdx - 1]]![1]);
+    bool leansHeavier = (fIdx < 3) && (moisture >= bounds[conditions[fIdx + 1]]![0]);
+
+    if (leansLighter && leansHeavier) {
+      if (moisture < center) leaning = "(${conditions[fIdx - 1]}寄り)";
+      else if (moisture > center) leaning = "(${conditions[fIdx + 1]}寄り)";
+    } else if (leansLighter) {
+      leaning = "(${conditions[fIdx - 1]}寄り)";
+    } else if (leansHeavier) {
+      leaning = "(${conditions[fIdx + 1]}寄り)";
+    }
+
+    Color c = Colors.green;
+    if (baseCondition == '稍重') c = Colors.orange;
+    if (baseCondition == '重') c = Colors.brown;
+    if (baseCondition == '不良') c = Colors.blue;
+
+    return JraConditionPrediction(
+      conditionText: baseCondition,
+      leaningText: leaning,
+      color: c,
+    );
+  }
+
+  // [修正] 戻り値を WeatherAnalysisResult に変更 (v.4.0)
+  static WeatherAnalysisResult analyzeTrackConditionInsights({
     required String venueCode,
     required String trackType,
-    dynamic currentRecord, // 最新のTrackConditionRecord
-    dynamic cachedRecord,  // 画面にキャッシュされていた前回のTrackConditionRecord
+    dynamic currentRecord,
+    dynamic cachedRecord,
     required double expectedPrecipitation,
     required double expectedRadiation,
     double? expectedTemp,
     double? expectedSoilMoisture,
+    List<dynamic> dailyWeather = const [],
+    String? raceDateStr,
   }) {
     if (currentRecord == null) {
-      return [
+      return WeatherAnalysisResult([
         WeatherInsight(
           label: "複合馬場予測",
           value: "データ待機中",
           description: "JRA公式データが取得でき次第、発走時刻の馬場シミュレーションを行います。",
           color: Colors.grey,
         )
-      ];
+      ], null);
     }
 
     final bool isDirt = trackType.contains('ダ') || trackType.contains('ダート');
     List<WeatherInsight> results = [];
 
-    // 内部計算用ヘルパー関数
     _SimulationResult? buildInsight(dynamic record, String labelPrefix, String timeLabel) {
       final double? baseMoisture = isDirt ? record.moistureDirtGoal : record.moistureTurfGoal;
       final double? baseCushion = record.cushionValue;
 
       if (baseMoisture == null) return null;
 
+      double currentMoisture = baseMoisture;
+      double intermediatePrecip = 0.0;
+      int simulatedDays = 0;
+
       double cWet = baseMoisture > 15.0 ? 1.2 : 0.8;
       double cDry = 0.005;
+      double goodLimit = TrackConstants.getGoodMoistureLimit(venueCode, trackType);
+
+      if (dailyWeather.isNotEmpty && raceDateStr != null && record.date != null) {
+        try {
+          DateTime recordDate = DateTime.parse(record.date);
+          final rMatch = RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(raceDateStr);
+          DateTime rDate = recordDate;
+          if (rMatch != null) {
+            rDate = DateTime(int.parse(rMatch.group(1)!), int.parse(rMatch.group(2)!), int.parse(rMatch.group(3)!));
+          }
+
+          for (var day in dailyWeather) {
+            DateTime dDate = DateTime.parse(day['date']);
+            if (dDate.isAfter(recordDate) && dDate.isBefore(rDate)) {
+              double p = (day['precipitationSum'] as num?)?.toDouble() ?? 0.0;
+              double e = (day['evapoTranspiration'] as num?)?.toDouble() ?? 0.0;
+
+              intermediatePrecip += p;
+              currentMoisture += (p * cWet) - (e * 0.1);
+
+              double lowerBound = goodLimit * 0.85;
+              if (currentMoisture < lowerBound) {
+                currentMoisture = lowerBound;
+              }
+              simulatedDays++;
+            }
+          }
+        } catch (e) {}
+      }
 
       double addedMoisture = expectedPrecipitation * cWet;
       double reducedMoisture = expectedRadiation * cDry;
       double soilPercent = (expectedSoilMoisture ?? 0.15) * 100;
       double soilAdjustment = (soilPercent - 15.0) * 0.05;
 
-      double predictedMoisture = baseMoisture + addedMoisture - reducedMoisture + soilAdjustment;
+      double predictedMoisture = currentMoisture + addedMoisture - reducedMoisture + soilAdjustment;
 
       double minLimit = isDirt ? 2.0 : 8.0;
       double maxLimit = 25.0;
@@ -144,15 +295,14 @@ class WeatherAnalyzer {
       if (predictedMoisture < minLimit) { predictedMoisture = minLimit; hitLimit = true; }
       if (predictedMoisture > maxLimit) { predictedMoisture = maxLimit; hitLimit = true; }
 
-      double goodLimit = TrackConstants.getGoodMoistureLimit(venueCode, trackType);
       double moistureIndex = predictedMoisture / goodLimit;
 
       double? predictedCushion = baseCushion;
       if (!isDirt && baseCushion != null) {
-        if (expectedRadiation > 300 && (expectedTemp ?? 15.0) > 20.0 && expectedPrecipitation == 0) {
-          predictedCushion = baseCushion + 0.3;
-        } else if (expectedPrecipitation > 1.0) {
+        if (predictedMoisture > baseMoisture + 2.0) {
           predictedCushion = baseCushion - 0.4;
+        } else if (expectedRadiation > 300 && (expectedTemp ?? 15.0) > 20.0 && expectedPrecipitation == 0) {
+          predictedCushion = baseCushion + 0.3;
         }
       }
 
@@ -177,16 +327,23 @@ class WeatherAnalyzer {
       String cushionText = !isDirt && predictedCushion != null ? "・予測クッション値: ${predictedCushion.toStringAsFixed(1)}\n" : "";
       String soilAdjSign = soilAdjustment >= 0 ? "+" : "";
 
+      String intermediateText = simulatedDays > 0
+          ? "・中間推移 ($simulatedDays日間): 降水 ${intermediatePrecip.toStringAsFixed(1)}mm / 自然乾燥・標準下限維持\n"
+          : "";
+
       String formulaText = "【予測シミュレーションの根拠】\n"
           "・起点 ($timeLabel公式): ${baseMoisture}%\n"
-          "・加水 (降水予報 ${expectedPrecipitation}mm): +${addedMoisture.toStringAsFixed(1)}%\n"
-          "・乾燥 (日射・風予報): -${reducedMoisture.toStringAsFixed(1)}%\n"
+          "$intermediateText"
+          "・当日加水 (降水予報 ${expectedPrecipitation}mm): +${addedMoisture.toStringAsFixed(1)}%\n"
+          "・当日乾燥 (日射・風予報): -${reducedMoisture.toStringAsFixed(1)}%\n"
           "・地盤補正 (気象API ${soilPercent.toStringAsFixed(1)}%): $soilAdjSign${soilAdjustment.toStringAsFixed(1)}%\n"
-          "➡ 予測含水率: ${predictedMoisture.toStringAsFixed(1)}%$limitNote\n"
+          "・予測含水率: ${predictedMoisture.toStringAsFixed(1)}%$limitNote\n"
           "$cushionText";
 
+      // [修正] predictedCushion を渡す (v.4.0)
       return _SimulationResult(
           predictedMoisture,
+          predictedCushion,
           WeatherInsight(
             label: "$labelPrefix$insightLabel",
             value: "予測含水率: ${predictedMoisture.toStringAsFixed(1)}%",
@@ -196,21 +353,20 @@ class WeatherAnalyzer {
       );
     }
 
-    // ① キャッシュデータ（古いデータ）があれば「前日予測」として表示
     _SimulationResult? prevResult;
     if (cachedRecord != null) {
       prevResult = buildInsight(cachedRecord, "[前回予測] ", "前回");
       if (prevResult != null) results.add(prevResult.insight);
     }
 
-    // ② 最新データで「今回確定版」を生成し、ギャップがあればアラートを結合
     _SimulationResult? currentResult = buildInsight(currentRecord, cachedRecord != null ? "🎯[今回確定] " : "", "今回");
+    JraConditionPrediction? latestPrediction;
+
     if (currentResult != null) {
       if (prevResult != null) {
         double diff = currentResult.predictedMoisture - prevResult.predictedMoisture;
         String warning = "";
 
-        // ±1.5%以上のズレがあればアラートを追加
         if (diff >= 1.5) {
           warning = "\n\n⚠️【乖離アラート】前回のシミュレーションより含水率が ${diff.toStringAsFixed(1)}% 上振れしています。未明の雨やJRAの散水作業の影響により、想定より時計が掛かる馬場になっています。";
         } else if (diff <= -1.5) {
@@ -231,15 +387,29 @@ class WeatherAnalyzer {
       } else {
         results.add(currentResult.insight);
       }
+
+      // [追加] 今回のシミュレーション結果からJRA予測を生成 (v.4.0)
+      String venueName = getVenueName(venueCode);
+      String trend = 'フラット';
+      if (expectedPrecipitation > 0.1) trend = '悪化';
+      else if (expectedRadiation > 200 && expectedPrecipitation == 0) trend = '回復';
+
+      latestPrediction = _calculateJraPrediction(
+          venueName,
+          isDirt,
+          currentResult.predictedMoisture,
+          currentResult.predictedCushion,
+          trend
+      );
     }
 
-    return results;
+    return WeatherAnalysisResult(results, latestPrediction);
   }
 }
 
-// 内部計算の戻り値用クラス
 class _SimulationResult {
   final double predictedMoisture;
+  final double? predictedCushion;
   final WeatherInsight insight;
-  _SimulationResult(this.predictedMoisture, this.insight);
+  _SimulationResult(this.predictedMoisture, this.predictedCushion, this.insight);
 }
