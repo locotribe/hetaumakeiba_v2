@@ -17,7 +17,6 @@ class WeatherInsight {
   });
 }
 
-// [追加] JRA予測用のデータクラス群 (v.4.0)
 class JraConditionPrediction {
   final String conditionText;
   final String leaningText;
@@ -32,7 +31,6 @@ class WeatherAnalysisResult {
 }
 
 class WeatherAnalyzer {
-  // [追加] JRA馬場状態の基準テーブル (v.4.0)
   static final Map<String, Map<String, List<double>>> _jraTurfBounds = {
     '札幌': {'良': [0, 15], '稍重': [14, 18], '重': [17, 21], '不良': [20, 100]},
     '函館': {'良': [0, 15], '稍重': [14, 18], '重': [17, 21], '不良': [20, 100]},
@@ -130,7 +128,6 @@ class WeatherAnalyzer {
     );
   }
 
-  // [追加] JRA予測状態の計算ロジック (v.4.0)
   static JraConditionPrediction _calculateJraPrediction(
       String venue,
       bool isDirt,
@@ -161,7 +158,6 @@ class WeatherAnalyzer {
     } else if (matched.length == 1) {
       baseCondition = matched.first;
     } else {
-      // 悪化トレンド、またはフラットの場合は「重めバイアス」
       if (trend == '悪化' || trend == 'フラット') {
         baseCondition = matched.last;
       } else {
@@ -169,7 +165,6 @@ class WeatherAnalyzer {
       }
     }
 
-    // 芝の場合、クッション値による補正
     if (!isDirt && cushion != null) {
       int idx = conditions.indexOf(baseCondition);
       if (cushion >= 9.5 && idx > 0) {
@@ -179,7 +174,6 @@ class WeatherAnalyzer {
       }
     }
 
-    // 「寄り」の判定
     int fIdx = conditions.indexOf(baseCondition);
     String leaning = "";
     double lowerBound = bounds[baseCondition]![0];
@@ -212,7 +206,6 @@ class WeatherAnalyzer {
     );
   }
 
-  // [修正] 戻り値を WeatherAnalysisResult に変更 (v.4.0)
   static WeatherAnalysisResult analyzeTrackConditionInsights({
     required String venueCode,
     required String trackType,
@@ -249,7 +242,8 @@ class WeatherAnalyzer {
       double intermediatePrecip = 0.0;
       int simulatedDays = 0;
 
-      double cWet = baseMoisture > 15.0 ? 1.2 : 0.8;
+      // [修正] ダート専用の低い加水係数 (v.5.0)
+      double cWet = isDirt ? 0.25 : (baseMoisture > 15.0 ? 1.2 : 0.8);
       double cDry = 0.005;
       double goodLimit = TrackConstants.getGoodMoistureLimit(venueCode, trackType);
 
@@ -289,7 +283,8 @@ class WeatherAnalyzer {
       double predictedMoisture = currentMoisture + addedMoisture - reducedMoisture + soilAdjustment;
 
       double minLimit = isDirt ? 2.0 : 8.0;
-      double maxLimit = 25.0;
+      // [修正] ダートの現実的な上限値を設定 (v.5.0)
+      double maxLimit = isDirt ? 18.0 : 25.0;
       bool hitLimit = false;
 
       if (predictedMoisture < minLimit) { predictedMoisture = minLimit; hitLimit = true; }
@@ -323,7 +318,8 @@ class WeatherAnalyzer {
         else { insightLabel = "標準 (乾いた良)"; insightDesc = "JRA基準通りの良好なコンディション。実力通りの決着になりやすい。"; insightColor = Colors.green; }
       }
 
-      String limitNote = hitLimit ? " (※限界値補正あり)" : "";
+      // [修正] ダートの場合は限界値補正アラートを非表示にする (v.5.0)
+      String limitNote = hitLimit && !isDirt ? " (※限界値補正あり)" : "";
       String cushionText = !isDirt && predictedCushion != null ? "・予測クッション値: ${predictedCushion.toStringAsFixed(1)}\n" : "";
       String soilAdjSign = soilAdjustment >= 0 ? "+" : "";
 
@@ -337,10 +333,9 @@ class WeatherAnalyzer {
           "・当日加水 (降水予報 ${expectedPrecipitation}mm): +${addedMoisture.toStringAsFixed(1)}%\n"
           "・当日乾燥 (日射・風予報): -${reducedMoisture.toStringAsFixed(1)}%\n"
           "・地盤補正 (気象API ${soilPercent.toStringAsFixed(1)}%): $soilAdjSign${soilAdjustment.toStringAsFixed(1)}%\n"
-          "・予測含水率: ${predictedMoisture.toStringAsFixed(1)}%$limitNote\n"
+          "➡ 予測含水率: ${predictedMoisture.toStringAsFixed(1)}%$limitNote\n"
           "$cushionText";
 
-      // [修正] predictedCushion を渡す (v.4.0)
       return _SimulationResult(
           predictedMoisture,
           predictedCushion,
@@ -388,7 +383,6 @@ class WeatherAnalyzer {
         results.add(currentResult.insight);
       }
 
-      // [追加] 今回のシミュレーション結果からJRA予測を生成 (v.4.0)
       String venueName = getVenueName(venueCode);
       String trend = 'フラット';
       if (expectedPrecipitation > 0.1) trend = '悪化';
