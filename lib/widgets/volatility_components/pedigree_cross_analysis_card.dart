@@ -32,8 +32,9 @@ class PedigreeCrossAnalysisCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // [修正] タイトルを血統分析に変更 (v.2)
               const Text(
-                '好走血統 × 馬場状態 クロス分析',
+                '過去レース 血統分析',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
@@ -86,13 +87,21 @@ class PedigreeCrossAnalysisCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // [修正] タイトルを血統分析に変更 (v.2)
             const Text(
-              '好走血統 × 馬場状態 クロス分析 (3着内)',
+              '過去レース 血統分析 (3着内)',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 16),
+            // [追加] 全体傾向の種牡馬を上部に固定表示 (v.2)
+            _buildFixedListSection('全体傾向：種牡馬 (父)', result.overallSires),
             const SizedBox(height: 12),
+            // [追加] 全体傾向の母父を上部に固定表示（縦並びで混同防止） (v.2)
+            _buildFixedListSection('全体傾向：母父 (BMS)', result.overallBms),
+            const Divider(height: 32),
+            // [修正] タブコントローラーの長さを2に変更（馬場状態別のみ） (v.2)
             DefaultTabController(
-              length: 3,
+              length: 2,
               child: Column(
                 children: [
                   TabBar(
@@ -101,7 +110,6 @@ class PedigreeCrossAnalysisCard extends StatelessWidget {
                     unselectedLabelColor: Colors.grey,
                     indicatorColor: Colors.blue.shade800,
                     tabs: const [
-                      Tab(text: '全体傾向'),
                       Tab(text: 'クッション値別'),
                       Tab(text: '含水率別'),
                     ],
@@ -110,11 +118,6 @@ class PedigreeCrossAnalysisCard extends StatelessWidget {
                     height: 250, // 高さを固定してスクロール可能に
                     child: TabBarView(
                       children: [
-                        // 全体傾向タブ
-                        _buildScrollableLists(
-                          title1: '種牡馬 (父)', list1: result.overallSires,
-                          title2: '母父 (BMS)', list2: result.overallBms,
-                        ),
                         // クッション値別タブ
                         _buildTripleScrollableLists(
                           title1: '硬い (9.5〜)', list1: result.highCushionSires,
@@ -135,6 +138,44 @@ class PedigreeCrossAnalysisCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  // [追加] 上部固定表示用の非スクロールリストセクション (v.2)
+  Widget _buildFixedListSection(String title, List<PedigreeCount> items) {
+    final displayItems = items.where((e) => e.count >= 1).take(5).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
+        ),
+        const SizedBox(height: 6),
+        if (displayItems.isEmpty)
+          const Text('-', style: TextStyle(color: Colors.grey, fontSize: 12))
+        else
+          ...displayItems.map((item) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    item.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Text(
+                  '${item.count}回',
+                  style: const TextStyle(fontSize: 12, color: Colors.blue),
+                ),
+              ],
+            ),
+          )),
+      ],
     );
   }
 
