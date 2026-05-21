@@ -371,12 +371,17 @@ class HorseWeightAnalyzer {
 }
 
 // 6. 過去上位3頭の抽出用
+// [修正] 過去上位3頭のデータ構造に性齢、タイム、上がり、コーナー通過順位を追加 (v.1.0)
 class PastTopHorse {
   final int rank;
   final String frameNumber;
   final String horseNumber;
   final String horseName;
   final String popularity;
+  final String sexAndAge;
+  final String time;
+  final String agari;
+  final String cornerRanking;
 
   PastTopHorse({
     required this.rank,
@@ -384,6 +389,10 @@ class PastTopHorse {
     required this.horseNumber,
     required this.horseName,
     required this.popularity,
+    required this.sexAndAge,
+    required this.time,
+    required this.agari,
+    required this.cornerRanking,
   });
 }
 
@@ -411,12 +420,17 @@ class PastTopHorsesAnalyzer {
       for (final h in r.horseResults) {
         int rank = int.tryParse(h.rank ?? '') ?? 0;
         if (rank >= 1 && rank <= 3) {
+          // [追加] 抽出時に性齢、タイム、上がり、コーナー順位の値をセット (v.1.0)
           topHorses.add(PastTopHorse(
             rank: rank,
-            frameNumber: h.frameNumber ?? '-',
-            horseNumber: h.horseNumber ?? '-',
-            horseName: h.horseName ?? '',
-            popularity: h.popularity ?? '-',
+            frameNumber: h.frameNumber,
+            horseNumber: h.horseNumber,
+            horseName: h.horseName,
+            popularity: h.popularity,
+            sexAndAge: h.sexAndAge,
+            time: h.time,
+            agari: h.agari,
+            cornerRanking: h.cornerRanking,
           ));
         }
       }
@@ -444,6 +458,7 @@ class PastTopHorsesAnalyzer {
     return results;
   }
 }
+
 // 7. ラップタイム・ペース
 class PaceLegStyleStats {
   int total = 0;

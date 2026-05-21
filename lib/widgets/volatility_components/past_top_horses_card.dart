@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+// [追加] ゲートカラーユーティリティのインポート (v.1.0)
+import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 
 class PastTopHorsesCard extends StatelessWidget {
   final List<PastRaceTop3Result>? pastTop3Result;
@@ -128,30 +130,82 @@ class PastTopHorsesCard extends StatelessWidget {
 
                     ...res.topHorses.map((h) {
                       Color rankColor = h.rank == 1 ? Colors.amber : (h.rank == 2 ? Colors.blueGrey : Colors.brown.shade400);
+                      // [修正] 表示要素を2行のレイアウトに拡張し、ゲートカラーを適用 (v.1.0)
                       return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2.0),
-                        child: Row(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SizedBox(width: 24, child: Text('${h.rank}着', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: rankColor))),
-                            const SizedBox(width: 8),
-                            Container(
-                              width: 20,
-                              height: 20,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(2)),
-                              child: Text(h.frameNumber, style: const TextStyle(fontSize: 10)),
+                            Row(
+                              children: [
+                                SizedBox(width: 24, child: Text('${h.rank}着', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: rankColor))),
+                                const SizedBox(width: 8),
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                      color: h.frameNumber.gateBackgroundColor,
+                                      border: Border.all(color: Colors.grey.shade400),
+                                      borderRadius: BorderRadius.circular(2)
+                                  ),
+                                  child: Text(h.frameNumber, style: TextStyle(fontSize: 10, color: h.frameNumber.gateTextColor, fontWeight: FontWeight.bold)),
+                                ),
+                                const SizedBox(width: 4),
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade400), borderRadius: BorderRadius.circular(2)),
+                                  child: Text(h.horseNumber, style: const TextStyle(fontSize: 10, color: Colors.black)),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(h.sexAndAge, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                const SizedBox(width: 4),
+                                Expanded(child: Text(h.horseName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                Text('${h.popularity}番人気', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              ],
                             ),
-                            const SizedBox(width: 4),
-                            Container(
-                              width: 20,
-                              height: 20,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(2)),
-                              child: Text(h.horseNumber, style: const TextStyle(fontSize: 10)),
+                            // [修正] 2行目全体を右寄せに配置 (v.1.2)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(h.time, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
+                                  const SizedBox(width: 16),
+
+                                  // コーナー順位 (4枠固定、右詰め)
+                                  ...(() {
+                                    final parts = h.cornerRanking.split('-');
+                                    final boxes = List.filled(4, '-');
+                                    final offset = 4 - parts.length;
+                                    for (int i = 0; i < parts.length; i++) {
+                                      if (offset + i >= 0 && offset + i < 4) {
+                                        final val = parts[i].trim();
+                                        boxes[offset + i] = val.isEmpty ? '-' : val;
+                                      }
+                                    }
+                                    return boxes.map((val) => Container(
+                                      width: 20,
+                                      height: 20,
+                                      margin: const EdgeInsets.only(right: 4),
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        border: Border.all(color: Colors.grey.shade400),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(val, style: const TextStyle(fontSize: 11, color: Colors.black87)),
+                                    ));
+                                  })(),
+
+                                  const SizedBox(width: 12),
+                                  Text(h.agari, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+                                ],
+                              ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(h.horseName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                            Text('${h.popularity}番人気', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                           ],
                         ),
                       );
