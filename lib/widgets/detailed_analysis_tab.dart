@@ -60,10 +60,10 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
         return;
       }
 
+      // [修正] 引数から totalBudget を削除 (v.2.0)
       final result = _engine.analyze(
         pastRaces: pastRaces,
         currentHorses: widget.horses,
-        totalBudget: 10000,
       );
 
       final Map<int, String> validMap = {};
@@ -138,21 +138,11 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
             const SizedBox(height: 24),
           ],
 
-          const Text('🎯 AI厳選買い目リスト', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          Text('予算1万円での傾斜配分例 (${_result!.betType})', style: TextStyle(fontSize: 12, color: Colors.blue[800], fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-
-          if (_result!.chaosHorses.isNotEmpty) ...[
-            _buildChaosOptionCard(_result!),
-            const SizedBox(height: 8),
-          ],
-
-          _buildTicketList(_result!),
+          // [削除] 買い目リスト関連のウィジェット呼び出しを完全に削除 (v.2.0)
         ],
       ),
     );
   }
-
 
   Widget _buildDisclaimerBanner() {
     return Container(
@@ -274,23 +264,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
     );
   }
 
-  Widget _buildChaosOptionCard(FormationAnalysisResult result) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red.shade200)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(children: [Icon(Icons.warning_amber_rounded, color: Colors.red), SizedBox(width: 8), Text('特異データ (Chaos Option)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red))]),
-          const SizedBox(height: 4),
-          const Text('過去に大穴実績あり。夢を追うなら紐に追加してください。', style: TextStyle(fontSize: 12)),
-          const Divider(color: Colors.red),
-          Text(result.chaosHorses.join(', '), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFrequencyMatrix(FormationAnalysisResult result) {
     final List<int> activePops = [];
     for (int i = 0; i < 18; i++) {
@@ -339,74 +312,7 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
     );
   }
 
-  Widget _buildTicketList(FormationAnalysisResult result) {
-    final displayTickets = result.tickets.take(30).toList();
-
-    if (displayTickets.isEmpty) {
-      return const Center(child: Text('条件に合致する買い目がありませんでした。', textAlign: TextAlign.center));
-    }
-
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: displayTickets.length,
-      itemBuilder: (context, index) {
-        final ticket = displayTickets[index];
-        final maxWeight = result.tickets.first.weight > 0 ? result.tickets.first.weight : 1.0;
-        final ratio = ticket.weight / maxWeight;
-        final betAmount = result.budgetAllocation[ticket] ?? 100;
-
-        return Card(
-          elevation: 1,
-          margin: const EdgeInsets.only(bottom: 6),
-          child: ListTile(
-            dense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-            leading: CircleAvatar(
-              backgroundColor: Colors.blueGrey[100],
-              radius: 14,
-              child: Text('${index + 1}', style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold)),
-            ),
-            title: Row(
-              children: [
-                Text(
-                  '${ticket.popularities[0]}人→${ticket.popularities[1]}人→${ticket.popularities[2]}人',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: Text('¥$betAmount', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
-                ),
-              ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${ticket.horseNames[0]} → ${ticket.horseNames[1]} → ${ticket.horseNames[2]}',
-                  style: const TextStyle(fontSize: 10),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                LinearProgressIndicator(
-                  value: ratio,
-                  backgroundColor: Colors.grey[200],
-                  color: Colors.teal,
-                  minHeight: 4,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
+// [削除] _buildChaosOptionCard, _buildTicketList メソッドを完全に削除 (v.2.0)
 }
 
 class MatrixTrapCard extends StatelessWidget {

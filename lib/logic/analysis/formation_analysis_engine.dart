@@ -7,10 +7,10 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 class FormationAnalysisEngine {
 
   /// 分析実行
+  // [修正] 引数から totalBudget を削除 (v.2.0)
   FormationAnalysisResult analyze({
     required List<RaceResult> pastRaces,
     required List<PredictionHorseDetail> currentHorses,
-    int totalBudget = 10000, // デフォルト予算
   }) {
     // 1. オッズデータの収集 & マトリクス作成
     List<double> winningOdds = [];
@@ -44,7 +44,7 @@ class FormationAnalysisEngine {
 
     // 3. 有効馬フィルタリング
     final Map<int, String> validHorseMap = {};
-    final List<String> chaosHorseNames = [];
+    // [削除] chaosHorseNames の抽出ロジックを削除 (v.2.0)
 
     for (final horse in currentHorses) {
       int p = int.tryParse(horse.popularity?.toString() ?? '') ?? 0;
@@ -53,8 +53,6 @@ class FormationAnalysisEngine {
       if (p > 0 && o > 0) {
         if (o <= standardLine) {
           validHorseMap[p] = horse.horseName;
-        } else if (o <= maxLine) {
-          chaosHorseNames.add('${horse.horseName}($p人/${o}倍)');
         }
       } else if (p > 0) {
         validHorseMap[p] = horse.horseName;
@@ -65,7 +63,6 @@ class FormationAnalysisEngine {
     final popScores = _buildPopScores(matrix);
 
     // --- A. 基本フォーメーション (Fixed 1-2-5) ---
-    // 単純にWinPts順、PlacePts順で選ぶ
     final winSorted = List<_PopScore>.from(popScores)..sort((a, b) => b.winCount.compareTo(a.winCount));
     final placeSorted = List<_PopScore>.from(popScores)..sort((a, b) => b.placeCount.compareTo(a.placeCount));
 
@@ -86,26 +83,20 @@ class FormationAnalysisEngine {
     List<int> stratR2 = [];
     List<int> stratR3 = [];
 
-    // 戦術判定ロジック
-    // 1位と2位のスコアを取得
     final top1 = winSorted.isNotEmpty ? winSorted[0] : null;
     final top2 = winSorted.length > 1 ? winSorted[1] : null;
 
     if (top1 != null && top1.winCount >= 5) {
       // パターン1: 不動の王様 (1頭軸流し)
-      // 相手は予算(例:30点)に収まるようにPlace順で選抜
       strategyName = "1頭軸流し (鉄板)";
       strategyReason = "${top1.pop}番人気の勝率が圧倒的(50%以上)です。ここを頭に固定します。";
 
       stratR1 = [top1.pop];
-      // 相手候補を抽出
       final rivals = placeSorted.where((s) => s.pop != top1.pop && validHorseMap.containsKey(s.pop)).toList();
 
-      // 2列目: 3~4頭, 3列目: 点数が許す限り
       stratR2 = rivals.take(4).map((e) => e.pop).toList();
-      stratR3 = rivals.take(8).map((e) => e.pop).toList(); // 仮置き
+      stratR3 = rivals.take(8).map((e) => e.pop).toList();
 
-      // 点数調整 (3列目を削る)
       _optimizeFormationPoints(stratR1, stratR2, stratR3, maxPoints: 40);
 
     } else if (top1 != null && top2 != null && (top1.winCount + top2.winCount) >= 7) {
@@ -115,10 +106,10 @@ class FormationAnalysisEngine {
 
       stratR1 = [top1.pop, top2.pop];
       stratR2 = [top1.pop, top2.pop, ...placeSorted.where((s) => s.pop != top1.pop && s.pop != top2.pop).take(2).map((e) => e.pop)];
-      stratR2 = stratR2.where((p) => validHorseMap.containsKey(p)).toSet().toList(); // 重複排除 & 足切り
+      stratR2 = stratR2.where((p) => validHorseMap.containsKey(p)).toSet().toList();
 
       final others = placeSorted.where((s) => validHorseMap.containsKey(s.pop)).map((e) => e.pop).toList();
-      stratR3 = others.take(8).toList(); // 仮置き
+      stratR3 = others.take(8).toList();
 
       _optimizeFormationPoints(stratR1, stratR2, stratR3, maxPoints: 40);
 
@@ -129,32 +120,28 @@ class FormationAnalysisEngine {
       betType = "3連複";
 
       stratR1 = [top1.pop];
-      // 相手はPlace順に選ぶ
       final rivals = placeSorted.where((s) => s.pop != top1.pop && validHorseMap.containsKey(s.pop)).toList();
 
-      // nC2 で点数を計算しながら相手を増やす
       List<int> opponents = [];
       for (var r in rivals) {
         opponents.add(r.pop);
-        int pts = (opponents.length * (opponents.length - 1)) ~/ 2; // nC2
+        int pts = (opponents.length * (opponents.length - 1)) ~/ 2;
         if (pts > 30) {
           opponents.removeLast();
           break;
         }
       }
       stratR2 = opponents;
-      stratR3 = opponents; // 3連複軸流しの場合、R2,R3は相手リストとして扱う
+      stratR3 = opponents;
 
     } else {
       // パターン5: 混戦 (BOX)
-      // BOX頭数を自動決定
-      final boxCandidates = _decideBoxHeads(popScores, validHorseMap, maxPoints: 60); // 3連単60点=5頭BOXまで
+      final boxCandidates = _decideBoxHeads(popScores, validHorseMap, maxPoints: 60);
 
       if (boxCandidates.length >= 6) {
         strategyName = "3連複BOX (大混戦)";
         strategyReason = "上位が拮抗しすぎています。3連単は点数が増えるため、3連複BOX推奨です。";
         betType = "3連複";
-        // 3連複なら6頭でも20点
         final box6 = _decideBoxHeads(popScores, validHorseMap, maxPoints: 20, isTrifecta: false);
         stratR1 = box6; stratR2 = box6; stratR3 = box6;
       } else {
@@ -164,82 +151,31 @@ class FormationAnalysisEngine {
       }
     }
 
-    // 5. 買い目の生成
-    final List<FormationTicket> tickets = [];
+    // 5. 点数計算
+    // [削除] 買い目の実体生成ループと資金配分ロジックを完全に削除 (v.2.0)
+    // [修正] 推定点数(estimatedPoints)のみを数学的に算出するロジックに変更 (v.2.0)
     int estimatedPts = 0;
 
     if (betType == "3連単") {
-      // BOX戦略の場合、stratR1~R3は同じリストなので全通り生成される
-      // フォーメーションの場合、指定通り生成される
       for (int first in stratR1) {
         for (int second in stratR2) {
           if (first == second) continue;
           for (int third in stratR3) {
             if (first == third || second == third) continue;
-
-            int w1 = matrix[first - 1][0] == 0 ? 1 : matrix[first - 1][0] * 5;
-            int w2 = matrix[second - 1][1] == 0 ? 1 : matrix[second - 1][1] * 2;
-            int w3 = matrix[third - 1][2] == 0 ? 1 : matrix[third - 1][2];
-            double weight = (w1 + w2 + w3).toDouble();
-
-            tickets.add(FormationTicket(
-              popularities: [first, second, third],
-              horseNames: [validHorseMap[first]!, validHorseMap[second]!, validHorseMap[third]!],
-              weight: weight,
-              type: '3連単',
-            ));
             estimatedPts++;
           }
         }
       }
     } else {
-      // 3連複
       if (strategyName.contains("軸")) {
-        // 軸流し (R1が軸, R2が相手)
-        int axis = stratR1[0];
         List<int> opponents = stratR2;
         int n = opponents.length;
-        for (int i = 0; i < n; i++) {
-          for (int j = i + 1; j < n; j++) {
-            int p2 = opponents[i];
-            int p3 = opponents[j];
-            int w = _calcPlaceWeight(matrix, axis) + _calcPlaceWeight(matrix, p2) + _calcPlaceWeight(matrix, p3);
-
-            tickets.add(FormationTicket(
-              popularities: [axis, p2, p3],
-              horseNames: [validHorseMap[axis]!, validHorseMap[p2]!, validHorseMap[p3]!],
-              weight: w.toDouble(),
-              type: '3連複',
-            ));
-            estimatedPts++;
-          }
-        }
+        estimatedPts = (n * (n - 1)) ~/ 2; // nC2
       } else {
-        // BOX
-        List<int> boxList = stratR1;
-        int n = boxList.length;
-        for (int i = 0; i < n; i++) {
-          for (int j = i + 1; j < n; j++) {
-            for (int k = j + 1; k < n; k++) {
-              int p1 = boxList[i]; int p2 = boxList[j]; int p3 = boxList[k];
-              int w = _calcPlaceWeight(matrix, p1) + _calcPlaceWeight(matrix, p2) + _calcPlaceWeight(matrix, p3);
-              tickets.add(FormationTicket(
-                popularities: [p1, p2, p3],
-                horseNames: [validHorseMap[p1]!, validHorseMap[p2]!, validHorseMap[p3]!],
-                weight: w.toDouble(),
-                type: '3連複',
-              ));
-              estimatedPts++;
-            }
-          }
-        }
+        int n = stratR1.length;
+        estimatedPts = (n * (n - 1) * (n - 2)) ~/ 6; // nC3
       }
     }
-
-    tickets.sort((a, b) => b.weight.compareTo(a.weight));
-
-    // 6. 資金配分の計算
-    final budgetAllocation = _allocateBudget(tickets, totalBudget);
 
     return FormationAnalysisResult(
       frequencyMatrix: matrix,
@@ -249,16 +185,13 @@ class FormationAnalysisEngine {
       strategyRank1: stratR1,
       strategyRank2: stratR2,
       strategyRank3: stratR3,
-      tickets: tickets,
       standardOddsLine: standardLine,
       maxOddsLine: maxLine,
-      chaosHorses: chaosHorseNames,
       validHorseCount: validHorseMap.length,
       strategyName: strategyName,
       strategyReason: strategyReason,
       betType: betType,
       estimatedPoints: estimatedPts,
-      budgetAllocation: budgetAllocation,
     );
   }
 
@@ -277,7 +210,6 @@ class FormationAnalysisEngine {
   }
 
   List<int> _decideBoxHeads(List<_PopScore> scores, Map<int, String> validMap, {required int maxPoints, bool isTrifecta = true}) {
-    // Place順にソート
     final sorted = List<_PopScore>.from(scores)..sort((a, b) => b.placeCount.compareTo(a.placeCount));
     final List<int> selected = [];
 
@@ -293,7 +225,6 @@ class FormationAnalysisEngine {
         break;
       }
     }
-    // BOXは最低3頭いないと成立しない
     if (selected.length < 3) return [];
     return selected;
   }
@@ -314,45 +245,18 @@ class FormationAnalysisEngine {
     }
 
     while (calc() > maxPoints) {
-      // 3列目 -> 2列目 の順で削る
       if (r3.length > r2.length && r3.length > 3) {
         r3.removeLast();
       } else if (r2.length > r1.length && r2.length > 2) {
         r2.removeLast();
       } else {
-        // これ以上削れないか、1列目を削るしかない場合
         if (r3.length > 1) r3.removeLast();
         else break;
       }
     }
   }
 
-  int _calcPlaceWeight(List<List<int>> matrix, int pop) {
-    return matrix[pop-1][0] + matrix[pop-1][1] + matrix[pop-1][2];
-  }
-
-  Map<FormationTicket, int> _allocateBudget(List<FormationTicket> tickets, int totalBudget) {
-    if (tickets.isEmpty) return {};
-
-    double totalWeight = tickets.fold(0.0, (p, t) => p + t.weight);
-    if (totalWeight == 0) return {};
-
-    final Map<FormationTicket, int> result = {};
-    int allocated = 0;
-
-    for (var t in tickets) {
-      int bet = (totalBudget * (t.weight / totalWeight)).floor();
-      // 100円単位にするなら
-      bet = (bet ~/ 100) * 100;
-      if (bet < 100) bet = 100; // 最低100円
-
-      result[t] = bet;
-      allocated += bet;
-    }
-
-    // 予算オーバーしないように調整(今回は単純に返す)
-    return result;
-  }
+// [削除] _calcPlaceWeight, _allocateBudget ヘルパーメソッドを削除 (v.2.0)
 }
 
 class _PopScore {
@@ -378,7 +282,6 @@ class MatrixTrapResult {
   });
 }
 
-// [修正] シンプルな足切り（ノイズ排除）と重複許可、および矛盾排除のロジックに更新 (v.1.3)
 class MatrixTrapFormationEngine {
   /// マトリクスデータから排他的なトラップフォーメーションを生成する
   MatrixTrapResult analyze({
@@ -393,7 +296,6 @@ class MatrixTrapFormationEngine {
       if (frequencyMatrix[i][2] > max3) max3 = frequencyMatrix[i][2];
     }
 
-    // 基本の足切りは「2回以上」とするが、最大回数が1回しかない着順は閾値を1に下げる（フェイルセーフ）
     int threshold1 = max1 >= 2 ? 2 : 1;
     int threshold2 = max2 >= 2 ? 2 : 1;
     int threshold3 = max3 >= 2 ? 2 : 1;

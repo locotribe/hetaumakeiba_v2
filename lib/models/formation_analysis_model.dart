@@ -14,13 +14,10 @@ class FormationAnalysisResult {
   final List<int> strategyRank2;
   final List<int> strategyRank3;
 
-  // 生成された推奨買い目リスト (AI戦略に基づく)
-  final List<FormationTicket> tickets;
-
   // オッズ分析データ
   final double standardOddsLine;
   final double maxOddsLine;
-  final List<String> chaosHorses;
+  // [削除] chaosHorses を削除 (v.2.0)
   final int validHorseCount;
 
   // AI戦術メタデータ
@@ -29,8 +26,7 @@ class FormationAnalysisResult {
   final String betType;        // "3連単" or "3連複"
   final int estimatedPoints;   // 推定点数
 
-  // 資金配分 (Ticket -> 推奨金額) ※予算10,000円想定
-  final Map<FormationTicket, int> budgetAllocation;
+  // [削除] tickets, budgetAllocation を削除 (v.2.0)
 
   FormationAnalysisResult({
     required this.frequencyMatrix,
@@ -40,16 +36,14 @@ class FormationAnalysisResult {
     required this.strategyRank1,
     required this.strategyRank2,
     required this.strategyRank3,
-    required this.tickets,
+    // [修正] コンストラクタ引数から不要なプロパティを削除 (v.2.0)
     required this.standardOddsLine,
     required this.maxOddsLine,
-    required this.chaosHorses,
     required this.validHorseCount,
     required this.strategyName,
     required this.strategyReason,
     required this.betType,
     required this.estimatedPoints,
-    required this.budgetAllocation, // 追加
   });
 }
 
