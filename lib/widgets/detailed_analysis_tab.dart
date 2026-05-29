@@ -28,12 +28,10 @@ class DetailedAnalysisTab extends StatefulWidget {
 class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
   final RaceRepository _raceRepo = RaceRepository();
   final FormationAnalysisEngine _engine = FormationAnalysisEngine();
-  // [追加] トラップロジック用のエンジンを初期化 (v.1.1)
   final MatrixTrapFormationEngine _trapEngine = MatrixTrapFormationEngine();
 
   bool _isLoading = true;
   FormationAnalysisResult? _result;
-  // [追加] トラップロジックの結果を保持するステート (v.1.1)
   MatrixTrapResult? _trapResult;
   String? _errorMessage;
 
@@ -65,10 +63,9 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
       final result = _engine.analyze(
         pastRaces: pastRaces,
         currentHorses: widget.horses,
-        totalBudget: 10000, // 予算1万円で計算
+        totalBudget: 10000,
       );
 
-      // [追加] トラップエンジンに渡すための有効馬マップ（足切り適用済み）を生成 (v.1.1)
       final Map<int, String> validMap = {};
       for (final h in widget.horses) {
         int p = int.tryParse(h.popularity?.toString() ?? '') ?? 0;
@@ -82,7 +79,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
         }
       }
 
-      // [追加] トラップ分析を実行 (v.1.1)
       final trapResult = _trapEngine.analyze(
         frequencyMatrix: result.frequencyMatrix,
         validHorseMap: validMap,
@@ -91,7 +87,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
       if (mounted) {
         setState(() {
           _result = result;
-          // [追加] ステートに保存 (v.1.1)
           _trapResult = trapResult;
           _isLoading = false;
         });
@@ -138,7 +133,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
           ),
           const SizedBox(height: 16),
 
-          // [追加] マトリクスの直下にトラップロジックのUIを描画 (v.1.1)
           if (_trapResult != null) ...[
             MatrixTrapCard(result: _trapResult),
             const SizedBox(height: 24),
@@ -415,7 +409,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
   }
 }
 
-// [追加] マトリクス直結トラップ（置き型）のUIコンポーネント (v.1.1)
 class MatrixTrapCard extends StatelessWidget {
   final MatrixTrapResult? result;
 
@@ -442,7 +435,6 @@ class MatrixTrapCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ヘッダーセクション
             Row(
               children: [
                 const Icon(Icons.filter_alt, color: Colors.deepPurple, size: 20),
@@ -464,7 +456,6 @@ class MatrixTrapCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // フォーメーション列の表示
             _buildRow('1列目', result!.rank1),
             Divider(color: Colors.grey.shade200, height: 24),
             _buildRow('2列目', result!.rank2),
@@ -472,7 +463,6 @@ class MatrixTrapCard extends StatelessWidget {
             _buildRow('3列目', result!.rank3),
             const SizedBox(height: 16),
 
-            // 推奨馬券と点数
             Container(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               decoration: BoxDecoration(

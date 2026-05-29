@@ -362,7 +362,6 @@ class _PopScore {
   _PopScore({required this.pop, required this.winCount, required this.placeCount});
 }
 
-// [追加] マトリクス直結型のトラップロジック（置き型予想）のクラス群を定義 (v.1.2)
 class MatrixTrapResult {
   final List<int> rank1;
   final List<int> rank2;
@@ -379,51 +378,48 @@ class MatrixTrapResult {
   });
 }
 
+// [修正] シンプルな足切り（ノイズ排除）と重複許可、および矛盾排除のロジックに更新 (v.1.3)
 class MatrixTrapFormationEngine {
   /// マトリクスデータから排他的なトラップフォーメーションを生成する
   MatrixTrapResult analyze({
     required List<List<int>> frequencyMatrix,
     required Map<int, String> validHorseMap,
   }) {
+    // 1. 各着順の最大出現回数を取得し、列ごとの閾値を決定する
+    int max1 = 0, max2 = 0, max3 = 0;
+    for (int i = 0; i < 18; i++) {
+      if (frequencyMatrix[i][0] > max1) max1 = frequencyMatrix[i][0];
+      if (frequencyMatrix[i][1] > max2) max2 = frequencyMatrix[i][1];
+      if (frequencyMatrix[i][2] > max3) max3 = frequencyMatrix[i][2];
+    }
+
+    // 基本の足切りは「2回以上」とするが、最大回数が1回しかない着順は閾値を1に下げる（フェイルセーフ）
+    int threshold1 = max1 >= 2 ? 2 : 1;
+    int threshold2 = max2 >= 2 ? 2 : 1;
+    int threshold3 = max3 >= 2 ? 2 : 1;
+
     List<int> r1 = [];
     List<int> r2 = [];
     List<int> r3 = [];
 
+    // 2. 独立判定で各列に候補を追加していく（重複を許容する）
     for (int pop = 1; pop <= 18; pop++) {
       if (!validHorseMap.containsKey(pop)) continue;
 
-      int c1 = frequencyMatrix[pop - 1][0];
-      int c2 = frequencyMatrix[pop - 1][1];
-      int c3 = frequencyMatrix[pop - 1][2];
-      int total = c1 + c2 + c3;
-
-      if (total == 0) continue;
-
-      int maxC = c1;
-      int targetRow = 1;
-
-      if (c2 > maxC) {
-        maxC = c2;
-        targetRow = 2;
-      }
-      if (c3 > maxC) {
-        maxC = c3;
-        targetRow = 3;
-      }
-
-      if (targetRow == 1) {
-        r1.add(pop);
-      } else if (targetRow == 2) {
-        r2.add(pop);
-      } else {
-        r3.add(pop);
-      }
+      if (frequencyMatrix[pop - 1][0] >= threshold1) r1.add(pop);
+      if (frequencyMatrix[pop - 1][1] >= threshold2) r2.add(pop);
+      if (frequencyMatrix[pop - 1][2] >= threshold3) r3.add(pop);
     }
 
+    // 3. 買い目生成と矛盾（同一人気の重複）の排除
     List<FormationTicket> tickets = [];
     for (int first in r1) {
       for (int second in r2) {
+        if (first == second) continue; // 1着と2着が同じならスキップ
+
         for (int third in r3) {
+          if (first == third || second == third) continue; // 3着が1着・2着と同じならスキップ
+
           int w1 = frequencyMatrix[first - 1][0];
           int w2 = frequencyMatrix[second - 1][1];
           int w3 = frequencyMatrix[third - 1][2];
