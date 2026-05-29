@@ -275,7 +275,8 @@ class LegStyleAnalyzer {
 
 
 // 5. 馬体重 (勝ち馬の平均からの散布度合いと、増減別成績用)
-class WeightChangeStats {
+// [修正] 絶対値と増減の両方で汎用的に利用できるようクラス名を WeightChangeStats から WeightStats に変更 (v.1.1)
+class WeightStats {
   int total = 0;
   int win = 0;
   int place = 0;
@@ -286,25 +287,41 @@ class HorseWeightAnalysisResult {
   final List<double> winningWeights;
   final double averageWinningWeight;
   final double medianWinningWeight;
-  final Map<String, WeightChangeStats> changeStats; // 増減別の集計データ
+  // [修正] 型を WeightStats に変更 (v.1.1)
+  final Map<String, WeightStats> changeStats; // 増減別の集計データ
+  // [追加] 馬体重（絶対値）の階級別集計データを追加 (v.1.1)
+  final Map<String, WeightStats> absoluteStats;
 
   HorseWeightAnalysisResult({
     required this.winningWeights,
     required this.averageWinningWeight,
     required this.medianWinningWeight,
     required this.changeStats,
+    // [追加] コンストラクタ引数に追加 (v.1.1)
+    required this.absoluteStats,
   });
 }
 
 class HorseWeightAnalyzer {
   HorseWeightAnalysisResult analyze(List<RaceResult> pastRaces) {
     final List<double> winningWeights = [];
-    final Map<String, WeightChangeStats> changeStats = {
-      '-10kg以下': WeightChangeStats(),
-      '-4~-8kg': WeightChangeStats(),
-      '-2~+2kg': WeightChangeStats(),
-      '+4~+8kg': WeightChangeStats(),
-      '+10kg以上': WeightChangeStats(),
+    // [修正] 型を WeightStats に変更 (v.1.1)
+    final Map<String, WeightStats> changeStats = {
+      '-10kg以下': WeightStats(),
+      '-4~-8kg': WeightStats(),
+      '-2~+2kg': WeightStats(),
+      '+4~+8kg': WeightStats(),
+      '+10kg以上': WeightStats(),
+    };
+
+    // [追加] 絶対馬体重の階級（20kg刻み）の初期化 (v.1.1)
+    final Map<String, WeightStats> absoluteStats = {
+      '~439kg': WeightStats(),
+      '440~459kg': WeightStats(),
+      '460~479kg': WeightStats(),
+      '480~499kg': WeightStats(),
+      '500~519kg': WeightStats(),
+      '520kg~': WeightStats(),
     };
 
     for (final r in pastRaces) {
@@ -325,6 +342,7 @@ class HorseWeightAnalyzer {
           if (weight != null && weightChange != null) {
             if (isWin) winningWeights.add(weight);
 
+            // --- 増減別の集計 ---
             String category;
             if (weightChange <= -10) {
               category = '-10kg以下';
@@ -342,6 +360,27 @@ class HorseWeightAnalyzer {
             if (isWin) changeStats[category]!.win += 1;
             if (isPlace) changeStats[category]!.place += 1;
             if (isShow) changeStats[category]!.show += 1;
+
+            // [追加] 絶対値の階級別集計ロジック (v.1.1)
+            String absCategory;
+            if (weight < 440) {
+              absCategory = '~439kg';
+            } else if (weight < 460) {
+              absCategory = '440~459kg';
+            } else if (weight < 480) {
+              absCategory = '460~479kg';
+            } else if (weight < 500) {
+              absCategory = '480~499kg';
+            } else if (weight < 520) {
+              absCategory = '500~519kg';
+            } else {
+              absCategory = '520kg~';
+            }
+
+            absoluteStats[absCategory]!.total += 1;
+            if (isWin) absoluteStats[absCategory]!.win += 1;
+            if (isPlace) absoluteStats[absCategory]!.place += 1;
+            if (isShow) absoluteStats[absCategory]!.show += 1;
           }
         }
       }
@@ -366,6 +405,8 @@ class HorseWeightAnalyzer {
       averageWinningWeight: avg,
       medianWinningWeight: median,
       changeStats: changeStats,
+      // [追加] 戻り値に絶対値の集計結果を含める (v.1.1)
+      absoluteStats: absoluteStats,
     );
   }
 }

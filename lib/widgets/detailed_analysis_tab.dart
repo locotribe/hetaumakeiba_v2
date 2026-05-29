@@ -28,9 +28,13 @@ class DetailedAnalysisTab extends StatefulWidget {
 class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
   final RaceRepository _raceRepo = RaceRepository();
   final FormationAnalysisEngine _engine = FormationAnalysisEngine();
+  // [追加] トラップロジック用のエンジンを初期化 (v.1.1)
+  final MatrixTrapFormationEngine _trapEngine = MatrixTrapFormationEngine();
 
   bool _isLoading = true;
   FormationAnalysisResult? _result;
+  // [追加] トラップロジックの結果を保持するステート (v.1.1)
+  MatrixTrapResult? _trapResult;
   String? _errorMessage;
 
   @override
@@ -64,9 +68,31 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
         totalBudget: 10000, // 予算1万円で計算
       );
 
+      // [追加] トラップエンジンに渡すための有効馬マップ（足切り適用済み）を生成 (v.1.1)
+      final Map<int, String> validMap = {};
+      for (final h in widget.horses) {
+        int p = int.tryParse(h.popularity?.toString() ?? '') ?? 0;
+        double o = double.tryParse(h.odds?.toString() ?? '') ?? 0.0;
+        if (p > 0 && o > 0) {
+          if (o <= result.standardOddsLine) {
+            validMap[p] = h.horseName;
+          }
+        } else if (p > 0) {
+          validMap[p] = h.horseName;
+        }
+      }
+
+      // [追加] トラップ分析を実行 (v.1.1)
+      final trapResult = _trapEngine.analyze(
+        frequencyMatrix: result.frequencyMatrix,
+        validHorseMap: validMap,
+      );
+
       if (mounted) {
         setState(() {
           _result = result;
+          // [追加] ステートに保存 (v.1.1)
+          _trapResult = trapResult;
           _isLoading = false;
         });
       }
@@ -110,8 +136,14 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
               const SizedBox(height: 8),
             ],
           ),
-
           const SizedBox(height: 16),
+
+          // [追加] マトリクスの直下にトラップロジックのUIを描画 (v.1.1)
+          if (_trapResult != null) ...[
+            MatrixTrapCard(result: _trapResult),
+            const SizedBox(height: 24),
+          ],
+
           const Text('🎯 AI厳選買い目リスト', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           Text('予算1万円での傾斜配分例 (${_result!.betType})', style: TextStyle(fontSize: 12, color: Colors.blue[800], fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -379,6 +411,146 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
           ),
         );
       },
+    );
+  }
+}
+
+// [追加] マトリクス直結トラップ（置き型）のUIコンポーネント (v.1.1)
+class MatrixTrapCard extends StatelessWidget {
+  final MatrixTrapResult? result;
+
+  const MatrixTrapCard({
+    super.key,
+    required this.result,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (result == null || result!.tickets.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ヘッダーセクション
+            Row(
+              children: [
+                const Icon(Icons.filter_alt, color: Colors.deepPurple, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'マトリクストラップ (置き型予想)',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '過去の出現分布に特化し、列間の重複を完全に排除した3連単専用のトラップです。レース側がこの波形に合致するのを待ちます。',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+
+            // フォーメーション列の表示
+            _buildRow('1列目', result!.rank1),
+            Divider(color: Colors.grey.shade200, height: 24),
+            _buildRow('2列目', result!.rank2),
+            Divider(color: Colors.grey.shade200, height: 24),
+            _buildRow('3列目', result!.rank3),
+            const SizedBox(height: 16),
+
+            // 推奨馬券と点数
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.deepPurple.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '推奨: 3連単 フォーメーション',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepPurple,
+                    ),
+                  ),
+                  Text(
+                    '推定 ${result!.estimatedPoints}点',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepPurple,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(String label, List<int> popularities) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 64,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Wrap(
+            spacing: 8.0,
+            runSpacing: 8.0,
+            children: popularities.isEmpty
+                ? [
+              Text(
+                '該当なし',
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+              )
+            ]
+                : popularities.map((pop) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.deepPurple.shade50,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '$pop人',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.deepPurple,
+                ),
+              ),
+            )).toList(),
+          ),
+        ),
+      ],
     );
   }
 }

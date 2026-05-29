@@ -21,14 +21,12 @@ class RelativeBattleCalculator {
         int iterations = 100,
         Map<String, JockeyStats>? jockeyStats,
         Map<String, List<HorseRaceRecord>>? horsePerformanceMap,
-        Map<String, List<TrainingTimeModel>>? trainingDataMap, // ★追加
+        Map<String, List<TrainingTimeModel>>? trainingDataMap,
       }) {
     if (horses.length < 2) return [];
 
-    // ★今回のレースの総頭数を取得 (パーセンテージ計算用)
     int totalHorses = horses.length;
 
-    // ★修正: _prepareStaticData に trainingDataMap を渡すように修正
     final List<_HorseStaticData> staticDataList = horses
         .map((h) => _prepareStaticData(h, totalHorses, jockeyStats, horsePerformanceMap, trainingDataMap))
         .toList();
@@ -114,7 +112,7 @@ class RelativeBattleCalculator {
         jockeyDetails: staticData.jockeyDetails,
         compatibilityDetails: staticData.compatibilityDetails,
         gateDetails: staticData.gateDetails,
-        trainingDetails: staticData.trainingDetails, // ★追加
+        trainingDetails: staticData.trainingDetails,
         scenarioWinRates: scenarioWinRates,
         scenarioRanks: scenarioRanks,
       ));
@@ -125,7 +123,7 @@ class RelativeBattleCalculator {
   }
 
   // ===========================================================================
-  // ★ プロフェッショナル短評生成エンジン
+  // プロフェッショナル短評生成エンジン
   // ===========================================================================
   String _generateRichComment({
     required double winRate,
@@ -174,7 +172,6 @@ class RelativeBattleCalculator {
 
   String _getRandom(List<String> list) => list[_random.nextInt(list.length)];
 
-  // --- 語彙データベース ---
   static const _subjectNige = ["テンの速さを最大限に活かし", "果敢にハナを奪うスタイルで", "単騎マイペースの逃げなら", "自慢の快速を武器に主導権を握り", "自分のリズムで逃げられれば", "強引にでもハナを叩く構えで", "行き脚の良さはメンバー随一で", "淀みない流れを作る快速馬で", "先手を奪って主導権を渡さず", "ハナを奪う形がベストの構成で"];
   static const _subjectSenko = ["好位のインで脚を溜め", "安定感ある取り口が武器で", "番手から抜け出す競馬が板につき", "隙のない立ち回りが持ち味で", "先団の直後で機を伺い", "好位で流れに乗る形が理想で", "器用な脚を使える先行タイプで", "先団の一角で流れに乗れば", "好位から安定した伸びを見せ", "経済コースを立ち回れる器用さがあり"];
   static const _subjectSashi = ["メンバー随一の末脚を誇り", "後方から虎視眈々と展開を伺い", "直線の切れ味を最大の武器に", "終い確実に脚を使うタイプで", "鋭い決め手を秘めており", "展開が嵌まった時の爆発力は凄まじく", "大外から豪快に脚を伸ばして", "溜めれば溜めるだけ伸びるタイプで", "混戦を切り裂くような末脚で", "自慢の瞬発力をフルに活かし"];
@@ -190,6 +187,15 @@ class RelativeBattleCalculator {
   static const _conclusionDanger = ["全幅の信頼は置けません。", "静観するのが賢明でしょう。", "リスクの方が大きい評価です。", "今回は評価を下げるのが妥当。", "過信は禁物の危うさがあり。", "人気先行の感が否めません。", "今回は苦戦が予想されます。", "馬券的な妙味は薄いと判断。", "見送る勇気も必要な一頭。", "過剰人気に対する懸念あり。"];
 
   // --- メイン処理 ---
+
+  // [追加] 50点満点のスコアに対するランク文字列判定ヘルパー
+  String _getRankFor50PointScale(double score) {
+    if (score >= 45) return 'SS';
+    if (score >= 35) return 'S';
+    if (score >= 25) return 'A';
+    if (score >= 15) return 'B';
+    return 'C';
+  }
 
   List<RelativeEvaluationResult> _runScenario(
       List<_HorseStaticData> staticDataList,
@@ -207,7 +213,7 @@ class RelativeBattleCalculator {
           'jockey': 0.0,
           'compatibility': 0.0,
           'gate': 0.0,
-          'training': 0.0, // ★追加
+          'training': 0.0,
         }
     };
 
@@ -239,7 +245,7 @@ class RelativeBattleCalculator {
         'jockey': acc['jockey']! / iterations,
         'compatibility': acc['compatibility']! / iterations,
         'gate': acc['gate']! / iterations,
-        'training': acc['training']! / iterations, // ★追加
+        'training': acc['training']! / iterations,
       };
 
       results.add(RelativeEvaluationResult(
@@ -256,7 +262,7 @@ class RelativeBattleCalculator {
         jockeyDetails: staticData.jockeyDetails,
         compatibilityDetails: staticData.compatibilityDetails,
         gateDetails: staticData.gateDetails,
-        trainingDetails: staticData.trainingDetails, // ★追加
+        trainingDetails: staticData.trainingDetails,
         scenarioWinRates: {},
         scenarioRanks: {},
       ));
@@ -269,7 +275,7 @@ class RelativeBattleCalculator {
       int totalHorses,
       Map<String, JockeyStats>? jockeyStats,
       Map<String, List<HorseRaceRecord>>? horsePerformanceMap,
-      Map<String, List<TrainingTimeModel>>? trainingDataMap, // ★追加
+      Map<String, List<TrainingTimeModel>>? trainingDataMap,
       ) {
     double baseAbility = 50.0;
     if (horse.overallScore != null) {
@@ -302,11 +308,13 @@ class RelativeBattleCalculator {
       'winRate': 0.0,
       'score': 0,
       'bonus': 'なし',
+      'rank': 'C', // [追加] 初期値
     };
 
     if (jockeyStats != null && jockeyStats.containsKey(horse.jockeyId)) {
       final stats = jockeyStats[horse.jockeyId]!;
-      final bool useCourseStats = (stats.courseStats != null && stats.courseStats!.raceCount >= 2);
+      // [修正] ボーナス判定のためにuseCourseStatsの基準を調整。足切りN数はボーナス付与側で個別に判定する。
+      final bool useCourseStats = (stats.courseStats != null && stats.courseStats!.raceCount > 0);
       final FactorStats targetStats = useCourseStats ? stats.courseStats! : stats.overallStats;
 
       if (targetStats.raceCount > 0) {
@@ -315,7 +323,22 @@ class RelativeBattleCalculator {
         double baseScore = winRateRatio * 100.0;
         double confidence = 0.5 + ((targetStats.raceCount / 20.0).clamp(0.0, 0.5));
         jockeyScore = baseScore * confidence;
-        if (useCourseStats) jockeyScore += 10.0;
+
+        // [追加] 段階的ボーナス評価 (コース連対率とN数で判定)
+        int bonusScore = 0;
+        String bonusLabel = 'なし';
+
+        if (useCourseStats && targetStats.raceCount >= 5) {
+          if (targetStats.placeRate >= 30.0) {
+            bonusScore = 10;
+            bonusLabel = 'コース連対率30%超 (+10)';
+          } else if (targetStats.placeRate >= 20.0) {
+            bonusScore = 5;
+            bonusLabel = 'コース連対率20%超 (+5)';
+          }
+        }
+
+        jockeyScore += bonusScore;
         if (jockeyScore > 50.0) jockeyScore = 50.0;
 
         jDetails = {
@@ -324,7 +347,8 @@ class RelativeBattleCalculator {
           'raceCount': targetStats.raceCount,
           'winRate': winRateRatio,
           'score': jockeyScore.round(),
-          'bonus': useCourseStats ? 'コース適性あり (+10)' : 'なし',
+          'bonus': bonusLabel, // [修正]
+          'rank': _getRankFor50PointScale(jockeyScore), // [追加]
         };
       }
     }
@@ -337,6 +361,7 @@ class RelativeBattleCalculator {
       'winRate': 0.0,
       'placeRate': 0.0,
       'score': 0,
+      'rank': 'C', // [追加]
     };
 
     // --- 枠順評価 & 傾向データ取得 ---
@@ -346,6 +371,7 @@ class RelativeBattleCalculator {
       'isDetermined': false,
       'tendency': <String, dynamic>{}, // 過去の内中外傾向
       'score': 0,
+      'rank': 'C', // [追加]
     };
     Map<String, Map<String, double>> gateTendency = {}; // 生データ
 
@@ -367,12 +393,14 @@ class RelativeBattleCalculator {
         double confidence = (comboStats.rideCount / 5.0).clamp(0.5, 1.0);
         compatibilityScore = (winScore * confidence) + countBonus;
         if (compatibilityScore > 50.0) compatibilityScore = 50.0;
+
         cDetails = {
           'isFirstRide': false,
           'rideCount': comboStats.rideCount,
           'winRate': winRateRatio,
           'placeRate': comboStats.placeRate,
           'score': compatibilityScore.round(),
+          'rank': _getRankFor50PointScale(compatibilityScore), // [追加]
         };
       }
 
@@ -401,14 +429,13 @@ class RelativeBattleCalculator {
           'zone': zone, // 'inner', 'middle', 'outer'
           'tendency': gateTendency,
           'score': gateScore.round(),
+          'rank': _getRankFor50PointScale(gateScore), // [追加]
         };
       }
     }
 
-    // --- ★追加: 調教評価 ---
+    // --- 調教評価 ---
     final tf = TrainingFactor();
-
-    // ★修正: 対象馬のID、全馬の調教データマップ、対象馬の性齢を渡す (完全相対評価化)
     final tResult = tf.evaluate(horse.horseId, trainingDataMap ?? {}, horse.sexAndAge);
 
     double trainingScore = tResult.score;
@@ -438,11 +465,11 @@ class RelativeBattleCalculator {
       jockeyScore: jockeyScore,
       compatibilityScore: compatibilityScore,
       gateScore: gateScore,
-      trainingScore: trainingScore, // ★追加
+      trainingScore: trainingScore,
       jockeyDetails: jDetails,
       compatibilityDetails: cDetails,
       gateDetails: gDetails,
-      trainingDetails: tDetails, // ★追加
+      trainingDetails: tDetails,
       gateTendency: gateTendency,
       currentOdds: currentOdds,
       legStyleProfile: horse.legStyleProfile,
@@ -493,7 +520,7 @@ class RelativeBattleCalculator {
     for (var horse in staticDataList) {
       // 基礎スコア合計
       double score = horse.baseAbility + horse.aptitudeScore +
-          horse.jockeyScore + horse.compatibilityScore + horse.gateScore + horse.trainingScore; // ★追加
+          horse.jockeyScore + horse.compatibilityScore + horse.gateScore + horse.trainingScore;
 
       double styleQualityBonus = 0.0;
       final style = currentStyles[horse.horseId]!;
@@ -525,7 +552,7 @@ class RelativeBattleCalculator {
       scoreAccumulator[horse.horseId]!['jockey'] = scoreAccumulator[horse.horseId]!['jockey']! + horse.jockeyScore;
       scoreAccumulator[horse.horseId]!['compatibility'] = scoreAccumulator[horse.horseId]!['compatibility']! + horse.compatibilityScore;
       scoreAccumulator[horse.horseId]!['gate'] = scoreAccumulator[horse.horseId]!['gate']! + horse.gateScore;
-      scoreAccumulator[horse.horseId]!['training'] = scoreAccumulator[horse.horseId]!['training']! + horse.trainingScore; // ★追加
+      scoreAccumulator[horse.horseId]!['training'] = scoreAccumulator[horse.horseId]!['training']! + horse.trainingScore;
     }
 
     // 総当たり戦
@@ -538,25 +565,18 @@ class RelativeBattleCalculator {
         double strB = currentStrengths[horseB.horseId]!;
 
         // 相対位置補正 (Relative Position Logic)
-        // 馬番が確定している場合のみ発動
         if (horseA.horseNumber > 0 && horseB.horseNumber > 0) {
-          // AがBより内側にいる場合
           if (horseA.horseNumber < horseB.horseNumber) {
-            // Aの内枠勝率が高ければ有利 (ボーナス)
             double innerWinRate = horseA.gateTendency['inner']?['winRate'] ?? 0.0;
-            if (innerWinRate > 0.2) strA += (innerWinRate * 5.0); // 最大5点程度
+            if (innerWinRate > 0.2) strA += (innerWinRate * 5.0);
 
-            // Bの外枠勝率が低ければBは不利 (A有利)
             double outerWinRate = horseB.gateTendency['outer']?['winRate'] ?? 0.0;
             if (outerWinRate < 0.1) strB -= 2.0;
           }
-          // AがBより外側にいる場合
           else {
-            // Aの外枠勝率が高ければ有利
             double outerWinRate = horseA.gateTendency['outer']?['winRate'] ?? 0.0;
             if (outerWinRate > 0.2) strA += (outerWinRate * 5.0);
 
-            // Bの内枠勝率が低ければBは不利
             double innerWinRate = horseB.gateTendency['inner']?['winRate'] ?? 0.0;
             if (innerWinRate < 0.1) strB -= 2.0;
           }
@@ -589,11 +609,11 @@ class _HorseStaticData {
   final double jockeyScore;
   final double compatibilityScore;
   final double gateScore;
-  final double trainingScore; // ★追加
+  final double trainingScore;
   final Map<String, dynamic> jockeyDetails;
   final Map<String, dynamic> compatibilityDetails;
   final Map<String, dynamic> gateDetails;
-  final Map<String, dynamic> trainingDetails; // ★追加
+  final Map<String, dynamic> trainingDetails;
   final Map<String, Map<String, double>> gateTendency;
   final double? currentOdds;
   final LegStyleProfile? legStyleProfile;
@@ -608,11 +628,11 @@ class _HorseStaticData {
     required this.jockeyScore,
     required this.compatibilityScore,
     required this.gateScore,
-    required this.trainingScore, // ★追加
+    required this.trainingScore,
     required this.jockeyDetails,
     required this.compatibilityDetails,
     required this.gateDetails,
-    required this.trainingDetails, // ★追加
+    required this.trainingDetails,
     required this.gateTendency,
     this.currentOdds,
     this.legStyleProfile,

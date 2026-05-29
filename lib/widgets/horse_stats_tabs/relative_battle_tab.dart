@@ -1,3 +1,5 @@
+// lib/widgets/horse_stats_tabs/relative_battle_tab.dart
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/relative_evaluation_model.dart';
@@ -67,7 +69,7 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
       iterations: 100,
       jockeyStats: jockeyStats,
       horsePerformanceMap: horsePerformanceMap,
-      trainingDataMap: widget.trainingDataMap, // ★修正: 親から渡されたマップをそのまま渡す
+      trainingDataMap: widget.trainingDataMap,
     );
 
     if (mounted) {
@@ -218,11 +220,13 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     content.add(_detailRow("勝率", "${(details['winRate'] * 100).toStringAsFixed(1)}%"));
     content.add(_detailRow("ボーナス", details['bonus'].toString()));
 
+    // [修正] 事前計算されたrankStrを渡す
     _showScoreDetailsDialog(
         context,
         horseName: '${details['jockeyName']} 騎手',
         subTitle: courseInfo,
         score: details['score'] as int,
+        rankStr: details['rank'] as String? ?? 'C',
         content: content
     );
   }
@@ -235,11 +239,13 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     final int score = details['score'] as int;
     final String jockeyName = result.jockeyDetails?['jockeyName'] ?? '騎手情報なし';
 
+    // [修正] 事前計算されたrankStrを渡す
     _showScoreDetailsDialog(
         context,
         horseName: result.horseName,
         subTitle: '$jockeyName 騎手との相性',
         score: score,
+        rankStr: details['rank'] as String? ?? 'C',
         content: isFirstRide
             ? [const Padding(padding: EdgeInsets.all(16.0), child: Center(child: Text("初コンビ")))]
             : [
@@ -266,11 +272,13 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     if (zone == 'middle') zoneLabel = '中枠 (Middle)';
     if (zone == 'outer') zoneLabel = '外枠 (Outer)';
 
+    // [修正] 事前計算されたrankStrを渡す
     _showScoreDetailsDialog(
         context,
         horseName: result.horseName,
         subTitle: isDetermined ? '馬番 $horseNumber番 ($zoneLabel)' : '馬番未定',
         score: score,
+        rankStr: details['rank'] as String? ?? 'C',
         content: [
           if (!isDetermined)
             const Padding(padding: EdgeInsets.all(16.0), child: Center(child: Text("枠順確定前のため集計対象外"))),
@@ -304,11 +312,13 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     final String lapStr = details['lapStr'] ?? '-';
     final String diagnosis = details['diagnosis'] ?? '-';
 
+    // [修正] 既に備わっているrankStrをそのまま渡す
     _showScoreDetailsDialog(
         context,
         horseName: result.horseName,
         subTitle: '調教評価 (直近データ)',
         score: score.toInt(),
+        rankStr: rank,
         content: [
           _detailRow("評価ランク", rank),
           _detailRow("コース", course),
@@ -329,25 +339,26 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     return _detailRow(label, "${(winRate * 100).toStringAsFixed(1)}% (${count.toInt()}走)");
   }
 
+  // [削除] 内部でのスコア閾値によるランク判定を全削除
+  // [修正] 引数に `rankStr` を追加し、文字列に基づく色(Color)のマッピングのみを行う
   void _showScoreDetailsDialog(BuildContext context, {
     required String horseName,
     required String subTitle,
     required int score,
+    required String rankStr,
     required List<Widget> content
   }) {
-    String rankStr = 'C';
-    Color rankColor = Colors.grey;
-    if (score >= 45) { rankStr = 'SS'; rankColor = Colors.red.shade900; }
-    else if (score >= 35) { rankStr = 'S'; rankColor = Colors.red; }
-    else if (score >= 25) { rankStr = 'A'; rankColor = Colors.orange; }
-    else if (score >= 15) { rankStr = 'B'; rankColor = Colors.amber; }
+    Color rankColor;
 
-    // ▼ 修正箇所：完全一致(==)を廃止し、TrainingFactorと同じ閾値の範囲指定(>=)に変更 ▼
-    else if (score >= 7) { rankStr = 'S'; rankColor = Colors.red; }
-    else if (score >= 3) { rankStr = 'A'; rankColor = Colors.orange; }
-    else if (score >= -1) { rankStr = 'B'; rankColor = Colors.grey; }
-    else { rankStr = 'C'; rankColor = Colors.blueGrey; }
-    // ▲ 修正箇所：ここまで ▲
+    // Viewとしての色付けの関心事のみを担当
+    switch (rankStr) {
+      case 'SS': rankColor = Colors.red.shade900; break;
+      case 'S': rankColor = Colors.red; break;
+      case 'A': rankColor = Colors.orange; break;
+      case 'B': rankColor = Colors.amber; break;
+      case 'C': rankColor = Colors.blueGrey; break;
+      default: rankColor = Colors.grey; break;
+    }
 
     showDialog(
       context: context,

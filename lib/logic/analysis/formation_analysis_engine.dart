@@ -70,8 +70,8 @@ class FormationAnalysisEngine {
     final placeSorted = List<_PopScore>.from(popScores)..sort((a, b) => b.placeCount.compareTo(a.placeCount));
 
     List<int> basicR1 = winSorted.take(1).map((e) => e.pop).toList();
-    List<int> basicR2 = placeSorted.take(2).map((e) => e.pop).toList();
-    List<int> basicR3 = placeSorted.take(5).map((e) => e.pop).toList();
+    List<int> basicR2 = placeSorted.where((e) => !basicR1.contains(e.pop)).take(2).map((e) => e.pop).toList();
+    List<int> basicR3 = placeSorted.where((e) => !basicR1.contains(e.pop)).take(5).map((e) => e.pop).toList();
 
     // 足切り適用
     basicR1 = basicR1.where((p) => validHorseMap.containsKey(p)).toList();
@@ -258,7 +258,7 @@ class FormationAnalysisEngine {
       strategyReason: strategyReason,
       betType: betType,
       estimatedPoints: estimatedPts,
-      budgetAllocation: budgetAllocation, // 追加
+      budgetAllocation: budgetAllocation,
     );
   }
 
@@ -360,4 +360,93 @@ class _PopScore {
   final int winCount;
   final int placeCount;
   _PopScore({required this.pop, required this.winCount, required this.placeCount});
+}
+
+// [追加] マトリクス直結型のトラップロジック（置き型予想）のクラス群を定義 (v.1.2)
+class MatrixTrapResult {
+  final List<int> rank1;
+  final List<int> rank2;
+  final List<int> rank3;
+  final List<FormationTicket> tickets;
+  final int estimatedPoints;
+
+  MatrixTrapResult({
+    required this.rank1,
+    required this.rank2,
+    required this.rank3,
+    required this.tickets,
+    required this.estimatedPoints,
+  });
+}
+
+class MatrixTrapFormationEngine {
+  /// マトリクスデータから排他的なトラップフォーメーションを生成する
+  MatrixTrapResult analyze({
+    required List<List<int>> frequencyMatrix,
+    required Map<int, String> validHorseMap,
+  }) {
+    List<int> r1 = [];
+    List<int> r2 = [];
+    List<int> r3 = [];
+
+    for (int pop = 1; pop <= 18; pop++) {
+      if (!validHorseMap.containsKey(pop)) continue;
+
+      int c1 = frequencyMatrix[pop - 1][0];
+      int c2 = frequencyMatrix[pop - 1][1];
+      int c3 = frequencyMatrix[pop - 1][2];
+      int total = c1 + c2 + c3;
+
+      if (total == 0) continue;
+
+      int maxC = c1;
+      int targetRow = 1;
+
+      if (c2 > maxC) {
+        maxC = c2;
+        targetRow = 2;
+      }
+      if (c3 > maxC) {
+        maxC = c3;
+        targetRow = 3;
+      }
+
+      if (targetRow == 1) {
+        r1.add(pop);
+      } else if (targetRow == 2) {
+        r2.add(pop);
+      } else {
+        r3.add(pop);
+      }
+    }
+
+    List<FormationTicket> tickets = [];
+    for (int first in r1) {
+      for (int second in r2) {
+        for (int third in r3) {
+          int w1 = frequencyMatrix[first - 1][0];
+          int w2 = frequencyMatrix[second - 1][1];
+          int w3 = frequencyMatrix[third - 1][2];
+          double weight = (w1 + w2 + w3).toDouble();
+
+          tickets.add(FormationTicket(
+            popularities: [first, second, third],
+            horseNames: [validHorseMap[first]!, validHorseMap[second]!, validHorseMap[third]!],
+            weight: weight,
+            type: '3連単',
+          ));
+        }
+      }
+    }
+
+    tickets.sort((a, b) => b.weight.compareTo(a.weight));
+
+    return MatrixTrapResult(
+      rank1: r1,
+      rank2: r2,
+      rank3: r3,
+      tickets: tickets,
+      estimatedPoints: tickets.length,
+    );
+  }
 }

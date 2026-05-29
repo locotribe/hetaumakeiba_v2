@@ -4,6 +4,7 @@ import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
+import 'package:intl/intl.dart'; // [追加] 日付パース用にintlパッケージをインポート (v.1.0)
 
 // 各ファクターをインポート
 import '../analysis/historical_match_engine_factors/weight_factor.dart';
@@ -169,7 +170,43 @@ class HistoricalMatchEngine {
     };
   }
 
+  // [追加] 日付文字列をDateTimeに変換するヘルパーメソッド (v.1.0)
+  DateTime? _parseDate(String dateStr) {
+    try {
+      if (dateStr.contains('年')) {
+        return DateFormat('yyyy年M月d日').parse(dateStr);
+      }
+      if (dateStr.contains('/')) {
+        return DateFormat('yyyy/MM/dd').parse(dateStr);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
 
+  // [追加] 対象レース開催日より過去の最新レースレコードを取得するヘルパーメソッド (v.1.0)
+  HorseRaceRecord? _getPreviousRaceRecord(List<HorseRaceRecord>? history, String referenceDateStr) {
+    if (history == null || history.isEmpty) return null;
+
+    final referenceDate = _parseDate(referenceDateStr);
+    if (referenceDate == null) return null;
+
+    final sortedHistory = List<HorseRaceRecord>.from(history);
+    sortedHistory.sort((a, b) {
+      final da = _parseDate(a.date) ?? DateTime(1900);
+      final db = _parseDate(b.date) ?? DateTime(1900);
+      return db.compareTo(da);
+    });
+
+    for (final record in sortedHistory) {
+      final recDate = _parseDate(record.date);
+      if (recDate != null && recDate.isBefore(referenceDate)) {
+        return record;
+      }
+    }
+    return null;
+  }
 
   // --- ヘルパーメソッド群 (変更なし) ---
   Map<String, dynamic> _analyzePrevRaceTrends(List<_HorseContext> topHorses, List<RaceResult> pastRaces, Map<String, List<HorseRaceRecord>> pastRecords) {
@@ -180,13 +217,10 @@ class HistoricalMatchEngine {
       final records = pastRecords[ctx.horse.horseId];
       if (records == null || records.isEmpty) continue;
       final targetRace = pastRaces.firstWhere((r) => r.horseResults.any((h) => h.horseId == ctx.horse.horseId), orElse: () => pastRaces.first);
-      HorseRaceRecord? prevRace;
-      for (final rec in records) {
-        if (rec.raceId != targetRace.raceId) {
-          prevRace = rec;
-          break;
-        }
-      }
+
+      // [修正] 単純にraceIdを比較するのではなく、対象レース開催日より過去の最新レコードを取得するよう変更 (v.1.0)
+      final prevRace = _getPreviousRaceRecord(records, targetRace.raceDate);
+
       if (prevRace != null) {
         String raceName = prevRace.raceName.replaceAll(RegExp(r'\(.*\)'), '').trim();
         if (raceName.isNotEmpty) rotationCounts[raceName] = (rotationCounts[raceName] ?? 0) + 1;
