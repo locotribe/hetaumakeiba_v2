@@ -9,8 +9,6 @@ import 'package:intl/intl.dart';
 typedef InitialData = (List<String> dates, RaceSchedule? schedule);
 
 class RaceScheduleScraperService {
-  /// 週の初期データを取得する
-  /// [representativeDate] が null の場合は日付指定なしのベースURLを使用する
   Future<InitialData> fetchInitialData(
       DateTime? representativeDate, {
         Function(String)? onProgress,
@@ -25,11 +23,9 @@ class RaceScheduleScraperService {
     return await _scrapeDataForDate(representativeDate);
   }
 
-  /// 指定された日付（またはnullならトップ）のデータを取得する
   Future<InitialData> _scrapeDataForDate(DateTime? date) async {
     final completer = Completer<InitialData>();
 
-    // date が null ならベースURL、あれば日付付きURLを生成
     final String urlString = date != null
         ? generateRaceListUrl(date)
         : "https://race.netkeiba.com/top/race_list.html";
@@ -37,7 +33,6 @@ class RaceScheduleScraperService {
     final url = WebUri(urlString);
     HeadlessInAppWebView? headlessWebView;
 
-    // タイムアウト用タイマー
     final timer = Timer(const Duration(seconds: 25), () {
       if (!completer.isCompleted) {
         print("Scraping timed out for $url");
@@ -63,7 +58,6 @@ class RaceScheduleScraperService {
       onLoadStop: (controller, url) async {
         if (completer.isCompleted) return;
         try {
-          // タブエリア(#date_list_sub) または コンテンツ(.RaceList_Body) または データなし(.NoData_Comment) を監視
           const String checkSelector = "#date_list_sub, .RaceList_Body, .NoData_Comment";
           const int maxRetries = 20;
           const Duration retryDelay = Duration(milliseconds: 300);
@@ -81,23 +75,19 @@ class RaceScheduleScraperService {
           }
 
           if (!isContentLoaded) {
-            // 要素が見つからない（タイムアウト気味）場合も空データを返して終了
             completer.complete((<String>[], null));
             return;
           }
 
-          // データなしコメントがあるか確認
           final hasNoData = await controller.evaluateJavascript(source: """
             (function() { return document.querySelector('.NoData_Comment') != null; })();
           """);
 
           if (hasNoData == true) {
-            // 「開催情報はありません」などの表示がある場合は即終了
             completer.complete((<String>[], null));
             return;
           }
 
-          // スクレイピング実行
           final result =
           await controller.evaluateJavascript(source: _getScrapingScript());
 
@@ -106,23 +96,48 @@ class RaceScheduleScraperService {
             return;
           }
 
-          // デコードした結果から日付リストとスケジュールデータを取得
           final decodedResult = json.decode(result);
           final List<String> dates =
           List<String>.from(decodedResult['dates'] ?? []);
+          // ★修正: activeDate をスクリプトから取得する
+          final String? activeDate = decodedResult['activeDate'] as String?;
           final List<dynamic> scheduleData = decodedResult['schedule'] ?? [];
 
-          // 日付の決定ロジック
+          // 日付の決定ロジック（修正）
           DateTime targetDate;
           if (date != null) {
+            // 明示的に日付が指定された場合はそれを使う
             targetDate = date;
-          } else if (dates.isNotEmpty) {
-            // date指定なし(初期ロード)の場合、取得できた日付リストの「最後(日曜)」をターゲットにする
-            final ds = dates.last;
+          } else if (activeDate != null && activeDate.length == 8) {
+            // ★修正: スクリプトが返したアクティブタブの日付を最優先で使う
             targetDate = DateTime(
-              int.parse(ds.substring(0, 4)),
-              int.parse(ds.substring(4, 6)),
-              int.parse(ds.substring(6, 8)),
+              int.parse(activeDate.substring(0, 4)),
+              int.parse(activeDate.substring(4, 6)),
+              int.parse(activeDate.substring(6, 8)),
+            );
+          } else if (dates.isNotEmpty) {
+            // フォールバック: 現在日付に最も近い開催日を選ぶ
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            String bestDate = dates.first;
+            Duration bestDiff = Duration(days: 9999);
+            for (final ds in dates) {
+              if (ds.length != 8) continue;
+              final d = DateTime(
+                int.parse(ds.substring(0, 4)),
+                int.parse(ds.substring(4, 6)),
+                int.parse(ds.substring(6, 8)),
+              );
+              final diff = (d.difference(today)).abs();
+              if (diff < bestDiff) {
+                bestDiff = diff;
+                bestDate = ds;
+              }
+            }
+            targetDate = DateTime(
+              int.parse(bestDate.substring(0, 4)),
+              int.parse(bestDate.substring(4, 6)),
+              int.parse(bestDate.substring(6, 8)),
             );
           } else {
             targetDate = DateTime.now();
@@ -245,25 +260,32 @@ class RaceScheduleScraperService {
   String _getScrapingScript({bool isInitial = true}) {
     return """
       (function() {
-        // 1. タブ要素を取得
         const dateElements = Array.from(document.querySelectorAll('#date_list_sub li:not(.rev):not(.fwd)'));
         
-        // タブが1つもない場合（＝開催情報がまだない未来のページなど）即座に空を返す
         if (dateElements.length === 0) {
-          return JSON.stringify({ dates: [], schedule: [] });
+          return JSON.stringify({ dates: [], activeDate: null, schedule: [] });
         }
 
-        // 日付リスト（タブ）の取得
         const dates = dateElements.map(li => {
            const a = li.querySelector('a');
            if (a && a.href) {
-              // URLパラメータから kaisai_date (yyyyMMdd) を抽出して、アプリ側の期待する形式に合わせる
               const match = a.href.match(/kaisai_date=(\\d{8})/);
               return match ? match[1] : '';
            }
-           // フォールバック: 属性から取得（古い仕様対応）
            return li.getAttribute('date') || '';
         }).filter(d => d);
+
+        // ★修正: アクティブなタブの日付を取得する
+        const activeElement = document.querySelector('#date_list_sub li.ui-tabs-active a');
+        let activeDate = null;
+        if (activeElement && activeElement.href) {
+          const activeMatch = activeElement.href.match(/kaisai_date=(\\d{8})/);
+          activeDate = activeMatch ? activeMatch[1] : null;
+        }
+        // ui-tabs-active で取れない場合、最初の li の日付をフォールバックとして使う
+        if (!activeDate && dates.length > 0) {
+          activeDate = dates[0];
+        }
         
         const mainTitleElement = document.querySelector('#date_list_sub li.ui-tabs-active a');
         const mainTitle = mainTitleElement ? mainTitleElement.innerText.trim().replace(/\\s+/g, ' ') : '';
@@ -296,8 +318,7 @@ class RaceScheduleScraperService {
           });
         });
         
-        // 既存のアプリロジックが期待するJSON構造 { "dates": [...], "schedule": [...] } を維持して返す
-        return JSON.stringify(${isInitial ? '{ "dates": dates, "schedule": allRacesData }' : '{ "schedule": allRacesData }'});
+        return JSON.stringify(${isInitial ? '{ "dates": dates, "activeDate": activeDate, "schedule": allRacesData }' : '{ "schedule": allRacesData }'});
       })();
     """;
   }

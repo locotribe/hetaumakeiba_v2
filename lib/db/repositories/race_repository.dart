@@ -262,6 +262,44 @@ class RaceRepository {
     return null;
   }
 
+  /// スクレイピングで取得した新しいスケジュールで既存データを更新する。
+  /// 既存データに保存されている isConfirmed の状態を引き継ぐ。
+  Future<int> mergeRaceSchedule(RaceSchedule newSchedule) async {
+    final db = await _dbProvider.database;
+
+    // 既存のスケジュールを取得して isConfirmed の状態を引き継ぐ
+    final existing = await getRaceSchedule(newSchedule.date);
+
+    if (existing != null) {
+      // 既存データの isConfirmed を raceId をキーにしてマップ化
+      final Map<String, bool> confirmedMap = {};
+      for (final venue in existing.venues) {
+        for (final race in venue.races) {
+          confirmedMap[race.raceId] = race.isConfirmed;
+        }
+      }
+
+      // 新しいスケジュールの各レースに既存の isConfirmed を引き継ぐ
+      for (final venue in newSchedule.venues) {
+        for (final race in venue.races) {
+          if (confirmedMap.containsKey(race.raceId)) {
+            race.isConfirmed = confirmedMap[race.raceId]!;
+          }
+        }
+      }
+    }
+
+    return await db.insert(
+      DbConstants.tableRaceSchedules,
+      {
+        'date': newSchedule.date,
+        'dayOfWeek': newSchedule.dayOfWeek,
+        'scheduleJson': raceScheduleToJson(newSchedule),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   // ===========================================================================
   // 出馬表キャッシュ (shutuba_table_cache)
   // ===========================================================================

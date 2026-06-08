@@ -137,9 +137,17 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         await _raceRepository.insertOrUpdateWeekCache(weekKey, dates);
       }
 
+      // ★修正: 初期ロード時のスケジュール保存も mergeRaceSchedule を使い
+      //        既存の isConfirmed を引き継ぐ
       if (schedule != null) {
-        _raceSchedules[schedule.date] = schedule;
-        await _raceRepository.insertOrUpdateRaceSchedule(schedule);
+        await _raceRepository.mergeRaceSchedule(schedule);
+        final merged = await _raceRepository.getRaceSchedule(schedule.date);
+        if (merged != null) {
+          _initializeStatusMapFromSchedule(merged);
+          _raceSchedules[merged.date] = merged;
+        } else {
+          _raceSchedules[schedule.date] = schedule;
+        }
       }
 
       if (mounted) {
@@ -186,9 +194,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     parsedDates.sort();
 
-    _availableDates = parsedDates
-        .map((d) => DateFormat('yyyy-MM-dd').format(d))
-        .toList();
+    _availableDates =
+        parsedDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
 
     if (parsedDates.isNotEmpty) {
       final lastDate = parsedDates.last;
@@ -200,14 +207,13 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       _weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
     }
 
-    // ★修正: 「今日」または「今日以降で最も近い日」を探すロジック
+    // 「今日」または「今日以降で最も近い日」を初期タブにする
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     int initialIndex = -1;
 
     for (int i = 0; i < _availableDates.length; i++) {
       final date = DateFormat('yyyy-MM-dd').parse(_availableDates[i]);
-      // 今日と一致、または今日より未来の日付が見つかったらそこを初期位置にする
       if (date.isAtSameMomentAs(today) || date.isAfter(today)) {
         initialIndex = i;
         break;
@@ -258,7 +264,13 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       RaceSchedule? schedule;
 
       if (forceRefresh) {
-        schedule = await _scraperService.scrapeRaceSchedule(date);
+        // ★修正1: スクレイピング結果を mergeRaceSchedule で isConfirmed を
+        //         引き継いでから保存し、DBから読み直して確定版を使う
+        final scraped = await _scraperService.scrapeRaceSchedule(date);
+        if (scraped != null) {
+          await _raceRepository.mergeRaceSchedule(scraped);
+          schedule = await _raceRepository.getRaceSchedule(dateString);
+        }
       } else {
         schedule = await _raceRepository.getRaceSchedule(dateString);
 
@@ -274,25 +286,54 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
               }
             }
             if (isIncomplete) {
-              schedule = await _scraperService.scrapeRaceSchedule(date);
+              // ★修正2: 不完全なキャッシュの補完時も mergeRaceSchedule を使う
+              final scraped = await _scraperService.scrapeRaceSchedule(date);
+              if (scraped != null) {
+                await _raceRepository.mergeRaceSchedule(scraped);
+                schedule = await _raceRepository.getRaceSchedule(dateString);
+              }
             }
           }
         }
 
-        schedule ??= await _scraperService.scrapeRaceSchedule(date);
+        if (schedule == null) {
+          // ★修正3: 新規取得時も mergeRaceSchedule 経由で保存する
+          final scraped = await _scraperService.scrapeRaceSchedule(date);
+          if (scraped != null) {
+            await _raceRepository.mergeRaceSchedule(scraped);
+            schedule = await _raceRepository.getRaceSchedule(dateString);
+          }
+        }
       }
 
       if (schedule != null) {
+        // ★修正4: DBから読み直したオブジェクトで isConfirmed を反映してから
+        //         画面を先に更新し、その後ステータス確認を非同期で走らせる
         _initializeStatusMapFromSchedule(schedule);
-        await _raceRepository.insertOrUpdateRaceSchedule(schedule);
         await _jyusyoService.reflectScheduleDataToJyusyoRaces(schedule);
-        _checkRaceStatusesForSchedule(schedule);
-      }
 
-      if (mounted) {
-        setState(() {
-          _raceSchedules[dateString] = schedule;
+        if (mounted) {
+          setState(() {
+            _raceSchedules[dateString] = schedule;
+          });
+        }
+
+        // ★修正5: ステータス確認完了後にDBと画面を再同期する
+        _checkRaceStatusesForSchedule(schedule).then((_) async {
+          final updated = await _raceRepository.getRaceSchedule(dateString);
+          if (mounted && updated != null) {
+            _initializeStatusMapFromSchedule(updated);
+            setState(() {
+              _raceSchedules[dateString] = updated;
+            });
+          }
         });
+      } else {
+        if (mounted) {
+          setState(() {
+            _raceSchedules[dateString] = null;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -318,7 +359,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
 
     final scheduleDate = DateFormat('yyyy-MM-dd').parse(scheduleDateStr);
-    final isPastDate = scheduleDate.isBefore(DateTime(now.year, now.month, now.day));
+    final isPastDate =
+    scheduleDate.isBefore(DateTime(now.year, now.month, now.day));
     final timeRegex = RegExp(r'(\d{1,2}):(\d{2})');
 
     bool needUpdateDb = false;
@@ -327,12 +369,16 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       for (final race in venue.races) {
         if (!mounted) return;
 
-        if (_raceStatusMap[race.raceId] == true) continue;
+        // ★修正6: _raceStatusMap だけでなく race.isConfirmed も確認して
+        //         確認済みレースの二重チェックを防ぐ
+        if (_raceStatusMap[race.raceId] == true || race.isConfirmed) continue;
 
         if (isPastDate) {
-          setState(() {
-            _raceStatusMap[race.raceId] = true;
-          });
+          if (mounted) {
+            setState(() {
+              _raceStatusMap[race.raceId] = true;
+            });
+          }
           race.isConfirmed = true;
           needUpdateDb = true;
           continue;
@@ -343,8 +389,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           if (match != null) {
             final hour = int.parse(match.group(1)!);
             final minute = int.parse(match.group(2)!);
-            final raceTime = DateTime(now.year, now.month, now.day, hour, minute);
-
+            final raceTime =
+            DateTime(now.year, now.month, now.day, hour, minute);
             if (now.isBefore(raceTime)) {
               continue;
             }
@@ -359,13 +405,14 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           final isConfirmed =
           await RaceResultScraperService.isRaceResultConfirmed(race.raceId);
 
-          if (mounted && isConfirmed) {
-            setState(() {
-              _raceStatusMap[race.raceId] = true;
-            });
-
+          if (isConfirmed) {
             race.isConfirmed = true;
             needUpdateDb = true;
+            if (mounted) {
+              setState(() {
+                _raceStatusMap[race.raceId] = true;
+              });
+            }
           }
         } catch (e) {
           print('Error checking status for ${race.raceId}: $e');
@@ -373,6 +420,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       }
     }
 
+    // ★修正7: isConfirmed 更新後は schedule オブジェクトが正しい状態なので
+    //         insertOrUpdateRaceSchedule でそのまま保存する
     if (needUpdateDb) {
       await _raceRepository.insertOrUpdateRaceSchedule(schedule);
     }
@@ -443,12 +492,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
         final schedule = _raceSchedules[dateStr];
 
-        final scheduleDate = DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        final bool isPastPageWithData =
-            scheduleDate.isBefore(today) && schedule != null;
-
         Widget content;
         if (schedule != null) {
           content = _buildRaceScheduleView(schedule);
@@ -469,14 +512,13 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           });
         }
 
-        if (isPastPageWithData) {
-          return content;
-        } else {
-          return RefreshIndicator(
-            onRefresh: () => _fetchDataForDate(dateStr, forceRefresh: true),
-            child: content,
-          );
-        }
+        // ★修正8: isPastPageWithData の分岐を廃止し、
+        //         過去日付でも常に RefreshIndicator で包む
+        //         （当日中に結果確定が走るため必要）
+        return RefreshIndicator(
+          onRefresh: () => _fetchDataForDate(dateStr, forceRefresh: true),
+          child: content,
+        );
       }).toList(),
     );
   }
@@ -507,9 +549,11 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
               labelColor: Colors.blue,
               unselectedLabelColor: Colors.black,
               tabs: _availableDates.map((dateStr) {
-                final date = DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
+                final date =
+                DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
                 final dayOfWeek = DateFormat.E('ja').format(date);
-                return Tab(text: '${DateFormat('M/d').format(date)}($dayOfWeek)');
+                return Tab(
+                    text: '${DateFormat('M/d').format(date)}($dayOfWeek)');
               }).toList(),
             )
                 : Center(
@@ -521,7 +565,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
               )
                   : const Text(
                 '読み込み中...',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -529,16 +574,17 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
             icon: const Icon(Icons.arrow_forward_ios),
             onPressed: _isLoading || _loadingTabs.isNotEmpty
                 ? null
-                : () => _calculateWeek(_currentDate.add(const Duration(days: 7))),
+                : () =>
+                _calculateWeek(_currentDate.add(const Duration(days: 7))),
           ),
         ],
       ),
     );
   }
 
-
   Widget _buildRaceScheduleView(RaceSchedule schedule) {
-    final scheduleDate = DateFormat('yyyy-MM-dd', 'en_US').parse(schedule.date);
+    final scheduleDate =
+    DateFormat('yyyy-MM-dd', 'en_US').parse(schedule.date);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final bool isFutureOrToday = !scheduleDate.isBefore(today);
@@ -601,7 +647,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                     decoration: BoxDecoration(
                                         border: Border(
                                             bottom: BorderSide(
-                                                color: Colors.grey.shade300))),
+                                                color:
+                                                Colors.grey.shade300))),
                                     child: Row(
                                       crossAxisAlignment:
                                       CrossAxisAlignment.center,
@@ -663,8 +710,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                                         color: getGradeColor(
                                                             race.grade),
                                                         borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
+                                                        BorderRadius
+                                                            .circular(8),
                                                       ),
                                                       child: Text(
                                                         race.grade,
@@ -672,7 +719,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                                             fontSize: 10,
                                                             color: Colors.white,
                                                             fontWeight:
-                                                            FontWeight.bold),
+                                                            FontWeight
+                                                                .bold),
                                                       ),
                                                     ),
                                                 ],
@@ -685,7 +733,8 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                                                   style: const TextStyle(
                                                       fontSize: 12,
                                                       color: Colors.black87),
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                  TextOverflow.ellipsis,
                                                 ),
                                             ],
                                           ),
@@ -702,6 +751,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                     ),
                   ),
                 ),
+                // 当日・未来のみ「引いて更新」のヒントを表示
                 if (isFutureOrToday)
                   const Padding(
                     padding: EdgeInsets.only(top: 16.0),
