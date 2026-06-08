@@ -15,6 +15,8 @@ import 'package:hetaumakeiba_v2/widgets/stats_match_tab.dart';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_analysis_tab.dart';
 
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+
 // ★追加：各カードウィジェットとアナライザーのインポート
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/payout_comparison_card.dart';
@@ -51,17 +53,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   // ★追加：グラフ描画のために過去レース(RaceResult)のリストを保持する変数
   List<RaceResult> _pastRaces = [];
-
-  final Map<String, String> bettingDict = {
-    '1': '単勝',
-    '2': '複勝',
-    '3': '枠連',
-    '4': '馬連',
-    '5': 'ワイド',
-    '6': '馬単',
-    '7': '3連複',
-    '8': '3連単',
-  };
 
   @override
   void initState() {
