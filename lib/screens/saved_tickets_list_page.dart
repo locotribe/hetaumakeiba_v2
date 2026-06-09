@@ -227,13 +227,25 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           ],
           rows: ordered.map((name) {
             final s = typeStats[name]!;
+            final hitRateStr = s.purchaseCount > 0
+                ? '${(s.hitCount / s.purchaseCount * 100).toStringAsFixed(1)}%'
+                : '-';
+            final recoveryRateStr = s.purchaseAmount > 0
+                ? '${(s.payoutAmount / s.purchaseAmount * 100).toStringAsFixed(1)}%'
+                : '-';
+            final payoutColor = s.payoutAmount > s.purchaseAmount
+                ? const Color(0xFF1A4314)
+                : Colors.black87;
             return DataRow(cells: [
               DataCell(Text(name, style: const TextStyle(fontSize: 11))),
               DataCell(Text('${s.purchaseCount}', style: const TextStyle(fontSize: 11))),
               DataCell(Text('¥${fmt(s.purchaseAmount)}', style: const TextStyle(fontSize: 11))),
-              DataCell(Text('-', style: const TextStyle(fontSize: 11, color: Colors.black38))),
-              DataCell(Text('-', style: const TextStyle(fontSize: 11, color: Colors.black38))),
-              DataCell(Text('-', style: const TextStyle(fontSize: 11, color: Colors.black38))),
+              DataCell(Text(
+                s.payoutAmount > 0 ? '¥${fmt(s.payoutAmount)}' : '-',
+                style: TextStyle(fontSize: 11, color: s.payoutAmount > 0 ? payoutColor : Colors.black38),
+              )),
+              DataCell(Text(hitRateStr, style: const TextStyle(fontSize: 11))),
+              DataCell(Text(recoveryRateStr, style: const TextStyle(fontSize: 11))),
             ]);
           }).toList(),
         ),

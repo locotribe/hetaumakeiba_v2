@@ -12,6 +12,8 @@ class HitResult {
   final List<String> hitDetails; // 的中した馬券の詳細リスト
   final int totalRefund;
   final List<String> refundDetails;
+  final Map<String, int> payoutByType;   // 券種別払戻金額
+  final Map<String, int> hitCountByType; // 券種別的中数
 
   HitResult({
     this.isHit = false,
@@ -19,6 +21,8 @@ class HitResult {
     this.hitDetails = const [],
     this.totalRefund = 0,
     this.refundDetails = const [],
+    this.payoutByType = const {},
+    this.hitCountByType = const {},
   });
 }
 
@@ -34,6 +38,8 @@ class HitChecker {
     List<String> hitDetails = [];
     int totalRefund = 0;
     List<String> refundDetails = [];
+    final Map<String, int> payoutByType = {};
+    final Map<String, int> hitCountByType = {};
 
     // 返還対象となる馬番と枠番のリストを作成
     final scratchedHorseNumbers = raceResult.horseResults
@@ -80,6 +86,8 @@ class HitChecker {
               totalPayout += payoutAmount;
               hitDetails.add('$ticketTypeName 的中！ ${matchingPayout.combination} -> $payoutAmount円');
               processedHitCombinations.add(comboKey);
+              payoutByType[ticketTypeName] = (payoutByType[ticketTypeName] ?? 0) + payoutAmount;
+              hitCountByType[ticketTypeName] = (hitCountByType[ticketTypeName] ?? 0) + 1;
             }
           }
         } else {
@@ -109,6 +117,8 @@ class HitChecker {
       hitDetails: hitDetails,
       totalRefund: totalRefund,
       refundDetails: refundDetails,
+      payoutByType: payoutByType,
+      hitCountByType: hitCountByType,
     );
     // --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
   }

@@ -6,10 +6,14 @@ import 'package:hetaumakeiba_v2/models/ticket_list_item.dart';
 class BettingTypeStats {
   final int purchaseCount;
   final int purchaseAmount;
+  final int payoutAmount;
+  final int hitCount;
 
   const BettingTypeStats({
     required this.purchaseCount,
     required this.purchaseAmount,
+    this.payoutAmount = 0,
+    this.hitCount = 0,
   });
 }
 
@@ -64,6 +68,8 @@ class TicketAggregator {
   static Map<String, BettingTypeStats> calculateTypeStats(List<TicketListItem> items) {
     final Map<String, int> countMap = {};
     final Map<String, int> amountMap = {};
+    final Map<String, int> payoutMap = {};
+    final Map<String, int> hitCountMap = {};
 
     for (final item in items) {
       final isOen = item.parsedTicket['方式'] == '応援馬券';
@@ -77,6 +83,14 @@ class TicketAggregator {
         }
         countMap['応援馬券'] = (countMap['応援馬券'] ?? 0) + 1;
         amountMap['応援馬券'] = (amountMap['応援馬券'] ?? 0) + totalAmount;
+        final oenPayout = item.hitResult?.payoutByType ?? {};
+        for (final entry in oenPayout.entries) {
+          payoutMap['応援馬券'] = (payoutMap['応援馬券'] ?? 0) + entry.value;
+        }
+        final oenHit = item.hitResult?.hitCountByType ?? {};
+        for (final entry in oenHit.entries) {
+          hitCountMap['応援馬券'] = (hitCountMap['応援馬券'] ?? 0) + entry.value;
+        }
       } else {
         for (final p in purchases) {
           final typeId = (p as Map<String, dynamic>)['式別'] as String?;
@@ -88,6 +102,15 @@ class TicketAggregator {
           countMap[typeName] = (countMap[typeName] ?? 0) + 1;
           amountMap[typeName] = (amountMap[typeName] ?? 0) + amount;
         }
+
+        final payoutByType = item.hitResult?.payoutByType ?? {};
+        for (final entry in payoutByType.entries) {
+          payoutMap[entry.key] = (payoutMap[entry.key] ?? 0) + entry.value;
+        }
+        final hitCountByType = item.hitResult?.hitCountByType ?? {};
+        for (final entry in hitCountByType.entries) {
+          hitCountMap[entry.key] = (hitCountMap[entry.key] ?? 0) + entry.value;
+        }
       }
     }
 
@@ -96,6 +119,8 @@ class TicketAggregator {
         typeName: BettingTypeStats(
           purchaseCount: countMap[typeName]!,
           purchaseAmount: amountMap[typeName]!,
+          payoutAmount: payoutMap[typeName] ?? 0,
+          hitCount: hitCountMap[typeName] ?? 0,
         ),
     };
   }
