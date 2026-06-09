@@ -21,6 +21,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
   List<TicketListItem> _filteredTicketItems = [];
 
   bool _isYearSummaryExpanded = false;
+  bool _isMonthTypeStatsExpanded = false;
 
   int? _selectedYear;
   int? _selectedMonth;
@@ -167,12 +168,21 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           child: Column(
             children: [
               _buildYearSelector(),
-              _buildYearlySummaryPanel(),
-              const SizedBox(height: 16),
-              _buildMonthSelector(),
-              const SizedBox(height: 16),
-              _buildMonthBanner(),
-              const SizedBox(height: 16),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildYearlySummaryPanel(),
+                      const SizedBox(height: 16),
+                      _buildMonthSelector(),
+                      const SizedBox(height: 16),
+                      _buildMonthBanner(),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ),
               Expanded(
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
@@ -188,6 +198,49 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     );
   }
 
+  Widget _buildTypeStatsTable(Map<String, BettingTypeStats> typeStats) {
+    const typeOrder = ['単勝', '複勝', '枠連', '馬連', 'ワイド', '馬単', '3連複', '3連単'];
+    String fmt(int v) => v.toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+
+    final ordered = [
+      ...typeOrder.where((t) => typeStats.containsKey(t)),
+      ...typeStats.keys.where((t) => !typeOrder.contains(t)),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          dataRowMinHeight: 28,
+          dataRowMaxHeight: 28,
+          headingRowHeight: 28,
+          columnSpacing: 12,
+          columns: const [
+            DataColumn(label: Text('券種', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('枚数', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)), numeric: true),
+            DataColumn(label: Text('購入金額', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)), numeric: true),
+            DataColumn(label: Text('払戻', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)), numeric: true),
+            DataColumn(label: Text('的中率', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)), numeric: true),
+            DataColumn(label: Text('回収率', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)), numeric: true),
+          ],
+          rows: ordered.map((name) {
+            final s = typeStats[name]!;
+            return DataRow(cells: [
+              DataCell(Text(name, style: const TextStyle(fontSize: 11))),
+              DataCell(Text('${s.purchaseCount}', style: const TextStyle(fontSize: 11))),
+              DataCell(Text('¥${fmt(s.purchaseAmount)}', style: const TextStyle(fontSize: 11))),
+              DataCell(Text('-', style: const TextStyle(fontSize: 11, color: Colors.black38))),
+              DataCell(Text('-', style: const TextStyle(fontSize: 11, color: Colors.black38))),
+              DataCell(Text('-', style: const TextStyle(fontSize: 11, color: Colors.black38))),
+            ]);
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildYearSelector() {
     const activeColor = Color(0xFF1A4314);
 
@@ -200,7 +253,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           if (newYear != _selectedYear) {
             setState(() {
               _selectedYear = newYear;
-              _isYearSummaryExpanded = false; // 年が変わったら閉じる（または維持でも可）
+              _isYearSummaryExpanded = false;
               _filterTickets();
             });
           }
@@ -333,6 +386,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
     // Use TicketAggregator
     final stats = TicketAggregator.calculateMonthlyStats(_filteredTicketItems);
+    final typeStats = TicketAggregator.calculateTypeStats(_filteredTicketItems);
 
     // 金額フォーマット用ヘルパー
     String formatMoney(int amount) {
@@ -354,7 +408,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
     final englishMonth = _englishMonths[_selectedMonth! - 1];
 
-    return Container(
+    final bannerContainer = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF1A4314),
@@ -449,6 +503,40 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           ),
         ],
       ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        bannerContainer,
+        if (typeStats.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          GestureDetector(
+            onTap: () => setState(() => _isMonthTypeStatsExpanded = !_isMonthTypeStatsExpanded),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text('券種別', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                Icon(
+                  _isMonthTypeStatsExpanded ? Icons.expand_less : Icons.expand_more,
+                  size: 16,
+                  color: Colors.grey.shade600,
+                ),
+              ],
+            ),
+          ),
+          if (_isMonthTypeStatsExpanded)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: _buildTypeStatsTable(typeStats),
+            ),
+        ],
+      ],
     );
   }
 
@@ -692,6 +780,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       );
     }
 
+    final typeStats = TicketAggregator.calculateTypeStats(yearlyItems);
+
     // 変数初期化
     int totalPurchase = 0;
     int totalPayout = 0;
@@ -910,6 +1000,20 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
               ],
             ),
           ),
+          if (typeStats.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                '券種別集計',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 4),
+            _buildTypeStatsTable(typeStats),
+          ],
         ],
       ),
     );
