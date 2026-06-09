@@ -82,7 +82,8 @@ class TicketAggregator {
           final typeId = (p as Map<String, dynamic>)['式別'] as String?;
           if (typeId == null) continue;
           final typeName = bettingDict[typeId] ?? typeId;
-          final amount = (p['購入金額'] as int?) ?? 0;
+          final combCount = (p['組合せ数'] as int?) ?? 1;
+          final amount = ((p['購入金額'] as int?) ?? 0) * combCount;
 
           countMap[typeName] = (countMap[typeName] ?? 0) + 1;
           amountMap[typeName] = (amountMap[typeName] ?? 0) + amount;
