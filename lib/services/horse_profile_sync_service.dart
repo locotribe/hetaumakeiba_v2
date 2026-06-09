@@ -1,5 +1,6 @@
 // lib/services/horse_profile_sync_service.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/services/horse_profile_scraper_service.dart';
@@ -20,7 +21,7 @@ class HorseProfileSyncService {
       List<PredictionHorseDetail> horses,
       Function(String horseId) onProfileUpdated,
       ) async {
-    print('DEBUG: syncMissingHorseProfiles started for ${horses.length} horses via Manager.');
+    debugPrint('DEBUG: syncMissingHorseProfiles started for ${horses.length} horses via Manager.');
 
     for (final horse in horses) {
       final existingProfile = await _horseRepository.getHorseProfile(horse.horseId);
@@ -29,14 +30,14 @@ class HorseProfileSyncService {
         _scrapingManager.addRequest(
             'プロフィール取得: ${horse.horseName}',
                 () async {
-              print('DEBUG: Executing queued profile fetch for: ${horse.horseName} (${horse.horseId})');
+              debugPrint('DEBUG: Executing queued profile fetch for: ${horse.horseName} (${horse.horseId})');
               final newProfile = await HorseProfileScraperService.scrapeAndSaveProfile(horse.horseId);
 
               if (newProfile != null) {
-                print('DEBUG: Profile synced for ${horse.horseId}, calling callback.');
+                debugPrint('DEBUG: Profile synced for ${horse.horseId}, calling callback.');
                 onProfileUpdated(horse.horseId);
               } else {
-                print('DEBUG: Failed to sync profile for ${horse.horseId}');
+                debugPrint('DEBUG: Failed to sync profile for ${horse.horseId}');
               }
             }
         );

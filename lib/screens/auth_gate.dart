@@ -26,15 +26,15 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _checkLoginStatus() async {
-    print('[AUTH_GATE] Checking login status...');
+    debugPrint('[AUTH_GATE] Checking login status...');
     final prefs = await SharedPreferences.getInstance();
     final userUuid = prefs.getString('logged_in_user_uuid');
-    print('[AUTH_GATE] Found UUID in SharedPreferences: $userUuid');
+    debugPrint('[AUTH_GATE] Found UUID in SharedPreferences: $userUuid');
 
     User? user;
     if (userUuid != null) {
       user = await _userRepository.getUserByUuid(userUuid);
-      print('[AUTH_GATE] User fetched from DB with UUID: ${user?.username}');
+      debugPrint('[AUTH_GATE] User fetched from DB with UUID: ${user?.username}');
     }
 
     // グローバルなlocalUserIdも設定
@@ -50,7 +50,7 @@ class _AuthGateState extends State<AuthGate> {
     final prefs = await SharedPreferences.getInstance();
     // ログインに成功したユーザーのuuidをセッション情報として保存
     await prefs.setString('logged_in_user_uuid', user.uuid);
-    print('[AUTH_GATE] Saved UUID to SharedPreferences: ${user.uuid}');
+    debugPrint('[AUTH_GATE] Saved UUID to SharedPreferences: ${user.uuid}');
 
     // グローバルなlocalUserIdも更新
     localUserId = user.uuid;

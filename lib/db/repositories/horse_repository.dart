@@ -1,5 +1,6 @@
 // lib/db/repositories/horse_repository.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:hetaumakeiba_v2/db/db_provider.dart';
 import 'package:hetaumakeiba_v2/db/db_constants.dart';
@@ -158,7 +159,7 @@ class HorseRepository {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     } catch (e) {
-      print('DEBUG: [ERROR] DB insertOrUpdateHorseProfile failed: $e');
+      debugPrint('DEBUG: [ERROR] DB insertOrUpdateHorseProfile failed: $e');
       return -1;
     }
   }
@@ -177,7 +178,7 @@ class HorseRepository {
       }
       return null;
     } catch (e) {
-      print('DEBUG: [ERROR] getHorseProfile failed: $e');
+      debugPrint('DEBUG: [ERROR] getHorseProfile failed: $e');
       return null;
     }
   }
@@ -234,7 +235,7 @@ class HorseRepository {
       );
       return maps.map((map) => map['horseId'] as String).toList();
     } catch (e) {
-      print('DEBUG: [ERROR] getAllHorseIds failed: $e');
+      debugPrint('DEBUG: [ERROR] getAllHorseIds failed: $e');
       return [];
     }
   }

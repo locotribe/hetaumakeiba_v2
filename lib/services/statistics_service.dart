@@ -1,5 +1,6 @@
 // lib/services/statistics_service.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
@@ -84,10 +85,10 @@ class StatisticsService {
     );
 
     if (pastRaceIdCandidates.isEmpty) {
-      print('警告: $raceName の過去レースID候補が見つかりませんでした。');
+      debugPrint('警告: $raceName の過去レースID候補が見つかりませんでした。');
       return [];
     }
-    print('【情報】${pastRaceIdCandidates.length}件の過去レースID候補が見つかりました。');
+    debugPrint('【情報】${pastRaceIdCandidates.length}件の過去レースID候補が見つかりました。');
 
     final List<RaceResult> pastResults = [];
     for (final pastId in pastRaceIdCandidates) {
@@ -95,7 +96,7 @@ class StatisticsService {
       RaceResult? result = await _raceRepo.getRaceResult(pastId);
       if (result == null) {
         // DBになければスクレイピング
-        print('DBに無いためWebから取得: $pastId');
+        debugPrint('DBに無いためWebから取得: $pastId');
         result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
         await Future.delayed(const Duration(milliseconds: 200)); // サーバー負荷軽減
       }
@@ -104,7 +105,7 @@ class StatisticsService {
       pastResults.add(result);
     }
 
-    print('【最終結果】${pastResults.length}件の過去レース結果を取得しました。');
+    debugPrint('【最終結果】${pastResults.length}件の過去レース結果を取得しました。');
 
     return pastResults;
   }

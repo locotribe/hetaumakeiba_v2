@@ -198,7 +198,7 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
       await _fetchAndAnalyze();
 
     } catch (e) {
-      print('血統情報の取得中にエラーが発生しました: $e');
+      debugPrint('血統情報の取得中にエラーが発生しました: $e');
     } finally {
       if (mounted) {
         setState(() {

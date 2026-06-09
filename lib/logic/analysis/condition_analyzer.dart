@@ -1,5 +1,6 @@
 // lib/logic/analysis/condition_analyzer.dart
 
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/models/analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
@@ -159,7 +160,7 @@ class ConditionAnalyzer {
         return FitnessRating.poor; // 平均の0.9倍未満
       return FitnessRating.average;
     } catch (e) {
-      print('Error parsing gate fit stats: $e');
+      debugPrint('Error parsing gate fit stats: $e');
       return FitnessRating.unknown;
     }
   }

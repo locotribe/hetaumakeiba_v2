@@ -224,7 +224,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           }
         }
       } catch (e) {
-        print('Auto-check result error: $e');
+        debugPrint('Auto-check result error: $e');
       }
 
       return;

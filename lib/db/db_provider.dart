@@ -1,5 +1,6 @@
 // lib/db/db_provider.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/db/db_constants.dart';
@@ -313,12 +314,12 @@ class DbProvider {
     if (oldVersion < 2) {
       try {
         await db.execute('ALTER TABLE ${DbConstants.tableRaceStatistics} ADD COLUMN analyzedRacesJson TEXT');
-      } catch (e) { print('Migration error (v1->v2): $e'); }
+      } catch (e) { debugPrint('Migration error (v1->v2): $e'); }
     }
     if (oldVersion < 3) {
       try {
         await db.execute('ALTER TABLE ${DbConstants.tableFeaturedRaces} ADD COLUMN shutubaHorsesJson TEXT');
-      } catch (e) { print('Migration error (v2->v3): $e'); }
+      } catch (e) { debugPrint('Migration error (v2->v3): $e'); }
     }
     if (oldVersion < 5) {
       try {
@@ -330,7 +331,7 @@ class DbProvider {
             ffName TEXT, fmName TEXT, mfName TEXT, mmName TEXT, lastUpdated TEXT
           )
         ''');
-      } catch (e) { print('DEBUG: Migration error (v4->v5): $e'); }
+      } catch (e) { debugPrint('DEBUG: Migration error (v4->v5): $e'); }
     }
     if (oldVersion < 6) {
       try {
@@ -341,7 +342,7 @@ class DbProvider {
             conditions TEXT, weight TEXT, source_url TEXT, UNIQUE(date, race_name)
           )
         ''');
-      } catch (e) { print('DEBUG: Migration error (v5->v6): $e'); }
+      } catch (e) { debugPrint('DEBUG: Migration error (v5->v6): $e'); }
     }
     if (oldVersion < 7) {
       try {
@@ -354,7 +355,7 @@ class DbProvider {
             UNIQUE(year, date, race_name)
           )
         ''');
-      } catch (e) { print('DEBUG: Migration error (v6->v7): $e'); }
+      } catch (e) { debugPrint('DEBUG: Migration error (v6->v7): $e'); }
     }
     if (oldVersion < 8) {
       try {
@@ -370,7 +371,7 @@ class DbProvider {
           }
         }
         await batch.commit(noResult: true);
-      } catch (e) { print('DEBUG: Migration error (v7->v8): $e'); }
+      } catch (e) { debugPrint('DEBUG: Migration error (v7->v8): $e'); }
     }
     if (oldVersion < 9) {
       try {
@@ -381,7 +382,7 @@ class DbProvider {
             moisture_dirt_goal REAL, moisture_dirt_4c REAL
           )
         ''');
-      } catch (e) { print('DEBUG: Migration error (v8->v9): $e'); }
+      } catch (e) { debugPrint('DEBUG: Migration error (v8->v9): $e'); }
     }
     if (oldVersion < 10) {
       try {
@@ -395,7 +396,7 @@ class DbProvider {
             UNIQUE(userId, raceId) ON CONFLICT REPLACE
           )
         ''');
-      } catch (e) { print('DEBUG: Migration error (v9->v10): $e'); }
+      } catch (e) { debugPrint('DEBUG: Migration error (v9->v10): $e'); }
     }
 
     if (oldVersion < 11) {
@@ -417,7 +418,7 @@ class DbProvider {
             PRIMARY KEY (${DbConstants.colHorseId}, ${DbConstants.colTrainingDate}, ${DbConstants.colTrainingTime}, ${DbConstants.colTrackType}, ${DbConstants.colLocation})
           )
         ''');
-      } catch (e) { print('DEBUG: Migration error (v10->v11): $e'); }
+      } catch (e) { debugPrint('DEBUG: Migration error (v10->v11): $e'); }
     }
 
     if (oldVersion < 12) {
@@ -449,14 +450,14 @@ class DbProvider {
             ${DbConstants.colResultLastUpdated} TEXT
           )
         ''');
-      } catch (e) { print('DEBUG: Migration error (v11->v12): $e'); }
+      } catch (e) { debugPrint('DEBUG: Migration error (v11->v12): $e'); }
     }
     if (oldVersion < 13) {
       try {
         await db.execute('DROP TABLE IF EXISTS analytics_aggregates');
         // [追加] horse_profilesテーブルにgenderカラムを追加 (v.13)
         await db.execute('ALTER TABLE ${DbConstants.tableHorseProfiles} ADD COLUMN gender TEXT');
-      } catch (e) { print('Migration error (v12->v13): $e'); }
+      } catch (e) { debugPrint('Migration error (v12->v13): $e'); }
     }
   }
 

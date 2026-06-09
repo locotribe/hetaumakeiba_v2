@@ -1,5 +1,6 @@
 // lib/services/cloud_sync_service.dart
 
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,7 +40,7 @@ class CloudSyncService {
       }
       return false;
     } catch (e) {
-      print('CloudSyncService checkSyncRequired Error: $e');
+      debugPrint('CloudSyncService checkSyncRequired Error: $e');
       return false;
     }
   }
@@ -68,7 +69,7 @@ class CloudSyncService {
       }
       return false;
     } catch (e) {
-      print('CloudSyncService importFromCloud Error: $e');
+      debugPrint('CloudSyncService importFromCloud Error: $e');
       return false;
     }
   }

@@ -1,4 +1,5 @@
 // lib/services/past_race_id_fetcher_service.dart
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
@@ -46,7 +47,7 @@ class PastRaceIdResult {
 class PastRaceIdFetcherService {
   /// 踏み台ロジックを使って過去レース一覧を取得するメインメソッド
   Future<PastRaceIdResult> fetchPastRaceIds(String baseRaceId, String raceName) async {
-    print("DEBUG: fetchPastRaceIds called for raceId: $baseRaceId");
+    debugPrint("DEBUG: fetchPastRaceIds called for raceId: $baseRaceId");
 
     // Step 1: past10.html から「踏み台」となる過去IDを取得
     // ※raceNameは引数として受け取るが、新ロジックではIDのみで判定するため使用しない
@@ -54,16 +55,16 @@ class PastRaceIdFetcherService {
     try {
       stepStoneId = await _fetchStepStoneIdFromPast10(baseRaceId);
     } catch (e) {
-      print("DEBUG: Failed to fetch step stone ID: $e");
+      debugPrint("DEBUG: Failed to fetch step stone ID: $e");
       return PastRaceIdResult(FetchStatus.empty, message: "Step stone ID not found");
     }
 
     if (stepStoneId == null) {
-      print("DEBUG: No step stone ID found.");
+      debugPrint("DEBUG: No step stone ID found.");
       return PastRaceIdResult(FetchStatus.empty);
     }
 
-    print("DEBUG: Step stone ID found: $stepStoneId. Proceeding to DB...");
+    debugPrint("DEBUG: Step stone ID found: $stepStoneId. Proceeding to DB...");
 
     // Step 2: 踏み台IDを使ってDBページへ行き、一覧リストのURLを取得してデータ取得
     return await _fetchListFromDb(stepStoneId);
@@ -72,7 +73,7 @@ class PastRaceIdFetcherService {
   /// 追加読み込み用メソッド (ページネーション)
   Future<List<PastRaceItem>> fetchMorePastRaces(String baseListUrl, int page) async {
     final targetUrl = "$baseListUrl&page=$page";
-    print("DEBUG: Fetching more races from: $targetUrl");
+    debugPrint("DEBUG: Fetching more races from: $targetUrl");
 
     final htmlContent = await _fetchHtmlContent(targetUrl);
     if (htmlContent == null) return [];
@@ -111,7 +112,7 @@ class PastRaceIdFetcherService {
       ),
       onConsoleMessage: (controller, consoleMessage) {
         if (consoleMessage.message.startsWith("DEBUG_JS:")) {
-          print(consoleMessage.message);
+          debugPrint(consoleMessage.message);
         }
       },
       onLoadStop: (controller, url) async {
@@ -222,7 +223,7 @@ class PastRaceIdFetcherService {
             return;
           }
 
-          print("DEBUG: List URL found: $listUrl");
+          debugPrint("DEBUG: List URL found: $listUrl");
 
           completer.complete(PastRaceIdResult(FetchStatus.success, baseListUrl: listUrl));
 
@@ -298,7 +299,7 @@ class PastRaceIdFetcherService {
       await browser.run();
       return await completer.future;
     } catch (e) {
-      print("DEBUG: Failed to fetch HTML content: $e");
+      debugPrint("DEBUG: Failed to fetch HTML content: $e");
       return null;
     } finally {
       await browser.dispose();

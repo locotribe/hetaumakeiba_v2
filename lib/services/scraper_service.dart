@@ -1,5 +1,6 @@
 // lib/services/scraper_service.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
@@ -29,7 +30,7 @@ class ScraperService {
       final response = await http.get(Uri.parse(shutubaTableUrl), headers: _headers);
 
       if (response.statusCode != 200) {
-        print('HTTPリクエストに失敗しました: Status code ${response.statusCode} for shutuba page $shutubaTableUrl');
+        debugPrint('HTTPリクエストに失敗しました: Status code ${response.statusCode} for shutuba page $shutubaTableUrl');
         return [];
       }
 
@@ -49,14 +50,14 @@ class ScraperService {
       }
       return horseIds.toSet().toList();
     } catch (e) {
-      print('[ERROR]出馬表ページからのホースID抽出中にエラーが発生しました: $e');
+      debugPrint('[ERROR]出馬表ページからのホースID抽出中にエラーが発生しました: $e');
       return [];
     }
   }
 
   /// 過去レース結果がない馬の成績データをバックグラウンドで取得し同期する
   static Future<void> syncNewHorseData(List<FeaturedRace> races) async {
-    print('[Horse Data Sync Start] 競走馬データの同期を開始します...');
+    debugPrint('[Horse Data Sync Start] 競走馬データの同期を開始します...');
     final HorseRepository horseRepository = HorseRepository();
     try {
       for (final race in races) {
@@ -72,7 +73,7 @@ class ScraperService {
           if (existingRecord != null && existingRecord.raceId.isNotEmpty) {
             continue;
           }
-          print('競走馬データ取得/更新中... Horse ID: $horseId');
+          debugPrint('競走馬データ取得/更新中... Horse ID: $horseId');
           final newRecords = await HorsePerformanceScraperService.scrapeHorsePerformance(horseId);
 
           // リポジトリ経由で保存（一括保存）
@@ -82,9 +83,9 @@ class ScraperService {
         }
       }
     } catch (e) {
-      print('[Horse Data Sync Error] 競走馬のデータ同期中にエラーが発生しました: $e');
+      debugPrint('[Horse Data Sync Error] 競走馬のデータ同期中にエラーが発生しました: $e');
     }
-    print('[Horse Data Sync End] 競走馬データの同期が完了しました。');
+    debugPrint('[Horse Data Sync End] 競走馬データの同期が完了しました。');
   }
 
   /// レース名から過去10年分のレースIDリストをスクレイピングする (統計分析機能で使用)
@@ -98,7 +99,7 @@ class ScraperService {
     try {
       final response = await http.get(Uri.parse(searchUrl), headers: _headers);
       if (response.statusCode != 200) {
-        print('レース名検索ページの取得に失敗: $searchUrl (Status: ${response.statusCode})');
+        debugPrint('レース名検索ページの取得に失敗: $searchUrl (Status: ${response.statusCode})');
         return [];
       }
 
@@ -134,7 +135,7 @@ class ScraperService {
       }
       return pastIds;
     } catch (e) {
-      print('Error fetching past race IDs by name: $e');
+      debugPrint('Error fetching past race IDs by name: $e');
       return [];
     }
   }
@@ -173,7 +174,7 @@ class ScraperService {
           });
         }
       } catch (e) {
-        print('[ERROR] DB検索結果の行解析エラー: $e');
+        debugPrint('[ERROR] DB検索結果の行解析エラー: $e');
         continue;
       }
     }

@@ -1,5 +1,6 @@
 // lib/db/repositories/race_repository.dart
 
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:hetaumakeiba_v2/db/db_provider.dart';
@@ -90,7 +91,7 @@ class RaceRepository {
             matches.add(result);
           }
         } catch (e) {
-          print('Error parsing race result in searchRaceResultsByName: $e');
+          debugPrint('Error parsing race result in searchRaceResultsByName: $e');
         }
       }
     }

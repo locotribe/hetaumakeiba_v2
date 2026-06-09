@@ -91,7 +91,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             newMonthsWithData[year] = {month};
           }
         } catch (e) {
-          print('日付の解析エラー: ${item.raceDate}');
+          debugPrint('日付の解析エラー: ${item.raceDate}');
         }
       }
     }

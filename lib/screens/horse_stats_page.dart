@@ -194,7 +194,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             await _horseRepository.insertOrUpdateHorsePerformance(record);
           }
         } catch (e) {
-          print('Error scraping horse ${horse.horseName} (${horse.horseId}): $e');
+          debugPrint('Error scraping horse ${horse.horseName} (${horse.horseId}): $e');
         }
 
         final records = await _horseRepository.getHorsePerformanceRecords(horse.horseId);
@@ -227,7 +227,7 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             fetchedResults[raceId] = result;
             await Future.delayed(const Duration(milliseconds: 200));
           } catch (e) {
-            print('Failed to fetch race result for $raceId: $e');
+            debugPrint('Failed to fetch race result for $raceId: $e');
           }
         }
       }

@@ -68,7 +68,7 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
     final formattedDate = _formatDateForApi(widget.raceDate);
     final horseIds = widget.horses.map((h) => h.horseId).toList();
 
-    print('DEBUG: [Training API] Request Date: $formattedDate, RaceID: ${widget.raceId}');
+    debugPrint('DEBUG: [Training API] Request Date: $formattedDate, RaceID: ${widget.raceId}');
 
     ScrapingManager().addRequest('調教データ取得', () async {
       await _service.fetchAndSaveTrainingData(

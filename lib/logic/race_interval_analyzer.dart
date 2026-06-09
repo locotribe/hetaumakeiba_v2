@@ -1,5 +1,6 @@
 // lib/logic/race_interval_analyzer.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 class RaceIntervalAnalyzer {
@@ -13,7 +14,7 @@ class RaceIntervalAnalyzer {
         return DateFormat('yyyy年M月d日').parse(dateStr);
       }
     } catch (e) {
-      print('日付の解析に失敗しました: $dateStr, エラー: $e');
+      debugPrint('日付の解析に失敗しました: $dateStr, エラー: $e');
     }
     return null;
   }

@@ -97,11 +97,11 @@ class TicketProcessingService {
                 }
                 await Future.delayed(const Duration(milliseconds: 500));
               } catch (e) {
-                print(
+                debugPrint(
                     'ERROR: 競走馬ID ${horse.horseId} の成績スクレイピングまたは保存中にエラーが発生しました: $e');
               }
             } else {
-              print('DEBUG: 競走馬ID ${horse.horseId} の最新成績は既に存在します。スキップします。');
+              debugPrint('DEBUG: 競走馬ID ${horse.horseId} の最新成績は既に存在します。スキップします。');
             }
           }
         } else {
@@ -125,7 +125,7 @@ class TicketProcessingService {
         }
       }
     } catch (e) {
-      print('ERROR: バックグラウンドスクレイピング処理全体でエラーが発生しました: $e');
+      debugPrint('ERROR: バックグラウンドスクレイピング処理全体でエラーが発生しました: $e');
     }
   }
 }

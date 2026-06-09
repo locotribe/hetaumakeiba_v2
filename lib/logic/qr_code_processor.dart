@@ -160,7 +160,7 @@ class QrCodeProcessor {
     // スクレイピングはawaitせずに実行（Fire-and-forget）
     _ticketProcessingService.triggerBackgroundScraping(userId, parsedData).catchError((e) {
       // バックグラウンド処理のエラーはコンソールに出力するのみ
-      print('ERROR: バックグラウンドスクレイピング中にエラーが発生しました: $e');
+      debugPrint('ERROR: バックグラウンドスクレイピング中にエラーが発生しました: $e');
     });
   }
 }

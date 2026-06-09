@@ -1,5 +1,7 @@
 // lib/logic/combination_calculator.dart
 
+import 'package:flutter/foundation.dart';
+
 const Map<String, String> bettingDict = {
   "1": "単勝", "2": "複勝", "3": "枠連", "5": "馬連", "6": "馬単",
   "7": "ワイド", "8": "3連複", "9": "3連単",
@@ -191,7 +193,7 @@ void generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMethod
         allCombinations = (di['馬番'] as List).map((c) => (c as List).cast<int>()).toList();
         break;
     }
-    print('DEBUG: 生成直後の組み合わせ (ソート前): $allCombinations');
+    debugPrint('DEBUG: 生成直後の組み合わせ (ソート前): $allCombinations');
 
     if (['馬連', 'ワイド', '枠連', '3連複'].contains(ticketType)) {
       final unique = <String, List<int>>{};
@@ -200,13 +202,13 @@ void generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMethod
         unique[sorted.join('-')] = sorted;
       }
       di['all_combinations'] = unique.values.toList();
-      print('DEBUG: DB保存直前の組み合わせ (3連複など): ${di['all_combinations']}');
+      debugPrint('DEBUG: DB保存直前の組み合わせ (3連複など): ${di['all_combinations']}');
     } else {
       di['all_combinations'] = allCombinations;
-      print('DEBUG: DB保存直前の組み合わせ (3連単など): ${di['all_combinations']}');
+      debugPrint('DEBUG: DB保存直前の組み合わせ (3連単など): ${di['all_combinations']}');
     }
   } catch (e) {
-    print('Error generating combinations for $ticketType ($bettingMethod): $e');
+    debugPrint('Error generating combinations for $ticketType ($bettingMethod): $e');
     di['all_combinations'] = [];
   }
 }

@@ -1,5 +1,6 @@
 // lib/services/qr_camera_service.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 class QrCameraService {
@@ -30,9 +31,9 @@ class QrCameraService {
       try {
         await _scannerController.start();
         _isScannerActive = true;
-        print('Scanner started');
+        debugPrint('Scanner started');
       } catch (e) {
-        print('Error starting scanner: $e');
+        debugPrint('Error starting scanner: $e');
       }
     }
   }
@@ -42,15 +43,15 @@ class QrCameraService {
       try {
         await _scannerController.stop();
         _isScannerActive = false;
-        print('Scanner stopped');
+        debugPrint('Scanner stopped');
       } catch (e) {
-        print('Error stopping scanner: $e');
+        debugPrint('Error stopping scanner: $e');
       }
     }
   }
 
   void dispose() {
     _scannerController.dispose();
-    print('Scanner controller disposed');
+    debugPrint('Scanner controller disposed');
   }
 }

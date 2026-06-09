@@ -135,7 +135,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
           final parsed = json.decode(qr.parsedDataJson) as Map<String, dynamic>;
           parsedTickets.add(parsed);
         } catch (e) {
-          print('Error parsing ticket: $e');
+          debugPrint('Error parsing ticket: $e');
         }
       }
 
@@ -203,7 +203,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
         raceResult: raceResult,
       );
     } catch (e) {
-      print('ページデータの読み込みに失敗しました: $e');
+      debugPrint('ページデータの読み込みに失敗しました: $e');
       throw Exception('データの表示に失敗しました。');
     }
   }
@@ -221,7 +221,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
       }
 
       final raceId = widget.raceId;
-      print('DEBUG: Refreshing race data for raceId: $raceId');
+      debugPrint('DEBUG: Refreshing race data for raceId: $raceId');
 
       // 1. レース結果のスクレイピング更新
       await RaceResultScraperService.scrapeRaceDetails(
@@ -248,7 +248,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
         );
       }
     } catch (e) {
-      print('ERROR: Failed to refresh race data: $e');
+      debugPrint('ERROR: Failed to refresh race data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('更新に失敗しました: $e')),

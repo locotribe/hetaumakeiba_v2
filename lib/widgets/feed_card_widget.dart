@@ -36,7 +36,7 @@ class _FeedCardState extends State<FeedCard> {
           decodedBody = utf8.decode(response.bodyBytes);
         } catch (e) {
           // UTF-8で失敗した場合、EUC-JPとしてデコードを試みる
-          print('Failed to decode as UTF-8, trying EUC-JP...');
+          debugPrint('Failed to decode as UTF-8, trying EUC-JP...');
           decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
         }
 
@@ -51,7 +51,7 @@ class _FeedCardState extends State<FeedCard> {
         throw Exception('Failed to load feed');
       }
     } catch (e) {
-      print('Error fetching or parsing feed for ${widget.feed.title}: $e');
+      debugPrint('Error fetching or parsing feed for ${widget.feed.title}: $e');
       rethrow;
     }
   }
@@ -60,7 +60,7 @@ class _FeedCardState extends State<FeedCard> {
     if (urlString == null) return;
     final Uri url = Uri.parse(urlString);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      print('Could not launch $url');
+      debugPrint('Could not launch $url');
     }
   }
 

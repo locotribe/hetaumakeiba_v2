@@ -1,4 +1,5 @@
 // lib/services/race_schedule_scraper_service.dart
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -35,7 +36,7 @@ class RaceScheduleScraperService {
 
     final timer = Timer(const Duration(seconds: 25), () {
       if (!completer.isCompleted) {
-        print("Scraping timed out for $url");
+        debugPrint("Scraping timed out for $url");
         if (headlessWebView != null) headlessWebView!.dispose();
         completer.complete((<String>[], null));
       }
@@ -158,7 +159,7 @@ class RaceScheduleScraperService {
       await headlessWebView.run();
       return await completer.future;
     } catch (e) {
-      print("Error in _scrapeDataForDate for $url: $e");
+      debugPrint("Error in _scrapeDataForDate for $url: $e");
       return (<String>[], null);
     } finally {
       timer.cancel();
@@ -249,7 +250,7 @@ class RaceScheduleScraperService {
       await headlessWebView.run();
       return await completer.future;
     } catch (e) {
-      print("Error in scrapeRaceSchedule for $url: $e");
+      debugPrint("Error in scrapeRaceSchedule for $url: $e");
       return null;
     } finally {
       timer.cancel();

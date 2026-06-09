@@ -264,7 +264,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         }
       }
     } catch (e) {
-      print('出馬表データの読み込みに失敗: $e');
+      debugPrint('出馬表データの読み込みに失敗: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;

@@ -1,5 +1,6 @@
 // lib/services/scraping_manager.dart
 
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 /// スクレイピングの進捗状況を表すクラス
@@ -87,10 +88,10 @@ class ScrapingManager {
 
     try {
       // タスク実行
-      print('ScrapingManager: Start processing -> ${currentTask.label}');
+      debugPrint('ScrapingManager: Start processing -> ${currentTask.label}');
       await currentTask.task();
     } catch (e) {
-      print('ScrapingManager: Error in task ${currentTask.label}: $e');
+      debugPrint('ScrapingManager: Error in task ${currentTask.label}: $e');
     } finally {
       // 指定間隔待機（サーバー負荷軽減）
       await Future.delayed(const Duration(milliseconds: _intervalMs));

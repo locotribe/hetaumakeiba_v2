@@ -1,5 +1,6 @@
 // lib/services/jyusyo_matching_service.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/db/repositories/jyusyo_race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/jyusyoichiran_page_data_model.dart';
@@ -17,13 +18,13 @@ class JyusyoMatchingService {
 
   /// スケジュールデータから重賞一覧のIDを更新・自動連携する
   Future<void> reflectScheduleDataToJyusyoRaces(RaceSchedule schedule) async {
-    print('DEBUG: reflectScheduleDataToJyusyoRaces START for date: ${schedule.date}');
+    debugPrint('DEBUG: reflectScheduleDataToJyusyoRaces START for date: ${schedule.date}');
 
     int year;
     try {
       year = int.parse(schedule.date.substring(0, 4));
     } catch (e) {
-      print('DEBUG: Error parsing year from date: $e');
+      debugPrint('DEBUG: Error parsing year from date: $e');
       return;
     }
 
@@ -31,7 +32,7 @@ class JyusyoMatchingService {
     List<JyusyoRace> jyusyoRaces = maps.map((m) => JyusyoRace.fromMap(m)).toList();
 
     if (jyusyoRaces.isEmpty) {
-      print('DEBUG: No Jyusyo races found in DB for year $year');
+      debugPrint('DEBUG: No Jyusyo races found in DB for year $year');
       return;
     }
 
@@ -88,7 +89,7 @@ class JyusyoMatchingService {
         processedCount++;
       }
     }
-    print('DEBUG: reflectScheduleDataToJyusyoRaces END. Processed: $processedCount, Matched: $matchedCount');
+    debugPrint('DEBUG: reflectScheduleDataToJyusyoRaces END. Processed: $processedCount, Matched: $matchedCount');
   }
 
   /// コース種別・距離・グレードによる厳格マッチング

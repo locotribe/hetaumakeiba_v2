@@ -415,7 +415,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
             }
           }
         } catch (e) {
-          print('Error checking status for ${race.raceId}: $e');
+          debugPrint('Error checking status for ${race.raceId}: $e');
         }
       }
     }

@@ -1,5 +1,6 @@
 // lib/logic/ticket_data_logic.dart
 
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
@@ -187,7 +188,7 @@ class TicketDataLogic {
 
             }
           } catch (e) {
-            print('新規レース情報のWeb取得に失敗: $raceId - $e');
+            debugPrint('新規レース情報のWeb取得に失敗: $raceId - $e');
             // 失敗時は処理を止めず、表示可能な情報だけでリストを生成します
           }
         }
@@ -221,7 +222,7 @@ class TicketDataLogic {
         }
 
       } catch (e) {
-        print('購入履歴のデータ処理中にエラーが発生しました: ${qrData.id} - $e');
+        debugPrint('購入履歴のデータ処理中にエラーが発生しました: ${qrData.id} - $e');
       }
     }
 
@@ -369,7 +370,7 @@ class TicketDataLogic {
       }
       return summary;
     } catch (e) {
-      print('Error in _formatPurchaseSummary: $e');
+      debugPrint('Error in _formatPurchaseSummary: $e');
       return '購入内容の表示に失敗しました';
     }
   }

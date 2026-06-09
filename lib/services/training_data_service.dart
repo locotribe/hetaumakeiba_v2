@@ -1,5 +1,6 @@
 // lib/services/training_data_service.dart
 
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
@@ -91,14 +92,14 @@ class TrainingDataService {
           }
         }
       } catch (e) {
-        print('DEBUG: TrainingDataService Error fetching $trackType: $e');
+        debugPrint('DEBUG: TrainingDataService Error fetching $trackType: $e');
       }
     }
 
     // 取得した全データが存在すれば一括保存
     if (allRecords.isNotEmpty) {
       await _repository.insertTrainingTimes(allRecords);
-      print('DEBUG: TrainingDataService Saved ${allRecords.length} records to DB.');
+      debugPrint('DEBUG: TrainingDataService Saved ${allRecords.length} records to DB.');
     }
   }
 }

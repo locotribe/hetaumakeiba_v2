@@ -89,7 +89,7 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
             newMonthsWithData[year] = {month};
           }
         } catch (e) {
-          print('日付の解析エラー: ${item.raceDate}');
+          debugPrint('日付の解析エラー: ${item.raceDate}');
         }
       }
     }

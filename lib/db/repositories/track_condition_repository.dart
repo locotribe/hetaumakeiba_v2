@@ -1,5 +1,6 @@
 // lib/db/repositories/track_condition_repository.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:csv/csv.dart';
 import 'package:hetaumakeiba_v2/db/db_provider.dart';
@@ -124,7 +125,7 @@ class TrackConditionRepository {
         'duplicates': duplicatesCount,
       };
     } catch (e) {
-      print('DEBUG: CSVインポートエラー: $e');
+      debugPrint('DEBUG: CSVインポートエラー: $e');
       rethrow;
     }
   }

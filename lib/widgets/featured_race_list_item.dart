@@ -27,7 +27,7 @@ DateTime _parseDateStringAsDateTime(String dateText) {
     }
     return DateTime.now();
   } catch (e) {
-    print('Date parsing error in FeaturedRaceListItem: $dateText, Error: $e');
+    debugPrint('Date parsing error in FeaturedRaceListItem: $dateText, Error: $e');
     return DateTime.now();
   }
 }
