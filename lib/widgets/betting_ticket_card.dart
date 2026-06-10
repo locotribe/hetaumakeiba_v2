@@ -1,6 +1,7 @@
 // lib/widgets/betting_ticket_card.dart
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
@@ -315,14 +316,16 @@ class BettingTicketCard extends StatelessWidget {
                   ),
                   // --- (上段) 中央領域 ---
                   Container(
-                    width: 40,
+                    // [修正] 式別エリアの横幅を実物の比率に近づけるため拡大 (v.13.40.2)
+                    width: 35,
                     decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.0)),
                     child: Column(
                       children: [
                         Container(
                           width: double.infinity,
                           color: topContainerColor,
-                          padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
+                          // [修正] 式別エリアの縦幅を詰めるためPaddingを縮小 (v.13.40.2)
+                          padding: const EdgeInsets.symmetric(vertical: 0.5, horizontal: 0.5),
                           child: Center(child: topWidget),
                         ),
                         Flexible(
@@ -338,28 +341,24 @@ class BettingTicketCard extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text('普通', style: TextStyle(color: middleTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 6),
                                   ...shikibetsuToDisplay.characters.map((char) {
-                                    return Text(char, style: TextStyle(color: middleTextColor, fontSize: 20, fontWeight: FontWeight.bold));
+                                    return Text(char, style: GoogleFonts.notoSerifJp(color: middleTextColor, fontSize: 28, fontWeight: FontWeight.bold));
                                   }),
                                 ],
                               ),
                             )
                                 : Column(
-                              children: shikibetsuToDisplay.characters.map((char) {
-                                return Expanded(
-                                  child: FittedBox(
-                                    fit: BoxFit.contain,
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-                                      child: Text(
-                                        char,
-                                        style: TextStyle(color: middleTextColor, fontSize: 16, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                for (int i = 0; i < shikibetsuToDisplay.characters.length; i++) ...[
+                                  if (i > 0) const SizedBox(height: 2),
+                                  Text(
+                                    shikibetsuToDisplay.characters.elementAt(i),
+                                    style: GoogleFonts.notoSerifJp(color: middleTextColor, fontSize: 25, fontWeight: FontWeight.bold),
                                   ),
-                                );
-                              }).toList(),
+                                ],
+                              ],
                             )
                                 : const SizedBox.shrink(),
                           ),
@@ -367,7 +366,8 @@ class BettingTicketCard extends StatelessWidget {
                         Container(
                           width: double.infinity,
                           color: bottomContainerColor,
-                          padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
+                          // [修正] 式別エリアの縦幅を詰めるためPaddingを縮小 (v.13.40.2)
+                          padding: const EdgeInsets.symmetric(vertical: 0.5, horizontal: 0.5),
                           child: Center(child: bottomWidget),
                         )
                       ],

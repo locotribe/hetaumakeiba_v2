@@ -25,16 +25,20 @@ String _getTotalAmountStars(int amount) {
   return '';
 }
 
-// グループ内の馬番の数に応じて、馬番を囲う枠のサイズを決定する関数
-double _getBoxSizeByHorseCount(int count) {
-  // 枠の大きさを指定する場所
+// グループ内の馬番の数に応じて、馬番を囲う枠のサイズ（縦長）を決定する関数
+Size _getBoxSizeByHorseCount(int count) {
+  // 枠の大きさを指定する場所（高さは横幅の1.35倍の縦長とする）
+  // 列をまたいだ揃えではなく、頭数のみで「大・中・小」の3段階を独立して決定する
+  double width;
   if (count == 1) {
-    return 38.0; // 1つの場合：最も大きい
-  } else if (count == 2) {
-    return 28.0; // 2つの場合：2番目に大きい（この数値は好みに応じて調整してください）
-  } else { // 3つ以上の場合
-    return 20.0; // 3つ以上の場合：小さいサイズ
+    // [修正] 1頭単独ボックスの横幅を細身に調整 (v.13.40.2)
+    width = 44.0; // 【大】1頭のみ
+  } else if (count >= 2 && count <= 6) {
+    width = 35.0; // 【中】2〜6頭
+  } else {
+    width = 22.0; // 【小】7頭以上（全体縮小を防ぐため、現状の25.0から少しスリム化）
   }
+  return Size(width, width * 1.35);
 }
 
 class PurchaseDetailsCard extends StatefulWidget {
@@ -81,7 +85,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
   List<Widget> _buildHorseNumberDisplay(dynamic horseNumbers, {String symbol = '', int? horseCountForSizing, Key? key}) {
     List<Widget> widgets = [];
     final int count = horseCountForSizing ?? (horseNumbers is List ? horseNumbers.length : 1);
-    final double boxSize = _getBoxSizeByHorseCount(count);
+    final Size boxSize = _getBoxSizeByHorseCount(count);
 
     List<int> numbersToProcess = [];
 
@@ -92,28 +96,43 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     }
 
     for (int i = 0; i < numbersToProcess.length; i++) {
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2.0),
-          child: Container(
-            key: key,
-            width: boxSize,
-            height: boxSize,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(border: Border.all(color: Colors.black)),
-            child: FittedBox(
-              fit: BoxFit.fill,
-              child: Text(
-                numbersToProcess[i].toString(),
-                style: const TextStyle(
-                  fontSize: 100,      // 大きなフォントサイズを指定
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                  height: 1.0,         // 行の高さを詰めて上下の余白を最小化
-                ),
-              ),
-            ),
+      final String numberStr = numbersToProcess[i].toString();
+      // 縦の大きさはボックスの高さを基準に確保する（横幅基準だと二桁で縮小しすぎるため）
+      // [修正] 中・小サイズの馬番フォントを微調整（-1pt） (v.13.40.2)
+      final double fontSize = boxSize.height * 0.88 - (count == 1 ? 0.0 : 1.0);
+
+      Widget numberText = Text(
+        numberStr,
+        maxLines: 1,
+        softWrap: false,
+        style: TextStyle(
+          fontSize: fontSize,
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
+          height: 1.0, // 行の高さを詰めて上下の余白を最小化
+        ),
+      );
+
+      // 二桁以上の馬番は、縦の大きさを保ったまま横幅のみ圧縮する「長体」にする
+      if (numberStr.length >= 2) {
+        numberText = Transform.scale(
+          scaleX: 0.65, // バランスを見て0.63〜0.67で調整
+          child: OverflowBox(
+            // ボックス幅の制約を外し、Textを改行させずに1行で描画させる
+            maxWidth: boxSize.height,
+            child: numberText,
           ),
+        );
+      }
+
+      widgets.add(
+        Container(
+          key: key,
+          width: boxSize.width,
+          height: boxSize.height,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(border: Border.all(color: Colors.black)),
+          child: numberText,
         ),
       );
       if (symbol.isNotEmpty && i < numbersToProcess.length - 1) {
@@ -123,37 +142,103 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     return widgets;
   }
 
-  Widget _buildHorseNumberGrid(List<int> horseNumbers) {
+  Widget _buildHorseNumberGrid(List<int> horseNumbers, {int starCount = 0}) {
     List<Widget> gridRows = [];
     final int horseCount = horseNumbers.length;
-    for (int i = 0; i < horseNumbers.length; i += 2) {
+    final Size boxSize = _getBoxSizeByHorseCount(horseCount);
+    final List<dynamic> items = [
+      ...horseNumbers,
+      for (int i = 0; i < starCount; i++) '☆',
+    ];
+
+    for (int i = 0; i < items.length; i += 2) {
       List<Widget> rowChildren = [];
-      rowChildren.add(_buildHorseNumberDisplay(horseNumbers[i], horseCountForSizing: horseCount).first);
-      if (i + 1 < horseNumbers.length) {
-        rowChildren.add(const SizedBox(width: 4.0));
-        rowChildren.add(_buildHorseNumberDisplay(horseNumbers[i + 1], horseCountForSizing: horseCount).first);
+      rowChildren.add(_buildGridCell(items[i], horseCount, boxSize));
+      if (i + 1 < items.length) {
+        rowChildren.add(const SizedBox(width: 2.0));
+        rowChildren.add(_buildGridCell(items[i + 1], horseCount, boxSize));
       }
       gridRows.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 4.0),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: rowChildren),
-        ),
+        Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: rowChildren),
       );
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: gridRows);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (int i = 0; i < gridRows.length; i++) ...[
+          if (i > 0) const SizedBox(height: 2.0),
+          gridRows[i],
+        ],
+      ],
+    );
   }
 
-  Widget _buildGroupLayoutItem(Map<String, dynamic> group, {required bool isFormation}) {
+  // 馬番グリッドの1セルを生成する（馬番セルまたは不足分の☆セル）
+  Widget _buildGridCell(dynamic item, int horseCount, Size boxSize) {
+    if (item is int) {
+      return _buildHorseNumberDisplay(item, horseCountForSizing: horseCount).first;
+    }
+    return _buildStarCell(boxSize);
+  }
+
+  // 馬番セルと同じ占有領域（幅・高さ）で☆を中央配置するセル
+  Widget _buildStarCell(Size boxSize) {
+    return SizedBox(
+      // _buildHorseNumberDisplayのセルと同じ幅にし、垂直軸のズレを防ぐ
+      width: boxSize.width,
+      height: boxSize.height,
+      child: Center(
+        child: Text(
+          '☆',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: boxSize.width * 0.6,
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+            height: 1.0,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupLayoutItem(Map<String, dynamic> group, {required bool isFormation, int maxCount = 0}) {
     final String label = group['label'] as String? ?? '';
     final List<int> horseNumbers = group['horseNumbers'] as List<int>? ?? [];
+    final int count = horseNumbers.length;
+    // 馬番が1つだけの列（軸など）は☆によるパディング対象外とする
+    final bool isSingleHorse = count == 1;
 
-    final Widget horseDisplayWidget = isFormation
-        ? _buildHorseNumberGrid(horseNumbers)
+    // 他列の頭数(maxCount)には依存せず、自身の頭数のみで不足数を決定する
+    int missingCount = 0;
+    if (!isSingleHorse) {
+      int totalSlots;
+      if (count <= 4) {
+        // 2〜4頭は、最低4スロット（2行）保証
+        totalSlots = 4;
+      } else if (count >= 7 && count <= 10) {
+        // JRAの特異仕様: 7〜10頭は8スロット(4行)の枠が存在せず、一律10スロット(5行)の枠が使われる
+        totalSlots = 10;
+      } else {
+        // 5, 6, 11頭以上などは、端数が出ないように偶数スロットに丸める（奇数なら+1）
+        totalSlots = count + (count % 2);
+      }
+      missingCount = totalSlots - count;
+    }
+
+    final Widget horseDisplayWidget = isSingleHorse
+        ? _buildHorseNumberDisplay(horseNumbers, horseCountForSizing: 1).first
+        : isFormation
+        ? _buildHorseNumberGrid(horseNumbers, starCount: missingCount)
         : Wrap(
-      spacing: 4.0,
-      runSpacing: 4.0,
+      spacing: 2.0,
+      runSpacing: 2.0,
       alignment: WrapAlignment.center,
-      children: _buildHorseNumberDisplay(horseNumbers, symbol: '', horseCountForSizing: horseNumbers.length),
+      children: [
+        ..._buildHorseNumberDisplay(horseNumbers, symbol: '', horseCountForSizing: horseNumbers.length),
+        for (int i = 0; i < missingCount; i++)
+          _buildStarCell(_getBoxSizeByHorseCount(horseNumbers.length)),
+      ],
     );
 
     if (label.isNotEmpty) {
@@ -176,12 +261,16 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       }) {
     if (groups.isEmpty) return const SizedBox.shrink();
 
+    final int maxCount = groups
+        .map((g) => (g['horseNumbers'] as List<int>? ?? []).length)
+        .fold(0, (a, b) => a > b ? a : b);
+
     List<Widget> children = [];
     final bool shouldShowSymbol = isFormation || (shikibetsu == '3連単' && (betType == 'ながし' || betType == '通常'));
     final String symbol = _getHorseNumberSymbol(shikibetsu, betType);
 
     for (int i = 0; i < groups.length; i++) {
-      children.add(Flexible(child: _buildGroupLayoutItem(groups[i], isFormation: isFormation)));
+      children.add(Flexible(child: _buildGroupLayoutItem(groups[i], isFormation: isFormation, maxCount: maxCount)));
       if (shouldShowSymbol && symbol.isNotEmpty && i < groups.length - 1) {
         children.add(
           Transform.scale(
@@ -192,10 +281,9 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         );
       }
     }
-    final bool isCenterAligned = isFormation || (shikibetsu == '3連単' && (betType == 'ながし' || betType == '通常'));
     return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: isCenterAligned ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: children,
     );
   }
@@ -220,7 +308,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     const int totalCells = numOpponentRows * numOpponentCols;
     final int opponentCount = opponentHorses.length;
     // 枠の大きさを指定する場所
-    final double boxSizeForOpponent = _getBoxSizeByHorseCount(opponentCount > 6 ? 7 : opponentCount);
+    final Size boxSizeForOpponent = _getBoxSizeByHorseCount(opponentCount > 6 ? 7 : opponentCount);
 
 
     List<dynamic> opponentItems = List.from(opponentHorses);
@@ -240,11 +328,11 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         } else {
           rowChildren.add(
             SizedBox(
-              width: boxSizeForOpponent + 4.0,
-              height: boxSizeForOpponent + 4.0,
+              width: boxSizeForOpponent.width + 4.0,
+              height: boxSizeForOpponent.height + 4.0,
               child: Center(
                 // ながし投票の相手馬が20頭に満たない場合のプレースホルダー('☆')のフォントサイズ
-                child: Text('☆', style: TextStyle(fontSize: boxSizeForOpponent * 0.5, color: Colors.black)),
+                child: Text('☆', style: TextStyle(fontSize: boxSizeForOpponent.width * 0.5, color: Colors.black)),
               ),
             ),
           );

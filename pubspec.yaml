@@ -2,7 +2,7 @@
     description: "競馬予想と馬券データ管理アプリ"
     publish_to: 'none'
 
-    version: 13.40.1+1
+    version: 13.40.2+1
 
     environment:
         sdk: '>=3.0.0 <4.0.0'
@@ -15,6 +15,9 @@
 
         # Icons
         cupertino_icons: ^1.0.8
+
+        # Fonts
+        google_fonts: ^6.2.1
 
         just_the_tooltip: ^0.0.12
 
