@@ -742,3 +742,42 @@ class LapTimeAnalyzer {
     );
   }
 }
+
+// 8. compute()によるバックグラウンド実行用のラッパー
+// [追加] 各アナライザーの結果をまとめてcompute()の戻り値として返すためのクラス (v.13.40.5)
+class VolatilityAnalysisBundle {
+  final VolatilityResult volatilityResult;
+  final PayoutAnalysisResult payoutResult;
+  final PopularityAnalysisResult popularityResult;
+  final FrameAnalysisResult frameResult;
+  final LegStyleAnalysisResult legStyleResult;
+  final HorseWeightAnalysisResult horseWeightResult;
+  final List<PastRaceTop3Result> pastTop3Result;
+  final LapTimeAnalysisResult? lapTimeResult;
+
+  VolatilityAnalysisBundle({
+    required this.volatilityResult,
+    required this.payoutResult,
+    required this.popularityResult,
+    required this.frameResult,
+    required this.legStyleResult,
+    required this.horseWeightResult,
+    required this.pastTop3Result,
+    required this.lapTimeResult,
+  });
+}
+
+// [追加] 8種類の解析処理をまとめて実行するトップレベル関数。
+// compute()に渡すことで別Isolateで実行し、UIスレッドのフリーズを防ぐ (v.13.40.5)
+VolatilityAnalysisBundle runVolatilityAnalysis(List<RaceResult> pastRaces) {
+  return VolatilityAnalysisBundle(
+    volatilityResult: VolatilityAnalyzer().analyze(pastRaces),
+    payoutResult: PayoutAnalyzer().analyze(pastRaces),
+    popularityResult: PopularityAnalyzer().analyze(pastRaces),
+    frameResult: FrameAnalyzer().analyze(pastRaces),
+    legStyleResult: LegStyleAnalyzer().analyze(pastRaces),
+    horseWeightResult: HorseWeightAnalyzer().analyze(pastRaces),
+    pastTop3Result: PastTopHorsesAnalyzer().analyze(pastRaces),
+    lapTimeResult: LapTimeAnalyzer().analyze(pastRaces),
+  );
+}

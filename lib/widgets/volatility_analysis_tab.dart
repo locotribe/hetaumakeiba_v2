@@ -1,5 +1,6 @@
 // lib/widgets/volatility_analysis_tab.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
@@ -35,7 +36,6 @@ class VolatilityAnalysisTab extends StatefulWidget {
 class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
   final RaceRepository _raceRepo = RaceRepository();
   final HorseRepository _horseRepo = HorseRepository();
-  final VolatilityAnalyzer _analyzer = VolatilityAnalyzer();
   bool _isLoading = true;
 
   VolatilityResult? _volatilityResult;
@@ -113,17 +113,20 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
       }
     }
 
+    // [修正] 8種類の解析処理をcompute()で別Isolate実行し、UIフリーズを防ぐ (v.13.40.5)
+    final bundle = await compute(runVolatilityAnalysis, pastRaces);
+
     if (mounted) {
       setState(() {
-        // 既存の解析
-        _volatilityResult = _analyzer.analyze(pastRaces);
-        _payoutResult = PayoutAnalyzer().analyze(pastRaces);
-        _popularityResult = PopularityAnalyzer().analyze(pastRaces);
-        _frameResult = FrameAnalyzer().analyze(pastRaces);
-        _legStyleResult = LegStyleAnalyzer().analyze(pastRaces);
-        _horseWeightResult = HorseWeightAnalyzer().analyze(pastRaces);
-        _pastTop3Result = PastTopHorsesAnalyzer().analyze(pastRaces);
-        _lapTimeResult = LapTimeAnalyzer().analyze(pastRaces);
+        // 既存の解析（compute()で実行した結果を反映）
+        _volatilityResult = bundle.volatilityResult;
+        _payoutResult = bundle.payoutResult;
+        _popularityResult = bundle.popularityResult;
+        _frameResult = bundle.frameResult;
+        _legStyleResult = bundle.legStyleResult;
+        _horseWeightResult = bundle.horseWeightResult;
+        _pastTop3Result = bundle.pastTop3Result;
+        _lapTimeResult = bundle.lapTimeResult;
 
         // 新しいアナライザーの実行
         _trackConditionTrendResult = TrackConditionTrendAnalyzer().analyze(_trackConditionMap);
