@@ -1,14 +1,12 @@
 // lib/screens/race_schedule_page.dart
-import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
-import 'package:hetaumakeiba_v2/services/race_schedule_scraper_service.dart';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
-import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
-import 'package:hetaumakeiba_v2/services/jyusyo_matching_service.dart';
+// [追加] 状態管理・ビジネスロジックをViewModelへ分離 (v.13.41.0)
+import 'package:hetaumakeiba_v2/view_models/race_schedule_view_model.dart';
 
 class RaceSchedulePage extends StatefulWidget {
   const RaceSchedulePage({super.key});
@@ -19,412 +17,91 @@ class RaceSchedulePage extends StatefulWidget {
 
 class RaceSchedulePageState extends State<RaceSchedulePage>
     with TickerProviderStateMixin {
-  final RaceScheduleScraperService _scraperService =
-  RaceScheduleScraperService();
-  final RaceRepository _raceRepository = RaceRepository();
-  final JyusyoMatchingService _jyusyoService = JyusyoMatchingService();
+  // [修正] データ取得・加工ロジックをRaceScheduleViewModelへ移行 (v.13.41.0)
+  late final RaceScheduleViewModel _viewModel;
 
-  bool _isLoading = false;
-  bool _isDataLoaded = false;
-  String _loadingMessage = '';
-  DateTime _currentDate = DateTime.now();
-  List<DateTime> _weekDates = [];
-
-  final Map<String, RaceSchedule?> _raceSchedules = {};
-  List<String> _availableDates = [];
-  final Set<String> _loadingTabs = {};
-  final Map<String, bool> _raceStatusMap = {};
-
+  // TabControllerはvsync(TickerProviderStateMixin)が必要なためView側で保持・管理する
   TabController? _tabController;
+  List<String> _syncedAvailableDates = [];
 
   @override
   void initState() {
     super.initState();
-    _currentDate = DateTime.now();
-    _loadDataForWeek(isInitial: true);
+    // [追加] ViewModelを生成し、画面の状態管理を委譲する (v.13.41.0)
+    _viewModel = RaceScheduleViewModel();
+    _viewModel.addListener(_onViewModelUpdate);
+    _viewModel.loadInitialData();
   }
 
   @override
   void dispose() {
     _tabController?.removeListener(_handleTabSelection);
     _tabController?.dispose();
+    // [追加] ViewModelのリスナー解除と破棄を追加 (v.13.41.0)
+    _viewModel.removeListener(_onViewModelUpdate);
+    _viewModel.dispose();
     super.dispose();
   }
 
-  void _calculateWeek(DateTime date) {
-    if (!mounted) return;
-    setState(() {
-      _currentDate = date;
-      final int daysToSubtract = date.weekday - 1;
-      final DateTime monday = date.subtract(Duration(days: daysToSubtract));
-      _weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
-
-      _isDataLoaded = false;
-      _isLoading = true;
-      _loadingMessage = '開催日をチェック中...';
-      _availableDates.clear();
-      _raceSchedules.clear();
-
-      if (_tabController != null) {
-        _tabController!.removeListener(_handleTabSelection);
-        _tabController!.dispose();
-        _tabController = null;
+  // [追加] ViewModelのnotifyListeners()を受けて再描画し、必要であればTabControllerを再構築する (v.13.41.0)
+  void _onViewModelUpdate() {
+    final error = _viewModel.tabErrorMessage;
+    if (error != null) {
+      _viewModel.clearTabError();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error)));
       }
-      _raceStatusMap.clear();
+    }
+
+    if (!mounted) return;
+
+    final tabsChanged =
+        !listEquals(_viewModel.availableDates, _syncedAvailableDates);
+
+    setState(() {
+      if (tabsChanged) {
+        _syncTabController();
+      }
     });
 
-    _loadDataForWeek(isInitial: false);
-  }
-
-  void _initializeStatusMapFromSchedule(RaceSchedule schedule) {
-    for (final venue in schedule.venues) {
-      for (final race in venue.races) {
-        if (race.isConfirmed) {
-          _raceStatusMap[race.raceId] = true;
-        }
-      }
+    if (tabsChanged) {
+      _handleTabSelection();
     }
   }
 
-  Future<void> _loadDataForWeek({bool isInitial = false}) async {
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _loadingMessage = '開催スケジュールを確認中...';
-        _raceSchedules.clear();
-      });
-    }
+  // [追加] availableDatesの変化に合わせてTabControllerを作り直す（旧_setupTabsのTabController生成部分） (v.13.41.0)
+  void _syncTabController() {
+    final dates = _viewModel.availableDates;
+    _syncedAvailableDates = List.from(dates);
 
-    try {
-      if (!isInitial && _weekDates.isNotEmpty) {
-        final weekKey = DateFormat('yyyyMMdd').format(_weekDates.first);
-        final cachedDates = await _raceRepository.getWeekCache(weekKey);
+    _tabController?.removeListener(_handleTabSelection);
+    _tabController?.dispose();
 
-        if (cachedDates != null && cachedDates.isNotEmpty) {
-          _setupTabs(cachedDates);
-          if (mounted) {
-            setState(() {
-              _isDataLoaded = true;
-              _isLoading = false;
-            });
-          }
-          return;
-        }
-      }
-
-      final (dates, schedule) = await _scraperService.fetchInitialData(
-        isInitial ? null : _currentDate,
-        onProgress: (msg) {
-          if (mounted) setState(() => _loadingMessage = msg);
-        },
-      );
-
-      if (dates.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _availableDates = [];
-            _isDataLoaded = true;
-          });
-        }
-        return;
-      }
-
-      _setupTabs(dates);
-
-      if (_weekDates.isNotEmpty) {
-        final weekKey = DateFormat('yyyyMMdd').format(_weekDates.first);
-        await _raceRepository.insertOrUpdateWeekCache(weekKey, dates);
-      }
-
-      // ★修正: 初期ロード時のスケジュール保存も mergeRaceSchedule を使い
-      //        既存の isConfirmed を引き継ぐ
-      if (schedule != null) {
-        await _raceRepository.mergeRaceSchedule(schedule);
-        final merged = await _raceRepository.getRaceSchedule(schedule.date);
-        if (merged != null) {
-          _initializeStatusMapFromSchedule(merged);
-          _raceSchedules[merged.date] = merged;
-        } else {
-          _raceSchedules[schedule.date] = schedule;
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _isDataLoaded = true;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _loadingMessage = 'データの取得に失敗しました';
-        });
-      }
-    }
-  }
-
-  void _setupTabs(List<String> yyyymmddStrings) {
-    if (yyyymmddStrings.isEmpty) {
-      if (mounted) setState(() => _isLoading = false);
+    if (dates.isEmpty) {
+      _tabController = null;
       return;
-    }
-
-    var parsedDates = yyyymmddStrings
-        .map((ds) {
-      try {
-        final year = int.parse(ds.substring(0, 4));
-        final month = int.parse(ds.substring(4, 6));
-        final day = int.parse(ds.substring(6, 8));
-        return DateTime(year, month, day);
-      } catch (e) {
-        return null;
-      }
-    })
-        .where((d) => d != null)
-        .cast<DateTime>()
-        .toList();
-
-    if (parsedDates.isEmpty) {
-      if (mounted) setState(() => _isLoading = false);
-      return;
-    }
-
-    parsedDates.sort();
-
-    _availableDates =
-        parsedDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
-
-    if (parsedDates.isNotEmpty) {
-      final lastDate = parsedDates.last;
-      final int daysToAdd = DateTime.sunday - lastDate.weekday;
-      final DateTime targetSunday = lastDate.add(Duration(days: daysToAdd));
-
-      _currentDate = targetSunday;
-      final DateTime monday = _currentDate.subtract(const Duration(days: 6));
-      _weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
-    }
-
-    // 「今日」または「今日以降で最も近い日」を初期タブにする
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    int initialIndex = -1;
-
-    for (int i = 0; i < _availableDates.length; i++) {
-      final date = DateFormat('yyyy-MM-dd').parse(_availableDates[i]);
-      if (date.isAtSameMomentAs(today) || date.isAfter(today)) {
-        initialIndex = i;
-        break;
-      }
-    }
-
-    // 全て過去の日付だった場合は、一番新しい日（リストの最後）を選択
-    if (initialIndex == -1) {
-      initialIndex = _availableDates.length - 1;
-    }
-
-    if (_tabController != null) {
-      _tabController!.dispose();
     }
 
     _tabController = TabController(
-      initialIndex: initialIndex,
-      length: _availableDates.length,
+      initialIndex: _viewModel.initialTabIndex,
+      length: dates.length,
       vsync: this,
     );
-    _tabController?.addListener(_handleTabSelection);
-    _handleTabSelection();
+    _tabController!.addListener(_handleTabSelection);
   }
 
   void _handleTabSelection() {
-    if (_tabController == null) return;
-    if (_tabController!.indexIsChanging) return;
+    final tabController = _tabController;
+    if (tabController == null) return;
+    if (tabController.indexIsChanging) return;
 
-    final index = _tabController!.index;
-    if (index < 0 || index >= _availableDates.length) return;
+    final dates = _viewModel.availableDates;
+    final index = tabController.index;
+    if (index < 0 || index >= dates.length) return;
 
-    final dateStr = _availableDates[index];
-
-    if (!_raceSchedules.containsKey(dateStr)) {
-      _fetchDataForDate(dateStr);
-    }
-  }
-
-  Future<void> _fetchDataForDate(String dateString,
-      {bool forceRefresh = false}) async {
-    if (!mounted) return;
-    setState(() {
-      _loadingTabs.add(dateString);
-    });
-
-    try {
-      final date = DateFormat('yyyy-MM-dd', 'en_US').parse(dateString);
-      RaceSchedule? schedule;
-
-      if (forceRefresh) {
-        // ★修正1: スクレイピング結果を mergeRaceSchedule で isConfirmed を
-        //         引き継いでから保存し、DBから読み直して確定版を使う
-        final scraped = await _scraperService.scrapeRaceSchedule(date);
-        if (scraped != null) {
-          await _raceRepository.mergeRaceSchedule(scraped);
-          schedule = await _raceRepository.getRaceSchedule(dateString);
-        }
-      } else {
-        schedule = await _raceRepository.getRaceSchedule(dateString);
-
-        if (schedule != null) {
-          final now = DateTime.now();
-          final today = DateTime(now.year, now.month, now.day);
-          if (date.isBefore(today)) {
-            bool isIncomplete = false;
-            for (final venue in schedule.venues) {
-              if (venue.races.length <= 5) {
-                isIncomplete = true;
-                break;
-              }
-            }
-            if (isIncomplete) {
-              // ★修正2: 不完全なキャッシュの補完時も mergeRaceSchedule を使う
-              final scraped = await _scraperService.scrapeRaceSchedule(date);
-              if (scraped != null) {
-                await _raceRepository.mergeRaceSchedule(scraped);
-                schedule = await _raceRepository.getRaceSchedule(dateString);
-              }
-            }
-          }
-        }
-
-        if (schedule == null) {
-          // ★修正3: 新規取得時も mergeRaceSchedule 経由で保存する
-          final scraped = await _scraperService.scrapeRaceSchedule(date);
-          if (scraped != null) {
-            await _raceRepository.mergeRaceSchedule(scraped);
-            schedule = await _raceRepository.getRaceSchedule(dateString);
-          }
-        }
-      }
-
-      if (schedule != null) {
-        // ★修正4: DBから読み直したオブジェクトで isConfirmed を反映してから
-        //         画面を先に更新し、その後ステータス確認を非同期で走らせる
-        _initializeStatusMapFromSchedule(schedule);
-        await _jyusyoService.reflectScheduleDataToJyusyoRaces(schedule);
-
-        if (mounted) {
-          setState(() {
-            _raceSchedules[dateString] = schedule;
-          });
-        }
-
-        // ★修正5: ステータス確認完了後にDBと画面を再同期する
-        _checkRaceStatusesForSchedule(schedule).then((_) async {
-          final updated = await _raceRepository.getRaceSchedule(dateString);
-          if (mounted && updated != null) {
-            _initializeStatusMapFromSchedule(updated);
-            setState(() {
-              _raceSchedules[dateString] = updated;
-            });
-          }
-        });
-      } else {
-        if (mounted) {
-          setState(() {
-            _raceSchedules[dateString] = null;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('データ取得エラー: $e')));
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingTabs.remove(dateString);
-        });
-      }
-    }
-  }
-
-  Future<void> _checkRaceStatusesForSchedule(RaceSchedule schedule) async {
-    final now = DateTime.now();
-    final todayStr = DateFormat('yyyy-MM-dd').format(now);
-    final scheduleDateStr = schedule.date;
-
-    if (scheduleDateStr.compareTo(todayStr) > 0) {
-      return;
-    }
-
-    final scheduleDate = DateFormat('yyyy-MM-dd').parse(scheduleDateStr);
-    final isPastDate =
-    scheduleDate.isBefore(DateTime(now.year, now.month, now.day));
-    final timeRegex = RegExp(r'(\d{1,2}):(\d{2})');
-
-    bool needUpdateDb = false;
-
-    for (final venue in schedule.venues) {
-      for (final race in venue.races) {
-        if (!mounted) return;
-
-        // ★修正6: _raceStatusMap だけでなく race.isConfirmed も確認して
-        //         確認済みレースの二重チェックを防ぐ
-        if (_raceStatusMap[race.raceId] == true || race.isConfirmed) continue;
-
-        if (isPastDate) {
-          if (mounted) {
-            setState(() {
-              _raceStatusMap[race.raceId] = true;
-            });
-          }
-          race.isConfirmed = true;
-          needUpdateDb = true;
-          continue;
-        }
-
-        if (!isPastDate) {
-          final match = timeRegex.firstMatch(race.details);
-          if (match != null) {
-            final hour = int.parse(match.group(1)!);
-            final minute = int.parse(match.group(2)!);
-            final raceTime =
-            DateTime(now.year, now.month, now.day, hour, minute);
-            if (now.isBefore(raceTime)) {
-              continue;
-            }
-          }
-        }
-
-        await Future.delayed(const Duration(milliseconds: 1000));
-
-        if (!mounted) return;
-
-        try {
-          final isConfirmed =
-          await RaceResultScraperService.isRaceResultConfirmed(race.raceId);
-
-          if (isConfirmed) {
-            race.isConfirmed = true;
-            needUpdateDb = true;
-            if (mounted) {
-              setState(() {
-                _raceStatusMap[race.raceId] = true;
-              });
-            }
-          }
-        } catch (e) {
-          debugPrint('Error checking status for ${race.raceId}: $e');
-        }
-      }
-    }
-
-    // ★修正7: isConfirmed 更新後は schedule オブジェクトが正しい状態なので
-    //         insertOrUpdateRaceSchedule でそのまま保存する
-    if (needUpdateDb) {
-      await _raceRepository.insertOrUpdateRaceSchedule(schedule);
-    }
+    // [修正] データ未取得日の判定・取得トリガーをViewModelへ委譲 (v.13.41.0)
+    _viewModel.ensureDataForDate(dates[index]);
   }
 
   @override
@@ -440,20 +117,20 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   }
 
   Widget _buildBodyContent() {
-    if (_isLoading) {
+    if (_viewModel.isLoading) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const CircularProgressIndicator(),
             const SizedBox(height: 16),
-            Text(_loadingMessage),
+            Text(_viewModel.loadingMessage),
           ],
         ),
       );
     }
 
-    if (!_isDataLoaded) {
+    if (!_viewModel.isDataLoaded) {
       return const Center(
         child: Text(
           '開催情報を読み込みます',
@@ -462,9 +139,10 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
       );
     }
 
-    if (_availableDates.isEmpty) {
+    if (_viewModel.availableDates.isEmpty) {
       return RefreshIndicator(
-        onRefresh: _loadDataForWeek,
+        // [修正] ViewModel.loadDataForWeek()を呼び出すよう変更 (v.13.41.0)
+        onRefresh: () => _viewModel.loadDataForWeek(),
         child: LayoutBuilder(builder: (context, constraints) {
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -485,12 +163,12 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     return TabBarView(
       controller: _tabController,
-      children: _availableDates.map((dateStr) {
-        if (_loadingTabs.contains(dateStr)) {
+      children: _viewModel.availableDates.map((dateStr) {
+        if (_viewModel.loadingTabs.contains(dateStr)) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final schedule = _raceSchedules[dateStr];
+        final schedule = _viewModel.raceSchedules[dateStr];
 
         Widget content;
         if (schedule != null) {
@@ -512,11 +190,12 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           });
         }
 
-        // ★修正8: isPastPageWithData の分岐を廃止し、
-        //         過去日付でも常に RefreshIndicator で包む
-        //         （当日中に結果確定が走るため必要）
+        // isPastPageWithData の分岐を廃止し、
+        // 過去日付でも常に RefreshIndicator で包む
+        // （当日中に結果確定が走るため必要）
         return RefreshIndicator(
-          onRefresh: () => _fetchDataForDate(dateStr, forceRefresh: true),
+          // [修正] ViewModel.fetchDataForDate()を呼び出すよう変更 (v.13.41.0)
+          onRefresh: () => _viewModel.fetchDataForDate(dateStr, forceRefresh: true),
           child: content,
         );
       }).toList(),
@@ -526,8 +205,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   Widget _buildWeekNavigator() {
     final formatter = DateFormat('M/d');
 
-    final bool canShowTabs =
-        _isDataLoaded && _availableDates.isNotEmpty && _tabController != null;
+    final bool canShowTabs = _viewModel.isDataLoaded &&
+        _viewModel.availableDates.isNotEmpty &&
+        _tabController != null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
@@ -535,10 +215,11 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         children: [
           IconButton(
             icon: const Icon(Icons.arrow_back_ios),
-            onPressed: _isLoading || _loadingTabs.isNotEmpty
+            // [修正] ViewModel.calculateWeek()を呼び出すよう変更 (v.13.41.0)
+            onPressed: _viewModel.isLoading || _viewModel.loadingTabs.isNotEmpty
                 ? null
-                : () => _calculateWeek(
-                _currentDate.subtract(const Duration(days: 7))),
+                : () => _viewModel.calculateWeek(
+                _viewModel.currentDate.subtract(const Duration(days: 7))),
           ),
           Expanded(
             child: canShowTabs
@@ -548,7 +229,7 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
               indicatorColor: Colors.blue.shade100,
               labelColor: Colors.blue,
               unselectedLabelColor: Colors.black,
-              tabs: _availableDates.map((dateStr) {
+              tabs: _viewModel.availableDates.map((dateStr) {
                 final date =
                 DateFormat('yyyy-MM-dd', 'en_US').parse(dateStr);
                 final dayOfWeek = DateFormat.E('ja').format(date);
@@ -557,9 +238,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
               }).toList(),
             )
                 : Center(
-              child: _weekDates.isNotEmpty
+              child: _viewModel.weekDates.isNotEmpty
                   ? Text(
-                '${formatter.format(_weekDates.first)} 〜 ${formatter.format(_weekDates.last)}',
+                '${formatter.format(_viewModel.weekDates.first)} 〜 ${formatter.format(_viewModel.weekDates.last)}',
                 style: const TextStyle(
                     fontSize: 16, fontWeight: FontWeight.bold),
               )
@@ -572,10 +253,11 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           ),
           IconButton(
             icon: const Icon(Icons.arrow_forward_ios),
-            onPressed: _isLoading || _loadingTabs.isNotEmpty
+            // [修正] ViewModel.calculateWeek()を呼び出すよう変更 (v.13.41.0)
+            onPressed: _viewModel.isLoading || _viewModel.loadingTabs.isNotEmpty
                 ? null
-                : () =>
-                _calculateWeek(_currentDate.add(const Duration(days: 7))),
+                : () => _viewModel.calculateWeek(
+                _viewModel.currentDate.add(const Duration(days: 7))),
           ),
         ],
       ),
@@ -625,8 +307,9 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                               ),
                               ...venue.races.map((race) {
                                 bool isRaceSet = race.raceId.isNotEmpty;
+                                // [修正] ViewModel.raceStatusMapを参照するよう変更 (v.13.41.0)
                                 final isConfirmed =
-                                    _raceStatusMap[race.raceId] ?? false;
+                                    _viewModel.raceStatusMap[race.raceId] ?? false;
                                 return InkWell(
                                   onTap: isRaceSet
                                       ? () {

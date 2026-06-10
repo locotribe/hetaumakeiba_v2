@@ -1,50 +1,21 @@
 // lib/screens/race_result_page.dart
 
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:csv/csv.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
-import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
-import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
-// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
-import 'package:hetaumakeiba_v2/services/user_session.dart';
+import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
 import 'package:hetaumakeiba_v2/models/analysis_model.dart';
-import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_review_edit_page.dart';
-import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
-import 'package:hetaumakeiba_v2/services/statistics_service.dart';
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
+// [追加] 状態管理・ビジネスロジックをViewModelへ分離 (v.13.41.0)
+import 'package:hetaumakeiba_v2/view_models/race_result_view_model.dart';
 import 'package:hetaumakeiba_v2/widgets/betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/widgets/race_review_card.dart';
-import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:hetaumakeiba_v2/utils/url_generator.dart';
-
-class PageData {
-  final List<Map<String, dynamic>> parsedTickets;
-  final RaceResult? raceResult;
-  final RacePacePrediction? pacePrediction;
-
-  PageData({
-    required this.parsedTickets,
-    this.raceResult,
-    this.pacePrediction,
-  });
-}
 
 class RaceResultPage extends StatefulWidget {
   final String raceId;
@@ -61,20 +32,17 @@ class RaceResultPage extends StatefulWidget {
 }
 
 class _RaceResultPageState extends State<RaceResultPage> {
-  final RaceRepository _raceRepo = RaceRepository();
-  final TicketRepository _ticketRepo = TicketRepository();
-  final HorseRepository _horseRepo = HorseRepository();
-
-  late Future<PageData> _pageDataFuture;
+  // [修正] データ取得・加工ロジックをRaceResultViewModelへ移行 (v.13.41.0)
+  late final RaceResultViewModel _viewModel;
 
   late PageController _ticketPageController;
-  List<QrData> _qrDataList = [];
-  int _currentTicketIndex = 0;
   bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
+    // [追加] ViewModelを生成し、画面の状態管理を委譲する (v.13.41.0)
+    _viewModel = RaceResultViewModel(raceId: widget.raceId);
   }
 
   @override
@@ -89,179 +57,48 @@ class _RaceResultPageState extends State<RaceResultPage> {
   @override
   void dispose() {
     _ticketPageController.dispose();
+    // [追加] ViewModelの破棄を追加 (v.13.41.0)
+    _viewModel.dispose();
     super.dispose();
   }
 
   // 初期データ設定（RouteSettingsからの引数受け取り含む）
+  // [修正] _qrDataList/_pageDataFutureへの直接代入をやめ、ViewModel.initialize()へ委譲 (v.13.41.0)
   void _initializeData() {
     // 遷移元から渡された引数をチェック
     final args = ModalRoute.of(context)?.settings.arguments;
     int initialIndex = 0;
+    List<QrData> initialQrDataList = [];
 
     if (args is Map && args.containsKey('siblingTickets')) {
       // 保存済みリストから遷移した場合
       final siblingTickets = args['siblingTickets'] as List<QrData>;
-      _qrDataList = siblingTickets;
+      initialQrDataList = siblingTickets;
       initialIndex = args['initialIndex'] as int? ?? 0;
     } else {
       // QR読み取りや直接遷移の場合（単一）
       if (widget.qrData != null) {
-        _qrDataList = [widget.qrData!];
+        initialQrDataList = [widget.qrData!];
       }
     }
 
     // データがない場合のフォールバック（通常ありえない）
-    if (_qrDataList.isEmpty && widget.qrData != null) {
-      _qrDataList = [widget.qrData!];
+    if (initialQrDataList.isEmpty && widget.qrData != null) {
+      initialQrDataList = [widget.qrData!];
     }
 
-    _currentTicketIndex = initialIndex;
     _ticketPageController = PageController(initialPage: initialIndex, viewportFraction: 0.92); // 少し隣が見えるように
-    _pageDataFuture = _loadPageData();
+    _viewModel.initialize(initialQrDataList, initialIndex);
   }
 
-  Future<PageData> _loadPageData() async {
-    try {
-      if (_qrDataList.isEmpty) {
-        // Step3で追加した高速検索メソッドを使用
-        final savedTickets = await _ticketRepo.getQrDataByRaceId(widget.raceId);
-        if (savedTickets.isNotEmpty) {
-          _qrDataList = savedTickets;
-        }
-      }
-      // 全チケットをパース
-      List<Map<String, dynamic>> parsedTickets = [];
-      for (var qr in _qrDataList) {
-        try {
-          final parsed = json.decode(qr.parsedDataJson) as Map<String, dynamic>;
-          parsedTickets.add(parsed);
-        } catch (e) {
-          debugPrint('Error parsing ticket: $e');
-        }
-      }
-
-      RaceResult? raceResult = await _raceRepo.getRaceResult(widget.raceId);
-
-      // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
-      final userId = UserSession().localUserId;
-      if (raceResult != null && userId != null) {
-        final memos = await _horseRepo.getMemosForRace(userId, widget.raceId);
-        final memosMap = {for (var memo in memos) memo.horseId: memo};
-        final List<PredictionHorseDetail> horseDetailsForPacePrediction = [];
-        final Map<String, List<HorseRaceRecord>> allPastRecords = {};
-
-        for (var horseResult in raceResult.horseResults) {
-          if (memosMap.containsKey(horseResult.horseId)) {
-            horseResult.userMemo = memosMap[horseResult.horseId];
-          }
-          final pastRecords = await _horseRepo.getHorsePerformanceRecords(horseResult.horseId);
-          allPastRecords[horseResult.horseId] = pastRecords;
-          final trainerText = horseResult.trainerName;
-          String trainerAffiliation = '';
-          String trainerName = trainerText;
-
-          if (trainerText.startsWith('美') || trainerText.startsWith('栗')) {
-            final parts = trainerText.split(' ');
-            if (parts.length > 1) {
-              trainerAffiliation = parts[0];
-              trainerName = parts.sublist(1).join(' ');
-            }
-          }
-          // 展開予測のためにPredictionHorseDetailのリストを作成
-          horseDetailsForPacePrediction.add(
-              PredictionHorseDetail(
-                horseId: horseResult.horseId,
-                horseNumber: int.tryParse(horseResult.horseNumber) ?? 0,
-                gateNumber: int.tryParse(horseResult.frameNumber) ?? 0,
-                horseName: horseResult.horseName,
-                sexAndAge: horseResult.sexAndAge,
-                jockey: horseResult.jockeyName,
-                jockeyId: horseResult.jockeyId,
-                carriedWeight: double.tryParse(horseResult.weightCarried) ?? 0.0,
-                trainerName: trainerName,
-                trainerAffiliation: trainerAffiliation,
-                isScratched: false,
-              )
-          );
-        }
-
-        // 過去レースの結果を取得する
-        final statisticsService = StatisticsService();
-        final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(
-            raceResult.raceTitle, widget.raceId);
-
-        final pacePrediction = RaceAnalyzer.predictRacePace(
-            horseDetailsForPacePrediction, allPastRecords, pastRaceResults);
-
-        return PageData(
-          parsedTickets: parsedTickets,
-          raceResult: raceResult,
-          pacePrediction: pacePrediction,
-        );
-      }
-
-      return PageData(
-        parsedTickets: parsedTickets,
-        raceResult: raceResult,
-      );
-    } catch (e) {
-      debugPrint('ページデータの読み込みに失敗しました: $e');
-      throw Exception('データの表示に失敗しました。');
-    }
-  }
-
+  // [修正] ViewModel.refreshData()へ処理を委譲し、結果メッセージをSnackBar表示する (v.13.41.0)
   Future<void> _handleRefresh() async {
-    try {
-      // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
-      final userId = UserSession().localUserId;
-      if (userId == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ユーザー情報の取得に失敗しました。')),
-          );
-        }
-        return;
-      }
-
-      final raceId = widget.raceId;
-      debugPrint('DEBUG: Refreshing race data for raceId: $raceId');
-
-      // 1. レース結果のスクレイピング更新
-      await RaceResultScraperService.scrapeRaceDetails(
-          generateRaceResultUrl(raceId)
+    final result = await _viewModel.refreshData();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
       );
-
-      final siblings = await _ticketRepo.getQrDataByRaceId(widget.raceId);
-
-      if (siblings.isNotEmpty) {
-        // 既存のリストにあるものは除外して追加（ID重複防止）
-        final existingIds = _qrDataList.map((e) => e.id).toSet();
-        for (var sib in siblings) {
-          if (!existingIds.contains(sib.id)) {
-            _qrDataList.add(sib);
-          }
-        }
-        // ID順にソート（保存順）
-        _qrDataList.sort((a, b) => (a.id ?? 0).compareTo(b.id ?? 0));
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('レース結果と馬券リストを更新しました。')),
-        );
-      }
-    } catch (e) {
-      debugPrint('ERROR: Failed to refresh race data: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('更新に失敗しました: $e')),
-        );
-      }
     }
-
-    setState(() {
-      _pageDataFuture = _loadPageData();
-    });
   }
 
   Future<void> _openBulkReviewEdit(RaceResult raceResult) async {
@@ -279,204 +116,13 @@ class _RaceResultPageState extends State<RaceResultPage> {
     }
   }
 
-  Future<void> _exportReviewsAsCsv(RaceResult raceResult) async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
-    final userId = UserSession().localUserId;
-    if (userId == null) return;
-
-    // レース総評を取得
-    final raceMemo = await _raceRepo.getRaceMemo(userId, widget.raceId);
-    final raceMemoText = raceMemo?.memo ?? '';
-
-    final List<List<dynamic>> rows = [];
-    // ヘッダーに raceMemo を追加
-    rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'reviewMemo', 'predictionMemo', 'raceMemo']);
-
-    for (int i = 0; i < raceResult.horseResults.length; i++) {
-      final horse = raceResult.horseResults[i];
-      rows.add([
-        widget.raceId,
-        horse.horseId,
-        horse.horseNumber,
-        horse.horseName,
-        horse.userMemo?.reviewMemo ?? '',
-        horse.userMemo?.predictionMemo ?? '',
-        // レース総評は長文になるため、最初のデータ行（i == 0）にのみ出力してスッキリさせる
-        i == 0 ? raceMemoText : '',
-      ]);
-    }
-
-    final String csv = const ListToCsvConverter().convert(rows);
-    final directory = await getTemporaryDirectory();
-    final path = '${directory.path}/${widget.raceId}_reviews.csv';
-    final file = File(path);
-    await file.writeAsString(csv);
-
-    await Share.shareXFiles([XFile(path)], text: '${raceResult.raceTitle} の回顧メモ');
-  }
-
+  // [修正] ViewModel.importReviewsFromCsv()へ処理を委譲し、競合解決ダイアログはコールバックとして渡す (v.13.41.0)
   Future<void> _importReviewsFromCsv() async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
-    final userId = UserSession().localUserId;
-    if (userId == null) {
+    final result = await _viewModel.importReviewsFromCsv(_resolveConflictDialog);
+    if (mounted && result.message.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ログインが必要です。')),
+        SnackBar(content: Text(result.message)),
       );
-      return;
-    }
-
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
-
-      if (result == null || result.files.single.path == null) return;
-
-      final filePath = result.files.single.path!;
-      final file = File(filePath);
-      final csvString = await file.readAsString();
-      final List<List<dynamic>> rows = const CsvToListConverter().convert(csvString);
-
-      if (rows.length < 2) throw Exception('データがありません');
-
-      final header = rows.first.map((e) => e.toString().trim()).toList();
-      // 旧フォーマットのCSVでも読み込めるように後方互換性を持たせる
-      final hasRaceMemoCol = header.length > 6 && header[6] == 'raceMemo';
-
-      if (header[0] != 'raceId' || header[1] != 'horseId') {
-        throw Exception('CSVヘッダーが正しくありません');
-      }
-
-      // === 既存データの取得 ===
-      final existingHorseMemos = await _horseRepo.getMemosForRace(userId, widget.raceId);
-      final existingHorseMemosMap = {for (var m in existingHorseMemos) m.horseId: m};
-      final existingRaceMemo = await _raceRepo.getRaceMemo(userId, widget.raceId);
-
-      final List<HorseMemo> memosToUpdate = [];
-      bool updateRaceMemo = false;
-      String finalRaceMemo = existingRaceMemo?.memo ?? '';
-      int updatedHorseCount = 0;
-
-      for (int i = 1; i < rows.length; i++) {
-        final row = rows[i];
-        final csvRaceId = row[0].toString();
-
-        if (csvRaceId != widget.raceId) continue;
-
-        final horseId = row[1].toString();
-        final horseName = row.length > 3 ? row[3].toString() : '馬番不明';
-        final csvReview = row.length > 4 ? row[4].toString() : '';
-        final csvPrediction = row.length > 5 ? row[5].toString() : '';
-
-        final existingHorse = existingHorseMemosMap[horseId];
-        String finalReview = existingHorse?.reviewMemo ?? '';
-        String finalPrediction = existingHorse?.predictionMemo ?? '';
-        bool isHorseUpdated = false;
-
-        // 回顧メモの競合判定
-        final reviewMerge = MemoImportLogic.determineMergeAction(existingHorse?.reviewMemo, csvReview);
-        if (reviewMerge.action == MemoMergeAction.overwrite) {
-          finalReview = reviewMerge.resultText;
-          isHorseUpdated = true;
-        } else if (reviewMerge.action == MemoMergeAction.conflict) {
-          final resolved = await _resolveConflictDialog('$horseNameの回顧メモ', reviewMerge);
-          if (resolved != null && resolved != finalReview) {
-            finalReview = resolved;
-            isHorseUpdated = true;
-          }
-        }
-
-        // 予想メモの競合判定
-        final predictionMerge = MemoImportLogic.determineMergeAction(existingHorse?.predictionMemo, csvPrediction);
-        if (predictionMerge.action == MemoMergeAction.overwrite) {
-          finalPrediction = predictionMerge.resultText;
-          isHorseUpdated = true;
-        } else if (predictionMerge.action == MemoMergeAction.conflict) {
-          final resolved = await _resolveConflictDialog('$horseNameの予想メモ', predictionMerge);
-          if (resolved != null && resolved != finalPrediction) {
-            finalPrediction = resolved;
-            isHorseUpdated = true;
-          }
-        }
-
-        // 変更があった場合、または新規作成の場合のみ更新リストへ追加
-        if (isHorseUpdated || existingHorse == null) {
-          // 新規の場合でかつCSVのメモがどちらも空なら追加しない
-          if (existingHorse != null || finalReview.isNotEmpty || finalPrediction.isNotEmpty) {
-            memosToUpdate.add(HorseMemo(
-              id: existingHorse?.id,
-              userId: userId,
-              raceId: csvRaceId,
-              horseId: horseId,
-              reviewMemo: finalReview,
-              predictionMemo: finalPrediction,
-              timestamp: DateTime.now(),
-              odds: existingHorse?.odds,
-              popularity: existingHorse?.popularity,
-            ));
-            updatedHorseCount++;
-          }
-        }
-
-        // レース総評の競合判定
-        if (hasRaceMemoCol && row.length > 6) {
-          final csvRaceMemo = row[6].toString().trim();
-          if (csvRaceMemo.isNotEmpty) {
-            final raceMerge = MemoImportLogic.determineMergeAction(finalRaceMemo, csvRaceMemo);
-            if (raceMerge.action == MemoMergeAction.overwrite) {
-              finalRaceMemo = raceMerge.resultText;
-              updateRaceMemo = true;
-            } else if (raceMerge.action == MemoMergeAction.conflict) {
-              final resolved = await _resolveConflictDialog('レース総評', raceMerge);
-              if (resolved != null && resolved != finalRaceMemo) {
-                finalRaceMemo = resolved;
-                updateRaceMemo = true;
-              }
-            }
-          }
-        }
-      }
-
-      // 馬ごとのメモを一括保存
-      if (memosToUpdate.isNotEmpty) {
-        await _horseRepo.insertOrUpdateMultipleMemos(memosToUpdate);
-      }
-
-      // レース総評の保存
-      if (updateRaceMemo) {
-        final newRaceMemo = RaceMemo(
-          id: existingRaceMemo?.id,
-          userId: userId,
-          raceId: widget.raceId,
-          memo: finalRaceMemo,
-          timestamp: DateTime.now(),
-        );
-        await _raceRepo.insertOrUpdateRaceMemo(newRaceMemo);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  '$updatedHorseCount頭のメモ' +
-                      (updateRaceMemo ? 'とレース総評' : '') +
-                      'を更新・インポートしました'
-              )
-          ),
-        );
-
-        // 画面を再読み込みして最新データを反映（RaceReviewCardも更新される）
-        setState(() {
-          _pageDataFuture = _loadPageData();
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('インポートエラー: $e')),
-        );
-      }
     }
   }
 
@@ -532,7 +178,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   Future<void> _showMemoDialog(HorseResult horse) async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.41.0)
     final userId = UserSession().localUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -651,13 +297,11 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     reviewMemo: finalMemo, // 結合したメモを保存
                     timestamp: DateTime.now(),
                   );
-                  await _horseRepo.insertOrUpdateHorseMemo(newMemo);
-                  Navigator.of(context).pop();
-
-                  // 画面を再読み込みして最新データを反映
-                  setState(() {
-                    _pageDataFuture = _loadPageData();
-                  });
+                  // [修正] ViewModel.saveHorseMemo()へ保存処理を委譲 (v.13.41.0)
+                  await _viewModel.saveHorseMemo(newMemo);
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                  }
                 }
               },
               child: const Text('保存'),
@@ -668,136 +312,100 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
+  // [修正] FutureBuilderをListenableBuilderに置き換え、ViewModelの状態を監視する (v.13.41.0)
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        FutureBuilder<PageData>(
-          future: _pageDataFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+        ListenableBuilder(
+          listenable: _viewModel,
+          builder: (context, _) {
+            if (_viewModel.isLoading && _viewModel.pageData == null) {
               return const Center(child: CircularProgressIndicator());
             }
-            if (snapshot.hasError) {
+            if (_viewModel.errorMessage != null) {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Text(
-                    'エラー: ${snapshot.error}',
+                    'エラー: ${_viewModel.errorMessage}',
                     style: const TextStyle(color: Colors.red),
                     textAlign: TextAlign.center,
                   ),
                 ),
               );
             }
-            if (snapshot.hasData) {
-              final pageData = snapshot.data!;
-              final parsedTickets = pageData.parsedTickets;
-              final raceResult = pageData.raceResult;
 
-              final Map<String, List<List<int>>> userCombinationsByType = {};
+            final pageData = _viewModel.pageData;
+            if (pageData == null) {
+              return const Center(child: Text('データがありません。'));
+            }
 
-              // 全チケットの購入情報を集約（払戻表示用）
-              for (var ticket in parsedTickets) {
-                if (ticket['購入内容'] != null) {
-                  final purchaseDetails = ticket['購入内容'] as List;
-                  for (var detail in purchaseDetails) {
-                    final ticketTypeId = detail['式別'] as String?;
-                    if (ticketTypeId != null && detail['all_combinations'] != null) {
-                      userCombinationsByType.putIfAbsent(ticketTypeId, () => []);
-                      final combinations = detail['all_combinations'] as List;
-                      for (var c in combinations) {
-                        if (c is List) {
-                          userCombinationsByType[ticketTypeId]!.add(c.cast<int>());
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+            final parsedTickets = pageData.parsedTickets;
+            final raceResult = pageData.raceResult;
 
-              return RefreshIndicator(
-                onRefresh: _handleRefresh,
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  children: [
-                    if (parsedTickets.isNotEmpty)
-                      _buildTicketPageView(parsedTickets, raceResult),
+            return RefreshIndicator(
+              onRefresh: _handleRefresh,
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                children: [
+                  if (parsedTickets.isNotEmpty)
+                    _buildTicketPageView(parsedTickets, raceResult),
 
-                    if (raceResult != null) ...[
-                      if (raceResult.isIncomplete)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: _buildIncompleteRaceDataCard(),
-                        )
-                      else ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: _buildRaceInfoCard(raceResult, pageData.pacePrediction),
-                        ),
-                        // 【新規追加】レース総評カードをここに挿入
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: RaceReviewCard(
-                            raceId: widget.raceId,
-                            // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
-                            userId: UserSession().localUserId ?? '',
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: _buildFullResultsCard(raceResult),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: _buildRefundsCard(raceResult, userCombinationsByType),
-                        ),
-                      ]
-                    ] else ...[
+                  if (raceResult != null) ...[
+                    if (raceResult.isIncomplete)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: _buildNoRaceDataCard(),
+                        child: _buildIncompleteRaceDataCard(),
+                      )
+                    else ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: _buildRaceInfoCard(raceResult, pageData.pacePrediction),
+                      ),
+                      // 【新規追加】レース総評カードをここに挿入
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: RaceReviewCard(
+                          raceId: widget.raceId,
+                          userId: UserSession().localUserId ?? '',
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: _buildFullResultsCard(raceResult),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: _buildRefundsCard(raceResult),
                       ),
                     ]
-                  ],
-                ),
-              );
-            }
-            return const Center(child: Text('データがありません。'));
+                  ] else ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: _buildNoRaceDataCard(),
+                    ),
+                  ]
+                ],
+              ),
+            );
           },
         ),
       ],
     );
   }
 
+  // [修正] 収支計算・的中判定をViewModelのgetter経由で取得するよう変更 (v.13.41.0)
   Widget _buildTicketPageView(List<Map<String, dynamic>> parsedTickets, RaceResult? raceResult) {
-    // 現在表示中のチケット
-    final currentTicket = parsedTickets.isNotEmpty
-        ? parsedTickets[_currentTicketIndex < parsedTickets.length ? _currentTicketIndex : 0]
-        : null;
-
     // 現在のチケットの収支計算
-    HitResult? currentHitResult;
-    if (currentTicket != null && raceResult != null && !raceResult.isIncomplete) {
-      currentHitResult = HitChecker.check(parsedTicket: currentTicket, raceResult: raceResult);
-    }
+    final currentHitResult = _viewModel.currentHitResult;
 
     // レース全体の収支計算
-    int raceTotalPurchase = 0;
-    int raceTotalPayout = 0;
-    int raceTotalRefund = 0;
-
-    for (var ticket in parsedTickets) {
-      final amount = ticket['合計金額'] as int? ?? 0;
-      raceTotalPurchase += amount;
-
-      if (raceResult != null && !raceResult.isIncomplete) {
-        final hit = HitChecker.check(parsedTicket: ticket, raceResult: raceResult);
-        raceTotalPayout += hit.totalPayout;
-        raceTotalRefund += hit.totalRefund;
-      }
-    }
-    final raceBalance = (raceTotalPayout + raceTotalRefund) - raceTotalPurchase;
+    final balance = _viewModel.raceBalanceSummary;
+    final raceTotalPurchase = balance.totalPurchase;
+    final raceTotalPayout = balance.totalPayout;
+    final raceTotalRefund = balance.totalRefund;
+    final raceBalance = balance.balance;
 
     return Column(
       children: [
@@ -808,20 +416,14 @@ class _RaceResultPageState extends State<RaceResultPage> {
             controller: _ticketPageController,
             itemCount: parsedTickets.length,
             onPageChanged: (index) {
-              setState(() {
-                _currentTicketIndex = index;
-              });
+              // [修正] setStateの代わりにViewModelへインデックス更新を委譲 (v.13.41.0)
+              _viewModel.setCurrentTicketIndex(index);
             },
             itemBuilder: (context, index) {
               final ticket = parsedTickets[index];
 
               // 的中判定ロジック
-              bool isHit = false;
-              if (raceResult != null && !raceResult.isIncomplete) {
-                final hitResult = HitChecker.check(parsedTicket: ticket, raceResult: raceResult);
-                // 払戻金が発生していれば的中とみなす
-                isHit = hitResult.totalPayout > 0;
-              }
+              final isHit = _viewModel.isTicketHit(index);
 
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4.0),
@@ -860,7 +462,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                   margin: const EdgeInsets.symmetric(horizontal: 4.0),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _currentTicketIndex == index ? Colors.blue.shade700 : Colors.grey.shade300,
+                    color: _viewModel.currentTicketIndex == index ? Colors.blue.shade700 : Colors.grey.shade300,
                   ),
                 );
               }),
@@ -1040,7 +642,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton(
-                      onPressed: () => _exportReviewsAsCsv(raceResult),
+                      // [修正] ViewModel.exportReviewsAsCsv()を直接呼び出すよう変更 (v.13.41.0)
+                      onPressed: () => _viewModel.exportReviewsAsCsv(),
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1107,7 +710,10 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  Widget _buildRefundsCard(RaceResult raceResult, Map<String, List<List<int>>> userCombinationsByType) {
+  // [修正] 引数からuserCombinationsByTypeを除去し、ViewModelのgetterから取得するよう変更 (v.13.41.0)
+  Widget _buildRefundsCard(RaceResult raceResult) {
+    final userCombinationsByType = _viewModel.userCombinationsByType;
+
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 8),

@@ -547,10 +547,11 @@ class _MainScaffoldState extends State<MainScaffold> {
   Widget build(BuildContext context) {
     final isTablet = ResponsiveBreakpoints.of(context).largerThan(MOBILE);
 
-    final int tabletIndex = _selectedIndex == 0 ? 0 : (_selectedIndex <= 2) ? 1 : 2;
+    // [修正] 重賞一覧ページを追加し、_selectedIndexとtabletPagesが1:1で対応するよう修正 (v.13.40.6)
     final List<Widget> tabletPages = [
       _pages[0],
       const TabletScheduleWrapperPage(),
+      const JyusyoIchiranPage(),
       const TabletSavedTicketsListPage(),
     ];
 
@@ -679,20 +680,17 @@ class _MainScaffoldState extends State<MainScaffold> {
           children: [
             NavigationRail(
               backgroundColor: Colors.green[900],
-              leading: IconButton(
-                icon: const Icon(Icons.menu, color: Colors.white),
-                onPressed: () {
-                  _scaffoldKey.currentState?.openDrawer();
-                },
-              ),
-              selectedIndex: tabletIndex,
+              // [修正] メニュー項目をdestinationsへ統合したためleadingのIconButtonを削除 (v.13.40.6)
+              selectedIndex: _selectedIndex + 1,
 
+              // [修正] BottomNavigationBarと同じ「index 0はメニュー(Drawer)」方式に統一し、
+              // 5項目すべてのタップを正しいページへ振り分けるよう修正 (v.13.40.6)
               onDestinationSelected: (int index) {
-                int mappedIndex = index;
-                if (index == 1) mappedIndex = 1;
-                else if (index == 2) mappedIndex = 3;
-
-                _onItemTapped(mappedIndex);
+                if (index == 0) {
+                  _scaffoldKey.currentState?.openDrawer();
+                  return;
+                }
+                _onItemTapped(index - 1);
               },
 
               labelType: NavigationRailLabelType.none,
@@ -702,16 +700,19 @@ class _MainScaffoldState extends State<MainScaffold> {
               unselectedIconTheme: const IconThemeData(color: Colors.grey, size: 24),
               selectedLabelTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
               unselectedLabelTextStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+              // [修正] BottomNavigationBarItemと同じ5項目（メニュー/ニュース/開催一覧/重賞一覧/馬券履歴）に同期 (v.13.40.6)
               destinations: const [
-                NavigationRailDestination(icon: Icon(Icons.home), label: Text('')),
-                NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('開催')),
-                NavigationRailDestination(icon: Icon(Icons.list_alt), label: Text('馬券')),
+                NavigationRailDestination(icon: Icon(Icons.menu), label: Text('メニュー')),
+                NavigationRailDestination(icon: Icon(Icons.home), label: Text('ニュース')),
+                NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('開催一覧')),
+                NavigationRailDestination(icon: Icon(Icons.receipt_long), label: Text('重賞一覧')),
+                NavigationRailDestination(icon: Icon(Icons.list_alt), label: Text('馬券履歴')),
               ],
             ),
             const VerticalDivider(thickness: 1, width: 1),
             Expanded(
               child: IndexedStack(
-                index: tabletIndex,
+                index: _selectedIndex,
                 children: tabletPages,
               ),
             ),
