@@ -7,7 +7,8 @@ import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
@@ -231,7 +232,8 @@ class PerformanceTabWidget extends StatelessWidget {
                     alignment: Alignment.center,
                     children: [
                       FutureBuilder<UserMark?>(
-                        future: _userRepo.getUserMark(localUserId!, record.raceId, record.horseId),
+                        // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+                        future: _userRepo.getUserMark(UserSession().localUserId!, record.raceId, record.horseId),
                         builder: (context, snapshot) {
                           if (snapshot.hasData && snapshot.data?.mark != null) {
                             return Text(

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
 import 'package:hetaumakeiba_v2/models/ticket_list_item.dart';
 import 'package:hetaumakeiba_v2/logic/ticket_aggregator.dart';
@@ -59,7 +60,8 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
     if (!mounted) return;
     setState(() { _isLoading = true; });
 
-    final userId = localUserId;
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId;
     if (userId == null) {
       setState(() {
         _isLoading = false;
@@ -477,7 +479,8 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
                           ),
                         );
                         if (confirm == true) {
-                          final userId = localUserId;
+                          // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+                          final userId = UserSession().localUserId;
                           if (userId != null) {
                             for (int id in _selectedTicketIds) {
                               await _ticketRepository.deleteQrData(id, userId);
@@ -513,7 +516,8 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
                         key: ValueKey('group_${group.first.raceId}_$index'),
                         direction: DismissDirection.endToStart,
                         onDismissed: (_) async {
-                          final userId = localUserId;
+                          // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+                          final userId = UserSession().localUserId;
                           if (userId == null) return;
                           for (final item in group) {
                             if (item.qrData.id != null) await _ticketRepository.deleteQrData(item.qrData.id!, userId);

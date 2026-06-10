@@ -7,7 +7,8 @@ import 'package:data_table_2/data_table_2.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
@@ -64,7 +65,8 @@ class _MemoTabWidgetState extends State<MemoTabWidget> {
   final HorseRepository _horseRepo = HorseRepository();
 
   Future<void> _showMemoDialog(PredictionHorseDetail horse) async {
-    final userId = localUserId;
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),
@@ -152,7 +154,8 @@ class _MemoTabWidgetState extends State<MemoTabWidget> {
   }
 
   Future<void> _importMemosFromCsv() async {
-    final userId = localUserId;
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),
@@ -222,7 +225,8 @@ class _MemoTabWidgetState extends State<MemoTabWidget> {
   }
 
   Future<List<_PastMemoDetail>> _fetchPastMemoDetails(String horseId) async {
-    final userId = localUserId;
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId;
     if (userId == null) return [];
 
     final records = await _horseRepo.getHorsePerformanceRecords(horseId);

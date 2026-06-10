@@ -3,7 +3,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/user_model.dart';
 import 'package:hetaumakeiba_v2/services/local_auth_service.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -51,23 +52,25 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
   }
 
   Future<void> _loadUserInfo() async {
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final localUserId = UserSession().localUserId;
     if (localUserId == null) {
       setState(() {
         _isLoading = false;
       });
       return;
     }
-    final user = await _userRepository.getUserByUuid(localUserId!);
+    final user = await _userRepository.getUserByUuid(localUserId);
     final prefs = await SharedPreferences.getInstance();
 
-    final profileImagePath = prefs.getString('profile_picture_path_${localUserId!}');
+    final profileImagePath = prefs.getString('profile_picture_path_$localUserId');
 
     setState(() {
       _currentUser = user;
       _hasPassword = user?.hashedPassword.isNotEmpty ?? false;
       _loginUsername = user?.username ?? '取得エラー';
       _displayNameController.text =
-          prefs.getString('display_name_${localUserId!}') ?? user?.username ?? '';
+          prefs.getString('display_name_$localUserId') ?? user?.username ?? '';
       if (profileImagePath != null) {
         _profileImageFile = File(profileImagePath);
       }
@@ -113,6 +116,8 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
   }
 
   Future<void> _saveSettings() async {
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final localUserId = UserSession().localUserId;
     if (!_formKey.currentState!.validate() || localUserId == null) {
       return;
     }
@@ -123,12 +128,12 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-        'display_name_${localUserId!}', _displayNameController.text);
+        'display_name_$localUserId', _displayNameController.text);
 
-    final imagePathKey = 'profile_picture_path_${localUserId!}';
+    final imagePathKey = 'profile_picture_path_$localUserId';
     if (_profileImageFile != null) {
       final appDir = await getApplicationDocumentsDirectory();
-      final fileName = 'profile_picture_${localUserId!}.jpg';
+      final fileName = 'profile_picture_$localUserId.jpg';
       final savedImage =
       await _profileImageFile!.copy(p.join(appDir.path, fileName));
       await prefs.setString(imagePathKey, savedImage.path);

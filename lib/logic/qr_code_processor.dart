@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/services/ticket_processing_service.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 
 class QrCodeProcessor {
   final TicketRepository _ticketRepository;
@@ -131,7 +132,8 @@ class QrCodeProcessor {
 
   /// 解析、DB保存、スクレイピング実行のロジックをTicketProcessingServiceに委譲
   Future<void> _processCombinedQrCode(String qrCode) async {
-    final userId = localUserId; // FirebaseAuthからlocalUserIdに変更
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId; // FirebaseAuthからlocalUserIdに変更
     if (userId == null) {
       _setWarningStatus(true, 'ユーザー情報の取得に失敗しました。');
       await Future.delayed(const Duration(seconds: 3));

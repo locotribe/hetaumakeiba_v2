@@ -11,7 +11,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
@@ -287,7 +288,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<void> _deleteMarkAndSaveInBackground(PredictionHorseDetail horse) async {
-    final userId = localUserId;
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId;
     if (userId == null) return;
 
     await _userRepo.deleteUserMark(userId, widget.raceId, horse.horseId);
@@ -366,7 +368,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<PredictionRaceData?> _fetchDataWithUserMarks() async {
-    final userId = localUserId;
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId;
     if (userId == null) {
       return await _scraperService.scrapeAllData(widget.raceId);
     }

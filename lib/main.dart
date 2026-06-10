@@ -5,9 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hetaumakeiba_v2/screens/auth_gate.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
-
-// アプリ全体で利用する永続的なローカルIDを保持する変数
-String? localUserId;
+// [修正] localUserIdグローバル変数を廃止しUserSessionサービスへ移行 (v.13.40.4)
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

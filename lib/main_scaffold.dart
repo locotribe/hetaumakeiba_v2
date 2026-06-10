@@ -14,7 +14,8 @@ import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
@@ -242,10 +243,12 @@ class _MainScaffoldState extends State<MainScaffold> {
 // （以降のコードは全く変更なしのため省略）
 
   Future<void> _loadUserInfoForDrawer() async {
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final localUserId = UserSession().localUserId;
     if (localUserId == null) return;
     final prefs = await SharedPreferences.getInstance();
-    final user = await _userRepository.getUserByUuid(localUserId!);
-    final profileImagePath = prefs.getString('profile_picture_path_${localUserId!}');
+    final user = await _userRepository.getUserByUuid(localUserId);
+    final profileImagePath = prefs.getString('profile_picture_path_$localUserId');
 
     File? newImageFile;
     if (profileImagePath != null) {
@@ -256,14 +259,15 @@ class _MainScaffoldState extends State<MainScaffold> {
     if (mounted) {
       setState(() {
         _displayName =
-            prefs.getString('display_name_${localUserId!}') ?? user?.username ?? '';
+            prefs.getString('display_name_$localUserId') ?? user?.username ?? '';
         _profileImageFile = newImageFile;
       });
     }
   }
 
   Future<void> _importGlobalMemosFromCsv() async {
-    final userId = localUserId; // _MainScaffoldState内で取得可能なユーザーID
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId; // _MainScaffoldState内で取得可能なユーザーID
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),

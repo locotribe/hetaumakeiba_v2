@@ -13,7 +13,8 @@ import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
@@ -141,7 +142,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
       RaceResult? raceResult = await _raceRepo.getRaceResult(widget.raceId);
 
-      final userId = localUserId;
+      // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+      final userId = UserSession().localUserId;
       if (raceResult != null && userId != null) {
         final memos = await _horseRepo.getMemosForRace(userId, widget.raceId);
         final memosMap = {for (var memo in memos) memo.horseId: memo};
@@ -210,7 +212,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
 
   Future<void> _handleRefresh() async {
     try {
-      final userId = localUserId;
+      // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+      final userId = UserSession().localUserId;
       if (userId == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -277,7 +280,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   Future<void> _exportReviewsAsCsv(RaceResult raceResult) async {
-    final userId = localUserId;
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId;
     if (userId == null) return;
 
     // レース総評を取得
@@ -312,7 +316,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   Future<void> _importReviewsFromCsv() async {
-    final userId = localUserId;
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),
@@ -527,7 +532,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   Future<void> _showMemoDialog(HorseResult horse) async {
-    final userId = localUserId;
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です。')),
@@ -734,7 +740,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
                           padding: const EdgeInsets.symmetric(horizontal: 8.0),
                           child: RaceReviewCard(
                             raceId: widget.raceId,
-                            userId: localUserId ?? '',
+                            // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+                            userId: UserSession().localUserId ?? '',
                           ),
                         ),
                         Padding(

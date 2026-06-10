@@ -5,7 +5,8 @@ import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/feed_card_widget.dart';
 import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/widgets/track_condition_ticker.dart';
 import 'package:hetaumakeiba_v2/services/track_conditions_scraper_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -80,7 +81,8 @@ class _HomePageState extends State<HomePage> {
   void _refreshFeeds() {
     if (mounted) {
       setState(() {
-        final userId = localUserId;
+        // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+        final userId = UserSession().localUserId;
         if (userId == null) {
           _feedsFuture = Future.value([]);
         } else {

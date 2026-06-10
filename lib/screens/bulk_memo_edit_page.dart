@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 
 class BulkMemoEditPage extends StatefulWidget {
   final List<PredictionHorseDetail> horses;
@@ -43,7 +44,8 @@ class _BulkMemoEditPageState extends State<BulkMemoEditPage> {
   }
 
   Future<void> _saveMemos() async {
-    final userId = localUserId;
+    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+    final userId = UserSession().localUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ユーザー情報が取得できませんでした。')),

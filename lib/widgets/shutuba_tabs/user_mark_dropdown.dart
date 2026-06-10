@@ -3,7 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
-import 'package:hetaumakeiba_v2/main.dart';
+// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 
 class UserMarkDropdown extends StatelessWidget {
   final PredictionHorseDetail horse;
@@ -48,7 +49,8 @@ class UserMarkDropdown extends StatelessWidget {
         ),
       ],
       onSelected: (String newValue) {
-        final userId = localUserId;
+        // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+        final userId = UserSession().localUserId;
         if (userId == null) return;
 
         if (newValue == '--') {
