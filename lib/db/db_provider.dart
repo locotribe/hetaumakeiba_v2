@@ -310,16 +310,26 @@ class DbProvider {
     ''');
   }
 
+  // [修正] マイグレーション失敗時にエラーを握りつぶさず、rethrowで上位へ伝播させるよう全catchブロックを修正 (v.13.40.3)
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       try {
         await db.execute('ALTER TABLE ${DbConstants.tableRaceStatistics} ADD COLUMN analyzedRacesJson TEXT');
-      } catch (e) { debugPrint('Migration error (v1->v2): $e'); }
+      } catch (e) {
+        debugPrint('Migration error (v1->v2): $e');
+        rethrow;
+      }
     }
     if (oldVersion < 3) {
       try {
         await db.execute('ALTER TABLE ${DbConstants.tableFeaturedRaces} ADD COLUMN shutubaHorsesJson TEXT');
-      } catch (e) { debugPrint('Migration error (v2->v3): $e'); }
+      } catch (e) {
+        debugPrint('Migration error (v2->v3): $e');
+        rethrow;
+      }
+    }
+    if (oldVersion < 4) {
+      // [追加] v3->v4はスキーマ変更なし。バージョン番号のステップ抜けを解消するための空ブロック (v.13.40.3)
     }
     if (oldVersion < 5) {
       try {
@@ -331,7 +341,10 @@ class DbProvider {
             ffName TEXT, fmName TEXT, mfName TEXT, mmName TEXT, lastUpdated TEXT
           )
         ''');
-      } catch (e) { debugPrint('DEBUG: Migration error (v4->v5): $e'); }
+      } catch (e) {
+        debugPrint('DEBUG: Migration error (v4->v5): $e');
+        rethrow;
+      }
     }
     if (oldVersion < 6) {
       try {
@@ -342,7 +355,10 @@ class DbProvider {
             conditions TEXT, weight TEXT, source_url TEXT, UNIQUE(date, race_name)
           )
         ''');
-      } catch (e) { debugPrint('DEBUG: Migration error (v5->v6): $e'); }
+      } catch (e) {
+        debugPrint('DEBUG: Migration error (v5->v6): $e');
+        rethrow;
+      }
     }
     if (oldVersion < 7) {
       try {
@@ -355,7 +371,10 @@ class DbProvider {
             UNIQUE(year, date, race_name)
           )
         ''');
-      } catch (e) { debugPrint('DEBUG: Migration error (v6->v7): $e'); }
+      } catch (e) {
+        debugPrint('DEBUG: Migration error (v6->v7): $e');
+        rethrow;
+      }
     }
     if (oldVersion < 8) {
       try {
@@ -371,7 +390,10 @@ class DbProvider {
           }
         }
         await batch.commit(noResult: true);
-      } catch (e) { debugPrint('DEBUG: Migration error (v7->v8): $e'); }
+      } catch (e) {
+        debugPrint('DEBUG: Migration error (v7->v8): $e');
+        rethrow;
+      }
     }
     if (oldVersion < 9) {
       try {
@@ -382,7 +404,10 @@ class DbProvider {
             moisture_dirt_goal REAL, moisture_dirt_4c REAL
           )
         ''');
-      } catch (e) { debugPrint('DEBUG: Migration error (v8->v9): $e'); }
+      } catch (e) {
+        debugPrint('DEBUG: Migration error (v8->v9): $e');
+        rethrow;
+      }
     }
     if (oldVersion < 10) {
       try {
@@ -396,7 +421,10 @@ class DbProvider {
             UNIQUE(userId, raceId) ON CONFLICT REPLACE
           )
         ''');
-      } catch (e) { debugPrint('DEBUG: Migration error (v9->v10): $e'); }
+      } catch (e) {
+        debugPrint('DEBUG: Migration error (v9->v10): $e');
+        rethrow;
+      }
     }
 
     if (oldVersion < 11) {
@@ -418,7 +446,10 @@ class DbProvider {
             PRIMARY KEY (${DbConstants.colHorseId}, ${DbConstants.colTrainingDate}, ${DbConstants.colTrainingTime}, ${DbConstants.colTrackType}, ${DbConstants.colLocation})
           )
         ''');
-      } catch (e) { debugPrint('DEBUG: Migration error (v10->v11): $e'); }
+      } catch (e) {
+        debugPrint('DEBUG: Migration error (v10->v11): $e');
+        rethrow;
+      }
     }
 
     if (oldVersion < 12) {
@@ -450,14 +481,20 @@ class DbProvider {
             ${DbConstants.colResultLastUpdated} TEXT
           )
         ''');
-      } catch (e) { debugPrint('DEBUG: Migration error (v11->v12): $e'); }
+      } catch (e) {
+        debugPrint('DEBUG: Migration error (v11->v12): $e');
+        rethrow;
+      }
     }
     if (oldVersion < 13) {
       try {
         await db.execute('DROP TABLE IF EXISTS analytics_aggregates');
         // [追加] horse_profilesテーブルにgenderカラムを追加 (v.13)
         await db.execute('ALTER TABLE ${DbConstants.tableHorseProfiles} ADD COLUMN gender TEXT');
-      } catch (e) { debugPrint('Migration error (v12->v13): $e'); }
+      } catch (e) {
+        debugPrint('Migration error (v12->v13): $e');
+        rethrow;
+      }
     }
   }
 
