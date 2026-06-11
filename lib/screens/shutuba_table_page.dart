@@ -11,6 +11,7 @@ import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/logic/race_info_parser.dart';
 // [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
@@ -331,6 +332,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         ? int.tryParse(raceResult.raceId.substring(raceResult.raceId.length - 2))?.toString() ?? ''
         : '';
 
+    // [追加] raceInfoからコース情報(トラック種別/距離/方向/内外回り)を復元 (v.13.41.1)
+    final courseInfo = RaceInfoParser.parse(raceResult.raceInfo);
 
     return PredictionRaceData(
       raceId: raceResult.raceId,
@@ -342,6 +345,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       raceGrade: raceResult.raceGrade,
       raceDetails1: raceResult.raceInfo,
       horses: horses,
+      trackType: courseInfo.trackType,
+      distanceValue: courseInfo.distanceValue,
+      direction: courseInfo.direction,
+      courseInOut: courseInfo.courseInOut,
     );
   }
 

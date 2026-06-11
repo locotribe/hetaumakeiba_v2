@@ -11,6 +11,7 @@ import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/logic/race_info_parser.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
 import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/screens/jockey_stats_page.dart';
@@ -114,6 +115,9 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
       ).value;
     }
 
+    // [追加] raceInfoからコース情報(トラック種別/距離/方向/内外回り)を復元 (v.13.41.1)
+    final courseInfo = RaceInfoParser.parse(raceResult.raceInfo);
+
     return PredictionRaceData(
       raceId: raceResult.raceId,
       raceName: raceResult.raceTitle,
@@ -124,6 +128,10 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
       raceGrade: raceResult.raceGrade,
       raceDetails1: raceResult.raceInfo,
       horses: horses,
+      trackType: courseInfo.trackType,
+      distanceValue: courseInfo.distanceValue,
+      direction: courseInfo.direction,
+      courseInOut: courseInfo.courseInOut,
     );
   }
 
