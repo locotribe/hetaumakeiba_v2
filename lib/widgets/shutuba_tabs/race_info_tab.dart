@@ -11,6 +11,10 @@ import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
 import 'package:hetaumakeiba_v2/db/course_elevations.dart';
 import 'package:hetaumakeiba_v2/logic/elevation_logic.dart';
+// [追加] コース平面図表示 (v.1.0)
+import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
+import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/course_diagram_painter.dart';
 
 class RaceInfoTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
@@ -263,6 +267,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
             '本賞金: ${widget.predictionRaceData.basePrize1st ?? "-"}, ${widget.predictionRaceData.basePrize2nd ?? "-"}, ${widget.predictionRaceData.basePrize3rd ?? "-"}, ${widget.predictionRaceData.basePrize4th ?? "-"}, ${widget.predictionRaceData.basePrize5th ?? "-"}万円',
             style: const TextStyle(fontSize: 12, color: Colors.black54),
           ),
+          // [追加] コース平面図表示 (v.1.0)
+          _buildCourseDiagramSection(),
           _buildElevationChartSection(),
           _buildDetailedTrackCondition(),
           const SizedBox(height: 12),
@@ -271,6 +277,68 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           _buildPinpointWeather(),
         ],
       ),
+    );
+  }
+
+  // [追加] コース平面図表示 (v.1.0)
+  Widget _buildCourseDiagramSection() {
+    final venueCode = widget.predictionRaceData.raceId.length >= 6
+        ? widget.predictionRaceData.raceId.substring(4, 6)
+        : null;
+
+    final distance = int.tryParse(widget.predictionRaceData.distanceValue?.toString() ?? '');
+
+    if (venueCode == null || distance == null) return const SizedBox.shrink();
+
+    final trackTypeKey = _mapToTrackTypeKey();
+
+    // [追加] シュート（引き込み線）の動的描画対応 (v.1.0)
+    // RaceCourseData.approachPathから合流点までの相対ベクトル(角度・距離)を取得し、Painterへ渡す
+    var raceCourse = CourseElevations.findRaceCourse(venueCode, distance, trackTypeKey);
+    if (raceCourse == null && trackTypeKey == 'shiba') {
+      raceCourse = CourseElevations.findRaceCourse(venueCode, distance, 'shiba_inner');
+    }
+    final approachPaths = raceCourse?.approachPath;
+
+    return FutureBuilder<CourseDiagramData?>(
+      future: CourseDiagramService.instance.getCourseDiagram(venueCode, distance, trackTypeKey),
+      builder: (context, snapshot) {
+        final diagram = snapshot.data;
+        if (diagram == null) return const SizedBox.shrink();
+
+        return Container(
+          margin: const EdgeInsets.only(top: 16.0, bottom: 8.0),
+          padding: const EdgeInsets.all(8.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return AspectRatio(
+                aspectRatio: diagram.imageInfo.width / diagram.imageInfo.height,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Image.asset(diagram.imageAsset, fit: BoxFit.contain),
+                    ),
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: CourseDiagramPainter(
+                          diagram: diagram,
+                          raceDistance: distance,
+                          approachPaths: approachPaths, // [追加] シュート（引き込み線）の動的描画対応 (v.1.0)
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 

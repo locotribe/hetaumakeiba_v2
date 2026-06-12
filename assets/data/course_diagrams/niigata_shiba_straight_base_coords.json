@@ -1,0 +1,26 @@
+{
+  "venue": "新潟",
+  "course_type": "shiba_straight",
+  "base_lap_distance": 1000.0,
+  "pixels_per_meter": 0.41700119903904354,
+  "edge_points": [
+    [
+      430,
+      148
+    ],
+    [
+      13,
+      149
+    ]
+  ],
+  "markers": [
+    [
+      430,
+      148
+    ],
+    [
+      13,
+      149
+    ]
+  ]
+}
