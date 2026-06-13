@@ -32,6 +32,7 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/training_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/user_mark_dropdown.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_info_tab.dart'; // ▼ 追加
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_tab.dart'; // ▼ 追加: 展開シミュタブ
 
 enum SortableColumn {
   gateNumber,
@@ -90,7 +91,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _loadShutubaData();
   }
 
@@ -572,6 +573,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                         isScrollable: true,
                         tabs: const [
                           Tab(text: 'レース情報'),
+                          Tab(text: '展開シミュ'),
                           Tab(text: '出走馬'),
                           Tab(text: '成績'),
                           Tab(text: 'メモ'),
@@ -685,6 +687,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             ),
                             buildGateNumber: _buildGateNumber,
                             buildHorseNumber: _buildHorseNumber,
+                          ),
+                          RaceSimulationTabWidget(
+                            predictionRaceData: _predictionRaceData!,
+                            horses: sortedHorses,
                           ),
                           StartersTabWidget(
                             horses: sortedHorses,

@@ -49,3 +49,13 @@ test_apps/
 
 # AI Assistant Memory Files
 memory/
+
+# Backup files
+*.bak
+*.bak[0-9]
+
+
+# WebやWindowsビルド用のフォルダ（使っていない場合）
+/web/
+/windows/
+/firebase.json

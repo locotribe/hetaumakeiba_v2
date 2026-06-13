@@ -133,7 +133,9 @@ class RaceAnalyzer {
     final courseId = '${venueCode}_${trackType}_$distance';
     final CoursePreset? coursePreset = await coursePresetRepo.getCoursePreset(courseId);
 
-    final simHorses = raceData.horses.map((horse) {
+    final simHorses = raceData.horses
+        .where((horse) => !horse.isScratched)
+        .map((horse) {
       final pastRecords = allPastRecords[horse.horseId] ?? [];
       final distribution = horse.legStyleProfile?.styleDistribution ?? {};
       double initialPositionScore;
