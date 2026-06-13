@@ -36,6 +36,12 @@ class RaceSimulationCameraPainter extends CustomPainter {
   final Path trackPath;
   final Path infieldPath;
 
+  /// インフィールド塗り色の判定に使うコースデータ(セクション情報)。
+  /// ダートコースでも芝スタート(セクション名に"turf"/"shiba"を含む)の
+  /// 場合があるため、trackTypeKeyだけでは判定できないスタート地点の
+  /// 実際の表面に基づいてインフィールド色を決める。
+  final RaceCourseData? raceCourse;
+
   /// 馬番号マーカーの描画切替(デフォルトOFF)。
   /// コース描画の検証中は馬群データに依存しない独立レイヤーとして無効化し、
   /// コース1周分の一筆書きオーバーレイ([buildInfieldPath]の枠線)の
@@ -52,6 +58,7 @@ class RaceSimulationCameraPainter extends CustomPainter {
     required this.trackTypeKey,
     required this.trackPath,
     required this.infieldPath,
+    this.raceCourse,
     this.showHorseMarkers = false,
   });
 
@@ -64,6 +71,35 @@ class RaceSimulationCameraPainter extends CustomPainter {
     final trackColor = trackTypeKey == 'dirt'
         ? const Color(0xFFC8A165)
         : const Color(0xFF7CB342);
+
+    // インフィールド色: スタート地点(高低差グラフのx=0に相当するセクション)の
+    // 表面に基づいて決定する。ダートコースでも芝スタートのコースがあるため、
+    // trackTypeKey(レース全体の表面)だけでは判定できない。
+    // セクション名に"turf"/"shiba"を含む場合は芝色、"dirt"を含む場合はダート色、
+    // 判定できない場合はtrackColorを使う。
+    var infieldColor = trackColor;
+    final sections = raceCourse?.sections;
+    if (sections != null && sections.isNotEmpty) {
+      CourseSection? startSection;
+      for (final s in sections) {
+        if (s.startDistance <= 0 && s.endDistance > 0) {
+          startSection = s;
+          break;
+        }
+      }
+      startSection ??= sections.first;
+      final name = startSection.name.toLowerCase();
+      if (name.contains('turf') || name.contains('shiba')) {
+        infieldColor = const Color(0xFF7CB342);
+      } else if (name.contains('dirt')) {
+        infieldColor = const Color(0xFFC8A165);
+      }
+    }
+
+    // (0) 背景: 画面全体をtrackColorで塗る。trackPath/infieldPathで
+    //     カバーされない領域(画面端、引き込み線の切断部付近など)が
+    //     Containerの背景色(黒)のまま見えてしまうのを防ぐ。
+    canvas.drawRect(Offset.zero & size, Paint()..color = trackColor);
 
     // ミニマップの光るドット([RaceSimulationMinimapPainter])と同一の
     // 先頭馬(distanceFromGoal最小)を求め、distanceFromGoalをカメラの基準点
@@ -106,7 +142,10 @@ class RaceSimulationCameraPainter extends CustomPainter {
     canvas.transform(transform.matrix.storage);
 
     // (a) 走路本体: 本線+シュートを含むtrackPathを、現実の80m幅相当の
-    //     極太Strokeで描画する(外側の馬が黒空間に落ちない)。
+    //     極太Strokeで描画する。内側への広がり分は(b)のインフィールド
+    //     塗りでマスクされるため見た目に影響しない。これでカバーされない
+    //     画面端の領域は(0)の背景塗りで同じtrackColorになるため、
+    //     視覚的に途切れることはない。
     canvas.drawPath(
       trackPath,
       Paint()
@@ -116,16 +155,16 @@ class RaceSimulationCameraPainter extends CustomPainter {
         ..strokeCap = StrokeCap.butt,
     );
 
-    // (b) インフィールド(内ラチの内側)を黒でFillマスクする。
+    // (b) インフィールド(内ラチの内側)をinfieldColorでFillマスクする。
     canvas.drawPath(
       infieldPath,
       Paint()
-        ..color = Colors.black87
+        ..color = infieldColor
         ..style = PaintingStyle.fill,
     );
 
-    // (c) スタートライン(赤線): スタート地点から+normal方向(走路外側)へ
-    //     40m相当の直線を描画する。
+    // (c) スタートライン(ゲートを模したグレー線): スタート地点から
+    //     +normal方向(走路外側)へ40m相当の直線を描画する。
     final startPos = coords.positionForRaceDistance(
       raceDistance,
       raceDistance: raceDistance,
@@ -141,21 +180,21 @@ class RaceSimulationCameraPainter extends CustomPainter {
       startPos,
       startPos + startNormal * (40.0 * coords.pixelsPerMeter),
       Paint()
-        ..color = Colors.red
+        ..color = Colors.grey.shade700
         ..strokeWidth = 2.0,
     );
 
-    // (d) 検証用: コース1周分の一筆書き(edgePoints)の枠線を重ねて描画する。
-    //     画面上端から10%(=5m)の位置に内ラチ(edgePoints)が固定されるはずなので、
-    //     この線が常にその位置・角度で滑らかに移動するかを確認する。
+    // (d) 内ラチ(edgePoints)の枠線: コース1周分の一筆書きを白線で重ねて描画する。
+    //     画面上端から10%(=5m)の位置に内ラチが固定されるはずで、
+    //     インフィールドと走路の境界を示す視認用ラインとしても機能する。
     final overlayScale =
         RaceSimulationCameraTransform.scaleFor(viewportSize: size, coords: coords);
     canvas.drawPath(
       infieldPath,
       Paint()
-        ..color = Colors.yellowAccent
+        ..color = Colors.white
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0 / overlayScale,
+        ..strokeWidth = 3.0 / overlayScale,
     );
 
     canvas.restore();
@@ -213,6 +252,16 @@ class RaceSimulationCameraPainter extends CustomPainter {
       );
       path.moveTo(mergePt.dx, mergePt.dy);
       path.lineTo(startPt.dx, startPt.dy);
+
+      // ゲート奥の引き込み線部分を表現するため、スタート地点からさらに
+      // 同方向へ10m分延長する。これにより、StrokeCap.buttによる
+      // ストロークの切断位置がスタートライン付近から外れる。
+      final dir = startPt - mergePt;
+      final dirLength = dir.distance;
+      if (dirLength > 0) {
+        final extendedPt = startPt + dir / dirLength * (10.0 * coords.pixelsPerMeter);
+        path.lineTo(extendedPt.dx, extendedPt.dy);
+      }
     }
     return path;
   }
@@ -257,6 +306,7 @@ class RaceSimulationCameraPainter extends CustomPainter {
         oldDelegate.approach != approach ||
         oldDelegate.isLeftHanded != isLeftHanded ||
         oldDelegate.trackTypeKey != trackTypeKey ||
+        oldDelegate.raceCourse != raceCourse ||
         oldDelegate.showHorseMarkers != showHorseMarkers;
   }
 }

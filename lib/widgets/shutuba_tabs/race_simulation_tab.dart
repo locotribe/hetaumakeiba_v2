@@ -35,6 +35,7 @@ class _RaceSimulationLoadResult {
   final RaceSimulationData simulationData;
   final bool isLeftHanded;
   final String trackTypeKey;
+  final RaceCourseData? raceCourse;
 
   const _RaceSimulationLoadResult({
     required this.diagram,
@@ -43,6 +44,7 @@ class _RaceSimulationLoadResult {
     required this.simulationData,
     required this.isLeftHanded,
     required this.trackTypeKey,
+    required this.raceCourse,
   });
 }
 
@@ -129,6 +131,7 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       // raceCourse未取得時は右回り扱い（JRAは右回りコースが多数派）
       isLeftHanded: raceCourse?.isLeftHanded ?? false,
       trackTypeKey: trackTypeKey,
+      raceCourse: raceCourse,
     );
   }
 
@@ -154,6 +157,7 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
             approachPaths: result.approachPaths,
             isLeftHanded: result.isLeftHanded,
             trackTypeKey: result.trackTypeKey,
+            raceCourse: result.raceCourse,
           ),
         );
       },
