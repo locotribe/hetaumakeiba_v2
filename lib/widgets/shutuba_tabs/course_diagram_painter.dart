@@ -70,10 +70,18 @@ class CourseDiagramPainter extends CustomPainter {
       startRawPos = approachPath.first;
     } else {
       // シュート区間なし：本線上のスタート位置 -> ゴール
-      // 複数周回の場合は baseLapDistance で剰余を取り、本線1周分のみをハイライトする
-      final startDist = raceDistance.toDouble() % coords.baseLapDistance;
+      // raceDistanceがbaseLapDistance(1周分)を超える場合、超過分の周回ごとに
+      // 本線1周分(edgePoints全体)を追加で繋ぎ、実際に走行する距離分を
+      // すべてハイライトする。
+      final lap = coords.baseLapDistance;
+      final startDist = raceDistance.toDouble() % lap;
       final startIndex = coords.indexAtDistance(startDist);
+      final lapCount = (raceDistance / lap).floor();
+
       racePoints.addAll(coords.edgePoints.sublist(0, startIndex + 1).reversed);
+      for (int i = 0; i < lapCount; i++) {
+        racePoints.addAll(coords.edgePoints.reversed);
+      }
       startRawPos = coords.positionAtDistance(startDist);
     }
 

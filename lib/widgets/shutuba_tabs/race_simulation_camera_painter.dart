@@ -164,7 +164,12 @@ class RaceSimulationCameraPainter extends CustomPainter {
     );
 
     // (c) スタートライン(ゲートを模したグレー線): スタート地点から
-    //     +normal方向(走路外側)へ40m相当の直線を描画する。
+    //     +normal方向(走路側=画面下方向)へ40m相当の直線を描画する。
+    //     tangentを+90°回転したベクトルが「変換後に走路側を指す」のは
+    //     右回り(isLeftHanded=false)の場合のみ。desiredDirが
+    //     isLeftHandedで180°反転するため、rotationAngleも同じ生tangentに
+    //     対して左右回りで常に180°ずれる。よって左回りコースでは符号を
+    //     反転させる必要がある。
     final startPos = coords.positionForRaceDistance(
       raceDistance,
       raceDistance: raceDistance,
@@ -175,7 +180,9 @@ class RaceSimulationCameraPainter extends CustomPainter {
       raceDistance: raceDistance,
       approach: approach,
     );
-    final startNormal = Offset(-startTangent.dy, startTangent.dx);
+    final normalSign = isLeftHanded ? -1.0 : 1.0;
+    final startNormal =
+        Offset(-startTangent.dy, startTangent.dx) * normalSign;
     canvas.drawLine(
       startPos,
       startPos + startNormal * (40.0 * coords.pixelsPerMeter),
