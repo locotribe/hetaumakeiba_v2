@@ -271,6 +271,28 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
           ),
         ),
 
+        // ── 残り距離表示(先頭馬基準・周回によるリセットなし) ──
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              final currentTime =
+                  _controller.value * widget.simulationData.totalTime;
+              final remaining = _leaderDistanceFromGoal(currentTime).round();
+              return Text(
+                '残り ${remaining}m',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              );
+            },
+          ),
+        ),
+
         // ── 再生コントロール ──
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),

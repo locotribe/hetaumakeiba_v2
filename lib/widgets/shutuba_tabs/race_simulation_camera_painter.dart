@@ -208,9 +208,27 @@ class RaceSimulationCameraPainter extends CustomPainter {
         ..strokeWidth = 8.0 / overlayScale,
     );
 
+    // (e) ゴールライン(赤い縦線): ゴール地点(distanceFromGoal=0)から
+    //     +normal方向(走路側=画面下方向)へ50m相当の直線を描画する。
+    //     スタートライン(c)と同じnormal方向・符号判定ロジックを使用。
+    final goalPos = coords.positionAtDistance(0);
+    final goalTangent = coords.tangentAt(
+      0,
+      raceDistance: raceDistance,
+      approach: approach,
+    );
+    final goalNormal = Offset(-goalTangent.dy, goalTangent.dx) * normalSign;
+    canvas.drawLine(
+      goalPos,
+      goalPos + goalNormal * (50.0 * coords.pixelsPerMeter),
+      Paint()
+        ..color = Colors.red
+        ..strokeWidth = 2.0,
+    );
+
     canvas.restore();
 
-    // (e) 馬群アイコン: showHorseMarkersがtrueの場合のみ、独立レイヤーとして
+    // (f) 馬群アイコン: showHorseMarkersがtrueの場合のみ、独立レイヤーとして
     //     スクリーン座標に変換してから一定サイズで描画する。
     if (showHorseMarkers) {
       for (final frame in frames) {
