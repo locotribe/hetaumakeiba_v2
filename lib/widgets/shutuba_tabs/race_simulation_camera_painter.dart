@@ -35,6 +35,7 @@ class RaceSimulationCameraPainter extends CustomPainter {
   final String trackTypeKey;
   final Path trackPath;
   final Path infieldPath;
+  final Path railPath;
 
   /// インフィールド塗り色の判定に使うコースデータ(セクション情報)。
   /// ダートコースでも芝スタート(セクション名に"turf"/"shiba"を含む)の
@@ -58,6 +59,7 @@ class RaceSimulationCameraPainter extends CustomPainter {
     required this.trackTypeKey,
     required this.trackPath,
     required this.infieldPath,
+    required this.railPath,
     this.raceCourse,
     this.showHorseMarkers = false,
   });
@@ -191,17 +193,19 @@ class RaceSimulationCameraPainter extends CustomPainter {
         ..strokeWidth = 2.0,
     );
 
-    // (d) 内ラチ(edgePoints)の枠線: コース1周分の一筆書きを白線で重ねて描画する。
+    // (d) 内ラチの枠線: edgePointsを平滑化したrailPathを白線で重ねて描画する。
     //     画面上端から10%(=5m)の位置に内ラチが固定されるはずで、
     //     インフィールドと走路の境界を示す視認用ラインとしても機能する。
+    //     edgePoints生データのジグザグノイズはrailPath構築時に平滑化済み
+    //     のため、ここでは単純なStrokeで滑らかな線になる。
     final overlayScale =
         RaceSimulationCameraTransform.scaleFor(viewportSize: size, coords: coords);
     canvas.drawPath(
-      infieldPath,
+      railPath,
       Paint()
         ..color = Colors.white
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.0 / overlayScale,
+        ..strokeWidth = 8.0 / overlayScale,
     );
 
     canvas.restore();
@@ -214,6 +218,24 @@ class RaceSimulationCameraPainter extends CustomPainter {
         _drawHorseMarker(canvas, pos, frame);
       }
     }
+  }
+
+  /// edgePointsを平滑化した内ラチのオーバーレイ線描画用Pathを構築する。
+  /// [CourseEdgeCoordsData.smoothedEdgePoints]によりpositionAtDistance等の
+  /// 元データには影響しない、表示専用の平滑化済み一筆書きパス。
+  static Path buildRailPath({required CourseEdgeCoordsData coords}) {
+    final path = Path();
+    final pts = coords.smoothedEdgePoints();
+    for (var i = 0; i < pts.length; i++) {
+      final p = pts[i];
+      if (i == 0) {
+        path.moveTo(p.dx, p.dy);
+      } else {
+        path.lineTo(p.dx, p.dy);
+      }
+    }
+    path.close();
+    return path;
   }
 
   /// edgePoints(本線の内ラチ)が囲む閉ループ(インフィールド領域)のPathを

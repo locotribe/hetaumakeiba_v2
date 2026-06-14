@@ -332,6 +332,18 @@ class CourseEdgeCoordsData {
     ).smoothedPosition;
   }
 
+  /// edgePoints全体を[_localFit]（接線用と同じ20m窓）の最小二乗直線への
+  /// 正射影で平滑化した座標列を返す。内ラチのオーバーレイ線描画専用
+  /// （positionAtDistance等が参照する元データには影響しない）。
+  List<Offset> smoothedEdgePoints() {
+    final lap = cumulativeDistances.last;
+    return [
+      for (final d in cumulativeDistances)
+        _localFit(d, lap, _tangentWindowMeters, _tangentSampleCount)
+            .smoothedPosition,
+    ];
+  }
+
   double _wrap(double d, double lap) {
     if (lap <= 0) return d;
     final r = d % lap;

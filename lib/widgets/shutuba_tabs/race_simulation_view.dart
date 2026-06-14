@@ -46,6 +46,7 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
   late final CourseApproach? _approach;
   late final Path _trackPath;
   late final Path _infieldPath;
+  late final Path _railPath;
   late final ChartDrawData? _elevationData;
 
   @override
@@ -69,6 +70,9 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
       approach: _approach,
     );
     _infieldPath = RaceSimulationCameraPainter.buildInfieldPath(
+      coords: widget.diagram.coords,
+    );
+    _railPath = RaceSimulationCameraPainter.buildRailPath(
       coords: widget.diagram.coords,
     );
     _elevationData = widget.raceCourse != null
@@ -255,6 +259,7 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
                   trackTypeKey: widget.trackTypeKey,
                   trackPath: _trackPath,
                   infieldPath: _infieldPath,
+                  railPath: _railPath,
                   raceCourse: widget.raceCourse,
                   // コース描画の検証中は馬番号マーカーを一時OFF。
                   // 後で独立レイヤーとして復活させる。
