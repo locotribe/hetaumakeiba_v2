@@ -10,9 +10,14 @@ import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 /// [ChartDrawData]）を軽量な[CustomPainter]として描画し、現在位置に
 /// 光る点を重ねて表示する。
 ///
-/// チャートのX軸は「スタートからの距離」(0=スタート, raceDistance=ゴール)で
-/// あり、シミュレーションの`distanceFromGoal`(0=ゴール)とは逆向きのため、
-/// `chartX = raceDistance - currentDistanceFromGoal`で変換する。
+/// チャートのX軸は、左回りコース([isLeftHanded]=true)では
+/// 「スタートからの距離」(0=スタート, raceDistance=ゴール)、
+/// 右回りコース([isLeftHanded]=false)ではx軸が反転され
+/// (0=ゴール, raceDistance=スタート)を表す
+/// ([ElevationLogic.generateRaceChartData]参照)。
+/// シミュレーションの`distanceFromGoal`(0=ゴール)からchartXへの変換は、
+/// 左回りは`chartX = raceDistance - currentDistanceFromGoal`、
+/// 右回りは`chartX = currentDistanceFromGoal`となる。
 /// [currentDistanceFromGoal]はミニマップ([RaceSimulationMinimapPainter])・
 /// メインカメラ([RaceSimulationCameraPainter])と同一の先頭馬
 /// (distanceFromGoal最小)の値を渡すこと。これにより3表示は常に同じ
@@ -21,12 +26,14 @@ class RaceSimulationElevationPainter extends CustomPainter {
   final ChartDrawData drawData;
   final List<CourseSection> sections;
   final double raceDistance;
+  final bool isLeftHanded;
   final double currentDistanceFromGoal;
 
   const RaceSimulationElevationPainter({
     required this.drawData,
     required this.sections,
     required this.raceDistance,
+    required this.isLeftHanded,
     required this.currentDistanceFromGoal,
   });
 
@@ -103,7 +110,9 @@ class RaceSimulationElevationPainter extends CustomPainter {
     );
 
     // (d) スタート線(青)・ゴール線(赤)
-    final startX = toCanvas(0, 0).dx;
+    // 右回りコースはチャートのx軸が反転しているため(x=0がゴール側)、
+    // スタート/ゴールの位置も入れ替える。
+    final startX = toCanvas(isLeftHanded ? 0 : maxX, 0).dx;
     canvas.drawLine(
       Offset(startX, 0),
       Offset(startX, size.height),
@@ -111,7 +120,7 @@ class RaceSimulationElevationPainter extends CustomPainter {
         ..color = Colors.blueAccent.withValues(alpha: 0.5)
         ..strokeWidth = 2,
     );
-    final goalX = toCanvas(maxX, 0).dx;
+    final goalX = toCanvas(isLeftHanded ? maxX : 0, 0).dx;
     canvas.drawLine(
       Offset(goalX, 0),
       Offset(goalX, size.height),
@@ -121,7 +130,11 @@ class RaceSimulationElevationPainter extends CustomPainter {
     );
 
     // (e) 現在位置: 光る点(ミニマップと同じ表現)
-    double chartX = raceDistance - currentDistanceFromGoal;
+    // 左回り: chartX=0がスタート(distanceFromGoal最大)なのでraceDistance-distFromGoal。
+    // 右回り: x軸反転によりchartX=0がゴール(distanceFromGoal=0)なのでdistFromGoalそのもの。
+    double chartX = isLeftHanded
+        ? raceDistance - currentDistanceFromGoal
+        : currentDistanceFromGoal;
     if (chartX < 0) chartX = 0;
     if (chartX > maxX) chartX = maxX;
     final currentElevation = _elevationAt(spots, chartX);

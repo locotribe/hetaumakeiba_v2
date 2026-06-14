@@ -187,7 +187,7 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
                 SizedBox(
                   height: 18,
                   child: Row(
-                    children: widget.raceCourse!.sections.map((sec) {
+                    children: _elevationData!.displaySections.map((sec) {
                       final d = sec.endDistance - sec.startDistance;
                       return Expanded(
                         flex: (d * 10).toInt(),
@@ -215,8 +215,9 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
                       return CustomPaint(
                         painter: RaceSimulationElevationPainter(
                           drawData: _elevationData!,
-                          sections: widget.raceCourse!.sections,
+                          sections: _elevationData!.displaySections,
                           raceDistance: widget.raceDistance,
+                          isLeftHanded: widget.isLeftHanded,
                           currentDistanceFromGoal:
                               _leaderDistanceFromGoal(currentTime),
                         ),

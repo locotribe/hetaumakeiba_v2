@@ -10,11 +10,17 @@ class ChartDrawData {
   final LinearGradient areaGradient;
   final double maxX;
 
+  /// 表示用に並べ替えたセクション一覧。右回りコースの場合は
+  /// [spots]のx軸反転に合わせてstartDistance/endDistanceを
+  /// (raceDistance - 元の値)に変換し、表示順も反転させたもの。
+  final List<CourseSection> displaySections;
+
   ChartDrawData({
     required this.spots,
     required this.lineGradient,
     required this.areaGradient,
     required this.maxX,
+    required this.displaySections,
   });
 }
 
@@ -65,11 +71,54 @@ class ElevationLogic {
       end: Alignment.centerRight,
     );
 
+    // 右回りコース(isLeftHanded=false)はチャートの左右を反転させ、
+    // 右側がスタート・左側がゴールになるようにする。
+    // (左回りコースは従来通り左=スタート/右=ゴール)
+    if (!race.isLeftHanded) {
+      final flippedSpots = spots.reversed
+          .map((s) => FlSpot(raceDist - s.x, s.y))
+          .toList();
+      final flippedSections = race.sections.reversed
+          .map((sec) => CourseSection(
+                name: sec.name,
+                startDistance: raceDist - sec.endDistance,
+                endDistance: raceDist - sec.startDistance,
+              ))
+          .toList();
+
+      return ChartDrawData(
+        spots: flippedSpots,
+        lineGradient: _reverseGradient(lineGradient),
+        areaGradient: _reverseGradient(areaGradient),
+        maxX: raceDist,
+        displaySections: flippedSections,
+      );
+    }
+
     return ChartDrawData(
       spots: spots,
       lineGradient: lineGradient,
       areaGradient: areaGradient,
       maxX: raceDist,
+      displaySections: race.sections,
+    );
+  }
+
+  /// グラデーションの色配列とstopsを反転させる(チャートのx軸反転に追従させる)
+  static LinearGradient _reverseGradient(LinearGradient gradient) {
+    final stops = gradient.stops!;
+    final n = stops.length;
+    final newColors = <Color>[];
+    final newStops = <double>[];
+    for (int i = n - 1; i >= 0; i--) {
+      newColors.add(gradient.colors[i]);
+      newStops.add(1.0 - stops[i]);
+    }
+    return LinearGradient(
+      colors: newColors,
+      stops: newStops,
+      begin: gradient.begin,
+      end: gradient.end,
     );
   }
 

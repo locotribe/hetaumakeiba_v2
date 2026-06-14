@@ -388,7 +388,7 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
             child: SizedBox(
               height: 30,
               child: Row(
-                children: raceCourse.sections.map((sec) {
+                children: drawData.displaySections.map((sec) {
                   final d = sec.endDistance - sec.startDistance;
                   return Expanded(
                     flex: (d * 10).toInt(),
@@ -421,14 +421,18 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     final List<VerticalRangeAnnotation> ranges = [];
     final stripeColors = [Colors.black.withValues(alpha: 0.01), Colors.black.withValues(alpha: 0.03)];
 
-    for (int i = 0; i < race.sections.length; i++) {
-      final sec = race.sections[i];
+    for (int i = 0; i < drawData.displaySections.length; i++) {
+      final sec = drawData.displaySections[i];
       vLines.add(VerticalLine(x: sec.startDistance, color: Colors.black12, strokeWidth: 0.5, dashArray: [4, 4]));
       ranges.add(VerticalRangeAnnotation(x1: sec.startDistance, x2: sec.endDistance, color: stripeColors[i % 2]));
     }
 
-    vLines.add(VerticalLine(x: 0, color: Colors.blueAccent.withValues(alpha: 0.5), strokeWidth: 2));
-    vLines.add(VerticalLine(x: raceDist, color: Colors.redAccent.withValues(alpha: 0.5), strokeWidth: 2));
+    // 右回りコースはx軸が反転しているため、スタート(青)/ゴール(赤)の
+    // ラインも左右を入れ替える。
+    final startX = race.isLeftHanded ? 0.0 : raceDist;
+    final goalX = race.isLeftHanded ? raceDist : 0.0;
+    vLines.add(VerticalLine(x: startX, color: Colors.blueAccent.withValues(alpha: 0.5), strokeWidth: 2));
+    vLines.add(VerticalLine(x: goalX, color: Colors.redAccent.withValues(alpha: 0.5), strokeWidth: 2));
 
     return LineChart(
       LineChartData(
@@ -455,7 +459,10 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               showTitles: true, reservedSize: 22, interval: 400,
               getTitlesWidget: (val, _) {
                 if (val < 0 || val > raceDist) return const SizedBox.shrink();
-                return Text('${val.toInt()}m', style: const TextStyle(color: Colors.black38, fontSize: 8));
+                // 右回りコースはx軸が反転している(x=0がゴール側)ため、
+                // 距離表示も「スタートからの距離」になるよう反転させる。
+                final displayVal = race.isLeftHanded ? val : raceDist - val;
+                return Text('${displayVal.toInt()}m', style: const TextStyle(color: Colors.black38, fontSize: 8));
               },
             ),
           ),
@@ -479,7 +486,12 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
         lineTouchData: LineTouchData(
             touchTooltipData: LineTouchTooltipData(
                 getTooltipColor: (_) => Colors.black87,
-                getTooltipItems: (ss) => ss.map((s) => LineTooltipItem('${s.x.toInt()}m\n${s.y.toStringAsFixed(2)}m', const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))).toList()
+                getTooltipItems: (ss) => ss.map((s) {
+                  // 右回りコースはx軸が反転している(x=0がゴール側)ため、
+                  // ツールチップの距離表示も「スタートからの距離」になるよう反転させる。
+                  final displayX = race.isLeftHanded ? s.x : raceDist - s.x;
+                  return LineTooltipItem('${displayX.toInt()}m\n${s.y.toStringAsFixed(2)}m', const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold));
+                }).toList()
             )
         ),
         borderData: FlBorderData(show: true, border: Border.all(color: Colors.black12)),
