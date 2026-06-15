@@ -12,7 +12,7 @@ import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 class RaceSimulationMinimapPainter extends CustomPainter {
   final CourseDiagramData diagram;
   final double raceDistance;
-  final CourseApproach? approach;
+  final List<CourseApproach>? approach;
   final RaceSimulationData simulationData;
   final double currentTime;
 

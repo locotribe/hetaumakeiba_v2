@@ -54,7 +54,7 @@ class RaceSimulationCameraTransform {
     required bool isLeftHanded,
     required CourseEdgeCoordsData coords,
     required double raceDistance,
-    CourseApproach? approach,
+    List<CourseApproach>? approach,
   }) {
     // 1. 基準点での進行方向(ゴールに向かう方向 = cameraTangentAtの逆方向)を取得
     final tangent = coords.cameraTangentAt(

@@ -343,7 +343,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
   }
 
   Widget _buildElevationChartSection() {
-    debugPrint('[Debug] raceId=${widget.predictionRaceData.raceId}, dist=${widget.predictionRaceData.distanceValue}, track=${widget.predictionRaceData.trackType}, venueCode=${widget.predictionRaceData.raceId.length >= 6 ? widget.predictionRaceData.raceId.substring(4, 6) : "null"}');
     final venueCode = widget.predictionRaceData.raceId.length >= 6
         ? widget.predictionRaceData.raceId.substring(4, 6)
         : null;
@@ -353,9 +352,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     if (venueCode == null || distance == null) return const SizedBox.shrink();
 
     final trackTypeKey = _mapToTrackTypeKey();
-    debugPrint('[Debug] findRaceCourse params: venueCode=$venueCode, distance=$distance, trackTypeKey=$trackTypeKey, '
-        'rawTrackType=${widget.predictionRaceData.trackType}, rawDirection=${widget.predictionRaceData.direction}, '
-        'rawCourseInOut=${widget.predictionRaceData.courseInOut}, raceDetails1=${widget.predictionRaceData.raceDetails1}');
     var raceCourse = CourseElevations.findRaceCourse(venueCode, distance, trackTypeKey);
 
     // [追加] JRAのraceData01表記では内回りがデフォルトで明記されず、外回りのみ「外」が
@@ -366,8 +362,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     if (raceCourse == null && trackTypeKey == 'shiba') {
       raceCourse = CourseElevations.findRaceCourse(venueCode, distance, 'shiba_inner');
     }
-
-    debugPrint('[Debug] findRaceCourse result: raceCourse=${raceCourse == null ? "null" : "${raceCourse.baseData.trackType} ${raceCourse.raceDistance}m"}');
 
     if (raceCourse == null) return const SizedBox.shrink();
 

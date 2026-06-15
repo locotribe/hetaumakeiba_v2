@@ -67,7 +67,7 @@ class RaceSimHorseTrack {
     double currentTime,
     CourseEdgeCoordsData coords,
     double raceDistance,
-    CourseApproach? approach,
+    List<CourseApproach>? approach,
     double laneSpacingPx,
     double innerMarginPx,
   ) {

@@ -28,7 +28,7 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_camera_tran
 class RaceSimulationCameraPainter extends CustomPainter {
   final CourseEdgeCoordsData coords;
   final double raceDistance;
-  final CourseApproach? approach;
+  final List<CourseApproach>? approach;
   final RaceSimulationData simulationData;
   final double currentTime;
   final bool isLeftHanded;
@@ -281,29 +281,26 @@ class RaceSimulationCameraPainter extends CustomPainter {
   static Path buildTrackPath({
     required CourseEdgeCoordsData coords,
     required double raceDistance,
-    CourseApproach? approach,
+    List<CourseApproach>? approach,
   }) {
     final path = Path()..addPath(buildInfieldPath(coords: coords), Offset.zero);
 
-    if (approach != null) {
-      final mergeDist = raceDistance - approach.distance;
-      final mergePt = coords.positionForRaceDistance(
-        mergeDist,
+    if (approach != null && approach.isNotEmpty) {
+      final vertices = coords.approachVertices(
         raceDistance: raceDistance,
         approach: approach,
       );
-      final startPt = coords.positionForRaceDistance(
-        raceDistance,
-        raceDistance: raceDistance,
-        approach: approach,
-      );
-      path.moveTo(mergePt.dx, mergePt.dy);
-      path.lineTo(startPt.dx, startPt.dy);
+      path.moveTo(vertices.first.dx, vertices.first.dy);
+      for (final v in vertices.skip(1)) {
+        path.lineTo(v.dx, v.dy);
+      }
 
       // ゲート奥の引き込み線部分を表現するため、スタート地点からさらに
-      // 同方向へ10m分延長する。これにより、StrokeCap.buttによる
+      // 最終セグメントの方向へ10m分延長する。これにより、StrokeCap.buttによる
       // ストロークの切断位置がスタートライン付近から外れる。
-      final dir = startPt - mergePt;
+      final startPt = vertices.last;
+      final prevPt = vertices[vertices.length - 2];
+      final dir = startPt - prevPt;
       final dirLength = dir.distance;
       if (dirLength > 0) {
         final extendedPt = startPt + dir / dirLength * (10.0 * coords.pixelsPerMeter);

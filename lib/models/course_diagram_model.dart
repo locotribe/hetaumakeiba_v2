@@ -136,25 +136,75 @@ class CourseEdgeCoordsData {
     return nearest;
   }
 
+  /// approachPath(合流点からスタート地点までの連結ポリライン)の
+  /// 各セグメント距離(m)の合計。
+  double _approachTotalDistance(List<CourseApproach> approach) =>
+      approach.fold(0.0, (sum, a) => sum + a.distance);
+
+  /// remaining(0=合流点, 合計距離=スタート地点)が approachPath の
+  /// どのセグメント内にあるかと、そのセグメント内での進捗(0.0~1.0)を返す。
+  ({int segmentIndex, double ratio}) _approachSegmentAt(
+    double remaining,
+    List<CourseApproach> approach,
+  ) {
+    for (int i = 0; i < approach.length; i++) {
+      final seg = approach[i];
+      if (remaining <= seg.distance || i == approach.length - 1) {
+        final ratio = seg.distance > 0
+            ? (remaining / seg.distance).clamp(0.0, 1.0)
+            : 0.0;
+        return (segmentIndex: i, ratio: ratio);
+      }
+      remaining -= seg.distance;
+    }
+    return (segmentIndex: approach.length - 1, ratio: 1.0);
+  }
+
+  /// approachPath(合流点からスタート地点までの連結ポリライン)の頂点列
+  /// (生ピクセル座標)を返す。先頭が本線上の合流点、末尾がスタート地点。
+  /// 各セグメントは[CourseApproach.angle]/[CourseApproach.distance]で表される
+  /// 相対ベクトル(度数法・m)で、前のセグメントの終点から連結する。
+  List<Offset> approachVertices({
+    required double raceDistance,
+    required List<CourseApproach> approach,
+  }) {
+    final lap = cumulativeDistances.last;
+    final mergeDist = raceDistance - _approachTotalDistance(approach);
+    final mergePt = positionAtDistance(_wrap(mergeDist, lap));
+
+    final points = <Offset>[mergePt];
+    var cur = mergePt;
+    for (final seg in approach) {
+      final rad = seg.angle * (math.pi / 180.0);
+      final segPx = seg.distance * pixelsPerMeter;
+      cur = cur + Offset(math.cos(rad), math.sin(rad)) * segPx;
+      points.add(cur);
+    }
+    return points;
+  }
+
   /// 「ゴールからの絶対残距離」(0=ゴール, raceDistance=発走, baseLapDistanceを
   /// 超えてもよい)を、本線上 or シュート内の生ピクセル座標に変換する。
   /// シュート判定・1周分のmodulo処理はこの内部でのみ行う。
+  /// [approach]は合流点からスタート地点までの連結ポリライン
+  /// (各セグメントの距離合計がシュート全長)。
   Offset positionForRaceDistance(
     double distanceFromGoal, {
     required double raceDistance,
-    CourseApproach? approach,
+    List<CourseApproach>? approach,
   }) {
     final lap = cumulativeDistances.last;
-    if (approach != null) {
-      final mergeDist = raceDistance - approach.distance;
+    if (approach != null && approach.isNotEmpty) {
+      final mergeDist = raceDistance - _approachTotalDistance(approach);
       if (distanceFromGoal > mergeDist) {
-        final mergePt = positionAtDistance(_wrap(mergeDist, lap));
-        final rad = approach.angle * (math.pi / 180.0);
-        final pxLen = approach.distance * pixelsPerMeter;
-        final startPt = mergePt + Offset(math.cos(rad), math.sin(rad)) * pxLen;
-        final ratio =
-            ((distanceFromGoal - mergeDist) / approach.distance).clamp(0.0, 1.0);
-        return Offset.lerp(mergePt, startPt, ratio)!;
+        final vertices =
+            approachVertices(raceDistance: raceDistance, approach: approach);
+        final seg = _approachSegmentAt(distanceFromGoal - mergeDist, approach);
+        return Offset.lerp(
+          vertices[seg.segmentIndex],
+          vertices[seg.segmentIndex + 1],
+          seg.ratio,
+        )!;
       }
     }
     return positionAtDistance(_wrap(distanceFromGoal, lap));
@@ -248,15 +298,16 @@ class CourseEdgeCoordsData {
   ({Offset tangent, Offset smoothedPosition}) _fitAt(
     double distanceFromGoal, {
     required double raceDistance,
-    CourseApproach? approach,
+    List<CourseApproach>? approach,
     required double windowMeters,
     required int sampleCount,
   }) {
     final lap = cumulativeDistances.last;
-    if (approach != null) {
-      final mergeDist = raceDistance - approach.distance;
+    if (approach != null && approach.isNotEmpty) {
+      final mergeDist = raceDistance - _approachTotalDistance(approach);
       if (distanceFromGoal > mergeDist) {
-        final rad = approach.angle * (math.pi / 180.0);
+        final seg = _approachSegmentAt(distanceFromGoal - mergeDist, approach);
+        final rad = approach[seg.segmentIndex].angle * (math.pi / 180.0);
         final tangent = Offset(math.cos(rad), math.sin(rad));
         final position = positionForRaceDistance(
           distanceFromGoal,
@@ -281,7 +332,7 @@ class CourseEdgeCoordsData {
   Offset tangentAt(
     double distanceFromGoal, {
     required double raceDistance,
-    CourseApproach? approach,
+    List<CourseApproach>? approach,
   }) {
     return _fitAt(
       distanceFromGoal,
@@ -300,7 +351,7 @@ class CourseEdgeCoordsData {
   Offset cameraTangentAt(
     double distanceFromGoal, {
     required double raceDistance,
-    CourseApproach? approach,
+    List<CourseApproach>? approach,
   }) {
     return _fitAt(
       distanceFromGoal,
@@ -321,7 +372,7 @@ class CourseEdgeCoordsData {
   Offset smoothedPositionForRaceDistance(
     double distanceFromGoal, {
     required double raceDistance,
-    CourseApproach? approach,
+    List<CourseApproach>? approach,
   }) {
     return _fitAt(
       distanceFromGoal,

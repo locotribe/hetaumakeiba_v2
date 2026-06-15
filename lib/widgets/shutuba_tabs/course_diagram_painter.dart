@@ -41,26 +41,31 @@ class CourseDiagramPainter extends CustomPainter {
     if (approachPaths != null && approachPaths!.isNotEmpty) {
       // [追加] シュート（引き込み線）の動的描画対応 (v.1.0)
       // 各競馬場のRaceCourseData.approachPathに定義された
-      // 「合流点からスタート地点へ向かう相対ベクトル(角度・距離)」を
-      // positionForRaceDistance()経由で三角関数により生ピクセル座標に変換し、
-      // シュート区間のPathを生成する
-      final approach = approachPaths!.first;
-      final mergeDist = raceDistance - approach.distance;
-      final rawMergePt = coords.positionForRaceDistance(
-        mergeDist.toDouble(),
+      // 「合流点からスタート地点へ向かう相対ベクトル(角度・距離)」の連結
+      // ポリラインを、approachVertices()経由で三角関数により生ピクセル座標に
+      // 変換し、シュート区間のPathを生成する（複数セグメント=カーブ対応）
+      final approach = approachPaths!;
+      final vertices = coords.approachVertices(
         raceDistance: raceDistance.toDouble(),
         approach: approach,
       );
-      final rawStartPt = coords.positionForRaceDistance(
-        raceDistance.toDouble(),
-        raceDistance: raceDistance.toDouble(),
-        approach: approach,
-      );
+      final mergeDist =
+          raceDistance - approach.fold(0.0, (sum, a) => sum + a.distance);
+      final rawStartPt = vertices.last;
 
-      final mergeIndex = coords.indexAtDistance(mergeDist.toDouble());
-      racePoints.add(rawStartPt);
-      racePoints.add(rawMergePt);
+      // mergeDistが1周分(lap)を超える場合、合流点から本線を複数周してゴールに
+      // 至る。合流点の本線上の位置はlapで折り返した値(wrappedMergeDist)で求め、
+      // 超過分の周回ごとに本線1周分(edgePoints全体)を追加で繋ぐ。
+      final lap = coords.cumulativeDistances.last;
+      final wrappedMergeDist = mergeDist % lap;
+      final mergeIndex = coords.indexAtDistance(wrappedMergeDist);
+      final lapCount = (mergeDist / lap).floor();
+
+      racePoints.addAll(vertices.reversed);
       racePoints.addAll(coords.edgePoints.sublist(0, mergeIndex + 1).reversed);
+      for (int i = 0; i < lapCount; i++) {
+        racePoints.addAll(coords.edgePoints.reversed);
+      }
       startRawPos = rawStartPt;
     } else if (approachPath != null && approachPath.isNotEmpty) {
       // シュート（引き込み線）区間あり：シュート -> 本線上の最近傍点 -> ゴール

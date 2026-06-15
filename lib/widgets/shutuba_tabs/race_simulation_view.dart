@@ -43,7 +43,7 @@ class RaceSimulationView extends StatefulWidget {
 class _RaceSimulationViewState extends State<RaceSimulationView>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late final CourseApproach? _approach;
+  late final List<CourseApproach>? _approach;
   late final Path _trackPath;
   late final Path _infieldPath;
   late final Path _railPath;
@@ -60,10 +60,7 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
     );
     _controller.addStatusListener(_onStatusChanged);
 
-    _approach =
-        (widget.approachPaths != null && widget.approachPaths!.isNotEmpty)
-            ? widget.approachPaths!.first
-            : null;
+    _approach = widget.approachPaths;
     _trackPath = RaceSimulationCameraPainter.buildTrackPath(
       coords: widget.diagram.coords,
       raceDistance: widget.raceDistance,
