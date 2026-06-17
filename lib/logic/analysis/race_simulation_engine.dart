@@ -36,11 +36,13 @@ class RaceSimulationEngine {
   }) async {
     if (horses.isEmpty || raceDistance <= 0) return null;
 
+    // [修正] 展開文字列の生成には必ず horses を使用し、raceData.horses に依存しない (v.13.43.0)
     final development = await RaceAnalyzer.simulateRaceDevelopment(
       raceData,
       allPastRecords,
       const ['1-2コーナー', '3コーナー', '4コーナー'],
       const {},
+      horsesOverride: horses,
     );
 
     // 「ゴールからの絶対残距離」(d0=raceDistance, d4=0, 単調減少)
@@ -197,5 +199,60 @@ class RaceSimulationEngine {
             .toList())
         .where((group) => group.isNotEmpty)
         .toList();
+  }
+
+  /// 枠順発表前（全馬 horseNumber=0）のときに呼ぶ仮番号付与ヘルパー。
+  /// 馬名のあいうえお順でソートし、1 始まりの連番を割り当てる。
+  /// 上限なし（19頭・20頭以上でも動作する）。
+  // [追加] 枠順発表前の仮番号付与 (v.13.43.0)
+  static List<PredictionHorseDetail> assignTempNumbers(
+      List<PredictionHorseDetail> horses) {
+    final sorted = List<PredictionHorseDetail>.from(horses)
+      ..sort((a, b) => a.horseName.compareTo(b.horseName));
+    return sorted.asMap().entries.map((entry) {
+      final tempNum = entry.key + 1;
+      final tempGate = ((tempNum - 1) ~/ 2) + 1;
+      final h = entry.value;
+      return PredictionHorseDetail(
+        horseId: h.horseId,
+        horseNumber: tempNum,
+        gateNumber: tempGate,
+        horseName: h.horseName,
+        sexAndAge: h.sexAndAge,
+        jockey: h.jockey,
+        jockeyId: h.jockeyId,
+        carriedWeight: h.carriedWeight,
+        trainerName: h.trainerName,
+        trainerAffiliation: h.trainerAffiliation,
+        odds: h.odds,
+        effectiveOdds: h.effectiveOdds,
+        popularity: h.popularity,
+        horseWeight: h.horseWeight,
+        userMark: h.userMark,
+        userMemo: h.userMemo,
+        isScratched: h.isScratched,
+        predictionScore: h.predictionScore,
+        conditionFit: h.conditionFit,
+        distanceCourseAptitudeStats: h.distanceCourseAptitudeStats,
+        trackAptitudeLabel: h.trackAptitudeLabel,
+        bestTimeStats: h.bestTimeStats,
+        fastestAgariStats: h.fastestAgariStats,
+        bestCourseTimeStats: h.bestCourseTimeStats,
+        fastestCourseAgariStats: h.fastestCourseAgariStats,
+        overallScore: h.overallScore,
+        expectedValue: h.expectedValue,
+        legStyleProfile: h.legStyleProfile,
+        previousHorseWeight: h.previousHorseWeight,
+        previousJockey: h.previousJockey,
+        ownerName: h.ownerName,
+        ownerId: h.ownerId,
+        ownerImageLocalPath: h.ownerImageLocalPath,
+        breederName: h.breederName,
+        fatherName: h.fatherName,
+        motherName: h.motherName,
+        mfName: h.mfName,
+        jockeyComboStats: h.jockeyComboStats,
+      );
+    }).toList();
   }
 }

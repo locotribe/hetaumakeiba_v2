@@ -4,9 +4,12 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/course_elevations.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_repository.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
@@ -36,6 +39,10 @@ class _RaceSimulationLoadResult {
   final bool isLeftHanded;
   final String trackTypeKey;
   final RaceCourseData? raceCourse;
+  // [追加] Layer2用パラメータ。馬番(horseNumber文字列)をキーとする (v.13.43.0)
+  final Map<String, HorseSimulationParams> simulationParams;
+  // [追加] ステータス表表示用。仮番号付与済みの馬リスト (v.13.43.0)
+  final List<PredictionHorseDetail> horses;
 
   const _RaceSimulationLoadResult({
     required this.diagram,
@@ -45,12 +52,17 @@ class _RaceSimulationLoadResult {
     required this.isLeftHanded,
     required this.trackTypeKey,
     required this.raceCourse,
+    required this.simulationParams,
+    required this.horses,
   });
 }
 
 class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     with AutomaticKeepAliveClientMixin {
   final HorseRepository _horseRepo = HorseRepository();
+  // [追加] Layer2用パラメータリポジトリ (v.13.43.0)
+  final HorseSimulationParamsRepository _simParamsRepo =
+      HorseSimulationParamsRepository();
   late Future<_RaceSimulationLoadResult?> _future;
 
   @override
@@ -65,7 +77,15 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
   @override
   void didUpdateWidget(RaceSimulationTabWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.predictionRaceData.raceId != oldWidget.predictionRaceData.raceId) {
+
+    // [修正] raceId変更 or 更新ボタン押下後にlegStyleProfileが揃った場合に再ロード (v.13.43.0)
+    final oldHasLegStyle =
+        oldWidget.horses.any((h) => h.legStyleProfile != null);
+    final newHasLegStyle =
+        widget.horses.any((h) => h.legStyleProfile != null);
+
+    if (widget.predictionRaceData.raceId != oldWidget.predictionRaceData.raceId ||
+        (!oldHasLegStyle && newHasLegStyle)) {
       setState(() {
         _future = _load();
       });
@@ -108,20 +128,38 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     final activeHorses = widget.horses.where((h) => !h.isScratched).toList();
     if (activeHorses.isEmpty) return null;
 
+    // [追加] 枠順発表前（全馬 horseNumber=0）は仮番号を付与したリストでシミュを実行 (v.13.43.0)
+    final horsesForSim = activeHorses.every((h) => h.horseNumber == 0)
+        ? RaceSimulationEngine.assignTempNumbers(activeHorses)
+        : activeHorses;
+
     final allPastRecords = <String, List<HorseRaceRecord>>{};
-    await Future.wait(activeHorses.map((horse) async {
+    await Future.wait(horsesForSim.map((horse) async {
       allPastRecords[horse.horseId] =
           await _horseRepo.getHorsePerformanceRecords(horse.horseId);
     }));
 
     final simulationData = await RaceSimulationEngine.build(
       raceData: widget.predictionRaceData,
-      horses: activeHorses,
+      horses: horsesForSim,
       allPastRecords: allPastRecords,
       raceCourse: raceCourse,
       raceDistance: distance.toDouble(),
     );
     if (simulationData == null) return null;
+
+    // [追加] Layer2用パラメータをDBから取得。DBにない場合はallPastRecordsから即時計算 (v.13.43.0)
+    final horseIds = horsesForSim.map((h) => h.horseId).toList();
+    final paramsByHorseId = await _simParamsRepo.getByHorseIds(horseIds);
+    final simulationParams = <String, HorseSimulationParams>{};
+    for (final horse in horsesForSim) {
+      final params = paramsByHorseId[horse.horseId] ??
+          SimulationParamsCalculator.calculate(
+            horse.horseId,
+            allPastRecords[horse.horseId] ?? [],
+          );
+      simulationParams[horse.horseNumber.toString()] = params;
+    }
 
     return _RaceSimulationLoadResult(
       diagram: diagram,
@@ -132,6 +170,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       isLeftHanded: raceCourse?.isLeftHanded ?? false,
       trackTypeKey: trackTypeKey,
       raceCourse: raceCourse,
+      simulationParams: simulationParams,
+      horses: horsesForSim,
     );
   }
 
@@ -158,6 +198,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
             isLeftHanded: result.isLeftHanded,
             trackTypeKey: result.trackTypeKey,
             raceCourse: result.raceCourse,
+            simulationParams: result.simulationParams,
+            horses: result.horses,
           ),
         );
       },

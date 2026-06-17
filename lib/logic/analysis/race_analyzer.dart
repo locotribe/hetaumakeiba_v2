@@ -105,11 +105,13 @@ class RaceAnalyzer {
 
 
   /// 各馬の脚質と枠順を元に、各コーナーの展開を予測（シミュレーション）します。
+  // [修正] horsesOverride を追加。渡された場合は raceData.horses の代わりに使用する (v.13.43.0)
   static Future<Map<String, String>> simulateRaceDevelopment(
       PredictionRaceData raceData,
       Map<String, List<HorseRaceRecord>> allPastRecords,
       List<String> cornersToPredict,
       Map<String, JockeyStats> allJockeyStats,
+      {List<PredictionHorseDetail>? horsesOverride}
       ) async {
     final CoursePresetRepository coursePresetRepo = CoursePresetRepository();
     final venueCode = venueCodeMap[raceData.venue];
@@ -133,7 +135,8 @@ class RaceAnalyzer {
     final courseId = '${venueCode}_${trackType}_$distance';
     final CoursePreset? coursePreset = await coursePresetRepo.getCoursePreset(courseId);
 
-    final simHorses = raceData.horses
+    // [修正] horsesOverride が渡された場合はそちらを使用する (v.13.43.0)
+    final simHorses = (horsesOverride ?? raceData.horses)
         .where((horse) => !horse.isScratched)
         .map((horse) {
       final pastRecords = allPastRecords[horse.horseId] ?? [];
@@ -283,20 +286,12 @@ class RaceAnalyzer {
       }
     }
 
+    // [修正] グループ内ゲートソートを除去。positionScore順を維持することで
+    // 各馬がそれぞれ独立したポジションとして扱われ隊列が仮番号順に戻らない (v.13.43.0)
     return groups.map((group) {
-      group.sort((a, b) => a.detail.gateNumber.compareTo(b.detail.gateNumber));
-
       final parallelGroups = <String>[];
-      for (int i = 0; i < group.length;) {
-        if (i + 1 < group.length &&
-            (group[i + 1].detail.gateNumber - group[i].detail.gateNumber) <= 2) {
-          parallelGroups.add(
-              '(${group[i].detail.horseNumber},${group[i + 1].detail.horseNumber})');
-          i += 2;
-        } else {
-          parallelGroups.add(group[i].detail.horseNumber.toString());
-          i += 1;
-        }
+      for (int i = 0; i < group.length; i++) {
+        parallelGroups.add(group[i].detail.horseNumber.toString());
       }
       return parallelGroups.join('-');
     }).join('-');

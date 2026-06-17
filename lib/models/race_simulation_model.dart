@@ -37,6 +37,8 @@ class RaceSimFrame {
   final Offset rawPosition;
   final Offset basePosition;
   final double distanceFromGoal;
+  // [追加] Layer2のY座標計算用。エンジンの補間済み横位置ランク (v.13.43.0)
+  final double laneRank;
 
   const RaceSimFrame({
     required this.horseNumber,
@@ -44,6 +46,7 @@ class RaceSimFrame {
     required this.rawPosition,
     required this.basePosition,
     required this.distanceFromGoal,
+    required this.laneRank,
   });
 }
 
@@ -104,6 +107,7 @@ class RaceSimHorseTrack {
       rawPosition: basePos + normal * lateralOffset,
       basePosition: basePos,
       distanceFromGoal: distanceFromGoal,
+      laneRank: laneRank,
     );
   }
 }

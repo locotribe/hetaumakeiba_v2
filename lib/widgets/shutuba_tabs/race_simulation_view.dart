@@ -6,10 +6,13 @@ import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/logic/elevation_logic.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/course_diagram_painter.dart';
+import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_camera_painter.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_elevation_painter.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_layer2_painter.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_painter.dart';
 
 /// 展開予想アニメーションのデュアルビュー表示ウィジェット。
@@ -24,6 +27,10 @@ class RaceSimulationView extends StatefulWidget {
   final bool isLeftHanded;
   final String trackTypeKey;
   final RaceCourseData? raceCourse;
+  // [追加] Layer2描画用パラメータ。馬番(horseNumber文字列)をキーとする (v.13.43.0)
+  final Map<String, HorseSimulationParams> simulationParams;
+  // [追加] ステータス表表示用。仮番号付与済みの馬リスト (v.13.43.0)
+  final List<PredictionHorseDetail> horses;
 
   const RaceSimulationView({
     super.key,
@@ -34,6 +41,8 @@ class RaceSimulationView extends StatefulWidget {
     required this.isLeftHanded,
     required this.trackTypeKey,
     this.raceCourse,
+    this.simulationParams = const {},
+    this.horses = const [],
   });
 
   @override
@@ -245,24 +254,40 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
             builder: (context, _) {
               final currentTime =
                   _controller.value * widget.simulationData.totalTime;
-              return CustomPaint(
-                painter: RaceSimulationCameraPainter(
-                  coords: widget.diagram.coords,
-                  raceDistance: widget.raceDistance,
-                  approach: _approach,
-                  simulationData: widget.simulationData,
-                  currentTime: currentTime,
-                  isLeftHanded: widget.isLeftHanded,
-                  trackTypeKey: widget.trackTypeKey,
-                  trackPath: _trackPath,
-                  infieldPath: _infieldPath,
-                  railPath: _railPath,
-                  raceCourse: widget.raceCourse,
-                  // コース描画の検証中は馬番号マーカーを一時OFF。
-                  // 後で独立レイヤーとして復活させる。
-                  showHorseMarkers: false,
-                ),
-                size: Size.infinite,
+              return Stack(
+                children: [
+                  // Layer1: コース形状・内ラチ・ゴールライン等（変更なし）
+                  CustomPaint(
+                    painter: RaceSimulationCameraPainter(
+                      coords: widget.diagram.coords,
+                      raceDistance: widget.raceDistance,
+                      approach: _approach,
+                      simulationData: widget.simulationData,
+                      currentTime: currentTime,
+                      isLeftHanded: widget.isLeftHanded,
+                      trackTypeKey: widget.trackTypeKey,
+                      trackPath: _trackPath,
+                      infieldPath: _infieldPath,
+                      railPath: _railPath,
+                      raceCourse: widget.raceCourse,
+                      showHorseMarkers: false,
+                    ),
+                    size: Size.infinite,
+                  ),
+                  // [追加] Layer2: 進行距離×横位置座標系の馬番マーカーオーバーレイ (v.13.43.0)
+                  CustomPaint(
+                    painter: RaceSimulationLayer2Painter(
+                      coords: widget.diagram.coords,
+                      raceDistance: widget.raceDistance,
+                      approach: _approach,
+                      simulationData: widget.simulationData,
+                      currentTime: currentTime,
+                      isLeftHanded: widget.isLeftHanded,
+                      simulationParams: widget.simulationParams,
+                    ),
+                    size: Size.infinite,
+                  ),
+                ],
               );
             },
           ),
@@ -316,7 +341,108 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
             ],
           ),
         ),
+
+        // [追加] ステータス表（シークバー下）(v.13.43.0)
+        if (widget.horses.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8.0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildStatusHeader(),
+                const Divider(height: 1),
+                ...widget.horses.map((horse) {
+                  final params =
+                      widget.simulationParams[horse.horseNumber.toString()];
+                  return _buildStatusRow(horse, params);
+                }),
+              ],
+            ),
+          ),
       ],
+    );
+  }
+
+  Widget _buildStatusHeader() {
+    const style = TextStyle(
+      fontSize: 9,
+      fontWeight: FontWeight.bold,
+      color: Colors.black54,
+    );
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 3.0),
+      child: Row(
+        children: [
+          SizedBox(width: 22, child: Text('#', style: style)),
+          Expanded(flex: 3, child: Text('馬名', style: style)),
+          SizedBox(
+              width: 30,
+              child: Text('脚質', style: style, textAlign: TextAlign.center)),
+          Expanded(
+              flex: 2,
+              child: Text('テン', style: style, textAlign: TextAlign.center)),
+          Expanded(
+              flex: 2,
+              child: Text('終い', style: style, textAlign: TextAlign.center)),
+          Expanded(
+              flex: 2,
+              child: Text('スタ', style: style, textAlign: TextAlign.center)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(
+      PredictionHorseDetail horse, HorseSimulationParams? params) {
+    const numStyle =
+        TextStyle(fontSize: 10, fontWeight: FontWeight.bold);
+    const nameStyle = TextStyle(fontSize: 10);
+    const legStyleTextStyle =
+        TextStyle(fontSize: 9, color: Colors.black87);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+      child: Row(
+        children: [
+          SizedBox(
+              width: 22,
+              child: Text(horse.horseNumber.toString(), style: numStyle)),
+          Expanded(
+              flex: 3,
+              child: Text(horse.horseName,
+                  style: nameStyle, overflow: TextOverflow.ellipsis)),
+          SizedBox(
+              width: 30,
+              child: Text(params?.legStyle ?? '不明',
+                  style: legStyleTextStyle, textAlign: TextAlign.center)),
+          Expanded(
+              flex: 2,
+              child: _buildBar(params?.tenAccelIndex ?? 0, Colors.orange)),
+          Expanded(
+              flex: 2,
+              child: _buildBar(params?.finishingPower ?? 0, Colors.blue)),
+          Expanded(
+              flex: 2,
+              child: _buildBar(params?.staminaIndex ?? 0, Colors.green)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBar(double value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+      child: LinearProgressIndicator(
+        value: value.clamp(0.0, 1.0),
+        minHeight: 6,
+        backgroundColor: Colors.grey.shade200,
+        valueColor: AlwaysStoppedAnimation<Color>(color),
+      ),
     );
   }
 }

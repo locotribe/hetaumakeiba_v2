@@ -308,6 +308,18 @@ class DbProvider {
         ${DbConstants.colResultLastUpdated} TEXT
       )
     ''');
+
+    // [追加] horse_simulation_params テーブル作成 (v.13.43.0)
+    await db.execute('''
+      CREATE TABLE ${DbConstants.tableHorseSimulationParams}(
+        horse_id        TEXT PRIMARY KEY,
+        ten_accel_index REAL NOT NULL,
+        finishing_power REAL NOT NULL,
+        stamina_index   REAL NOT NULL,
+        leg_style       TEXT NOT NULL,
+        calculated_at   TEXT NOT NULL
+      )
+    ''');
   }
 
   // [修正] マイグレーション失敗時にエラーを握りつぶさず、rethrowで上位へ伝播させるよう全catchブロックを修正 (v.13.40.3)
@@ -493,6 +505,24 @@ class DbProvider {
         await db.execute('ALTER TABLE ${DbConstants.tableHorseProfiles} ADD COLUMN gender TEXT');
       } catch (e) {
         debugPrint('Migration error (v12->v13): $e');
+        rethrow;
+      }
+    }
+    // [追加] horse_simulation_params テーブル新設 (v.13.43.0)
+    if (oldVersion < 14) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS ${DbConstants.tableHorseSimulationParams}(
+            horse_id        TEXT PRIMARY KEY,
+            ten_accel_index REAL NOT NULL,
+            finishing_power REAL NOT NULL,
+            stamina_index   REAL NOT NULL,
+            leg_style       TEXT NOT NULL,
+            calculated_at   TEXT NOT NULL
+          )
+        ''');
+      } catch (e) {
+        debugPrint('Migration error (v13->v14): $e');
         rethrow;
       }
     }

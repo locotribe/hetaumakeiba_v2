@@ -8,8 +8,10 @@ import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart'
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_repository.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/logic/race_info_parser.dart';
 // [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
@@ -532,6 +534,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         }
       }
     }
+
+    // [追加] 展開シミュ用パラメータを全馬分算出してDBに保存 (v.13.43.0)
+    final simulationParamsList = raceData.horses.map((horse) {
+      final records = allPastRecords[horse.horseId] ?? [];
+      return SimulationParamsCalculator.calculate(horse.horseId, records);
+    }).toList();
+    await HorseSimulationParamsRepository().upsertBatch(simulationParamsList);
 
     raceData.racePacePrediction = RaceAnalyzer.predictRacePace(
         raceData.horses, allPastRecords, []);
