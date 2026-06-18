@@ -139,16 +139,7 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
           await _horseRepo.getHorsePerformanceRecords(horse.horseId);
     }));
 
-    final simulationData = await RaceSimulationEngine.build(
-      raceData: widget.predictionRaceData,
-      horses: horsesForSim,
-      allPastRecords: allPastRecords,
-      raceCourse: raceCourse,
-      raceDistance: distance.toDouble(),
-    );
-    if (simulationData == null) return null;
-
-    // [追加] Layer2用パラメータをDBから取得。DBにない場合はallPastRecordsから即時計算 (v.13.43.0)
+    // [修正] simulationParamsをbuild()前に取得して脚質ベースlaneRankに使用 (v.2026.6.19)
     final horseIds = horsesForSim.map((h) => h.horseId).toList();
     final paramsByHorseId = await _simParamsRepo.getByHorseIds(horseIds);
     final simulationParams = <String, HorseSimulationParams>{};
@@ -160,6 +151,16 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
           );
       simulationParams[horse.horseNumber.toString()] = params;
     }
+
+    final simulationData = await RaceSimulationEngine.build(
+      raceData: widget.predictionRaceData,
+      horses: horsesForSim,
+      allPastRecords: allPastRecords,
+      raceCourse: raceCourse,
+      raceDistance: distance.toDouble(),
+      simulationParams: simulationParams, // [追加] 脚質ベースlaneRank用 (v.2026.6.19)
+    );
+    if (simulationData == null) return null;
 
     return _RaceSimulationLoadResult(
       diagram: diagram,

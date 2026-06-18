@@ -4,6 +4,7 @@
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 
@@ -33,39 +34,58 @@ class RaceSimulationEngine {
     required Map<String, List<HorseRaceRecord>> allPastRecords,
     required RaceCourseData? raceCourse,
     required double raceDistance,
+    // [追加] フェーズ2: 脚質ベースlaneRank算出に使用 (v.2026.6.19)
+    Map<String, HorseSimulationParams> simulationParams = const {},
   }) async {
     if (horses.isEmpty || raceDistance <= 0) return null;
 
-    // [修正] 展開文字列の生成には必ず horses を使用し、raceData.horses に依存しない (v.13.43.0)
+    // [修正] 7キーフレーム(d0-d6)でコーナーごとのパラメータを反映 (v.2026.6.19)
     final development = await RaceAnalyzer.simulateRaceDevelopment(
       raceData,
       allPastRecords,
-      const ['1-2コーナー', '3コーナー', '4コーナー'],
+      const ['テン', '1コーナー', '2コーナー', '3コーナー', '4コーナー', '直線'],
       const {},
       horsesOverride: horses,
+      simulationParams: simulationParams,
     );
 
-    // 「ゴールからの絶対残距離」(d0=raceDistance, d4=0, 単調減少)
+    // 「ゴールからの絶対残距離」(d0=raceDistance→d6=0, 単調減少)
+    // minKeyframeGapMeters保証で等時間キーフレームを防止
+    const double minKeyframeGapMeters = 20.0;
     final d0 = raceDistance;
-    final d1 = _clampD(
-      _cornerMid(raceCourse, const ['corner_1', 'corner_2'],
+    // d1: テン（固定比率・コース形状非依存）
+    final d1 = _clampD(raceDistance * 0.88, 0.0, d0 - minKeyframeGapMeters);
+    // d2: 1コーナー初回出現（多周回コース対応）
+    final d2 = _clampD(
+      _cornerMidFirst(raceCourse, const ['corner_1'],
           fallback: raceDistance * 0.75),
       0.0,
-      d0,
+      d1 - minKeyframeGapMeters,
     );
-    final d2 = _clampD(
-      _cornerMid(raceCourse, const ['corner_3'], fallback: raceDistance * 0.5),
-      0.0,
-      d1,
-    );
+    // d3: 2コーナー初回出現
     final d3 = _clampD(
-      _cornerMid(raceCourse, const ['corner_4'], fallback: raceDistance * 0.25),
+      _cornerMidFirst(raceCourse, const ['corner_2'],
+          fallback: raceDistance * 0.60),
       0.0,
-      d2,
+      d2 - minKeyframeGapMeters,
     );
-    const d4 = 0.0;
+    // d4: 3コーナー最終出現（ゴールに最も近い3コーナー）
+    final d4 = _clampD(
+      _cornerMid(raceCourse, const ['corner_3'],
+          fallback: raceDistance * 0.40),
+      0.0,
+      d3 - minKeyframeGapMeters,
+    );
+    // d5: 4コーナー最終出現
+    final d5 = _clampD(
+      _cornerMid(raceCourse, const ['corner_4'],
+          fallback: raceDistance * 0.20),
+      minKeyframeGapMeters, // ゴール(0)との最低ギャップを保証
+      d4 - minKeyframeGapMeters,
+    );
+    const d6 = 0.0; // ゴール（直線終了）
 
-    final distances = <double>[d0, d1, d2, d3, d4];
+    final distances = <double>[d0, d1, d2, d3, d4, d5, d6];
     final times = distances
         .map((d) => ((raceDistance - d) / raceDistance) * totalAnimationSeconds)
         .toList();
@@ -73,28 +93,40 @@ class RaceSimulationEngine {
     // 各キーフレームでの隊列グループ（「-」区切りの前後グループ × 内側からの並び順）
     final orderedByGate = List<PredictionHorseDetail>.from(horses)
       ..sort((a, b) => a.gateNumber.compareTo(b.gateNumber));
-    // 発走時は枠順一列を1グループとして扱う（横一列のスタートゲート表現）
+    // d0: スタートゲート（枠番順の横一列）
     final order0Groups = [
       orderedByGate.map((h) => h.horseNumber.toString()).toList()
     ];
-    final order1Groups = _parseTairetsuGroups(development['1-2コーナー']);
-    final order2Groups = _parseTairetsuGroups(development['3コーナー']);
-    final order3Groups = _parseTairetsuGroups(development['4コーナー']);
-    final order4Groups = order3Groups;
+    final order1Groups = _parseTairetsuGroups(development['テン']);
+    final order2Groups = _parseTairetsuGroups(development['1コーナー']);
+    final order3Groups = _parseTairetsuGroups(development['2コーナー']);
+    final order4Groups = _parseTairetsuGroups(development['3コーナー']);
+    final order5Groups = _parseTairetsuGroups(development['4コーナー']);
+    final order6Groups = _parseTairetsuGroups(development['直線']);
 
     final orderGroups = <List<List<String>>>[
-      order0Groups,
-      order1Groups,
-      order2Groups,
-      order3Groups,
-      order4Groups,
+      order0Groups, // d0: スタート
+      order1Groups, // d1: テン
+      order2Groups, // d2: 1コーナー
+      order3Groups, // d3: 2コーナー
+      order4Groups, // d4: 3コーナー
+      order5Groups, // d5: 4コーナー
+      order6Groups, // d6: ゴール（直線）
     ];
 
-    final horseTracks = <RaceSimHorseTrack>[];
-    for (final horse in horses) {
+    final int n = horses.length;
+
+    // [修正] Phase1: 全馬×全キーフレームの生(distanceFromGoal, laneRank)を計算 (v.2026.6.19)
+    final rawDistances =
+        List<List<double>>.generate(n, (_) => List<double>.filled(7, 0.0));
+    final rawLaneRanks =
+        List<List<double>>.generate(n, (_) => List<double>.filled(7, 0.0));
+
+    for (int h = 0; h < n; h++) {
+      final horse = horses[h];
       final horseNumber = horse.horseNumber.toString();
-      final snapshots = <RaceSimSnapshot>[];
-      for (int i = 0; i < 5; i++) {
+
+      for (int i = 0; i < 7; i++) {
         final groups = orderGroups[i];
 
         int groupIndex = -1;
@@ -110,21 +142,64 @@ class RaceSimulationEngine {
           }
         }
 
-        final laneRank = groupIndex >= 0
-            ? idxInGroup - (groupSize - 1) / 2.0
-            : 0.0;
-        final distanceFromGoal = groupIndex >= 0
-            ? distances[i] + groupIndex * groupSpacingMeters
+        // [修正] d0=枠番ベース縦配列 / d1以降=脚質ベース内外優先度 (v.2026.6.19)
+        final double laneRank;
+        if (i == 0) {
+          // スタートゲート: 枠番順の縦1列（既存動作）
+          laneRank = groupIndex >= 0
+              ? idxInGroup - (groupSize - 1) / 2.0
+              : 0.0;
+        } else {
+          // d1以降: 脚質ベース（逃げ=内、追込=外）
+          laneRank =
+              _styleLaneRank(simulationParams[horseNumber], horse.gateNumber);
+        }
+
+        // [追加] 確定的ゆらぎ: horseIdとキーフレームから±1グループの予想誤差を付与 (v.2026.6.19)
+        // d0(スタート)のみゆらぎなし（スタートゲートは枠番固定）
+        final int effectiveGroupIndex;
+        if (i > 0 && groupIndex >= 0) {
+          final variance = _deterministicVariance(horse.horseId, i);
+          effectiveGroupIndex =
+              (groupIndex + variance).clamp(0, groups.length - 1);
+        } else {
+          effectiveGroupIndex = groupIndex;
+        }
+        final distanceFromGoal = effectiveGroupIndex >= 0
+            ? distances[i] + effectiveGroupIndex * groupSpacingMeters
             : distances[i];
 
+        rawDistances[h][i] = distanceFromGoal;
+        rawLaneRanks[h][i] = laneRank;
+      }
+    }
+
+    // [修正] Phase2: d1〜d6をビルド時に衝突解決（d0=スタートゲートはスキップ） (v.2026.6.19)
+    // 各キーフレームで衝突を静的解決することでPainterのリアルタイム当たり判定を不要にし、
+    // Y軸の急激なジャンプを根本的に排除する。
+    for (int i = 1; i < 7; i++) {
+      final lrList = List<double>.generate(n, (h) => rawLaneRanks[h][i]);
+      final dfgList = List<double>.generate(n, (h) => rawDistances[h][i]);
+      final resolved = _resolveCollisionsForKeyframe(lrList, dfgList);
+      for (int h = 0; h < n; h++) {
+        rawLaneRanks[h][i] = resolved[h];
+      }
+    }
+
+    // Phase3: スナップショット構築
+    final horseTracks = <RaceSimHorseTrack>[];
+    for (int h = 0; h < n; h++) {
+      final horse = horses[h];
+      final snapshots = <RaceSimSnapshot>[];
+      for (int i = 0; i < 7; i++) {
         snapshots.add(RaceSimSnapshot(
           time: times[i],
-          distanceFromGoal: distanceFromGoal,
-          laneRank: laneRank,
+          distanceFromGoal: rawDistances[h][i],
+          laneRank: rawLaneRanks[h][i],
         ));
       }
       horseTracks.add(RaceSimHorseTrack(
-        horseNumber: horseNumber,
+        horseNumber: horse.horseNumber.toString(),
         gateNumber: horse.gateNumber,
         snapshots: snapshots,
       ));
@@ -185,6 +260,89 @@ class RaceSimulationEngine {
     return raceCourse.raceDistance - midFromStart;
   }
 
+  /// raceCourse.sections から sectionNames に該当する「最初の」連続グループを探し、
+  /// その中間値を「ゴールからの絶対残距離」に変換して返す。
+  /// 多周回コースで1コーナー・2コーナーが複数出現する場合、スタートに最も近い
+  /// （最初の）出現を使うことでテン〜2コーナー区間の正確な距離を得る。
+  // [追加] フェーズ2: 多周回コース対応の初回コーナー取得 (v.2026.6.19)
+  static double _cornerMidFirst(
+    RaceCourseData? raceCourse,
+    List<String> sectionNames, {
+    required double fallback,
+  }) {
+    if (raceCourse == null) return fallback;
+    final sections = raceCourse.sections;
+
+    final matches = <int>[];
+    for (int i = 0; i < sections.length; i++) {
+      if (sectionNames.contains(sections[i].name)) matches.add(i);
+    }
+    if (matches.isEmpty) return fallback;
+
+    // 最初の連続グループのみ採用
+    final firstGroup = <int>[matches.first];
+    for (int i = 1; i < matches.length; i++) {
+      if (matches[i] == firstGroup.last + 1) {
+        firstGroup.add(matches[i]);
+      } else {
+        break;
+      }
+    }
+
+    double minStart = sections[firstGroup.first].startDistance;
+    double maxEnd = sections[firstGroup.first].endDistance;
+    for (final idx in firstGroup) {
+      if (sections[idx].startDistance < minStart) {
+        minStart = sections[idx].startDistance;
+      }
+      if (sections[idx].endDistance > maxEnd) {
+        maxEnd = sections[idx].endDistance;
+      }
+    }
+    final midFromStart = (minStart + maxEnd) / 2.0;
+    return raceCourse.raceDistance - midFromStart;
+  }
+
+  /// horseIdとキーフレームインデックスから -1/0/+1 の確定的変動値を返す。
+  /// 同じ馬・同じキーフレームでは常に同じ値を返すためアニメーション中にちらつかない。
+  // [追加] フェーズ2: 予想の不確かさを表す確定的ゆらぎ (v.2026.6.19)
+  static int _deterministicVariance(String horseId, int keyframe) {
+    final hash = (horseId.hashCode ^ (keyframe * 2654435761)) & 0x7FFFFFFF;
+    return (hash % 3) - 1; // -1, 0, +1
+  }
+
+  /// 1キーフレーム分の全馬laneRankをビルド時に衝突解決する。
+  /// 進行距離が近い馬（|dx| < 6.0m）のみ対象とし、
+  /// 内側(laneRank小)から順に処理して重なりを外側へ押し出す。
+  // [追加] Y軸急激移動根本修正: ビルド時衝突解決 (v.2026.6.19)
+  static List<double> _resolveCollisionsForKeyframe(
+    List<double> rawLaneRanks,
+    List<double> distancesFromGoal,
+  ) {
+    const double collisionThresholdMeters = 6.0;
+    const double minLaneGap = 18.0 / 13.0; // markerDiameter / laneSpacingY ≈ 1.38
+
+    final n = rawLaneRanks.length;
+    final indices = List<int>.generate(n, (i) => i);
+    indices.sort((a, b) => rawLaneRanks[a].compareTo(rawLaneRanks[b]));
+
+    final resolved = List<double>.from(rawLaneRanks);
+    for (int i = 0; i < n; i++) {
+      final idx = indices[i];
+      for (int j = 0; j < i; j++) {
+        final jdx = indices[j];
+        final dx = (distancesFromGoal[idx] - distancesFromGoal[jdx]).abs();
+        if (dx < collisionThresholdMeters) {
+          final gap = resolved[idx] - resolved[jdx];
+          if (gap < minLaneGap) {
+            resolved[idx] = resolved[jdx] + minLaneGap;
+          }
+        }
+      }
+    }
+    return resolved;
+  }
+
   /// "(3,5)-7-12" 形式の隊列文字列を [['3','5'], ['7'], ['12']] に変換する。
   /// 「-」区切りの各トークンが1グループ（前後関係）、トークン内の「()」が
   /// 並走する馬（横方向のみの関係）を表す。
@@ -199,6 +357,29 @@ class RaceSimulationEngine {
             .toList())
         .where((group) => group.isNotEmpty)
         .toList();
+  }
+
+  /// 脚質に基づくレーンランク（内外優先度）を返す。逃げ=最内(0.5)、追込=最外(6.0)。
+  /// 同脚質の馬は枠番で微分散（0〜1.05）させて初期位置が重ならないようにする。
+  // [追加] フェーズ2: 脚質ベースlaneRank (v.2026.6.19)
+  static double _styleLaneRank(
+      HorseSimulationParams? params, int gateNumber) {
+    double base;
+    if (params?.legStyle == '逃げ') {
+      base = 0.5;
+    } else if (params?.legStyle == '先行') {
+      base = 2.0;
+    } else if (params?.legStyle == '自在') {
+      base = 1.5;
+    } else if (params?.legStyle == '差し') {
+      base = 4.0;
+    } else if (params?.legStyle == '追込') {
+      base = 6.0;
+    } else {
+      base = 3.0;
+    }
+    // 同脚質内で枠番を使って微分散（0〜1.05の範囲）
+    return base + (gateNumber - 1) * 0.15;
   }
 
   /// 枠順発表前（全馬 horseNumber=0）のときに呼ぶ仮番号付与ヘルパー。

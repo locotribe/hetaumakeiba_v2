@@ -104,16 +104,38 @@ class RaceSimulationLayer2Painter extends CustomPainter {
             ? availableHeight / laneRankRange
             : _laneSpacingY;
 
-    // 描画（内側から外側へ順に描くことで内側の馬が前面に来る）
-    final sorted = List<RaceSimFrame>.from(frames)
-      ..sort((a, b) => b.laneRank.compareTo(a.laneRank)); // 外側から先に描く
+    // 全馬のscreenXを先行計算
+    final screenXByHorse = <String, double>{};
+    for (final f in frames) {
+      screenXByHorse[f.horseNumber] = size.width / 2 +
+          dirSign * (f.distanceFromGoal - anchorDist) * scaleMeters;
+    }
 
-    for (final frame in sorted) {
-      final screenX = size.width / 2 +
-          dirSign * (frame.distanceFromGoal - anchorDist) * scaleMeters;
+    if (spread < 2.0) {
+      // スタートゲート: effectiveSpacingYで全馬を均等配置。
+      // 頭数が多い場合はマーカーが重なってもよい（修正前の動作を維持）。
+      final sorted = List<RaceSimFrame>.from(frames)
+        ..sort((a, b) => b.laneRank.compareTo(a.laneRank));
+      for (final frame in sorted) {
+        final screenY =
+            topY + (frame.laneRank - minLaneRank) * effectiveSpacingY;
+        _drawHorseMarker(
+            canvas, Offset(screenXByHorse[frame.horseNumber]!, screenY), frame);
+      }
+      return;
+    }
+
+    // [修正] レース中: エンジン側でビルド時に衝突解決済みのlaneRankをY座標に直接マッピング (v.2026.6.19)
+    // リアルタイム当たり判定を廃止し、Y軸の急激なジャンプを根本的に排除する。
+    // 外側(laneRank大)から描画して内側の馬が前面になる。
+    final sortedForDraw = List<RaceSimFrame>.from(frames)
+      ..sort((a, b) => b.laneRank.compareTo(a.laneRank));
+
+    for (final frame in sortedForDraw) {
+      final screenX = screenXByHorse[frame.horseNumber]!;
       final screenY =
-          topY + (frame.laneRank - minLaneRank) * effectiveSpacingY;
-
+          (topY + (frame.laneRank - minLaneRank) * effectiveSpacingY)
+              .clamp(topY, bottomY);
       _drawHorseMarker(canvas, Offset(screenX, screenY), frame);
     }
   }

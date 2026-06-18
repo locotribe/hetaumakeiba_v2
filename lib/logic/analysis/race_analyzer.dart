@@ -9,6 +9,7 @@ import 'package:hetaumakeiba_v2/logic/analysis/aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 
 class _SimHorse {
@@ -111,7 +112,11 @@ class RaceAnalyzer {
       Map<String, List<HorseRaceRecord>> allPastRecords,
       List<String> cornersToPredict,
       Map<String, JockeyStats> allJockeyStats,
-      {List<PredictionHorseDetail>? horsesOverride}
+      {
+      List<PredictionHorseDetail>? horsesOverride,
+      // [追加] フェーズ2: tenAccelIndex/staminaIndex/finishingPowerをキーフレームに反映 (v.2026.6.19)
+      Map<String, HorseSimulationParams> simulationParams = const {},
+      }
       ) async {
     final CoursePresetRepository coursePresetRepo = CoursePresetRepository();
     final venueCode = venueCodeMap[raceData.venue];
@@ -212,6 +217,35 @@ class RaceAnalyzer {
         'ミドルペース';
 
     simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
+
+    // [追加] テン: 初期ソート直後の隊列（枠番・脚質ベース、テン指数未反映） (v.2026.6.19)
+    if (cornersToPredict.contains('テン')) {
+      development['テン'] = _formatTairetsu(simHorses);
+    }
+
+    // [追加] 1コーナー: テン加速指数が高い馬が前に出る (v.2026.6.19)
+    if (cornersToPredict.contains('1コーナー')) {
+      for (final horse in simHorses) {
+        final params = simulationParams[horse.detail.horseNumber.toString()];
+        final tenAccel = params?.tenAccelIndex ?? 0.5;
+        // tenAccelIndex>0.5の馬はpositionScoreを下げて前進、<0.5は後退
+        horse.positionScore -= (tenAccel - 0.5) * 0.6;
+      }
+      simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
+      development['1コーナー'] = _formatTairetsu(simHorses);
+    }
+
+    // [追加] 2コーナー: スタミナ不足の馬がわずかに後退し始める (v.2026.6.19)
+    if (cornersToPredict.contains('2コーナー')) {
+      for (final horse in simHorses) {
+        final params = simulationParams[horse.detail.horseNumber.toString()];
+        final stamina = params?.staminaIndex ?? 0.5;
+        if (stamina < 0.35) horse.positionScore += 0.12;
+      }
+      simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
+      development['2コーナー'] = _formatTairetsu(simHorses);
+    }
+
     if (cornersToPredict.contains('1-2コーナー')) {
       development['1-2コーナー'] = _formatTairetsu(simHorses);
     }
@@ -267,6 +301,23 @@ class RaceAnalyzer {
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['4コーナー'] = _formatTairetsu(simHorses);
+    }
+
+    // [追加] 直線: finishingPowerで上がり3F区間の伸び/粘りを反映 (v.2026.6.19)
+    if (cornersToPredict.contains('直線')) {
+      for (final horse in simHorses) {
+        final params = simulationParams[horse.detail.horseNumber.toString()];
+        final finishingPower = params?.finishingPower ?? 0.5;
+        double kickFactor = 1.5;
+        if (predictedPace.contains('スロー')) {
+          kickFactor = 2.0; // スローペースは瞬発力勝負
+        } else if (predictedPace.contains('ハイ')) {
+          kickFactor = 1.0; // ハイペースは消耗戦で末脚の差が縮む
+        }
+        horse.positionScore -= (finishingPower - 0.5) * kickFactor;
+      }
+      simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
+      development['直線'] = _formatTairetsu(simHorses);
     }
 
     return development;
