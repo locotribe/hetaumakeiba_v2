@@ -10,6 +10,8 @@ import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 class RaceSimulationEngine {
   // [追加] リアルタイム速度化: 時速60km≈16.67m/sを基準にtotalTimeをraceDistanceから算出 (v2026.6.25)
   static const double _baseSpeedMps = 16.67;
+  // [追加] 坂補正: 勾配(m/m)あたりの速度変化係数。勾配0.013(中山最急坂)で約10%の速度変化 (v2026.6.25)
+  static const double _slopeInfluence = 8.0;
 
   /// レーン1つあたりの横方向オフセット(px)。coords.pixelsPerMeter≈0.5
   /// (1px≈2m)であるため、0.5px≈1m間隔とする(18頭が重なりながら密集する想定)。
@@ -86,9 +88,13 @@ class RaceSimulationEngine {
     const d6 = 0.0; // ゴール（直線終了）
 
     final distances = <double>[d0, d1, d2, d3, d4, d5, d6];
-    final times = distances
-        .map((d) => ((raceDistance - d) / raceDistance) * totalAnimationSeconds)
-        .toList();
+    // [追加] 坂補正: キーフレーム間の平均勾配から速度倍率を算出し時間軸を非線形化 (v2026.6.25)
+    final times = _buildKeyframeTimes(
+      distances: distances,
+      raceCourse: raceCourse,
+      raceDistance: raceDistance,
+      totalAnimationSeconds: totalAnimationSeconds,
+    );
 
     // 各キーフレームでの隊列グループ（「-」区切りの前後グループ × 内側からの並び順）
     final orderedByGate = List<PredictionHorseDetail>.from(horses)
@@ -430,5 +436,59 @@ class RaceSimulationEngine {
         jockeyComboStats: h.jockeyComboStats,
       );
     }).toList();
+  }
+
+  /// キーフレームの distanceFromGoal リストから、坂勾配を考慮した時刻リストを構築する。
+  /// 各区間の中点における平均勾配を算出し、上り坂=減速・下り坂=加速として区間時間を補正する。
+  /// 正規化により totalAnimationSeconds が常に最終時刻になることを保証する。
+  /// シュート（引き込み線）スタートのレースは approach path の標高データが無いため、
+  /// d0→d1 区間は本線の同距離帯の標高で近似する（誤差は軽微）。
+  static List<double> _buildKeyframeTimes({
+    required List<double> distances,
+    required RaceCourseData? raceCourse,
+    required double raceDistance,
+    required double totalAnimationSeconds,
+  }) {
+    final times = <double>[0.0];
+    for (int i = 1; i < distances.length; i++) {
+      final sectionMeters = distances[i - 1] - distances[i];
+      double speedMultiplier = 1.0;
+      if (raceCourse != null && sectionMeters > 0) {
+        final gradient = _sectionAverageGradient(
+          raceCourse,
+          distances[i - 1],
+          distances[i],
+          raceDistance,
+        );
+        speedMultiplier =
+            (1.0 - gradient * _slopeInfluence).clamp(0.5, 1.5);
+      }
+      final linearTime =
+          (sectionMeters / raceDistance) * totalAnimationSeconds;
+      times.add(times.last + linearTime / speedMultiplier);
+    }
+    // 最終時刻が totalAnimationSeconds になるよう正規化
+    final rawTotal = times.last;
+    return [for (final t in times) t / rawTotal * totalAnimationSeconds];
+  }
+
+  /// distanceFromGoal 区間の中点における 1周分標高データの平均勾配 (m/m) を返す。
+  /// 多周回コースは % lapDistance で単周回座標に折り返す。
+  static double _sectionAverageGradient(
+    RaceCourseData raceCourse,
+    double sectionStartDfg,
+    double sectionEndDfg,
+    double raceDistance,
+  ) {
+    final lapDist = raceCourse.baseData.lapDistance;
+    final midDfs =
+        raceDistance - (sectionStartDfg + sectionEndDfg) / 2.0;
+    final lapPos = midDfs % lapDist;
+    const double delta = 50.0;
+    final e1 = raceCourse.baseData
+        .getElevationAt((lapPos - delta).clamp(0.0, lapDist));
+    final e2 = raceCourse.baseData
+        .getElevationAt((lapPos + delta).clamp(0.0, lapDist));
+    return (e2 - e1) / (2 * delta);
   }
 }
