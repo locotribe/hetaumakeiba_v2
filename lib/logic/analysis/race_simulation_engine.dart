@@ -1,5 +1,4 @@
 // lib/logic/analysis/race_simulation_engine.dart
-// [追加] 展開予想アニメーション機能(MVP)のシミュレーションエンジン (v.1.0)
 
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
@@ -9,8 +8,8 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 
 class RaceSimulationEngine {
-  /// アニメーション全体の長さ(秒)
-  static const double totalAnimationSeconds = 12.0;
+  // [追加] リアルタイム速度化: 時速60km≈16.67m/sを基準にtotalTimeをraceDistanceから算出 (v2026.6.25)
+  static const double _baseSpeedMps = 16.67;
 
   /// レーン1つあたりの横方向オフセット(px)。coords.pixelsPerMeter≈0.5
   /// (1px≈2m)であるため、0.5px≈1m間隔とする(18頭が重なりながら密集する想定)。
@@ -26,7 +25,7 @@ class RaceSimulationEngine {
   /// 約+1m走路側に来るよう設定。
   static const double innerMarginPx = 4.75;
 
-  /// 出走取消済み除外後の各馬について、発走(d0)〜ゴール(d4)の5キーフレーム分の
+  /// 出走取消済み除外後の各馬について、発走(d0)〜ゴール(d6)の7キーフレーム分の
   /// Snapshot配列(time, distanceFromGoal, laneRank)を構築する。
   static Future<RaceSimulationData?> build({
     required PredictionRaceData raceData,
@@ -34,12 +33,13 @@ class RaceSimulationEngine {
     required Map<String, List<HorseRaceRecord>> allPastRecords,
     required RaceCourseData? raceCourse,
     required double raceDistance,
-    // [追加] フェーズ2: 脚質ベースlaneRank算出に使用 (v.2026.6.19)
     Map<String, HorseSimulationParams> simulationParams = const {},
   }) async {
     if (horses.isEmpty || raceDistance <= 0) return null;
 
-    // [修正] 7キーフレーム(d0-d6)でコーナーごとのパラメータを反映 (v.2026.6.19)
+    // raceDistanceから実レース時間(秒)を算出し、アニメーション基準時間とする
+    final totalAnimationSeconds = raceDistance / _baseSpeedMps;
+
     final development = await RaceAnalyzer.simulateRaceDevelopment(
       raceData,
       allPastRecords,
@@ -116,7 +116,7 @@ class RaceSimulationEngine {
 
     final int n = horses.length;
 
-    // [修正] Phase1: 全馬×全キーフレームの生(distanceFromGoal, laneRank)を計算 (v.2026.6.19)
+    // Phase1: 全馬×全キーフレームの生(distanceFromGoal, laneRank)を計算
     final rawDistances =
         List<List<double>>.generate(n, (_) => List<double>.filled(7, 0.0));
     final rawLaneRanks =
@@ -142,7 +142,7 @@ class RaceSimulationEngine {
           }
         }
 
-        // [修正] d0=枠番ベース縦配列 / d1以降=脚質ベース内外優先度 (v.2026.6.19)
+        // d0=枠番ベース縦配列 / d1以降=脚質ベース内外優先度
         final double laneRank;
         if (i == 0) {
           // スタートゲート: 枠番順の縦1列（既存動作）
@@ -155,7 +155,7 @@ class RaceSimulationEngine {
               _styleLaneRank(simulationParams[horseNumber], horse.gateNumber);
         }
 
-        // [追加] 確定的ゆらぎ: horseIdとキーフレームから±1グループの予想誤差を付与 (v.2026.6.19)
+        // 確定的ゆらぎ: horseIdとキーフレームから±1グループの予想誤差を付与
         // d0(スタート)のみゆらぎなし（スタートゲートは枠番固定）
         final int effectiveGroupIndex;
         if (i > 0 && groupIndex >= 0) {
@@ -174,7 +174,7 @@ class RaceSimulationEngine {
       }
     }
 
-    // [修正] Phase2: d1〜d6をビルド時に衝突解決（d0=スタートゲートはスキップ） (v.2026.6.19)
+    // Phase2: d1〜d6をビルド時に衝突解決（d0=スタートゲートはスキップ）
     // 各キーフレームで衝突を静的解決することでPainterのリアルタイム当たり判定を不要にし、
     // Y軸の急激なジャンプを根本的に排除する。
     for (int i = 1; i < 7; i++) {
@@ -264,7 +264,6 @@ class RaceSimulationEngine {
   /// その中間値を「ゴールからの絶対残距離」に変換して返す。
   /// 多周回コースで1コーナー・2コーナーが複数出現する場合、スタートに最も近い
   /// （最初の）出現を使うことでテン〜2コーナー区間の正確な距離を得る。
-  // [追加] フェーズ2: 多周回コース対応の初回コーナー取得 (v.2026.6.19)
   static double _cornerMidFirst(
     RaceCourseData? raceCourse,
     List<String> sectionNames, {
@@ -305,7 +304,6 @@ class RaceSimulationEngine {
 
   /// horseIdとキーフレームインデックスから -1/0/+1 の確定的変動値を返す。
   /// 同じ馬・同じキーフレームでは常に同じ値を返すためアニメーション中にちらつかない。
-  // [追加] フェーズ2: 予想の不確かさを表す確定的ゆらぎ (v.2026.6.19)
   static int _deterministicVariance(String horseId, int keyframe) {
     final hash = (horseId.hashCode ^ (keyframe * 2654435761)) & 0x7FFFFFFF;
     return (hash % 3) - 1; // -1, 0, +1
@@ -314,7 +312,6 @@ class RaceSimulationEngine {
   /// 1キーフレーム分の全馬laneRankをビルド時に衝突解決する。
   /// 進行距離が近い馬（|dx| < 6.0m）のみ対象とし、
   /// 内側(laneRank小)から順に処理して重なりを外側へ押し出す。
-  // [追加] Y軸急激移動根本修正: ビルド時衝突解決 (v.2026.6.19)
   static List<double> _resolveCollisionsForKeyframe(
     List<double> rawLaneRanks,
     List<double> distancesFromGoal,
@@ -361,7 +358,6 @@ class RaceSimulationEngine {
 
   /// 脚質に基づくレーンランク（内外優先度）を返す。逃げ=最内(0.5)、追込=最外(6.0)。
   /// 同脚質の馬は枠番で微分散（0〜1.05）させて初期位置が重ならないようにする。
-  // [追加] フェーズ2: 脚質ベースlaneRank (v.2026.6.19)
   static double _styleLaneRank(
       HorseSimulationParams? params, int gateNumber) {
     double base;
@@ -385,7 +381,6 @@ class RaceSimulationEngine {
   /// 枠順発表前（全馬 horseNumber=0）のときに呼ぶ仮番号付与ヘルパー。
   /// 馬名のあいうえお順でソートし、1 始まりの連番を割り当てる。
   /// 上限なし（19頭・20頭以上でも動作する）。
-  // [追加] 枠順発表前の仮番号付与 (v.13.43.0)
   static List<PredictionHorseDetail> assignTempNumbers(
       List<PredictionHorseDetail> horses) {
     final sorted = List<PredictionHorseDetail>.from(horses)

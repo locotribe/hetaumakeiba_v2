@@ -1,5 +1,4 @@
 // lib/widgets/shutuba_tabs/race_simulation_view.dart
-// [改修] 展開予想アニメーション デュアルビュー設計 (v.2.0)
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
@@ -27,9 +26,7 @@ class RaceSimulationView extends StatefulWidget {
   final bool isLeftHanded;
   final String trackTypeKey;
   final RaceCourseData? raceCourse;
-  // [追加] Layer2描画用パラメータ。馬番(horseNumber文字列)をキーとする (v.13.43.0)
   final Map<String, HorseSimulationParams> simulationParams;
-  // [追加] ステータス表表示用。仮番号付与済みの馬リスト (v.13.43.0)
   final List<PredictionHorseDetail> horses;
 
   const RaceSimulationView({
@@ -58,13 +55,17 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
   late final Path _railPath;
   late final ChartDrawData? _elevationData;
 
+  // [追加] リアルタイム速度化: 再生倍速。デフォルト8x(2000m≈15秒) (v2026.6.25)
+  double _playbackSpeed = 8.0;
+
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
       duration: Duration(
-        milliseconds: (widget.simulationData.totalTime * 1000).round(),
+        milliseconds:
+            (widget.simulationData.totalTime * 1000 / _playbackSpeed).round(),
       ),
     );
     _controller.addStatusListener(_onStatusChanged);
@@ -106,6 +107,22 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
       }
       _controller.forward();
     }
+  }
+
+  // [追加] リアルタイム速度化: 再生倍速を切り替える。再生中の場合は現在位置を保持してそのまま継続 (v2026.6.25)
+  void _setPlaybackSpeed(double speed) {
+    final wasAnimating = _controller.isAnimating;
+    final currentValue = _controller.value;
+    _controller.stop();
+    _controller.duration = Duration(
+      milliseconds:
+          (widget.simulationData.totalTime * 1000 / speed).round(),
+    );
+    setState(() {
+      _playbackSpeed = speed;
+    });
+    _controller.value = currentValue;
+    if (wasAnimating) _controller.forward();
   }
 
   /// currentTime時点での先頭馬(distanceFromGoal最小)のdistanceFromGoalを
@@ -274,7 +291,7 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
                     ),
                     size: Size.infinite,
                   ),
-                  // [追加] Layer2: 進行距離×横位置座標系の馬番マーカーオーバーレイ (v.13.43.0)
+                  // Layer2: 進行距離×横位置座標系の馬番マーカーオーバーレイ
                   CustomPaint(
                     painter: RaceSimulationLayer2Painter(
                       coords: widget.diagram.coords,
@@ -342,7 +359,42 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
           ),
         ),
 
-        // [追加] ステータス表（シークバー下）(v.13.43.0)
+        // [追加] リアルタイム速度化: 再生速度セレクター (v2026.6.25)
+        Padding(
+          padding: const EdgeInsets.only(left: 52.0, right: 8.0, bottom: 8.0),
+          child: Row(
+            children: [
+              const Text('速度:',
+                  style: TextStyle(fontSize: 11, color: Colors.black54)),
+              const SizedBox(width: 6),
+              for (final speed in [4.0, 8.0, 16.0])
+                Padding(
+                  padding: const EdgeInsets.only(left: 4.0),
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 0),
+                      minimumSize: const Size(0, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      side: BorderSide(
+                        color: _playbackSpeed == speed
+                            ? Colors.green.shade700
+                            : Colors.grey.shade400,
+                      ),
+                      foregroundColor: _playbackSpeed == speed
+                          ? Colors.green.shade700
+                          : Colors.grey.shade600,
+                    ),
+                    onPressed: () => _setPlaybackSpeed(speed),
+                    child: Text('${speed.toInt()}x',
+                        style: const TextStyle(fontSize: 11)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+
+        // ── ステータス表（シークバー下）──
         if (widget.horses.isNotEmpty)
           Container(
             margin: const EdgeInsets.only(bottom: 8.0),
