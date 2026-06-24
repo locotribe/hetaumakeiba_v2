@@ -1,5 +1,4 @@
 // lib/widgets/shutuba_tabs/race_simulation_layer2_painter.dart
-// [追加] 展開シミュ Layer2: コース座標に依存しない進行距離×横位置座標系で馬番マーカーを描画 (v.13.43.0)
 
 import 'dart:math' show min;
 
@@ -19,8 +18,8 @@ import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 ///
 /// X座標: 設計書の統一式 — 先頭馬を進行方向の端から10%に固定し、
 ///        馬群の縦の広がりに応じて中央寄せ→先頭固定を自動切替。
-/// Y座標(MVP): laneRank（エンジン算出済み）から内ラチ基準の画面Y座標へ直接マッピング。
-///             将来フェーズで speed-based drift + 当たり判定に置換予定。
+/// Y座標: エンジン算出済みlaneRankから直接マッピングし、コーナー遠心力・
+///        最終直線のfinishingPower広がりを加算オフセットとして重ねる。
 class RaceSimulationLayer2Painter extends CustomPainter {
   final CourseEdgeCoordsData coords;
   final double raceDistance;
@@ -28,14 +27,17 @@ class RaceSimulationLayer2Painter extends CustomPainter {
   final RaceSimulationData simulationData;
   final double currentTime;
   final bool isLeftHanded;
-  // [追加] 将来のdrift補正・処理順序に使用。MVP段階では保持のみ (v.13.43.0)
   final Map<String, HorseSimulationParams> simulationParams;
+  // [追加] 候補A: コーナー遠心力・最終直線広がりに使用 (v2026.6.25)
+  final RaceCourseData? raceCourse;
 
   static const double _markerRadius = 9.0;
   // Layer1の_railOffsetRatioと同一値でinnerRailYを揃える
   static const double _railOffsetRatio = 0.1;
   // laneRank 1単位あたりの画面Y間隔(px)。馬群の縦の広がりを制御する
   static const double _laneSpacingY = 13.0;
+  // [追加] 候補A: 4コーナー入口→ゴールの一体化展開係数。finishingPower×外側度合いで広がり量が決まる (v2026.6.25)
+  static const double _finalSpreadFactor = 0.20;
 
   const RaceSimulationLayer2Painter({
     required this.coords,
@@ -45,6 +47,7 @@ class RaceSimulationLayer2Painter extends CustomPainter {
     required this.currentTime,
     required this.isLeftHanded,
     this.simulationParams = const {},
+    this.raceCourse,
   });
 
   @override
@@ -125,19 +128,48 @@ class RaceSimulationLayer2Painter extends CustomPainter {
       return;
     }
 
-    // [修正] レース中: エンジン側でビルド時に衝突解決済みのlaneRankをY座標に直接マッピング (v.2026.6.19)
-    // リアルタイム当たり判定を廃止し、Y軸の急激なジャンプを根本的に排除する。
+    // エンジン側でビルド時に衝突解決済みのlaneRankをY座標に直接マッピング。
     // 外側(laneRank大)から描画して内側の馬が前面になる。
     final sortedForDraw = List<RaceSimFrame>.from(frames)
       ..sort((a, b) => b.laneRank.compareTo(a.laneRank));
 
+    // [追加] 候補A: 4コーナー入口→ゴールの一体化スムーズ展開 (v2026.6.25)
+    final corner4StartDfg = raceCourse != null
+        ? _corner4StartDfg(raceCourse!.sections, raceDistance)
+        : null;
+
     for (final frame in sortedForDraw) {
       final screenX = screenXByHorse[frame.horseNumber]!;
+      final laneFromInner = frame.laneRank - minLaneRank;
+
+      // 4コーナー入口→ゴールを一体のプログレスで外側に広げる。
+      // 遠心力で徐々に外に振られ、直線でも広がり続ける自然な流れを実現する。
+      double spreadOffset = 0.0;
+      if (corner4StartDfg != null &&
+          corner4StartDfg > 0 &&
+          frame.distanceFromGoal <= corner4StartDfg) {
+        final fp = simulationParams[frame.horseNumber]?.finishingPower ?? 0.5;
+        final progress =
+            (1.0 - frame.distanceFromGoal / corner4StartDfg).clamp(0.0, 1.0);
+        spreadOffset = laneFromInner * fp * progress * _finalSpreadFactor;
+      }
+
       final screenY =
-          (topY + (frame.laneRank - minLaneRank) * effectiveSpacingY)
+          (topY + (laneFromInner + spreadOffset) * effectiveSpacingY)
               .clamp(topY, bottomY);
       _drawHorseMarker(canvas, Offset(screenX, screenY), frame);
     }
+  }
+
+  // [追加] 候補A: 最後のcorner_4入口のdistanceFromGoalを返す (v2026.6.25)
+  static double? _corner4StartDfg(
+      List<CourseSection> sections, double raceDistance) {
+    double? lastCorner4Start;
+    for (final sec in sections) {
+      if (sec.name == 'corner_4') lastCorner4Start = sec.startDistance;
+    }
+    if (lastCorner4Start == null) return null;
+    return raceDistance - lastCorner4Start;
   }
 
   void _drawHorseMarker(Canvas canvas, Offset pos, RaceSimFrame frame) {
@@ -178,6 +210,7 @@ class RaceSimulationLayer2Painter extends CustomPainter {
         oldDelegate.simulationData != simulationData ||
         oldDelegate.raceDistance != raceDistance ||
         oldDelegate.approach != approach ||
-        oldDelegate.isLeftHanded != isLeftHanded;
+        oldDelegate.isLeftHanded != isLeftHanded ||
+        oldDelegate.raceCourse != raceCourse;
   }
 }

@@ -301,6 +301,7 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
                       currentTime: currentTime,
                       isLeftHanded: widget.isLeftHanded,
                       simulationParams: widget.simulationParams,
+                      raceCourse: widget.raceCourse,
                     ),
                     size: Size.infinite,
                   ),
