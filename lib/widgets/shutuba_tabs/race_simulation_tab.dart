@@ -1,10 +1,11 @@
 // lib/widgets/shutuba_tabs/race_simulation_tab.dart
-// [追加] 展開予想アニメーション機能(MVP)のタブ (v.1.0)
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/course_elevations.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
@@ -39,9 +40,7 @@ class _RaceSimulationLoadResult {
   final bool isLeftHanded;
   final String trackTypeKey;
   final RaceCourseData? raceCourse;
-  // [追加] Layer2用パラメータ。馬番(horseNumber文字列)をキーとする (v.13.43.0)
   final Map<String, HorseSimulationParams> simulationParams;
-  // [追加] ステータス表表示用。仮番号付与済みの馬リスト (v.13.43.0)
   final List<PredictionHorseDetail> horses;
 
   const _RaceSimulationLoadResult({
@@ -60,9 +59,11 @@ class _RaceSimulationLoadResult {
 class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     with AutomaticKeepAliveClientMixin {
   final HorseRepository _horseRepo = HorseRepository();
-  // [追加] Layer2用パラメータリポジトリ (v.13.43.0)
   final HorseSimulationParamsRepository _simParamsRepo =
       HorseSimulationParamsRepository();
+  // [追加] 馬場状態補正用 (v2026.6.25)
+  final TrackConditionRepository _trackConditionRepo =
+      TrackConditionRepository();
   late Future<_RaceSimulationLoadResult?> _future;
 
   @override
@@ -104,6 +105,55 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     return 'shiba';
   }
 
+  /// 馬場状態から速度補正係数を導出する（Cascade Fallback）。
+  /// ① JRA公式 trackCondition → ② クッション値(芝)/含水率(ダート) → ③ 1.0（補正なし）
+  static double _deriveTrackSpeedMultiplier({
+    required String? trackConditionText,
+    required bool isDirt,
+    required TrackConditionRecord? record,
+  }) {
+    // ① JRA公式発表の馬場状態テキスト
+    if (trackConditionText != null) {
+      switch (trackConditionText) {
+        case '良': return 1.00;
+        case '稍重': return 1.03;
+        case '重': return 1.06;
+        case '不良': return 1.10;
+      }
+    }
+    // ② TrackConditionRecord からの推定
+    if (record != null) {
+      if (isDirt) {
+        final m = record.moistureDirtGoal;
+        if (m != null) {
+          if (m <= 9.0) return 1.00;   // 良(乾燥)
+          if (m <= 13.0) return 1.03;  // 稍重相当
+          if (m <= 16.0) return 1.06;  // 重相当
+          return 1.10;                  // 不良相当
+        }
+      } else {
+        // 芝: クッション値優先（良馬場内の速度差を区別できる唯一の指標）
+        final c = record.cushionValue;
+        if (c != null) {
+          if (c >= 10.0) return 0.98;  // 高速良馬場
+          if (c >= 9.0) return 1.00;   // 標準良
+          if (c >= 8.0) return 1.02;   // 稍重傾向
+          return 1.04;                  // 重傾向以上
+        }
+        // クッション値なし → 含水率で代替推定
+        final m = record.moistureTurfGoal;
+        if (m != null) {
+          if (m <= 13.0) return 1.00;  // 良
+          if (m <= 17.0) return 1.03;  // 稍重
+          if (m <= 21.0) return 1.06;  // 重
+          return 1.10;                  // 不良
+        }
+      }
+    }
+    // ③ データなし
+    return 1.0;
+  }
+
   Future<_RaceSimulationLoadResult?> _load() async {
     final venueCode = widget.predictionRaceData.raceId.length >= 6
         ? widget.predictionRaceData.raceId.substring(4, 6)
@@ -113,6 +163,20 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     if (venueCode == null || distance == null) return null;
 
     final trackTypeKey = _mapToTrackTypeKey();
+
+    // [追加] 馬場状態補正: prefix10でDBから当日のクッション値・含水率を取得 (v2026.6.25)
+    final isDirt = trackTypeKey == 'dirt';
+    TrackConditionRecord? trackConditionRecord;
+    final raceIdStr = widget.predictionRaceData.raceId;
+    if (raceIdStr.length >= 10) {
+      trackConditionRecord = await _trackConditionRepo
+          .getLatestTrackConditionByPrefix(raceIdStr.substring(0, 10));
+    }
+    final trackSpeedMultiplier = _deriveTrackSpeedMultiplier(
+      trackConditionText: widget.predictionRaceData.trackCondition,
+      isDirt: isDirt,
+      record: trackConditionRecord,
+    );
 
     var raceCourse =
         CourseElevations.findRaceCourse(venueCode, distance, trackTypeKey);
@@ -128,7 +192,6 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     final activeHorses = widget.horses.where((h) => !h.isScratched).toList();
     if (activeHorses.isEmpty) return null;
 
-    // [追加] 枠順発表前（全馬 horseNumber=0）は仮番号を付与したリストでシミュを実行 (v.13.43.0)
     final horsesForSim = activeHorses.every((h) => h.horseNumber == 0)
         ? RaceSimulationEngine.assignTempNumbers(activeHorses)
         : activeHorses;
@@ -139,7 +202,6 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
           await _horseRepo.getHorsePerformanceRecords(horse.horseId);
     }));
 
-    // [修正] simulationParamsをbuild()前に取得して脚質ベースlaneRankに使用 (v.2026.6.19)
     final horseIds = horsesForSim.map((h) => h.horseId).toList();
     final paramsByHorseId = await _simParamsRepo.getByHorseIds(horseIds);
     final simulationParams = <String, HorseSimulationParams>{};
@@ -158,7 +220,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       allPastRecords: allPastRecords,
       raceCourse: raceCourse,
       raceDistance: distance.toDouble(),
-      simulationParams: simulationParams, // [追加] 脚質ベースlaneRank用 (v.2026.6.19)
+      simulationParams: simulationParams,
+      // [追加] 馬場状態補正 (v2026.6.25)
+      trackSpeedMultiplier: trackSpeedMultiplier,
     );
     if (simulationData == null) return null;
 

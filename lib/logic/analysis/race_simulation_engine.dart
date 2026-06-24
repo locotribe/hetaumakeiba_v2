@@ -36,11 +36,13 @@ class RaceSimulationEngine {
     required RaceCourseData? raceCourse,
     required double raceDistance,
     Map<String, HorseSimulationParams> simulationParams = const {},
+    // [追加] 馬場状態補正: 良=1.00, 稍重=1.03, 重=1.06, 不良=1.10 等 (v2026.6.25)
+    double trackSpeedMultiplier = 1.0,
   }) async {
     if (horses.isEmpty || raceDistance <= 0) return null;
 
-    // raceDistanceから実レース時間(秒)を算出し、アニメーション基準時間とする
-    final totalAnimationSeconds = raceDistance / _baseSpeedMps;
+    // raceDistanceと馬場状態補正から実レース時間(秒)を算出し、アニメーション基準時間とする
+    final totalAnimationSeconds = raceDistance / _baseSpeedMps * trackSpeedMultiplier;
 
     final development = await RaceAnalyzer.simulateRaceDevelopment(
       raceData,
