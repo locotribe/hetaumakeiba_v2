@@ -17,12 +17,14 @@ class _SimHorse {
   double positionScore;
   final double staminaScore;
   final double finishingKickScore;
+  final double abilityScore;
 
   _SimHorse({
     required this.detail,
     required this.positionScore,
     required this.staminaScore,
     required this.finishingKickScore,
+    required this.abilityScore,
   });
 }
 
@@ -37,6 +39,10 @@ class RaceAnalyzer {
   static final Map<String, String> trackIdMap = {
     '芝': 'shiba', 'ダ': 'dirt', '障': 'obstacle',
   };
+
+  // [追加] 上がり局面での能力反映係数（実装後の挙動を見て微調整する初期値） (v.2026.7.25)
+  static const double _kAbilityFactor4c = 0.8;   // 4コーナー
+  static const double _kAbilityFactorLast = 0.5; // 直線
 
   static RacePacePrediction predictRacePace(
       List<PredictionHorseDetail> horses,
@@ -202,6 +208,10 @@ class RaceAnalyzer {
       }
 
 
+      // [追加] 総合適性(能力)を展開実行時にその場算出 (v.2026.7.25)
+      final abilityScore = AptitudeAnalyzer.calculateOverallAptitudeScore(
+          horse, raceData, pastRecords);
+
       return _SimHorse(
         detail: horse,
         positionScore: initialPositionScore,
@@ -209,12 +219,19 @@ class RaceAnalyzer {
         AptitudeAnalyzer.evaluateStaminaFit(horse, raceData, pastRecords),
         finishingKickScore: AptitudeAnalyzer.evaluateFinishingKickFit(
             horse, raceData, pastRecords),
+        abilityScore: abilityScore,
       );
     }).toList();
 
     final development = <String, String>{};
     final predictedPace = raceData.racePacePrediction?.predictedPace ??
         'ミドルペース';
+
+    // [追加] 能力差を相対評価するための場内平均 (v.2026.7.25)
+    final meanAbility = simHorses.isEmpty
+        ? 60.0
+        : simHorses.map((h) => h.abilityScore).reduce((a, b) => a + b) /
+        simHorses.length;
 
     simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
 
@@ -298,6 +315,10 @@ class RaceAnalyzer {
         if (horse.positionScore < 3.0 && horse.finishingKickScore < 70.0) {
           horse.positionScore += 0.3;
         }
+
+        // [追加] 能力反映: 平均より強い馬は位置を上げ、弱い馬は下げる (v.2026.7.25)
+        final abilityDelta4c = (horse.abilityScore - meanAbility) / 100.0; // 概ね -0.5〜+0.5
+        horse.positionScore -= abilityDelta4c * _kAbilityFactor4c;
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['4コーナー'] = _formatTairetsu(simHorses);
@@ -315,6 +336,10 @@ class RaceAnalyzer {
           kickFactor = 1.0; // ハイペースは消耗戦で末脚の差が縮む
         }
         horse.positionScore -= (finishingPower - 0.5) * kickFactor;
+
+        // [追加] 能力反映: 直線でも能力差を反映 (v.2026.7.25)
+        final abilityDeltaLast = (horse.abilityScore - meanAbility) / 100.0;
+        horse.positionScore -= abilityDeltaLast * _kAbilityFactorLast;
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['直線'] = _formatTairetsu(simHorses);
