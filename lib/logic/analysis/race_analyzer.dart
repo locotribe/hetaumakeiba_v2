@@ -18,6 +18,8 @@ class _SimHorse {
   final double staminaScore;
   final double finishingKickScore;
   final double abilityScore;
+  // [追加] 斤量: 馬体重比ベースの実効kg負担（既定値0.0、後段で代入） (v.2026.7.26+26072601)
+  double weightBurden = 0.0;
 
   _SimHorse({
     required this.detail,
@@ -60,6 +62,28 @@ class RaceAnalyzer {
     if (t.contains('1勝') || t.contains('５００万') || t.contains('500万')) return 2;
     if (t.contains('新馬') || t.contains('未勝利')) return 1;
     return 0;
+  }
+
+  // [追加] 斤量の反映係数（実効kgあたり・実装後に微調整する初期値） (v.2026.7.26+26072601)
+  static const double _kWeightFactorFront = 0.05; // 逃げ・先行のテンへの効き
+  static const double _kWeightFactorBack = 0.03;  // 差し・追込等の上がりへの効き
+
+  // [追加] 馬体重文字列から絶対値kgを取り出す（"480(+14)"→480.0、計不/空はnull） (v.2026.7.26+26072601)
+  static double? _parseBodyWeight(String? text) {
+    if (text == null) return null;
+    final m = RegExp(r'(\d+)').firstMatch(text);
+    if (m == null) return null;
+    return double.tryParse(m.group(1)!);
+  }
+
+  // [追加] 過去成績を新しい順に走査し最初に取得できる馬体重を返す（海外/計不はスキップ） (v.2026.7.26)
+  static double? _firstParsableBodyWeight(List<HorseRaceRecord>? records) {
+    if (records == null) return null;
+    for (final r in records) {
+      final w = _parseBodyWeight(r.horseWeight);
+      if (w != null) return w;
+    }
+    return null;
   }
 
   static RacePacePrediction predictRacePace(
@@ -267,6 +291,39 @@ class RaceAnalyzer {
         : simHorses.map((h) => h.abilityScore).reduce((a, b) => a + b) /
         simHorses.length;
 
+    // [追加] 斤量: 馬体重比ベースの実効kg負担を算出 (v.2026.7.26+26072601)
+    final bodyWeights = <_SimHorse, double?>{};
+    for (final sh in simHorses) {
+      // [修正] 直近1走が海外(馬体重null)でも、過去成績を遡って国内の馬体重を使う (v.2026.7.26)
+      bodyWeights[sh] = _parseBodyWeight(sh.detail.horseWeight) ??
+          _parseBodyWeight(sh.detail.previousHorseWeight) ??
+          _firstParsableBodyWeight(allPastRecords[sh.detail.horseId]);
+    }
+    final validBodyWeights = bodyWeights.values.whereType<double>().toList();
+    final meanBodyWeight = validBodyWeights.isEmpty
+        ? 470.0
+        : validBodyWeights.reduce((a, b) => a + b) / validBodyWeights.length;
+    final ratios = <_SimHorse, double>{};
+    for (final sh in simHorses) {
+      final bw = bodyWeights[sh] ?? meanBodyWeight;
+      ratios[sh] = sh.detail.carriedWeight / bw;
+    }
+    final meanRatio = ratios.isEmpty
+        ? 0.0
+        : ratios.values.reduce((a, b) => a + b) / ratios.length;
+    for (final sh in simHorses) {
+      sh.weightBurden = (ratios[sh]! - meanRatio) * meanBodyWeight;
+    }
+
+    simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
+
+    // [追加] 斤量(逃げ・先行): 初速=テンの位置取りに反映。重い馬はテンでやや後退 (v.2026.7.26+26072601)
+    for (final horse in simHorses) {
+      final style = horse.detail.legStyleProfile?.primaryStyle;
+      if (style == '逃げ' || style == '先行') {
+        horse.positionScore += horse.weightBurden * _kWeightFactorFront;
+      }
+    }
     simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
 
     // [追加] テン: 初期ソート直後の隊列（枠番・脚質ベース、テン指数未反映） (v.2026.6.19)
@@ -353,6 +410,12 @@ class RaceAnalyzer {
         // [追加] 能力反映: 平均より強い馬は位置を上げ、弱い馬は下げる (v.2026.7.25)
         final abilityDelta4c = (horse.abilityScore - meanAbility) / 100.0; // 概ね -0.5〜+0.5
         horse.positionScore -= abilityDelta4c * _kAbilityFactor4c;
+
+        // [追加] 斤量(差し・追込・自在・マクリ): 再加速=上がりに反映。重い馬は伸び鈍化 (v.2026.7.26+26072601)
+        final style = horse.detail.legStyleProfile?.primaryStyle;
+        if (style == '差し' || style == '追込' || style == '自在' || style == 'マクリ') {
+          horse.positionScore += horse.weightBurden * _kWeightFactorBack;
+        }
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['4コーナー'] = _formatTairetsu(simHorses);
@@ -374,6 +437,12 @@ class RaceAnalyzer {
         // [追加] 能力反映: 直線でも能力差を反映 (v.2026.7.25)
         final abilityDeltaLast = (horse.abilityScore - meanAbility) / 100.0;
         horse.positionScore -= abilityDeltaLast * _kAbilityFactorLast;
+
+        // [追加] 斤量(差し・追込・自在・マクリ): 再加速=上がりに反映。重い馬は伸び鈍化 (v.2026.7.26+26072601)
+        final style = horse.detail.legStyleProfile?.primaryStyle;
+        if (style == '差し' || style == '追込' || style == '自在' || style == 'マクリ') {
+          horse.positionScore += horse.weightBurden * _kWeightFactorBack;
+        }
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['直線'] = _formatTairetsu(simHorses);
