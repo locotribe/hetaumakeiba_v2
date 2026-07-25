@@ -11,6 +11,7 @@ import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
+import 'package:hetaumakeiba_v2/models/distance_category.dart';
 
 class _SimHorse {
   final PredictionHorseDetail detail;
@@ -20,6 +21,8 @@ class _SimHorse {
   final double abilityScore;
   // [追加] 斤量: 馬体重比ベースの実効kg負担（既定値0.0、後段で代入） (v.2026.7.26+26072601)
   double weightBurden = 0.0;
+  // [追加] 0-4 距離延長短縮: 直線への補正値（既定値0.0、後段で代入） (v.2026.7.26+26072602)
+  double distLastAdj = 0.0;
 
   _SimHorse({
     required this.detail,
@@ -85,6 +88,10 @@ class RaceAnalyzer {
     }
     return null;
   }
+
+  // [追加] 距離延長短縮の補正値（固定微小値・実装後に微調整） (v.2026.7.26+26072602)
+  static const double _kDistTenAdj = 0.15;  // テン位置への補正
+  static const double _kDistLastAdj = 0.15; // 直線への補正
 
   static RacePacePrediction predictRacePace(
       List<PredictionHorseDetail> horses,
@@ -324,6 +331,50 @@ class RaceAnalyzer {
         horse.positionScore += horse.weightBurden * _kWeightFactorFront;
       }
     }
+
+    // [追加] 0-4 距離延長短縮: 隣接カテゴリ跨ぎ×脚質でテン/直線を補正 (v.2026.7.26+26072602)
+    final currentDistanceMeters = int.tryParse(distance);
+    final currentCategory = distanceCategoryOf(currentDistanceMeters);
+    for (final horse in simHorses) {
+      final records = allPastRecords[horse.detail.horseId];
+      if (currentCategory == null || records == null || records.isEmpty) continue;
+      final prev = records.first;
+      String prevSurface;
+      if (prev.distance.startsWith('障')) {
+        prevSurface = 'obstacle';
+      } else if (prev.distance.startsWith('ダ')) {
+        prevSurface = 'dirt';
+      } else {
+        prevSurface = 'shiba';
+      }
+      if (prevSurface != trackType) continue; // 馬場替わりは対象外
+      final prevMeters =
+          int.tryParse(prev.distance.replaceAll(RegExp(r'[^0-9]'), ''));
+      final prevCategory = distanceCategoryOf(prevMeters);
+      if (prevCategory == null) continue;
+      final diff = currentCategory.index - prevCategory.index;
+      if (diff.abs() != 1) continue; // 隣接1カテゴリ跨ぎのみ
+      final style = horse.detail.legStyleProfile?.primaryStyle;
+      final isFront = style == '逃げ' || style == '先行';
+      final isBack = style == '差し' || style == '追込';
+      if (diff > 0) {
+        // 距離延長
+        if (isFront) {
+          horse.positionScore -= _kDistTenAdj; // テン前進
+          horse.distLastAdj -= _kDistLastAdj;  // 直線も前進(息が入る)
+        }
+        // 差し・追込の延長はテン・直線とも変化なし（スタミナ別ロジックに委ねる）
+      } else {
+        // 距離短縮
+        if (isFront) {
+          horse.distLastAdj += _kDistLastAdj;  // 直線で失速=後退
+        } else if (isBack) {
+          horse.positionScore += _kDistTenAdj; // テン後退
+        }
+      }
+      // 自在・マクリ・不明は補正なし
+    }
+
     simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
 
     // [追加] テン: 初期ソート直後の隊列（枠番・脚質ベース、テン指数未反映） (v.2026.6.19)
@@ -443,6 +494,9 @@ class RaceAnalyzer {
         if (style == '差し' || style == '追込' || style == '自在' || style == 'マクリ') {
           horse.positionScore += horse.weightBurden * _kWeightFactorBack;
         }
+
+        // [追加] 0-4 距離延長短縮: 直線での距離ローテ補正（符号はdistLastAdjに格納済み） (v.2026.7.26+26072602)
+        horse.positionScore += horse.distLastAdj;
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['直線'] = _formatTairetsu(simHorses);
