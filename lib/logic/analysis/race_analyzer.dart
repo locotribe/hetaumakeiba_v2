@@ -93,6 +93,9 @@ class RaceAnalyzer {
   static const double _kDistTenAdj = 0.15;  // テン位置への補正
   static const double _kDistLastAdj = 0.15; // 直線への補正
 
+  // [追加] 3コーナーのスタミナ反映係数（実装後に微調整する初期値） (v.2026.7.26+26072603)
+  static const double _kStaminaFactor3c = 0.4;
+
   static RacePacePrediction predictRacePace(
       List<PredictionHorseDetail> horses,
       Map<String, List<HorseRaceRecord>> allPastRecords,
@@ -394,13 +397,8 @@ class RaceAnalyzer {
       development['1コーナー'] = _formatTairetsu(simHorses);
     }
 
-    // [追加] 2コーナー: スタミナ不足の馬がわずかに後退し始める (v.2026.6.19)
+    // [修正] スタミナ不足補正のforループを削除（2コーナーは疲労で動く局面ではないため、隊列出力自体は維持） (v.2026.7.26+26072603)
     if (cornersToPredict.contains('2コーナー')) {
-      for (final horse in simHorses) {
-        final params = simulationParams[horse.detail.horseNumber.toString()];
-        final stamina = params?.staminaIndex ?? 0.5;
-        if (stamina < 0.35) horse.positionScore += 0.12;
-      }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['2コーナー'] = _formatTairetsu(simHorses);
     }
@@ -411,13 +409,15 @@ class RaceAnalyzer {
 
     if (cornersToPredict.contains('3コーナー')) {
       for (final horse in simHorses) {
-        // ペースによる影響
-        if (predictedPace.contains('ハイ') && horse.staminaScore < 70.0) {
-          horse.positionScore += 0.25; // ハイペースでスタミナがない馬は後退
+        // [修正] 死んだ2値条件を廃止し、連続スタミナで統一（高スタミナ=進出/低=後退、ハイで増幅） (v.2026.7.26+26072603)
+        final staminaDelta = (horse.staminaScore - 50.0) / 100.0; // -0.5〜+0.5
+        double paceFactor = 1.0;
+        if (predictedPace.contains('ハイ')) {
+          paceFactor = 1.5;
+        } else if (predictedPace.contains('スロー')) {
+          paceFactor = 0.6;
         }
-        if (horse.positionScore >= 2.5 && horse.staminaScore > 80.0) {
-          horse.positionScore -= 0.1; // 差し・追込でスタミナがある馬は進出開始
-        }
+        horse.positionScore -= staminaDelta * _kStaminaFactor3c * paceFactor;
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['3コーナー'] = _formatTairetsu(simHorses);

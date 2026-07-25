@@ -374,29 +374,70 @@ class AptitudeAnalyzer {
     return score;
   }
 
-  // 8. スタミナ評価
+  // [追加] 着差文字列を秒(勝ち馬とのタイム差)に変換する。判定不能はnull (v.2026.7.26+26072603)
+  static double? _parseMarginSeconds(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty || s == '-') return null;
+    final d = double.tryParse(s); // "1.9" "0.1" "0.0" 等の秒表記
+    if (d != null) return d.abs();
+    if (s.contains('同着')) return 0.0;
+    if (s.contains('ハナ') || s.contains('アタマ')) return 0.0;
+    if (s.contains('クビ')) return 0.1;
+    if (s.contains('大')) return 2.0; // 大差は上限相当
+    return null; // 馬身分数等の想定外表記は中立扱い
+  }
+
+  // 8. スタミナ評価（連続値化: 距離実績・ハイペース実績・フェード耐性の合成） (v.2026.7.26+26072603)
   static double evaluateStaminaFit(
       PredictionHorseDetail horse,
       PredictionRaceData raceData,
       List<HorseRaceRecord> pastRecords,
       ) {
-    if (pastRecords.isEmpty) return 60.0;
-    // 今回のレース距離を取得
+    if (pastRecords.isEmpty) return 50.0;
+
+    // 今回距離
     final distanceMatch = RegExp(r'(\d+)m').firstMatch(raceData.raceDetails1 ?? '');
-    if (distanceMatch == null) return 60.0;
-    final currentDistance = int.parse(distanceMatch.group(1)!);
+    final currentDistance = distanceMatch != null ? int.tryParse(distanceMatch.group(1)!) : null;
 
-    // 過去に今回より長い距離で3着以内に入ったことがあるか
-    final hasLongDistanceRecord = pastRecords.any((record) {
-      final recordDistance =
-      int.tryParse(record.distance.replaceAll(RegExp(r'[^0-9]'), ''));
-      final rank = int.tryParse(record.rank);
-      return recordDistance != null &&
-          rank != null &&
-          recordDistance > currentDistance &&
-          rank <= 3;
-    });
+    int distTotal = 0, distPlace = 0;      // Sa: 今回距離以上
+    int highTotal = 0, highPlace = 0;      // Sb: ハイペース戦
+    final scList = <double>[];             // Sc: ミドル〜ハイのフェード耐性
 
-    return hasLongDistanceRecord ? 95.0 : 70.0;
+    for (final r in pastRecords) {
+      final rank = int.tryParse(r.rank);
+      final n = int.tryParse(r.numberOfHorses);
+      final recDist = int.tryParse(r.distance.replaceAll(RegExp(r'[^0-9]'), ''));
+      final pace = RaceDataParser.calculatePace(r.pace); // 'ハイ'/'ミドル'/'スロー'
+
+      // Sa: 今回距離以上での複勝率
+      if (currentDistance != null && recDist != null && recDist >= currentDistance && rank != null) {
+        distTotal++;
+        if (rank <= 3) distPlace++;
+      }
+      // Sb: ハイペース戦での複勝率
+      if (pace == 'ハイ' && rank != null) {
+        highTotal++;
+        if (rank <= 3) highPlace++;
+      }
+      // Sc: ミドル〜ハイのフェード耐性
+      if ((pace == 'ハイ' || pace == 'ミドル') && rank != null && n != null && n > 0) {
+        final positions = r.cornerPassage.split('-').map((p) => int.tryParse(p)).toList();
+        if (positions.isNotEmpty && positions.last != null) {
+          final rc = positions.last!; // 4角(最終コーナー)通過順位
+          double m = _parseMarginSeconds(r.margin) ?? 0.0; // 勝ち馬との着差秒
+          if (rank == 1) m = 0.0; // 勝ち馬の着差(2着との差)はフェードではない
+          final drop = (rank - rc) > 0 ? (rank - rc) / n : 0.0;
+          final p = 0.4 * drop + 0.6 * (m / 2.0).clamp(0.0, 1.0);
+          scList.add((1.0 - p).clamp(0.0, 1.0));
+        }
+      }
+    }
+
+    final sa = distTotal > 0 ? distPlace / distTotal : 0.5;
+    final sb = highTotal > 0 ? highPlace / highTotal : 0.5;
+    final sc = scList.isNotEmpty ? scList.reduce((a, b) => a + b) / scList.length : 0.5;
+
+    final e = 0.3 * sa + 0.5 * sb + 0.2 * sc;
+    return (e * 100).roundToDouble();
   }
 }
