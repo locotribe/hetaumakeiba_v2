@@ -44,6 +44,24 @@ class RaceAnalyzer {
   static const double _kAbilityFactor4c = 0.8;   // 4コーナー
   static const double _kAbilityFactorLast = 0.5; // 直線
 
+  // [追加] 1クラス差あたりの能力補正(点)。実装後の挙動を見て微調整する初期値 (v.2026.7.25+26072502)
+  static const double _kClassAbilityWeight = 4.0;
+
+  // [追加] レース名/グレードからクラスを1〜8にランク化（判定不能は0） (v.2026.7.25+26072502)
+  static int _estimateClassLevel(String text) {
+    final t = text;
+    if (t.contains('G1') || t.contains('GⅠ') || t.contains('G I')) return 8;
+    if (t.contains('G2') || t.contains('GⅡ')) return 7;
+    if (t.contains('G3') || t.contains('GⅢ')) return 6;
+    if (t.contains('リステッド') || t.contains('(L)') || t.contains('L)') ||
+        t.contains('オープン') || t.contains('ＯＰ') || t.contains('OP')) return 5;
+    if (t.contains('3勝') || t.contains('１６００万') || t.contains('1600万')) return 4;
+    if (t.contains('2勝') || t.contains('１０００万') || t.contains('1000万')) return 3;
+    if (t.contains('1勝') || t.contains('５００万') || t.contains('500万')) return 2;
+    if (t.contains('新馬') || t.contains('未勝利')) return 1;
+    return 0;
+  }
+
   static RacePacePrediction predictRacePace(
       List<PredictionHorseDetail> horses,
       Map<String, List<HorseRaceRecord>> allPastRecords,
@@ -212,6 +230,22 @@ class RaceAnalyzer {
       final abilityScore = AptitudeAnalyzer.calculateOverallAptitudeScore(
           horse, raceData, pastRecords);
 
+      // [追加] クラス(相手関係)補正: 経験クラスと今回クラスの差でabilityScoreを増減 (v.2026.7.25+26072502)
+      final currentClass = _estimateClassLevel('${raceData.raceGrade} ${raceData.raceDetails1 ?? ''}');
+      final pastClasses = pastRecords
+          .take(5)
+          .map((r) => _estimateClassLevel(r.raceName))
+          .where((c) => c > 0)
+          .toList();
+      double classAdjustedAbility = abilityScore;
+      if (currentClass > 0 && pastClasses.isNotEmpty) {
+        final avgPastClass =
+            pastClasses.reduce((a, b) => a + b) / pastClasses.length;
+        final classDelta = (avgPastClass - currentClass).clamp(-3.0, 3.0);
+        classAdjustedAbility =
+            (abilityScore + classDelta * _kClassAbilityWeight).clamp(0.0, 100.0);
+      }
+
       return _SimHorse(
         detail: horse,
         positionScore: initialPositionScore,
@@ -219,7 +253,7 @@ class RaceAnalyzer {
         AptitudeAnalyzer.evaluateStaminaFit(horse, raceData, pastRecords),
         finishingKickScore: AptitudeAnalyzer.evaluateFinishingKickFit(
             horse, raceData, pastRecords),
-        abilityScore: abilityScore,
+        abilityScore: classAdjustedAbility,
       );
     }).toList();
 
