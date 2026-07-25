@@ -69,10 +69,11 @@ class RaceDataParser {
 
     final difference = kouhan - zenhan;
 
+    // [修正] 前傾(テン速い→上がり遅い=差が正)はハイペース。ハイ/スローの反転を是正 (v.2026.7.26+26072604)
     if (difference >= 1.0) {
-      return 'スロー';
-    } else if (difference <= -1.0) {
       return 'ハイ';
+    } else if (difference <= -1.0) {
+      return 'スロー';
     } else {
       return 'ミドル';
     }
@@ -116,8 +117,9 @@ class RaceDataParser {
 
     final difference = secondHalfTime - firstHalfTime;
 
-    if (difference >= 1.0) return 'スロー';
-    if (difference <= -1.0) return 'ハイ';
+    // [修正] 前半が速く後半が遅い(差が正)はハイペース。ハイ/スローの反転を是正 (v.2026.7.26+26072604)
+    if (difference >= 1.0) return 'ハイ';
+    if (difference <= -1.0) return 'スロー';
     return 'ミドル';
   }
   static String getSimpleLegStyle(String cornerPassage, String numberOfHorsesStr) {
