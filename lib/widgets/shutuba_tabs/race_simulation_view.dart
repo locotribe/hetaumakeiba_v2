@@ -28,6 +28,15 @@ class RaceSimulationView extends StatefulWidget {
   final RaceCourseData? raceCourse;
   final Map<String, HorseSimulationParams> simulationParams;
   final List<PredictionHorseDetail> horses;
+  // [追加] 0-9(b) 使用データカード表示用 (v.2026.7.27+26072703)
+  final String? predictedPace;
+  final String? trackConditionText;   // 馬場状態(良/稍重/重/不良)
+  final double? cushionValue;         // 芝のみ
+  final double? moistureValue;        // 芝:ゴール前芝含水 / ダート:ゴール前ダート含水
+  final double trackBias;             // 0-9aの算出値(既定0.0)
+  final String? trackConditionDate;   // 計測日（実測のときのみ非null）
+  // [追加] 0-9b-1 クッション値/含水率の使用ソースラベル（実測(当日)/予測/過去平均） (v.2026.7.27+26072704)
+  final String biasSourceLabel;
 
   const RaceSimulationView({
     super.key,
@@ -40,6 +49,13 @@ class RaceSimulationView extends StatefulWidget {
     this.raceCourse,
     this.simulationParams = const {},
     this.horses = const [],
+    this.predictedPace,
+    this.trackConditionText,
+    this.cushionValue,
+    this.moistureValue,
+    this.trackBias = 0.0,
+    this.trackConditionDate,
+    this.biasSourceLabel = '—',
   });
 
   @override
@@ -395,6 +411,55 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
           ),
         ),
 
+        // [追加] 0-9(b) 使用データカード（展開予想の根拠を常時表示） (v.2026.7.27+26072703)
+        Container(
+          margin: const EdgeInsets.only(bottom: 8.0),
+          padding: const EdgeInsets.all(8.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '使用データ',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black54,
+                ),
+              ),
+              const SizedBox(height: 4),
+              _buildDataRow('予想ペース', widget.predictedPace ?? '—'),
+              _buildDataRow('距離・コース', _buildCourseLabel()),
+              _buildDataRow('馬場状態', widget.trackConditionText ?? '—'),
+              _buildDataRow(
+                'クッション値',
+                widget.trackTypeKey == 'dirt'
+                    ? '—'
+                    : (widget.cushionValue != null
+                        ? '${widget.cushionValue!.toStringAsFixed(1)}（${widget.biasSourceLabel}）'
+                        : '—'),
+              ),
+              _buildDataRow(
+                '含水率',
+                widget.moistureValue != null
+                    ? '${widget.moistureValue!.toStringAsFixed(1)}%（${widget.biasSourceLabel}）'
+                    : '—',
+              ),
+              _buildDataRow(
+                'トラックバイアス',
+                '${widget.trackBias.toStringAsFixed(2)}（${_trackBiasLabel(widget.trackBias)}）',
+              ),
+              // [修正] 0-9b-1 計測日は実測のときのみ表示（予測・過去平均・なしのときは行自体を出さない） (v.2026.7.27+26072704)
+              if (widget.trackConditionDate != null)
+                _buildDataRow('計測日', widget.trackConditionDate!),
+            ],
+          ),
+        ),
+
         // ── ステータス表（シークバー下）──
         if (widget.horses.isNotEmpty)
           Container(
@@ -485,6 +550,59 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
         ],
       ),
     );
+  }
+
+  // [追加] 0-9(b) 使用データカード: ラベル:値の1行を組み立てる (v.2026.7.27+26072703)
+  Widget _buildDataRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1.5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 84,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 10, color: Colors.black54),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // [追加] 0-9(b) 使用データカード: 距離・コース表記を組み立てる (v.2026.7.27+26072703)
+  String _buildCourseLabel() {
+    final surface = widget.trackTypeKey == 'dirt' ? 'ダ' : '芝';
+    final distanceText = '$surface${widget.raceDistance.round()}m';
+    if (widget.trackTypeKey == 'shiba_straight') {
+      return '$distanceText・直線';
+    }
+    final direction = widget.isLeftHanded ? '左' : '右';
+    String inOut = '';
+    if (widget.trackTypeKey == 'shiba_outer') inOut = '外';
+    if (widget.trackTypeKey == 'shiba_inner') inOut = '内';
+    return inOut.isEmpty
+        ? '$distanceText・$direction'
+        : '$distanceText・$direction・$inOut';
+  }
+
+  // [追加] 0-9(b) トラックバイアス値→ラベル変換 (v.2026.7.27+26072703)
+  String _trackBiasLabel(double b) {
+    if (b >= 0.5) return '前有利';
+    if (b >= 0.15) return 'やや前有利';
+    if (b > -0.15) return 'フラット';
+    if (b > -0.5) return 'やや差し有利';
+    return '差し有利';
   }
 
   Widget _buildBar(double value, Color color) {

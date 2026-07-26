@@ -6,8 +6,10 @@ import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -21,11 +23,18 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_view.dart';
 class RaceSimulationTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
   final List<PredictionHorseDetail> horses;
+  // [追加] 0-9b-1 使用データカードの予測/過去平均ソース用（shutuba_table_page.dartから共有、天気取得の二重化を防ぐ） (v.2026.7.27+26072704)
+  final Future<TrackConditionRecord?>? trackConditionFuture;
+  final Future<Map<String, dynamic>?>? pinpointWeatherFuture;
+  final TrackConditionRecord? cachedPrevRecord;
 
   const RaceSimulationTabWidget({
     super.key,
     required this.predictionRaceData,
     required this.horses,
+    this.trackConditionFuture,
+    this.pinpointWeatherFuture,
+    this.cachedPrevRecord,
   });
 
   @override
@@ -43,6 +52,15 @@ class _RaceSimulationLoadResult {
   final RaceCourseData? raceCourse;
   final Map<String, HorseSimulationParams> simulationParams;
   final List<PredictionHorseDetail> horses;
+  // [追加] 0-9(b) 使用データカード表示用 (v.2026.7.27+26072703)
+  final String? predictedPace;
+  final String? trackConditionText;
+  final double? cushionValue;
+  final double? moistureValue;
+  final double trackBias;
+  final String? trackConditionDate;
+  // [追加] 0-9b-1 クッション値/含水率の使用ソースラベル（実測(当日)/予測/過去平均） (v.2026.7.27+26072704)
+  final String biasSourceLabel;
 
   const _RaceSimulationLoadResult({
     required this.diagram,
@@ -54,6 +72,13 @@ class _RaceSimulationLoadResult {
     required this.raceCourse,
     required this.simulationParams,
     required this.horses,
+    this.predictedPace,
+    this.trackConditionText,
+    this.cushionValue,
+    this.moistureValue,
+    this.trackBias = 0.0,
+    this.trackConditionDate,
+    this.biasSourceLabel = '—',
   });
 }
 
@@ -178,13 +203,98 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       isDirt: isDirt,
       record: trackConditionRecord,
     );
-    // [追加] 0-9 馬場バイアスを算出（公式/最新の計測値から。値なしは0.0） (v.2026.7.27+26072702)
-    final trackBias = RaceAnalyzer.calcTrackBias(
-      cushionValue: trackConditionRecord?.cushionValue,
-      moistureTurfGoal: trackConditionRecord?.moistureTurfGoal,
-      moistureDirtGoal: trackConditionRecord?.moistureDirtGoal,
-      isDirt: isDirt,
-    );
+    // [追加] 0-9b-1 トラックバイアス算出値の4ソース自動選択（優先順: 実測(当日)→予測→過去平均） (v.2026.7.27+26072704)
+    double? selectedCushion;
+    double? selectedMoisture;
+    String? selectedDate;
+    String biasSourceLabel = '—';
+
+    final bool hasActualToday = isDirt
+        ? trackConditionRecord?.moistureDirtGoal != null
+        : (trackConditionRecord?.cushionValue != null ||
+            trackConditionRecord?.moistureTurfGoal != null);
+
+    if (hasActualToday) {
+      // 1. 実測(当日): 既存のprefix10一致レコード(前週等へのフォールバックはしない)
+      selectedCushion = trackConditionRecord?.cushionValue;
+      selectedMoisture = isDirt
+          ? trackConditionRecord?.moistureDirtGoal
+          : trackConditionRecord?.moistureTurfGoal;
+      biasSourceLabel = '実測(当日)';
+      selectedDate = trackConditionRecord?.date;
+    } else {
+      // 2. 予測: weather_analyzerの既存算出結果を再利用（天気取得自体はshutuba_table_page.dartで1回のみ）
+      double? predictedCushion;
+      double? predictedMoisture;
+      if (widget.pinpointWeatherFuture != null &&
+          widget.trackConditionFuture != null) {
+        try {
+          final pinpointData = await widget.pinpointWeatherFuture;
+          final baselineRecord = await widget.trackConditionFuture;
+          final raceTime = pinpointData?['raceTime'];
+          if (raceTime != null && baselineRecord != null) {
+            final analysisResult = WeatherAnalyzer.analyzeTrackConditionInsights(
+              venueCode: venueCode,
+              trackType: widget.predictionRaceData.trackType ?? '芝',
+              currentRecord: baselineRecord,
+              cachedRecord: widget.cachedPrevRecord,
+              expectedPrecipitation:
+                  (raceTime['precipitation'] as num?)?.toDouble() ?? 0.0,
+              expectedRadiation:
+                  (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,
+              expectedSoilMoisture:
+                  (raceTime['soilMoisture'] as num?)?.toDouble(),
+              dailyWeather: pinpointData?['daily'] ?? const [],
+              raceDateStr: widget.predictionRaceData.raceDate,
+            );
+            predictedCushion = analysisResult.predictedCushion;
+            predictedMoisture = analysisResult.predictedMoisture;
+          }
+        } catch (_) {
+          predictedCushion = null;
+          predictedMoisture = null;
+        }
+      }
+
+      if (predictedMoisture != null) {
+        selectedCushion = isDirt ? null : predictedCushion;
+        selectedMoisture = predictedMoisture;
+        biasSourceLabel = '予測';
+      } else {
+        // 3. 過去平均: 当該競馬場の直近レコードから新規に軽量算出
+        final recentRecords = await _trackConditionRepo
+            .getRecentTrackConditionsForVenue(venueCode);
+        final trendMap = {
+          for (final r in recentRecords) r.trackConditionId.toString(): r
+        };
+        final trend = TrackConditionTrendAnalyzer().analyze(trendMap);
+        final avgMoisture =
+            isDirt ? trend.avgDirtMoisture : trend.avgTurfMoisture;
+        if (avgMoisture > 0 || trend.avgCushion > 0) {
+          selectedCushion =
+              isDirt ? null : (trend.avgCushion > 0 ? trend.avgCushion : null);
+          selectedMoisture = avgMoisture > 0 ? avgMoisture : null;
+          biasSourceLabel = '過去平均';
+        }
+      }
+    }
+
+    final trackBias = (selectedCushion != null || selectedMoisture != null)
+        ? RaceAnalyzer.calcTrackBias(
+            cushionValue: selectedCushion,
+            moistureTurfGoal: isDirt ? null : selectedMoisture,
+            moistureDirtGoal: isDirt ? selectedMoisture : null,
+            isDirt: isDirt,
+          )
+        : 0.0;
+
+    // [追加] 0-9(b) 使用データカード表示用の値を用意 (v.2026.7.27+26072703)
+    final predictedPace =
+        widget.predictionRaceData.racePacePrediction?.predictedPace;
+    final trackConditionText = widget.predictionRaceData.trackCondition;
+    final cushionValue = selectedCushion;
+    final moistureValue = selectedMoisture;
+    final trackConditionDate = selectedDate;
 
     var raceCourse =
         CourseElevations.findRaceCourse(venueCode, distance, trackTypeKey);
@@ -247,6 +357,13 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       raceCourse: raceCourse,
       simulationParams: simulationParams,
       horses: horsesForSim,
+      predictedPace: predictedPace,
+      trackConditionText: trackConditionText,
+      cushionValue: cushionValue,
+      moistureValue: moistureValue,
+      trackBias: trackBias,
+      trackConditionDate: trackConditionDate,
+      biasSourceLabel: biasSourceLabel,
     );
   }
 
@@ -275,6 +392,13 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
             raceCourse: result.raceCourse,
             simulationParams: result.simulationParams,
             horses: result.horses,
+            predictedPace: result.predictedPace,
+            trackConditionText: result.trackConditionText,
+            cushionValue: result.cushionValue,
+            moistureValue: result.moistureValue,
+            trackBias: result.trackBias,
+            trackConditionDate: result.trackConditionDate,
+            biasSourceLabel: result.biasSourceLabel,
           ),
         );
       },

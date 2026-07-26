@@ -25,6 +25,19 @@ class RacePacePrediction {
     final topEntry = paceProbabilities.entries.reduce((a, b) => a.value > b.value ? a : b);
     return topEntry.key;
   }
+
+  // [追加] 0-9b-1 ShutubaTableCacheのJSON往復で消失していたのを解消するためシリアライズ対応 (v.2026.7.27+26072704)
+  Map<String, dynamic> toJson() {
+    return {'paceProbabilities': paceProbabilities};
+  }
+
+  factory RacePacePrediction.fromJson(Map<String, dynamic> json) {
+    final raw = json['paceProbabilities'] as Map<String, dynamic>?;
+    return RacePacePrediction(
+      paceProbabilities:
+          raw?.map((k, v) => MapEntry(k, (v as num).toDouble())) ?? const {},
+    );
+  }
 }
 
 enum FitnessRating { excellent, good, average, poor, unknown }

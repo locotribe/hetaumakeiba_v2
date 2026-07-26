@@ -84,6 +84,8 @@ class PredictionRaceData {
       'raceGrade': raceGrade,
       'raceDetails1': raceDetails1,
       'horses': horses.map((h) => h.toJson()).toList(),
+      // [追加] 0-9b-1 racePacePredictionがキャッシュ往復で消失していたのを解消 (v.2026.7.27+26072704)
+      'racePacePrediction': racePacePrediction?.toJson(),
       // ▼▼ 新規追加 ▼▼
       'trackType': trackType,
       'distanceValue': distanceValue,
@@ -178,6 +180,11 @@ class PredictionRaceData {
       horses: (json['horses'] as List<dynamic>)
           .map((e) => PredictionHorseDetail.fromJson(e as Map<String, dynamic>))
           .toList(),
+      // [追加] 0-9b-1 racePacePredictionがキャッシュ往復で消失していたのを解消 (v.2026.7.27+26072704)
+      racePacePrediction: json['racePacePrediction'] != null
+          ? RacePacePrediction.fromJson(
+              json['racePacePrediction'] as Map<String, dynamic>)
+          : null,
       // ▼▼ 新規追加: フォールバック結果を反映 ▼▼
       trackType: pTrackType,
       distanceValue: pDistanceValue,

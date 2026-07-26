@@ -2,7 +2,7 @@ name: hetaumakeiba_v2
 description: "競馬予想と馬券データ管理アプリ"
 publish_to: 'none'
 
-version: 2026.7.27+26072702
+version: 2026.7.27+26072704
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

@@ -27,7 +27,15 @@ class JraConditionPrediction {
 class WeatherAnalysisResult {
   final List<WeatherInsight> insights;
   final JraConditionPrediction? jraPrediction;
-  WeatherAnalysisResult(this.insights, this.jraPrediction);
+  // [追加] 0-9b-1 展開シミュの使用データカード用に予測クッション値/含水率を公開 (v.2026.7.27+26072704)
+  final double? predictedCushion;
+  final double? predictedMoisture;
+  WeatherAnalysisResult(
+    this.insights,
+    this.jraPrediction, {
+    this.predictedCushion,
+    this.predictedMoisture,
+  });
 }
 
 class WeatherAnalyzer {
@@ -397,7 +405,13 @@ class WeatherAnalyzer {
       );
     }
 
-    return WeatherAnalysisResult(results, latestPrediction);
+    // [追加] 0-9b-1 展開シミュの使用データカード用に今回分の予測値を公開 (v.2026.7.27+26072704)
+    return WeatherAnalysisResult(
+      results,
+      latestPrediction,
+      predictedCushion: currentResult?.predictedCushion,
+      predictedMoisture: currentResult?.predictedMoisture,
+    );
   }
 }
 

@@ -147,6 +147,20 @@ class TrackConditionRepository {
     return null;
   }
 
+  // [追加] 0-9b-1 指定競馬場コードの直近N件の馬場状態レコードを取得（過去傾向の算出用） (v.2026.7.27+26072704)
+  Future<List<TrackConditionRecord>> getRecentTrackConditionsForVenue(
+      String venueCode, {int limit = 10}) async {
+    final db = await _dbProvider.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      DbConstants.tableTrackConditions,
+      where: 'SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) = ? AND track_condition_id % 100 != 0',
+      whereArgs: [venueCode],
+      orderBy: 'track_condition_id DESC',
+      limit: limit,
+    );
+    return maps.map((e) => TrackConditionRecord.fromJson(e)).toList();
+  }
+
   /// 【追加】指定した日付のデータが存在するかチェックするメソッド（分岐Aの判定用）
   Future<bool> hasDataForDate(String date) async {
     final db = await _dbProvider.database;

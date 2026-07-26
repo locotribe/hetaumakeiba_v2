@@ -4,10 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
-import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
-import 'package:hetaumakeiba_v2/services/jma_weather_service.dart';
-import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
 import 'package:hetaumakeiba_v2/db/course_elevations.dart';
 import 'package:hetaumakeiba_v2/logic/elevation_logic.dart';
@@ -22,6 +19,13 @@ class RaceInfoTabWidget extends StatefulWidget {
   final Widget Function(PredictionHorseDetail) buildMarkDropdown;
   final Widget Function(int) buildGateNumber;
   final Widget Function(int, int) buildHorseNumber;
+  // [追加] 0-9b-1 天気/馬場データ取得をshutuba_table_page.dartへ引き上げ（展開シミュタブと共有し二重取得を防ぐ） (v.2026.7.27+26072704)
+  final Future<TrackConditionRecord?>? trackConditionFuture;
+  final Future<Map<String, String>?>? jmaWeatherFuture;
+  final Future<Map<String, dynamic>?>? pinpointWeatherFuture;
+  final TrackConditionRecord? cachedPrevRecord;
+  final bool isWeatherLocked;
+  final VoidCallback onRefreshWeather;
 
   const RaceInfoTabWidget({
     super.key,
@@ -30,6 +34,12 @@ class RaceInfoTabWidget extends StatefulWidget {
     required this.buildMarkDropdown,
     required this.buildGateNumber,
     required this.buildHorseNumber,
+    this.trackConditionFuture,
+    this.jmaWeatherFuture,
+    this.pinpointWeatherFuture,
+    this.cachedPrevRecord,
+    this.isWeatherLocked = true,
+    required this.onRefreshWeather,
   });
 
   @override
@@ -37,30 +47,8 @@ class RaceInfoTabWidget extends StatefulWidget {
 }
 
 class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKeepAliveClientMixin {
-  final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
-  Future<TrackConditionRecord?>? _trackConditionFuture;
-  Future<Map<String, String>?>? _jmaWeatherFuture;
-  Future<Map<String, dynamic>?>? _pinpointWeatherFuture;
-
-  TrackConditionRecord? _currentTrackRecord;
-  TrackConditionRecord? _cachedPrevRecord;
-
   @override
   bool get wantKeepAlive => true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAllData();
-  }
-
-  @override
-  void didUpdateWidget(RaceInfoTabWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.predictionRaceData.raceId != oldWidget.predictionRaceData.raceId) {
-      _loadAllData();
-    }
-  }
 
   String _mapToTrackTypeKey() {
     final tt = widget.predictionRaceData.trackType ?? '';
@@ -90,88 +78,6 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
       }
     } catch(e) {}
     return rawTime;
-  }
-
-  bool _isWeatherLocked() {
-    try {
-      int year = DateTime.now().year;
-      int month = DateTime.now().month;
-      int day = DateTime.now().day;
-      final dateMatch = RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(widget.predictionRaceData.raceDate);
-      if (dateMatch != null) {
-        year = int.parse(dateMatch.group(1)!);
-        month = int.parse(dateMatch.group(2)!);
-        day = int.parse(dateMatch.group(3)!);
-      } else {
-        return true;
-      }
-      final timeStr = widget.predictionRaceData.startTime ?? "15:00";
-      final timeParts = timeStr.split(':');
-      int hour = 15;
-      int minute = 0;
-      if (timeParts.length >= 2) {
-        hour = int.tryParse(timeParts[0]) ?? 15;
-        minute = int.tryParse(timeParts[1]) ?? 0;
-      }
-      final raceDateTime = DateTime(year, month, day, hour, minute);
-      final lockTime = raceDateTime.add(const Duration(hours: 1));
-      return DateTime.now().isAfter(lockTime);
-    } catch (e) {
-      return true;
-    }
-  }
-
-  void _loadAllData({bool forceRefresh = false}) {
-    _loadTrackCondition();
-    setState(() {
-      final venue = widget.predictionRaceData.venue;
-      final raceId = widget.predictionRaceData.raceId;
-      final isLocked = _isWeatherLocked();
-
-      _jmaWeatherFuture = JmaWeatherService.fetchWeatherAndPop(
-          venue,
-          raceId,
-          forceRefresh: forceRefresh,
-          isPastRace: isLocked
-      );
-
-      _pinpointWeatherFuture = OpenMeteoService.fetchDetailedWeather(
-          venue,
-          widget.predictionRaceData.raceDate,
-          widget.predictionRaceData.startTime ?? "15:00",
-          raceId,
-          forceRefresh: forceRefresh,
-          isPastRace: isLocked
-      );
-    });
-  }
-
-  void _loadTrackCondition() {
-    if (widget.predictionRaceData.raceId.length >= 6) {
-      final venueCode = widget.predictionRaceData.raceId.substring(4, 6);
-      setState(() {
-        _trackConditionFuture = _trackConditionRepo.getLatestTrackConditionsForEachCourse().then((records) {
-          try {
-            final newRecord = records.firstWhere((r) {
-              final idStr = r.trackConditionId.toString();
-              if (idStr.length >= 6) {
-                return idStr.substring(4, 6) == venueCode;
-              }
-              return false;
-            });
-
-            if (_currentTrackRecord != null && _currentTrackRecord!.trackConditionId != newRecord.trackConditionId) {
-              _cachedPrevRecord = _currentTrackRecord;
-            }
-            _currentTrackRecord = newRecord;
-
-            return newRecord;
-          } catch (e) {
-            return null;
-          }
-        });
-      });
-    }
   }
 
   @override
@@ -494,10 +400,10 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
   }
 
   Widget _buildDetailedTrackCondition() {
-    if (_trackConditionFuture == null) return const SizedBox.shrink();
+    if (widget.trackConditionFuture == null) return const SizedBox.shrink();
 
     return FutureBuilder<TrackConditionRecord?>(
-      future: _trackConditionFuture,
+      future: widget.trackConditionFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -549,7 +455,7 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
 
   Widget _buildJmaWeather() {
     return FutureBuilder<Map<String, String>?>(
-      future: _jmaWeatherFuture,
+      future: widget.jmaWeatherFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const SizedBox.shrink();
         if (!snapshot.hasData) return const SizedBox.shrink();
@@ -684,7 +590,7 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
 
   Widget _buildPinpointWeather() {
     return FutureBuilder<Map<String, dynamic>?>(
-      future: _pinpointWeatherFuture,
+      future: widget.pinpointWeatherFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()));
@@ -721,16 +627,14 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                       Text('${widget.predictionRaceData.venue}競馬場 ピンポイント詳細', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
                     ],
                   ),
-                  if (_isWeatherLocked())
+                  if (widget.isWeatherLocked)
                     const Text('当時のデータ', style: TextStyle(fontSize: 10, color: Colors.grey))
                   else
                     IconButton(
                       icon: const Icon(Icons.refresh, size: 20, color: Colors.teal),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
-                      onPressed: () {
-                        _loadAllData(forceRefresh: true);
-                      },
+                      onPressed: widget.onRefreshWeather,
                     ),
                 ],
               ),
@@ -804,7 +708,7 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               const SizedBox(height: 8),
 
               FutureBuilder<TrackConditionRecord?>(
-                future: _trackConditionFuture,
+                future: widget.trackConditionFuture,
                 builder: (context, trackSnapshot) {
                   final trackRecord = trackSnapshot.data;
                   final String venueCode = widget.predictionRaceData.raceId.length >= 6
@@ -816,7 +720,7 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                     venueCode: venueCode,
                     trackType: widget.predictionRaceData.trackType ?? '芝',
                     currentRecord: trackRecord,
-                    cachedRecord: _cachedPrevRecord,
+                    cachedRecord: widget.cachedPrevRecord,
                     expectedPrecipitation: (raceTime['precipitation'] as num?)?.toDouble() ?? 0.0,
                     expectedRadiation: (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,
                     expectedSoilMoisture: (raceTime['soilMoisture'] as num?)?.toDouble(),

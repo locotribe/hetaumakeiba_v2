@@ -6,6 +6,9 @@ import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+import 'package:hetaumakeiba_v2/services/jma_weather_service.dart';
+import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
@@ -76,6 +79,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
 
+  // [追加] 0-9b-1 天気/馬場データ取得をrace_info_tab.dartから引き上げ（展開シミュタブと共有し二重取得を防ぐ） (v.2026.7.27+26072704)
+  Future<TrackConditionRecord?>? _trackConditionFuture;
+  Future<Map<String, String>?>? _jmaWeatherFuture;
+  Future<Map<String, dynamic>?>? _pinpointWeatherFuture;
+  TrackConditionRecord? _currentTrackRecord;
+  TrackConditionRecord? _cachedPrevRecord;
+
   final Map<String, String> _mfNameCache = {};
   final Map<String, JockeyComboStats> _jockeyComboCache = {};
 
@@ -95,6 +105,92 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
     _loadShutubaData();
+  }
+
+  // [追加] 0-9b-1 race_info_tab.dartから引き上げ（レース情報タブと展開シミュタブで天気/馬場取得を共有） (v.2026.7.27+26072704)
+  bool _isWeatherLocked() {
+    if (_predictionRaceData == null) return true;
+    try {
+      int year = DateTime.now().year;
+      int month = DateTime.now().month;
+      int day = DateTime.now().day;
+      final dateMatch = RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(_predictionRaceData!.raceDate);
+      if (dateMatch != null) {
+        year = int.parse(dateMatch.group(1)!);
+        month = int.parse(dateMatch.group(2)!);
+        day = int.parse(dateMatch.group(3)!);
+      } else {
+        return true;
+      }
+      final timeStr = _predictionRaceData!.startTime ?? "15:00";
+      final timeParts = timeStr.split(':');
+      int hour = 15;
+      int minute = 0;
+      if (timeParts.length >= 2) {
+        hour = int.tryParse(timeParts[0]) ?? 15;
+        minute = int.tryParse(timeParts[1]) ?? 0;
+      }
+      final raceDateTime = DateTime(year, month, day, hour, minute);
+      final lockTime = raceDateTime.add(const Duration(hours: 1));
+      return DateTime.now().isAfter(lockTime);
+    } catch (e) {
+      return true;
+    }
+  }
+
+  // [追加] 0-9b-1 race_info_tab.dartから引き上げ (v.2026.7.27+26072704)
+  void _loadWeatherAndTrackData({bool forceRefresh = false}) {
+    if (_predictionRaceData == null) return;
+    _loadTrackCondition();
+    setState(() {
+      final venue = _predictionRaceData!.venue;
+      final raceId = _predictionRaceData!.raceId;
+      final isLocked = _isWeatherLocked();
+
+      _jmaWeatherFuture = JmaWeatherService.fetchWeatherAndPop(
+          venue,
+          raceId,
+          forceRefresh: forceRefresh,
+          isPastRace: isLocked
+      );
+
+      _pinpointWeatherFuture = OpenMeteoService.fetchDetailedWeather(
+          venue,
+          _predictionRaceData!.raceDate,
+          _predictionRaceData!.startTime ?? "15:00",
+          raceId,
+          forceRefresh: forceRefresh,
+          isPastRace: isLocked
+      );
+    });
+  }
+
+  // [追加] 0-9b-1 race_info_tab.dartから引き上げ (v.2026.7.27+26072704)
+  void _loadTrackCondition() {
+    if (_predictionRaceData == null || _predictionRaceData!.raceId.length < 6) return;
+    final venueCode = _predictionRaceData!.raceId.substring(4, 6);
+    setState(() {
+      _trackConditionFuture = _trackConditionRepo.getLatestTrackConditionsForEachCourse().then((records) {
+        try {
+          final newRecord = records.firstWhere((r) {
+            final idStr = r.trackConditionId.toString();
+            if (idStr.length >= 6) {
+              return idStr.substring(4, 6) == venueCode;
+            }
+            return false;
+          });
+
+          if (_currentTrackRecord != null && _currentTrackRecord!.trackConditionId != newRecord.trackConditionId) {
+            _cachedPrevRecord = _currentTrackRecord;
+          }
+          _currentTrackRecord = newRecord;
+
+          return newRecord;
+        } catch (e) {
+          return null;
+        }
+      });
+    });
   }
 
   @override
@@ -253,6 +349,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             _tableUpdateKey = DateTime.now().millisecondsSinceEpoch; // 追加
             _isLoading = false;
           });
+        }
+
+        // [追加] 0-9b-1 レース識別後、天気/馬場データを1回だけ取得（raceIdは不変のためレース単位で1回） (v.2026.7.27+26072704)
+        if (data != null && _jmaWeatherFuture == null) {
+          _loadWeatherAndTrackData();
         }
 
         if (data != null) {
@@ -696,10 +797,21 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             ),
                             buildGateNumber: _buildGateNumber,
                             buildHorseNumber: _buildHorseNumber,
+                            // [追加] 0-9b-1 天気/馬場データ取得を引き上げたためprops経由で渡す (v.2026.7.27+26072704)
+                            trackConditionFuture: _trackConditionFuture,
+                            jmaWeatherFuture: _jmaWeatherFuture,
+                            pinpointWeatherFuture: _pinpointWeatherFuture,
+                            cachedPrevRecord: _cachedPrevRecord,
+                            isWeatherLocked: _isWeatherLocked(),
+                            onRefreshWeather: () => _loadWeatherAndTrackData(forceRefresh: true),
                           ),
                           RaceSimulationTabWidget(
                             predictionRaceData: _predictionRaceData!,
                             horses: sortedHorses,
+                            // [追加] 0-9b-1 使用データカードの予測/過去平均ソース用 (v.2026.7.27+26072704)
+                            trackConditionFuture: _trackConditionFuture,
+                            pinpointWeatherFuture: _pinpointWeatherFuture,
+                            cachedPrevRecord: _cachedPrevRecord,
                           ),
                           StartersTabWidget(
                             horses: sortedHorses,
