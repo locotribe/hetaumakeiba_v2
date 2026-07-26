@@ -14,6 +14,9 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_elevation_p
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_layer2_painter.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_painter.dart';
 
+// [追加] 0-9b-2 トラックバイアスの入力ソース種別 (v.2026.7.27+26072705)
+enum TrackBiasSource { actual, predicted, trend, manual }
+
 /// 展開予想アニメーションのデュアルビュー表示ウィジェット。
 ///
 /// 上部に全体俯瞰マップ（コース平面図＋先頭馬の光るドット）、
@@ -37,6 +40,14 @@ class RaceSimulationView extends StatefulWidget {
   final String? trackConditionDate;   // 計測日（実測のときのみ非null）
   // [追加] 0-9b-1 クッション値/含水率の使用ソースラベル（実測(当日)/予測/過去平均） (v.2026.7.27+26072704)
   final String biasSourceLabel;
+  // [追加] 0-9b-2 ソース切替・自由入力用 (v.2026.7.27+26072705)
+  final TrackBiasSource selectedSource;
+  final bool hasActualToday;
+  final double? manualCushion;
+  final double? manualMoisture;
+  final ValueChanged<TrackBiasSource> onSourceChanged;
+  final ValueChanged<double?> onManualCushionChanged;
+  final ValueChanged<double?> onManualMoistureChanged;
 
   const RaceSimulationView({
     super.key,
@@ -56,6 +67,13 @@ class RaceSimulationView extends StatefulWidget {
     this.trackBias = 0.0,
     this.trackConditionDate,
     this.biasSourceLabel = '—',
+    this.selectedSource = TrackBiasSource.actual,
+    this.hasActualToday = false,
+    this.manualCushion,
+    this.manualMoisture,
+    required this.onSourceChanged,
+    required this.onManualCushionChanged,
+    required this.onManualMoistureChanged,
   });
 
   @override
@@ -74,9 +92,17 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
   // [追加] リアルタイム速度化: 再生倍速。デフォルト8x(2000m≈15秒) (v2026.6.25)
   double _playbackSpeed = 8.0;
 
+  // [追加] 0-9b-2 自由入力欄のコントローラー (v.2026.7.27+26072705)
+  late final TextEditingController _manualCushionController;
+  late final TextEditingController _manualMoistureController;
+
   @override
   void initState() {
     super.initState();
+    _manualCushionController =
+        TextEditingController(text: widget.manualCushion?.toString() ?? '');
+    _manualMoistureController =
+        TextEditingController(text: widget.manualMoisture?.toString() ?? '');
     _controller = AnimationController(
       vsync: this,
       duration: Duration(
@@ -107,6 +133,8 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
   void dispose() {
     _controller.removeStatusListener(_onStatusChanged);
     _controller.dispose();
+    _manualCushionController.dispose();
+    _manualMoistureController.dispose();
     super.dispose();
   }
 
@@ -432,6 +460,11 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
                 ),
               ),
               const SizedBox(height: 4),
+              // [追加] 0-9b-2 クッション値/含水率のソース切替トグル (v.2026.7.27+26072705)
+              _buildSourceToggle(),
+              if (widget.selectedSource == TrackBiasSource.manual)
+                _buildManualInputs(),
+              const SizedBox(height: 4),
               _buildDataRow('予想ペース', widget.predictedPace ?? '—'),
               _buildDataRow('距離・コース', _buildCourseLabel()),
               _buildDataRow('馬場状態', widget.trackConditionText ?? '—'),
@@ -550,6 +583,102 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
         ],
       ),
     );
+  }
+
+  // [追加] 0-9b-2 クッション値/含水率のソース切替トグルを組み立てる (v.2026.7.27+26072705)
+  Widget _buildSourceToggle() {
+    const options = <TrackBiasSource, String>{
+      TrackBiasSource.actual: '実測(当日)',
+      TrackBiasSource.predicted: '予測',
+      TrackBiasSource.trend: '過去平均',
+      TrackBiasSource.manual: '自由入力',
+    };
+    return Wrap(
+      spacing: 4.0,
+      runSpacing: 4.0,
+      children: options.entries.map((entry) {
+        final source = entry.key;
+        final isSelected = widget.selectedSource == source;
+        final isEnabled =
+            source != TrackBiasSource.actual || widget.hasActualToday;
+        return OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+            minimumSize: const Size(0, 24),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            side: BorderSide(
+              color: !isEnabled
+                  ? Colors.grey.shade300
+                  : (isSelected ? Colors.green.shade700 : Colors.grey.shade400),
+            ),
+            foregroundColor: !isEnabled
+                ? Colors.grey.shade400
+                : (isSelected ? Colors.green.shade700 : Colors.grey.shade600),
+          ),
+          onPressed: isEnabled ? () => widget.onSourceChanged(source) : null,
+          child: Text(entry.value, style: const TextStyle(fontSize: 10)),
+        );
+      }).toList(),
+    );
+  }
+
+  // [追加] 0-9b-2 自由入力欄（クッション値・含水率）を組み立てる (v.2026.7.27+26072705)
+  Widget _buildManualInputs() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6.0),
+      child: Row(
+        children: [
+          if (widget.trackTypeKey != 'dirt') ...[
+            Expanded(
+              child: TextField(
+                controller: _manualCushionController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(fontSize: 11),
+                decoration: const InputDecoration(
+                  labelText: 'クッション値',
+                  labelStyle: TextStyle(fontSize: 10),
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (v) => widget
+                    .onManualCushionChanged(_parseGuarded(v, 0.0, 20.0)),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: TextField(
+              controller: _manualMoistureController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(fontSize: 11),
+              decoration: const InputDecoration(
+                labelText: '含水率(%)',
+                labelStyle: TextStyle(fontSize: 10),
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (v) =>
+                  widget.onManualMoistureChanged(_parseGuarded(v, 0.0, 30.0)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // [追加] 0-9b-2 自由入力の数値ガード（空欄・数値変換不可・範囲外はnull=無効） (v.2026.7.27+26072705)
+  double? _parseGuarded(String text, double min, double max) {
+    if (text.trim().isEmpty) return null;
+    final v = double.tryParse(text.trim());
+    if (v == null) return null;
+    if (v < min || v > max) return null;
+    return v;
   }
 
   // [追加] 0-9(b) 使用データカード: ラベル:値の1行を組み立てる (v.2026.7.27+26072703)
