@@ -23,6 +23,8 @@ class _SimHorse {
   double weightBurden = 0.0;
   // [追加] 0-4 距離延長短縮: 直線への補正値（既定値0.0、後段で代入） (v.2026.7.26+26072602)
   double distLastAdj = 0.0;
+  // [追加] 0-8 着差ベースの相対力（既定値0.0、後段で代入） (v.2026.7.27+26072701)
+  double marginPower = 0.0;
 
   _SimHorse({
     required this.detail,
@@ -95,6 +97,9 @@ class RaceAnalyzer {
 
   // [追加] 3コーナーのスタミナ反映係数（実装後に微調整する初期値） (v.2026.7.26+26072603)
   static const double _kStaminaFactor3c = 0.4;
+
+  // [追加] 着差ベースの相対力の反映係数（直線・実装後に微調整する初期値） (v.2026.7.27+26072701)
+  static const double _kMarginPowerFactor = 0.3;
 
   static RacePacePrediction predictRacePace(
       List<PredictionHorseDetail> horses,
@@ -325,6 +330,33 @@ class RaceAnalyzer {
       sh.weightBurden = (ratios[sh]! - meanRatio) * meanBodyWeight;
     }
 
+    // [追加] 0-8 着差ベースの相対力(marginPower)を近走から算出（直線でのみ使用） (v.2026.7.27+26072701)
+    for (final horse in simHorses) {
+      final records = allPastRecords[horse.detail.horseId];
+      if (records == null || records.isEmpty) {
+        horse.marginPower = 0.0;
+        continue;
+      }
+      double totalWeighted = 0.0;
+      double totalWeight = 0.0;
+      double weight = 1.0;
+      for (final r in records.take(5)) {
+        final margin = double.tryParse(r.margin.trim()); // 秒。勝ち馬:マイナス, 敗者:プラス
+        final dist = int.tryParse(r.distance.replaceAll(RegExp(r'[^0-9]'), ''));
+        if (margin == null || dist == null || dist <= 0) {
+          weight *= 0.8;
+          continue;
+        }
+        final normMargin = margin / (dist / 1000.0); // 1000mあたり着差(秒)
+        final raw = -normMargin;                      // 勝ち=プラス, 負け=マイナス
+        final clamped = raw.clamp(-1.0, 1.5);         // 非対称クランプ(大敗はノイズ多く-1.0で打ち切り)
+        totalWeighted += clamped * weight;
+        totalWeight += weight;
+        weight *= 0.8;                                // 近走ほど重み大
+      }
+      horse.marginPower = totalWeight > 0 ? totalWeighted / totalWeight : 0.0;
+    }
+
     simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
 
     // [追加] 斤量(逃げ・先行): 初速=テンの位置取りに反映。重い馬はテンでやや後退 (v.2026.7.26+26072601)
@@ -497,6 +529,9 @@ class RaceAnalyzer {
 
         // [追加] 0-4 距離延長短縮: 直線での距離ローテ補正（符号はdistLastAdjに格納済み） (v.2026.7.26+26072602)
         horse.positionScore += horse.distLastAdj;
+
+        // [追加] 0-8 着差ベースの相対力を直線で反映（強い勝ち方の馬ほど最後に伸びる） (v.2026.7.27+26072701)
+        horse.positionScore -= horse.marginPower * _kMarginPowerFactor;
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['直線'] = _formatTairetsu(simHorses);
