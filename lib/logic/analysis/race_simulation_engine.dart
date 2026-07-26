@@ -38,6 +38,8 @@ class RaceSimulationEngine {
     Map<String, HorseSimulationParams> simulationParams = const {},
     // [追加] 馬場状態補正: 良=1.00, 稍重=1.03, 重=1.06, 不良=1.10 等 (v2026.6.25)
     double trackSpeedMultiplier = 1.0,
+    // [追加] 0-9 馬場の硬軟による前残り/差しの全体バイアス (v.2026.7.27+26072702)
+    double trackBias = 0.0,
   }) async {
     if (horses.isEmpty || raceDistance <= 0) return null;
 
@@ -51,6 +53,7 @@ class RaceSimulationEngine {
       const {},
       horsesOverride: horses,
       simulationParams: simulationParams,
+      trackBias: trackBias,
     );
 
     // 「ゴールからの絶対残距離」(d0=raceDistance→d6=0, 単調減少)

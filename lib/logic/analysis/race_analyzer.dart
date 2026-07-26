@@ -101,6 +101,61 @@ class RaceAnalyzer {
   // [追加] 着差ベースの相対力の反映係数（直線・実装後に微調整する初期値） (v.2026.7.27+26072701)
   static const double _kMarginPowerFactor = 0.3;
 
+  // [追加] 0-9 トラックバイアスの全体スケール係数（実装後に微調整する初期値） (v.2026.7.27+26072702)
+  static const double _kTrackBiasScale = 0.05;
+
+  // [追加] 0-9 馬場の硬軟から前残り/差しの全体バイアスBを算出（正=高速/前有利, 負=タフ/差し有利） (v.2026.7.27+26072702)
+  // 芝: クッション値・含水率の線形。ダート: 含水率の単調写像(差し側に振らせない・芝より小さめ)。必要値がnullなら0.0(=バイアスなし)。
+  static double calcTrackBias({
+    double? cushionValue,
+    double? moistureTurfGoal,
+    double? moistureDirtGoal,
+    required bool isDirt,
+  }) {
+    if (isDirt) {
+      final m = moistureDirtGoal;
+      if (m == null) return 0.0;
+      return ((m - 2.0) * 0.1).clamp(0.0, 0.8);
+    } else {
+      final c = cushionValue;
+      final m = moistureTurfGoal;
+      if (c == null && m == null) return 0.0;
+      final cushionTerm = c != null ? (c - 9.4) * 0.35 : 0.0;
+      final moistureTerm = m != null ? (12.0 - m) * 0.15 : 0.0;
+      return (cushionTerm + moistureTerm).clamp(-1.0, 1.0);
+    }
+  }
+
+  // [追加] 0-9 脚質別トラックバイアス係数（テン局面） (v.2026.7.27+26072702)
+  static double _trackBiasKTen(String? style) {
+    switch (style) {
+      case '逃げ':
+        return 1.2;
+      case '先行':
+        return 0.8;
+      default:
+        return 0.0; // 差し/追込/自在/マクリ/不明はテンでは補正しない
+    }
+  }
+
+  // [追加] 0-9 脚質別トラックバイアス係数（直線局面） (v.2026.7.27+26072702)
+  static double _trackBiasKStr(String? style) {
+    switch (style) {
+      case '逃げ':
+        return 0.8;
+      case '先行':
+        return 0.8;
+      case '差し':
+        return -1.4;
+      case '追込':
+        return -1.8;
+      case 'マクリ':
+        return -0.8;
+      default:
+        return 0.0; // 自在/不明は補正しない
+    }
+  }
+
   static RacePacePrediction predictRacePace(
       List<PredictionHorseDetail> horses,
       Map<String, List<HorseRaceRecord>> allPastRecords,
@@ -179,6 +234,8 @@ class RaceAnalyzer {
       List<PredictionHorseDetail>? horsesOverride,
       // [追加] フェーズ2: tenAccelIndex/staminaIndex/finishingPowerをキーフレームに反映 (v.2026.6.19)
       Map<String, HorseSimulationParams> simulationParams = const {},
+      // [追加] 0-9 馬場の硬軟による前残り/差しの全体バイアス (v.2026.7.27+26072702)
+      double trackBias = 0.0,
       }
       ) async {
     final CoursePresetRepository coursePresetRepo = CoursePresetRepository();
@@ -410,6 +467,14 @@ class RaceAnalyzer {
       // 自在・マクリ・不明は補正なし
     }
 
+    // [追加] 0-9 トラックバイアス(テン): 逃げ・先行を馬場傾向で微補正 (v.2026.7.27+26072702)
+    for (final horse in simHorses) {
+      final k = _trackBiasKTen(horse.detail.legStyleProfile?.primaryStyle);
+      if (k != 0.0) {
+        horse.positionScore -= trackBias * _kTrackBiasScale * k;
+      }
+    }
+
     simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
 
     // [追加] テン: 初期ソート直後の隊列（枠番・脚質ベース、テン指数未反映） (v.2026.6.19)
@@ -532,6 +597,12 @@ class RaceAnalyzer {
 
         // [追加] 0-8 着差ベースの相対力を直線で反映（強い勝ち方の馬ほど最後に伸びる） (v.2026.7.27+26072701)
         horse.positionScore -= horse.marginPower * _kMarginPowerFactor;
+
+        // [追加] 0-9 トラックバイアス(直線): 全脚質を馬場傾向で微補正（前残り/差しの再現） (v.2026.7.27+26072702)
+        final kStr = _trackBiasKStr(horse.detail.legStyleProfile?.primaryStyle);
+        if (kStr != 0.0) {
+          horse.positionScore -= trackBias * _kTrackBiasScale * kStr;
+        }
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['直線'] = _formatTairetsu(simHorses);

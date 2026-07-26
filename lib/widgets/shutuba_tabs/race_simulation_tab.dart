@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
@@ -177,6 +178,13 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       isDirt: isDirt,
       record: trackConditionRecord,
     );
+    // [追加] 0-9 馬場バイアスを算出（公式/最新の計測値から。値なしは0.0） (v.2026.7.27+26072702)
+    final trackBias = RaceAnalyzer.calcTrackBias(
+      cushionValue: trackConditionRecord?.cushionValue,
+      moistureTurfGoal: trackConditionRecord?.moistureTurfGoal,
+      moistureDirtGoal: trackConditionRecord?.moistureDirtGoal,
+      isDirt: isDirt,
+    );
 
     var raceCourse =
         CourseElevations.findRaceCourse(venueCode, distance, trackTypeKey);
@@ -223,6 +231,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       simulationParams: simulationParams,
       // [追加] 馬場状態補正 (v2026.6.25)
       trackSpeedMultiplier: trackSpeedMultiplier,
+      // [追加] 0-9 馬場バイアス (v.2026.7.27+26072702)
+      trackBias: trackBias,
     );
     if (simulationData == null) return null;
 
