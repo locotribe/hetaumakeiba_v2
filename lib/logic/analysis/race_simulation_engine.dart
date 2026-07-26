@@ -40,6 +40,8 @@ class RaceSimulationEngine {
     double trackSpeedMultiplier = 1.0,
     // [追加] 0-9 馬場の硬軟による前残り/差しの全体バイアス (v.2026.7.27+26072702)
     double trackBias = 0.0,
+    // [追加] 0-9b-3 ユーザーによるペース手動選択（未指定時はアプリ予想を使用） (v.2026.7.27+26072707)
+    String? paceOverride,
   }) async {
     if (horses.isEmpty || raceDistance <= 0) return null;
 
@@ -54,6 +56,7 @@ class RaceSimulationEngine {
       horsesOverride: horses,
       simulationParams: simulationParams,
       trackBias: trackBias,
+      paceOverride: paceOverride,
     );
 
     // 「ゴールからの絶対残距離」(d0=raceDistance→d6=0, 単調減少)

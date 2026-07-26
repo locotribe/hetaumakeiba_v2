@@ -236,6 +236,8 @@ class RaceAnalyzer {
       Map<String, HorseSimulationParams> simulationParams = const {},
       // [追加] 0-9 馬場の硬軟による前残り/差しの全体バイアス (v.2026.7.27+26072702)
       double trackBias = 0.0,
+      // [追加] 0-9b-3 ユーザーによるペース手動選択（未指定時はアプリ予想を使用） (v.2026.7.27+26072707)
+      String? paceOverride,
       }
       ) async {
     final CoursePresetRepository coursePresetRepo = CoursePresetRepository();
@@ -354,7 +356,9 @@ class RaceAnalyzer {
     }).toList();
 
     final development = <String, String>{};
-    final predictedPace = raceData.racePacePrediction?.predictedPace ??
+    // [修正] 0-9b-3 ペース手動選択(paceOverride)があれば優先。未指定時は従来どおりアプリ予想を使用 (v.2026.7.27+26072707)
+    final predictedPace = paceOverride ??
+        raceData.racePacePrediction?.predictedPace ??
         'ミドルペース';
 
     // [追加] 能力差を相対評価するための場内平均 (v.2026.7.25)

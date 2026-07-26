@@ -145,10 +145,10 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
   _RaceSimulationLoadResult? _lastResult;
   bool _isRebuilding = false;
 
-  // [追加] 0-9b-2 クッション値/含水率のソース切替・自由入力のState（セッション内のみ保持） (v.2026.7.27+26072705)
+  // [修正] 0-9b-3 自由入力を廃止しペース手動選択に置き換え。クッション値/含水率のソース切替のみセッション内保持 (v.2026.7.27+26072707)
   TrackBiasSource _selectedSource = TrackBiasSource.actual;
-  double? _manualCushion;
-  double? _manualMoisture;
+  // [追加] 0-9b-3 ペース手動選択State。初期値はアプリ予想ペース（セッション内のみ保持） (v.2026.7.27+26072707)
+  late String _selectedPace;
 
   // [追加] 0-9b-2不具合修正 スクロール位置を再ビルドをまたいで保持するコントローラー (v.2026.7.27+26072706)
   late final ScrollController _scrollController;
@@ -160,7 +160,15 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    // [追加] 0-9b-3 ペース手動選択の初期値はアプリ予想ペース (v.2026.7.27+26072707)
+    _selectedPace = _appPredictedPace();
     _startLoad();
+  }
+
+  // [追加] 0-9b-3 アプリの予想ペースを取得（無ければミドルペース） (v.2026.7.27+26072707)
+  String _appPredictedPace() {
+    return widget.predictionRaceData.racePacePrediction?.predictedPace ??
+        'ミドルペース';
   }
 
   @override
@@ -186,8 +194,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         _lastResult = null;
         _isRebuilding = false;
         _selectedSource = TrackBiasSource.actual;
-        _manualCushion = null;
-        _manualMoisture = null;
+        // [修正] 0-9b-3 raceId変更時は新レースの予想ペースへリセット (v.2026.7.27+26072707)
+        _selectedPace = _appPredictedPace();
         _startLoad();
       });
     }
@@ -242,26 +250,13 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     _triggerRebuild(_cachedInputs!);
   }
 
-  // [追加] 0-9b-2 自由入力(クッション値)変更コールバック (v.2026.7.27+26072705)
-  void _onManualCushionChanged(double? value) {
+  // [追加] 0-9b-3 ペース手動選択コールバック（再取得はせずPhase Bのみ再実行） (v.2026.7.27+26072707)
+  void _onPaceChanged(String pace) {
     if (_cachedInputs == null) return;
     setState(() {
-      _manualCushion = value;
+      _selectedPace = pace;
     });
-    if (_selectedSource == TrackBiasSource.manual) {
-      _triggerRebuild(_cachedInputs!);
-    }
-  }
-
-  // [追加] 0-9b-2 自由入力(含水率)変更コールバック (v.2026.7.27+26072705)
-  void _onManualMoistureChanged(double? value) {
-    if (_cachedInputs == null) return;
-    setState(() {
-      _manualMoisture = value;
-    });
-    if (_selectedSource == TrackBiasSource.manual) {
-      _triggerRebuild(_cachedInputs!);
-    }
+    _triggerRebuild(_cachedInputs!);
   }
 
   String _mapToTrackTypeKey() {
@@ -490,11 +485,6 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         selectedMoisture = cached.trendMoisture;
         biasSourceLabel = '過去平均';
         break;
-      case TrackBiasSource.manual:
-        selectedCushion = cached.isDirt ? null : _manualCushion;
-        selectedMoisture = _manualMoisture;
-        biasSourceLabel = '自由入力';
-        break;
     }
 
     final trackBias = (selectedCushion != null || selectedMoisture != null)
@@ -517,6 +507,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       trackSpeedMultiplier: cached.trackSpeedMultiplier,
       // [追加] 0-9 馬場バイアス (v.2026.7.27+26072702)
       trackBias: trackBias,
+      // [追加] 0-9b-3 ペース手動選択 (v.2026.7.27+26072707)
+      paceOverride: _selectedPace,
     );
     if (simulationData == null) return null;
 
@@ -591,14 +583,13 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
                 trackBias: result.trackBias,
                 trackConditionDate: result.trackConditionDate,
                 biasSourceLabel: result.biasSourceLabel,
-                // [追加] 0-9b-2 ソース切替・自由入力の配線 (v.2026.7.27+26072705)
+                // [追加] 0-9b-2 ソース切替の配線 (v.2026.7.27+26072705)
                 selectedSource: _selectedSource,
                 hasActualToday: cached.hasActualToday,
-                manualCushion: _manualCushion,
-                manualMoisture: _manualMoisture,
                 onSourceChanged: _onSourceChanged,
-                onManualCushionChanged: _onManualCushionChanged,
-                onManualMoistureChanged: _onManualMoistureChanged,
+                // [追加] 0-9b-3 ペース手動選択の配線 (v.2026.7.27+26072707)
+                selectedPace: _selectedPace,
+                onPaceChanged: _onPaceChanged,
               ),
             ],
           ),
