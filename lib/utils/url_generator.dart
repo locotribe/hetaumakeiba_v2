@@ -62,6 +62,11 @@ String generateShutubaUrl({required String raceId, String type = 'shutuba'}) {
   return 'https://race.netkeiba.com/race/$type.html?race_id=$raceId';
 }
 
+/// 競馬新聞ページのURLを生成します（ブリンカー/外/地の取得用）。
+String generateNewspaperUrl({required String raceId}) {
+  return 'https://race.netkeiba.com/race/newspaper.html?race_id=$raceId&rf=shutuba_submenu';
+}
+
 const Map<String, String> jraToPakaraPlaceMap = {
   '05': '0', // 東京
   '06': '1', // 中山

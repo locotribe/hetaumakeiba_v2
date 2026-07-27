@@ -261,15 +261,28 @@ class HorseInfoCell extends StatelessWidget {
         Row(
           children: [
             Text('${horse.sexAndAge} ', style: const TextStyle(fontSize: 10)),
+            // ▼ [追加] 競馬新聞ページのマーク（外/地）を馬名の頭に表示 (v.2026.7.27+26072708)
+            if (horse.isMaruGai) _buildNewspaperMarkChip('外'),
+            if (horse.isMaruChi) _buildNewspaperMarkChip('地'),
+            // ▲ [追加]
             Expanded(
-              child: Text(
-                horse.horseName,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  decoration: horse.isScratched ? TextDecoration.lineThrough : null,
-                ),
-                overflow: TextOverflow.ellipsis,
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      horse.horseName,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        decoration: horse.isScratched ? TextDecoration.lineThrough : null,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // ▼ [追加] 競馬新聞ページのマーク（ブリンカー）を馬名の末尾に表示。初装着のみ赤背景 (v.2026.7.27+26072708)
+                  if (horse.isBlinker) _buildNewspaperMarkChip('B', isRed: horse.isFirstBlinker),
+                  // ▲ [追加]
+                ],
               ),
             ),
           ],
@@ -293,6 +306,27 @@ class HorseInfoCell extends StatelessWidget {
       ],
     );
   }
+
+  // ▼ [追加] 競馬新聞ページのマーク用チップ。isRed指定時のみ赤背景（初ブリンカー用） (v.2026.7.27+26072708)
+  Widget _buildNewspaperMarkChip(String label, {bool isRed = false}) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+      decoration: BoxDecoration(
+        color: isRed ? Colors.red : Colors.black,
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 9,
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+  // ▲ [追加]
 }
 // ▼ 変更: 上下のはみ出しを無くし、左右のみはみ出させるように修正
 class _OversizedBackground extends StatelessWidget {

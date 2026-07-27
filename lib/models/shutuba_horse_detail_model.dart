@@ -16,6 +16,13 @@ class ShutubaHorseDetail {
   int? popularity; // 人気 (変動するためNullable)
   final bool isScratched; // 出走取消フラグ
 
+  // ▼ [追加] 競馬新聞ページから取得するマーク情報 (v.2026.7.27+26072708)
+  bool isBlinker;
+  bool isFirstBlinker;
+  bool isMaruGai;
+  bool isMaruChi;
+  // ▲ [追加]
+
   ShutubaHorseDetail({
     required this.horseId,
     required this.horseNumber,
@@ -31,6 +38,12 @@ class ShutubaHorseDetail {
     this.odds,
     this.popularity,
     this.isScratched = false,
+    // ▼ [追加] 競馬新聞ページから取得するマーク情報 (v.2026.7.27+26072708)
+    this.isBlinker = false,
+    this.isFirstBlinker = false,
+    this.isMaruGai = false,
+    this.isMaruChi = false,
+    // ▲ [追加]
   });
 
   Map<String, dynamic> toMap() {
@@ -49,6 +62,12 @@ class ShutubaHorseDetail {
       'odds': odds,
       'popularity': popularity,
       'isScratched': isScratched ? 1 : 0,
+      // ▼ [追加] 競馬新聞ページから取得するマーク情報 (v.2026.7.27+26072708)
+      'isBlinker': isBlinker,
+      'isFirstBlinker': isFirstBlinker,
+      'isMaruGai': isMaruGai,
+      'isMaruChi': isMaruChi,
+      // ▲ [追加]
     };
   }
 
@@ -68,6 +87,12 @@ class ShutubaHorseDetail {
       odds: (map['odds'] as num?)?.toDouble(),
       popularity: map['popularity'] as int?,
       isScratched: map['isScratched'] == 1,
+      // ▼ [追加] 競馬新聞ページから取得するマーク情報。旧キャッシュに無ければfalse (v.2026.7.27+26072708)
+      isBlinker: map['isBlinker'] as bool? ?? false,
+      isFirstBlinker: map['isFirstBlinker'] as bool? ?? false,
+      isMaruGai: map['isMaruGai'] as bool? ?? false,
+      isMaruChi: map['isMaruChi'] as bool? ?? false,
+      // ▲ [追加]
     );
   }
 }

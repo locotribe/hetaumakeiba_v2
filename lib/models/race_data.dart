@@ -254,6 +254,13 @@ class PredictionHorseDetail {
   String? motherName;
   String? mfName;
 
+  // ▼ [追加] 競馬新聞ページから取得するマーク情報 (v.2026.7.27+26072708)
+  bool isBlinker;
+  bool isFirstBlinker;
+  bool isMaruGai;
+  bool isMaruChi;
+  // ▲ [追加]
+
   PredictionHorseDetail({
     required this.horseId,
     required this.horseNumber,
@@ -295,6 +302,12 @@ class PredictionHorseDetail {
     this.motherName,
     this.mfName,
     this.jockeyComboStats,
+    // ▼ [追加] 競馬新聞ページから取得するマーク情報 (v.2026.7.27+26072708)
+    this.isBlinker = false,
+    this.isFirstBlinker = false,
+    this.isMaruGai = false,
+    this.isMaruChi = false,
+    // ▲ [追加]
   });
 
   factory PredictionHorseDetail.fromShutubaHorseDetail(ShutubaHorseDetail detail) {
@@ -366,6 +379,12 @@ class PredictionHorseDetail {
         'showRecoveryRate': jockeyComboStats!.showRecoveryRate,
         'recordString': jockeyComboStats!.recordString,
       } : null,
+      // ▼ [追加] 競馬新聞ページから取得するマーク情報 (v.2026.7.27+26072708)
+      'isBlinker': isBlinker,
+      'isFirstBlinker': isFirstBlinker,
+      'isMaruGai': isMaruGai,
+      'isMaruChi': isMaruChi,
+      // ▲ [追加]
     };
   }
 
@@ -436,6 +455,12 @@ class PredictionHorseDetail {
         recordString: json['jockeyComboStats']['recordString'] as String? ?? '0-0-0-0',
       )
           : null,
+      // ▼ [追加] 競馬新聞ページから取得するマーク情報。旧キャッシュに無ければfalse (v.2026.7.27+26072708)
+      isBlinker: json['isBlinker'] as bool? ?? false,
+      isFirstBlinker: json['isFirstBlinker'] as bool? ?? false,
+      isMaruGai: json['isMaruGai'] as bool? ?? false,
+      isMaruChi: json['isMaruChi'] as bool? ?? false,
+      // ▲ [追加]
     );
   }
 }

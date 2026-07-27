@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
+import 'package:hetaumakeiba_v2/services/newspaper_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
@@ -38,6 +39,23 @@ class ShutubaTableScraperService {
           await controller.evaluateJavascript(source: _getScrapingJs());
           if (result != null) {
             final data = _parseScrapedData(result, raceId);
+
+            // ▼ [追加] 競馬新聞ページからブリンカー/外/地のマークを取得しhorseIDでマージ（ベストエフォート） (v.2026.7.27+26072708)
+            try {
+              final marks = await NewspaperScraperService().scrapeMarks(raceId);
+              for (final h in data.horses) {
+                final mk = marks[h.horseId];
+                if (mk != null) {
+                  h.isBlinker = mk.isBlinker;
+                  h.isFirstBlinker = mk.isFirstBlinker;
+                  h.isMaruGai = mk.isMaruGai;
+                  h.isMaruChi = mk.isMaruChi;
+                }
+              }
+            } catch (_) {
+              // 新聞取得は任意。失敗時はマーク無しで続行
+            }
+            // ▲ [追加]
 
             final cache = ShutubaTableCache(
               raceId: data.raceId,
