@@ -161,6 +161,18 @@ class TrackConditionRepository {
     return maps.map((e) => TrackConditionRecord.fromJson(e)).toList();
   }
 
+  // [追加] 同一開催(prefix8=YYYYCCKK)の全馬場状態履歴を取得（トレンドグラフ表示用、古い順・前日データ(下2桁00)は除外） (v.2026.7.28+26072809)
+  Future<List<TrackConditionRecord>> getTrackConditionsByMeeting(String prefix8) async {
+    final db = await _dbProvider.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      DbConstants.tableTrackConditions,
+      where: 'CAST(track_condition_id AS TEXT) LIKE ? AND track_condition_id % 100 != 0',
+      whereArgs: ['$prefix8%'],
+      orderBy: 'track_condition_id ASC',
+    );
+    return maps.map((e) => TrackConditionRecord.fromJson(e)).toList();
+  }
+
   /// 【追加】指定した日付のデータが存在するかチェックするメソッド（分岐Aの判定用）
   Future<bool> hasDataForDate(String date) async {
     final db = await _dbProvider.database;

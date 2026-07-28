@@ -48,7 +48,8 @@ class MainScaffold extends StatefulWidget {
 }
 
 class _MainScaffoldState extends State<MainScaffold> {
-  int _selectedIndex = 0;
+  // [修正] 起動時のトップページをニュース(_pages[0])から馬場状態(_pages[1])へ変更 (v.2026.7.28+26072811)
+  int _selectedIndex = 1;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<SavedTicketsListPageState> _savedListKey =
   GlobalKey<SavedTicketsListPageState>();

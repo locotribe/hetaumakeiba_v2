@@ -8,7 +8,7 @@ import 'package:hetaumakeiba_v2/services/cloud_sync_service.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/track_condition_card.dart';
 
-// [追加] 馬場状態をカードリストで表示する専用ページ (v.2026.7.28+26072801)
+// [修正] 馬場状態をカードリストで表示する専用ページ。開催ごとのトレンドグラフ対応のため保持データをMapに変更 (v.2026.7.28+26072809)
 class TrackConditionPage extends StatefulWidget {
   const TrackConditionPage({super.key});
 
@@ -18,7 +18,8 @@ class TrackConditionPage extends StatefulWidget {
 
 class _TrackConditionPageState extends State<TrackConditionPage> {
   final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
-  List<TrackConditionRecord> _records = [];
+  // [修正] 会場名をキーに、同一開催の全履歴リストを保持するよう変更（トレンドグラフ表示用） (v.2026.7.28+26072809)
+  Map<String, List<TrackConditionRecord>> _meetingRecords = {};
   bool _isSyncing = false;
   bool _needsCloudSync = false;
   String _lastUpdatedTime = "--:--";
@@ -81,20 +82,25 @@ class _TrackConditionPageState extends State<TrackConditionPage> {
       final List<String> activeCourseNames = await TrackConditionsScraperService.getActiveCourseNames();
       final allLatestRecords = await _trackConditionRepo.getLatestTrackConditionsForEachCourse();
 
-      final List<TrackConditionRecord> filteredRecords = [];
+      // [修正] 各会場の最新レコードから開催prefix8(YYYYCCKK)を求め、同一開催の全履歴を取得するよう変更（トレンドグラフ表示用） (v.2026.7.28+26072809)
+      final Map<String, List<TrackConditionRecord>> meetingRecords = {};
       for (var name in activeCourseNames) {
         try {
-          final record = allLatestRecords.firstWhere(
+          final latest = allLatestRecords.firstWhere(
                   (r) => _getCourseName(r.trackConditionId) == name
           );
-          filteredRecords.add(record);
+          final prefix8 = latest.trackConditionId.toString().substring(0, 8);
+          final history = await _trackConditionRepo.getTrackConditionsByMeeting(prefix8);
+          if (history.isNotEmpty) {
+            meetingRecords[name] = history;
+          }
         } catch (_) {}
       }
 
       if (mounted) {
         setState(() {
           _needsCloudSync = needsSync;
-          _records = filteredRecords;
+          _meetingRecords = meetingRecords;
           _isSyncing = false;
         });
       }
@@ -210,7 +216,7 @@ class _TrackConditionPageState extends State<TrackConditionPage> {
               fillColor: Color.fromRGBO(172, 234, 231, 1.0),
             ),
           ),
-          if (_records.isEmpty && !_isSyncing)
+          if (_meetingRecords.isEmpty && !_isSyncing)
             const Center(
               child: Text(
                 '現在開催中の馬場状態データがありません',
@@ -220,13 +226,19 @@ class _TrackConditionPageState extends State<TrackConditionPage> {
           else
             RefreshIndicator(
               onRefresh: _handleRefresh,
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                itemCount: _records.length,
-                itemBuilder: (context, index) {
-                  return TrackConditionCard(
-                    record: _records[index],
-                    lastUpdatedTime: _lastUpdatedTime,
+              child: Builder(
+                builder: (context) {
+                  // [修正] Mapの値(開催ごとの履歴リスト)を順序保持のままリスト化してカードへ渡す (v.2026.7.28+26072809)
+                  final meetingHistories = _meetingRecords.values.toList();
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    itemCount: meetingHistories.length,
+                    itemBuilder: (context, index) {
+                      return TrackConditionCard(
+                        meetingHistory: meetingHistories[index],
+                        lastUpdatedTime: _lastUpdatedTime,
+                      );
+                    },
                   );
                 },
               ),
