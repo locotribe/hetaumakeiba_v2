@@ -248,6 +248,12 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             motherName: (profile.motherName.isNotEmpty) ? profile.motherName : horse.motherName,
             mfName: (profile.mfName.isNotEmpty) ? profile.mfName : horse.mfName,
             jockeyComboStats: horse.jockeyComboStats,
+            // ▼ [修正] 再構築時に競馬新聞マークが false にリセットされる不具合を修正 (v.2026.7.28+26072805)
+            isBlinker: horse.isBlinker,
+            isFirstBlinker: horse.isFirstBlinker,
+            isMaruGai: horse.isMaruGai,
+            isMaruChi: horse.isMaruChi,
+            // ▲ [修正]
           ));
         } else {
           updatedHorses.add(horse);

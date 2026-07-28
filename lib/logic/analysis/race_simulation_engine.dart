@@ -442,6 +442,12 @@ class RaceSimulationEngine {
         motherName: h.motherName,
         mfName: h.mfName,
         jockeyComboStats: h.jockeyComboStats,
+        // ▼ [修正] 再構築時に競馬新聞マークが false にリセットされる不具合を修正 (v.2026.7.28+26072805)
+        isBlinker: h.isBlinker,
+        isFirstBlinker: h.isFirstBlinker,
+        isMaruGai: h.isMaruGai,
+        isMaruChi: h.isMaruChi,
+        // ▲ [修正]
       );
     }).toList();
   }

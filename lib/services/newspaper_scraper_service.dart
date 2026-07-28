@@ -2,7 +2,6 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
@@ -58,8 +57,6 @@ class NewspaperScraperService {
           final result =
           await controller.evaluateJavascript(source: _getScrapingJs());
           final marks = _parseMarks(result);
-          // [一時] 原因確認用ログ（後で削除可） (v.2026.7.28+26072803)
-          debugPrint('[一時] NewspaperScrape raceId=$raceId dtCount=$dtCount marks=${marks.length}');
           if (!completer.isCompleted) completer.complete(marks);
         } catch (e) {
           if (!completer.isCompleted) {

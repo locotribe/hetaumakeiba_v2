@@ -327,6 +327,12 @@ class PredictionHorseDetail {
       effectiveOdds: null,
       popularity: detail.popularity,
       isScratched: detail.isScratched,
+      // ▼ [修正] 再構築時に競馬新聞マークが false にリセットされる不具合を修正 (v.2026.7.28+26072805)
+      isBlinker: detail.isBlinker,
+      isFirstBlinker: detail.isFirstBlinker,
+      isMaruGai: detail.isMaruGai,
+      isMaruChi: detail.isMaruChi,
+      // ▲ [修正]
     );
   }
 
