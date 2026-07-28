@@ -27,6 +27,7 @@ import 'package:hetaumakeiba_v2/screens/race_schedule_page.dart';
 import 'package:hetaumakeiba_v2/screens/saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/tablet/tablet_saved_tickets_list_page.dart';
 import 'package:hetaumakeiba_v2/screens/tablet/tablet_schedule_wrapper_page.dart';
+import 'package:hetaumakeiba_v2/screens/track_condition_page.dart';
 import 'package:hetaumakeiba_v2/screens/user_settings_page.dart';
 import 'package:hetaumakeiba_v2/services/local_auth_service.dart';
 import 'package:hetaumakeiba_v2/widgets/track_condition_ticker.dart';
@@ -523,6 +524,7 @@ class _MainScaffoldState extends State<MainScaffold> {
 
     _pages = <Widget>[
       const HomePage(),
+      const TrackConditionPage(),
       RaceSchedulePage(key: _raceScheduleKey),
       const JyusyoIchiranPage(),
       SavedTicketsListPage(key: _savedListKey),
@@ -535,7 +537,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   }
 
   void _onItemTapped(int index) {
-    if (index == 3) {
+    if (index == 4) {
       _savedListKey.currentState?.reloadData();
     }
     setState(() {
@@ -550,6 +552,7 @@ class _MainScaffoldState extends State<MainScaffold> {
     // [修正] 重賞一覧ページを追加し、_selectedIndexとtabletPagesが1:1で対応するよう修正 (v.13.40.6)
     final List<Widget> tabletPages = [
       _pages[0],
+      const TrackConditionPage(),
       const TabletScheduleWrapperPage(),
       const JyusyoIchiranPage(),
       const TabletSavedTicketsListPage(),
@@ -704,6 +707,7 @@ class _MainScaffoldState extends State<MainScaffold> {
               destinations: const [
                 NavigationRailDestination(icon: Icon(Icons.menu), label: Text('メニュー')),
                 NavigationRailDestination(icon: Icon(Icons.home), label: Text('ニュース')),
+                NavigationRailDestination(icon: Icon(Icons.grass), label: Text('馬場')),
                 NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('開催一覧')),
                 NavigationRailDestination(icon: Icon(Icons.receipt_long), label: Text('重賞一覧')),
                 NavigationRailDestination(icon: Icon(Icons.list_alt), label: Text('馬券履歴')),
@@ -729,6 +733,7 @@ class _MainScaffoldState extends State<MainScaffold> {
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.menu), label: 'メニュー'),
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'ニュース'),
+          BottomNavigationBarItem(icon: Icon(Icons.grass), label: '馬場'),
           BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: '開催一覧'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '重賞一覧'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '馬券履歴'),
