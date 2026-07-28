@@ -25,6 +25,8 @@ class _SimHorse {
   double distLastAdj = 0.0;
   // [追加] 0-8 着差ベースの相対力（既定値0.0、後段で代入） (v.2026.7.27+26072701)
   double marginPower = 0.0;
+  // [追加] フェーズ1b ブリンカーのテン補正実効量（等価交換で直線に引き継ぐため保持、既定値0.0） (v.2026.7.28+26072806)
+  double blinkerTenDelta = 0.0;
 
   _SimHorse({
     required this.detail,
@@ -94,6 +96,12 @@ class RaceAnalyzer {
   // [追加] 距離延長短縮の補正値（固定微小値・実装後に微調整） (v.2026.7.26+26072602)
   static const double _kDistTenAdj = 0.15;  // テン位置への補正
   static const double _kDistLastAdj = 0.15; // 直線への補正
+
+  // [追加] フェーズ1b ブリンカー装着による前進気勢補正（テン限定。負値＝前へ）。逃げ・先行のみに適用、差し・追込は係数0 (v.2026.7.28+26072806)
+  // 0-4距離テン補正(_kDistTenAdj=0.15)を基準に、継続装着=その0.5〜1.0倍、初装着=1.5〜2.0倍の範囲で選定。
+  // 直線側で同量・逆向きの等価交換を行うため、初装着を強めても前に行くだけの一方的な過大評価にはならない。
+  static const double _kBlinkerTenBonus = -0.10;      // 継続装着（0.15の約0.67倍）
+  static const double _kFirstBlinkerTenBonus = -0.25; // 初装着（0.15の約1.67倍）
 
   // [追加] 3コーナーのスタミナ反映係数（実装後に微調整する初期値） (v.2026.7.26+26072603)
   static const double _kStaminaFactor3c = 0.4;
@@ -479,6 +487,17 @@ class RaceAnalyzer {
       }
     }
 
+    // [追加] フェーズ1b ブリンカー装着によるテン補正（先行力ベクトルとしてのみ機能。逃げ・先行のみ、差し・追込には適用しない） (v.2026.7.28+26072806)
+    for (final horse in simHorses) {
+      final style = horse.detail.legStyleProfile?.primaryStyle;
+      final blinkerLegFactor = (style == '逃げ' || style == '先行') ? 1.0 : 0.0;
+      final blinkerBaseDelta = horse.detail.isFirstBlinker
+          ? _kFirstBlinkerTenBonus
+          : (horse.detail.isBlinker ? _kBlinkerTenBonus : 0.0);
+      horse.blinkerTenDelta = blinkerBaseDelta * blinkerLegFactor;
+      horse.positionScore += horse.blinkerTenDelta;
+    }
+
     simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
 
     // [追加] テン: 初期ソート直後の隊列（枠番・脚質ベース、テン指数未反映） (v.2026.6.19)
@@ -607,6 +626,9 @@ class RaceAnalyzer {
         if (kStr != 0.0) {
           horse.positionScore -= trackBias * _kTrackBiasScale * kStr;
         }
+
+        // [追加] フェーズ1b ブリンカー装着の上がり等価交換（テンで前へ寄せた分だけ終盤を不利にする。差し・追込は係数0で無変化） (v.2026.7.28+26072806)
+        horse.positionScore -= horse.blinkerTenDelta;
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['直線'] = _formatTairetsu(simHorses);
