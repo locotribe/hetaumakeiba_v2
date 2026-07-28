@@ -9,6 +9,7 @@ import 'package:hetaumakeiba_v2/screens/race_result_page.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
+import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/logic/race_info_parser.dart';
@@ -43,15 +44,64 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   late TabController _tabController;
   final RaceRepository _raceRepo = RaceRepository();
   final HorseRepository _horseRepo = HorseRepository();
+  // ▼ [追加] 過去レースの出馬表を裏でスクレイプし直すためのサービス (v.2026.7.28+26072802)
+  final ShutubaTableScraperService _scraperService = ShutubaTableScraperService();
+  // ▲ [追加]
   RaceStatus _status = RaceStatus.loading;
   RaceResult? _raceResult;
   PredictionRaceData? _predictionRaceData;
+  // ▼ [追加] 裏スクレイプ成功時にtab0(出馬表=ShutubaTablePage)を再マウントさせるための世代カウンタ (v.2026.7.28+26072802)
+  int _shutubaRefreshGen = 0;
+  // ▲ [追加]
 
   void _onShutubaDataRefreshed(PredictionRaceData newData) {
     setState(() {
       _predictionRaceData = newData;
     });
   }
+
+  // ▼ [追加] 分岐1(キャッシュあり)の補完処理をヘルパー化し、分岐2(裏スクレイプ後)からも再利用する (v.2026.7.28+26072802)
+  // オーナー画像パスの実在チェック・付け替え、およびレース結果からの馬体重マージを行う。
+  Future<PredictionRaceData> _applyOwnerImageAndWeightMerge(
+      PredictionRaceData data, RaceResult? dbResult) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final currentOwnerImagesDir = '${dir.path}/owner_images';
+
+    for (var shutubaHorse in data.horses) {
+      final profile = await _horseRepo.getHorseProfile(shutubaHorse.horseId);
+      if (profile != null && profile.ownerImageLocalPath.isNotEmpty) {
+        final savedPath = profile.ownerImageLocalPath;
+        final fileName = savedPath.split('/').last;
+        final currentFilePath = '$currentOwnerImagesDir/$fileName';
+
+        if (await File(currentFilePath).exists()) {
+          shutubaHorse.ownerImageLocalPath = currentFilePath;
+        } else if (await File(savedPath).exists()) {
+          shutubaHorse.ownerImageLocalPath = savedPath;
+        }
+      }
+    }
+    if (dbResult != null) {
+      for (var shutubaHorse in data.horses) {
+        try {
+          final resultHorse = dbResult.horseResults.firstWhere(
+                (hr) => hr.horseId == shutubaHorse.horseId,
+          );
+          if (resultHorse.horseWeight.isNotEmpty && resultHorse.horseWeight != '--') {
+            final weightMatch = RegExp(r'(\d+)\((.*?)\)').firstMatch(resultHorse.horseWeight);
+            if (weightMatch != null) {
+              shutubaHorse.horseWeight = weightMatch.group(1);
+            } else if (RegExp(r'^\d+$').hasMatch(resultHorse.horseWeight)) {
+              shutubaHorse.horseWeight = resultHorse.horseWeight;
+            }
+          }
+        } catch (_) {
+        }
+      }
+    }
+    return data;
+  }
+  // ▲ [追加]
 
   // メソッドをFuture<PredictionRaceData>にし、asyncを追加
   Future<PredictionRaceData> _createPredictionDataFromRaceResult(RaceResult raceResult) async {
@@ -153,43 +203,12 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
     final dbResult = await _raceRepo.getRaceResult(widget.raceId);
 
     if (shutubaCache != null) {
-      final dir = await getApplicationDocumentsDirectory();
-      final currentOwnerImagesDir = '${dir.path}/owner_images';
-
-      for (var shutubaHorse in shutubaCache.predictionRaceData.horses) {
-        final profile = await _horseRepo.getHorseProfile(shutubaHorse.horseId);
-        if (profile != null && profile.ownerImageLocalPath.isNotEmpty) {
-          final savedPath = profile.ownerImageLocalPath;
-          final fileName = savedPath.split('/').last;
-          final currentFilePath = '$currentOwnerImagesDir/$fileName';
-
-          if (await File(currentFilePath).exists()) {
-            shutubaHorse.ownerImageLocalPath = currentFilePath;
-          } else if (await File(savedPath).exists()) {
-            shutubaHorse.ownerImageLocalPath = savedPath;
-          }
-        }
-      }
-      if (dbResult != null) {
-        for (var shutubaHorse in shutubaCache.predictionRaceData.horses) {
-          try {
-            final resultHorse = dbResult.horseResults.firstWhere(
-                  (hr) => hr.horseId == shutubaHorse.horseId,
-            );
-            if (resultHorse.horseWeight.isNotEmpty && resultHorse.horseWeight != '--') {
-              final weightMatch = RegExp(r'(\d+)\((.*?)\)').firstMatch(resultHorse.horseWeight);
-              if (weightMatch != null) {
-                shutubaHorse.horseWeight = weightMatch.group(1);
-              } else if (RegExp(r'^\d+$').hasMatch(resultHorse.horseWeight)) {
-                shutubaHorse.horseWeight = resultHorse.horseWeight;
-              }
-            }
-          } catch (_) {
-          }
-        }
-      }
+      // ▼ [修正] オーナー画像・馬体重マージ処理をヘルパー化した _applyOwnerImageAndWeightMerge に統合 (v.2026.7.28+26072802)
+      final enrichedData = await _applyOwnerImageAndWeightMerge(
+          shutubaCache.predictionRaceData, dbResult);
+      // ▲ [修正]
       setState(() {
-        _predictionRaceData = shutubaCache.predictionRaceData;
+        _predictionRaceData = enrichedData;
         _raceResult = dbResult;
         _status = RaceStatus.resultConfirmed;
         _tabController.animateTo(dbResult != null ? 6 : 0);
@@ -247,6 +266,27 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _status = RaceStatus.resultConfirmed;
         _tabController.animateTo(6);
       });
+
+      // ▼ [追加] フェーズ1a-2: 裏で本物の出馬表(shutuba+newspaper)をスクレイプし、成功時のみ差し替える (v.2026.7.28+26072802)
+      // 結果は既に即時表示済みのため、ここはUIをブロックしないベストエフォート処理。失敗時は結果構築データのまま維持する。
+      try {
+        await _scraperService.scrapeAllData(widget.raceId);
+        final refreshedCache = await _raceRepo.getShutubaTableCache(widget.raceId);
+        if (refreshedCache != null && mounted) {
+          final enrichedData = await _applyOwnerImageAndWeightMerge(
+              refreshedCache.predictionRaceData, dbResult);
+          if (mounted) {
+            setState(() {
+              _predictionRaceData = enrichedData;
+              _shutubaRefreshGen++;
+            });
+          }
+        }
+      } catch (_) {
+        // 過去ページが取得できないレースのフォールバック。結果構築データのまま表示を継続する。
+      }
+      // ▲ [追加]
+
       return;
     }
 
@@ -398,6 +438,10 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           physics: const NeverScrollableScrollPhysics(),
           children: [
             ShutubaTablePage(
+              // ▼ [追加] 裏スクレイプ成功時(_shutubaRefreshGen加算)にこのタブを再マウントし、
+              // ShutubaTablePage内部の初回ロード済みキャッシュではなく最新の本物の出馬表を読み直させる (v.2026.7.28+26072802)
+              key: ValueKey('${widget.raceId}_$_shutubaRefreshGen'),
+              // ▲ [追加]
               raceId: widget.raceId,
               predictionRaceData: _predictionRaceData,
               raceResult: _raceResult,

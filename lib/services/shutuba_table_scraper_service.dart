@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
@@ -52,6 +53,8 @@ class ShutubaTableScraperService {
                   h.isMaruChi = mk.isMaruChi;
                 }
               }
+              // [一時] 原因確認用ログ（後で削除可） (v.2026.7.28+26072803)
+              debugPrint('[一時] ShutubaMerge raceId=$raceId newspaperMarks=${marks.length}');
             } catch (_) {
               // 新聞取得は任意。失敗時はマーク無しで続行
             }

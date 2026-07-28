@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
@@ -44,9 +45,22 @@ class NewspaperScraperService {
       onLoadStop: (controller, url) async {
         if (completer.isCompleted) return;
         try {
+          // [一時] dt.Horse02 が描画されるまで待機（JSレンダリング対策） (v.2026.7.28+26072803)
+          int dtCount = 0;
+          for (int i = 0; i < 16; i++) {
+            final c = await controller.evaluateJavascript(
+                source: "document.querySelectorAll('dt.Horse02').length");
+            dtCount = (c is int) ? c : int.tryParse('$c') ?? 0;
+            if (dtCount > 0) break;
+            await Future.delayed(const Duration(milliseconds: 500));
+            if (completer.isCompleted) return;
+          }
           final result =
           await controller.evaluateJavascript(source: _getScrapingJs());
-          completer.complete(_parseMarks(result));
+          final marks = _parseMarks(result);
+          // [一時] 原因確認用ログ（後で削除可） (v.2026.7.28+26072803)
+          debugPrint('[一時] NewspaperScrape raceId=$raceId dtCount=$dtCount marks=${marks.length}');
+          if (!completer.isCompleted) completer.complete(marks);
         } catch (e) {
           if (!completer.isCompleted) {
             completer.complete(<String, HorseNewspaperMarks>{});
