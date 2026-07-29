@@ -320,6 +320,19 @@ class DbProvider {
         calculated_at   TEXT NOT NULL
       )
     ''');
+
+    // [追加] スピード指数保存用テーブル作成 (v.2026.7.28+26072811)
+    await db.execute('''
+      CREATE TABLE ${DbConstants.tableHorseSpeedIndex}(
+        horse_id         TEXT PRIMARY KEY,
+        best_index       REAL NOT NULL,
+        recent_avg_index REAL NOT NULL,
+        trend            REAL NOT NULL,
+        confidence       REAL NOT NULL,
+        sample_count     INTEGER NOT NULL,
+        calculated_at    TEXT NOT NULL
+      )
+    ''');
   }
 
   // [修正] マイグレーション失敗時にエラーを握りつぶさず、rethrowで上位へ伝播させるよう全catchブロックを修正 (v.13.40.3)
@@ -523,6 +536,25 @@ class DbProvider {
         ''');
       } catch (e) {
         debugPrint('Migration error (v13->v14): $e');
+        rethrow;
+      }
+    }
+    // [追加] horse_speed_index テーブル新設 (v.2026.7.28+26072811)
+    if (oldVersion < 15) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS ${DbConstants.tableHorseSpeedIndex}(
+            horse_id         TEXT PRIMARY KEY,
+            best_index       REAL NOT NULL,
+            recent_avg_index REAL NOT NULL,
+            trend            REAL NOT NULL,
+            confidence       REAL NOT NULL,
+            sample_count     INTEGER NOT NULL,
+            calculated_at    TEXT NOT NULL
+          )
+        ''');
+      } catch (e) {
+        debugPrint('Migration error (v14->v15): $e');
         rethrow;
       }
     }

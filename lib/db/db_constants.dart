@@ -2,8 +2,8 @@
 
 class DbConstants {
   static const String dbName = 'hetaumakeiba_v2.db';
-  // [修正] 13 -> 14に更新 (v.13.43.0)
-  static const int dbVersion = 14;
+  // [修正] 14 -> 15に更新 (v.2026.7.28+26072811)
+  static const int dbVersion = 15;
 
   // --- Tables ---
   static const String tableQrData = 'qr_data';
@@ -29,6 +29,8 @@ class DbConstants {
   static const String tableIntegratedRaces = 'integrated_races';
   // [追加] シミュレーション用馬パラメータテーブル (v.13.43.0)
   static const String tableHorseSimulationParams = 'horse_simulation_params';
+  // [追加] スピード指数保存用テーブル (v.2026.7.28+26072811)
+  static const String tableHorseSpeedIndex = 'horse_speed_index';
 
   // --- Common Columns ---
   static const String colId = 'id';
