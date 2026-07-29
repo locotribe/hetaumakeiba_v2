@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/course_elevations.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_speed_index_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
@@ -11,9 +12,11 @@ import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/speed_index_calculator.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_speed_index_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
@@ -54,6 +57,8 @@ class _CachedSimInputs {
   final List<PredictionHorseDetail> horsesForSim;
   final Map<String, List<HorseRaceRecord>> allPastRecords;
   final Map<String, HorseSimulationParams> simulationParams;
+  // [追加] フェーズ5-2 スピード指数(simulationParamsと同一経路でRaceSimulationEngine.buildへ転送) (v.2026.7.30+26073001)
+  final Map<String, HorseSpeedIndex> speedIndexParams;
   final String? predictedPace;
   final String? trackConditionText;
   final bool hasActualToday;
@@ -76,6 +81,7 @@ class _CachedSimInputs {
     required this.horsesForSim,
     required this.allPastRecords,
     required this.simulationParams,
+    required this.speedIndexParams,
     required this.predictedPace,
     required this.trackConditionText,
     required this.hasActualToday,
@@ -134,6 +140,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
   final HorseRepository _horseRepo = HorseRepository();
   final HorseSimulationParamsRepository _simParamsRepo =
       HorseSimulationParamsRepository();
+  // [追加] フェーズ5-2 スピード指数の読み出し用 (v.2026.7.30+26073001)
+  final HorseSpeedIndexRepository _speedIndexRepo = HorseSpeedIndexRepository();
   // [追加] 馬場状態補正用 (v2026.6.25)
   final TrackConditionRepository _trackConditionRepo =
       TrackConditionRepository();
@@ -169,6 +177,20 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
   String _appPredictedPace() {
     return widget.predictionRaceData.racePacePrediction?.predictedPace ??
         'ミドルペース';
+  }
+
+  // [追加] フェーズ5-2 raceDateから年月日を抽出してDateTimeを生成する(スピード指数のconfidence用)。
+  // weather_analyzer.dart/shutuba_table_page.dartの既存パターンに倣い、区切り文字の
+  // 表記ゆれを吸収するRegExpで抽出する。変換不能な場合はnullを返し、asOfを省略させる (v.2026.7.30+26073001)
+  DateTime? _parseRaceDateForSpeedIndex(String raceDateStr) {
+    final match =
+        RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(raceDateStr);
+    if (match == null) return null;
+    final year = int.tryParse(match.group(1)!);
+    final month = int.tryParse(match.group(2)!);
+    final day = int.tryParse(match.group(3)!);
+    if (year == null || month == null || day == null) return null;
+    return DateTime(year, month, day);
   }
 
   @override
@@ -437,6 +459,21 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       simulationParams[horse.horseNumber.toString()] = params;
     }
 
+    // [追加] フェーズ5-2 スピード指数をsimulationParamsと同じ経路(DB優先・無ければ算出フォールバック)で構築 (v.2026.7.30+26073001)
+    final speedIndexByHorseId = await _speedIndexRepo.getByHorseIds(horseIds);
+    final raceDateForSpeedIndex =
+        _parseRaceDateForSpeedIndex(widget.predictionRaceData.raceDate);
+    final speedIndexParams = <String, HorseSpeedIndex>{};
+    for (final horse in horsesForSim) {
+      final speedIndex = speedIndexByHorseId[horse.horseId] ??
+          SpeedIndexCalculator.calculate(
+            horse.horseId,
+            allPastRecords[horse.horseId] ?? [],
+            asOf: raceDateForSpeedIndex,
+          );
+      speedIndexParams[horse.horseNumber.toString()] = speedIndex;
+    }
+
     return _CachedSimInputs(
       venueCode: venueCode,
       distance: distance,
@@ -448,6 +485,7 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       horsesForSim: horsesForSim,
       allPastRecords: allPastRecords,
       simulationParams: simulationParams,
+      speedIndexParams: speedIndexParams,
       predictedPace: widget.predictionRaceData.racePacePrediction?.predictedPace,
       trackConditionText: widget.predictionRaceData.trackCondition,
       hasActualToday: hasActualToday,
@@ -503,6 +541,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       raceCourse: cached.raceCourse,
       raceDistance: cached.distance.toDouble(),
       simulationParams: cached.simulationParams,
+      // [追加] フェーズ5-2 スピード指数(build()自身は不使用、内部転送のみ) (v.2026.7.30+26073001)
+      speedIndexParams: cached.speedIndexParams,
       // [追加] 馬場状態補正 (v2026.6.25)
       trackSpeedMultiplier: cached.trackSpeedMultiplier,
       // [追加] 0-9 馬場バイアス (v.2026.7.27+26072702)

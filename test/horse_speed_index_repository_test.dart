@@ -28,9 +28,15 @@ Future<void> _resetDb() async {
 }
 
 void main() {
-  setUpAll(() {
+  setUpAll(() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
+    // [修正] 実DBパスを他のテストファイル(race_analyzer_speed_index_wiring_test.dart等)と
+    // 共有すると、flutter testの並列実行時にファイル競合でflakyになるため、
+    // ファイル固有の一時ディレクトリへ隔離する (v.2026.7.30+26073001)
+    final tempDir =
+        await Directory.systemTemp.createTemp('horse_speed_index_repo_test_');
+    await databaseFactory.setDatabasesPath(tempDir.path);
   });
 
   group('HorseSpeedIndexRepository CRUD', () {

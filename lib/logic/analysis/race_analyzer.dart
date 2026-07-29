@@ -10,6 +10,7 @@ import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_speed_index_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/distance_category.dart';
 
@@ -52,6 +53,12 @@ class RaceAnalyzer {
   // [追加] 上がり局面での能力反映係数（実装後の挙動を見て微調整する初期値） (v.2026.7.25)
   static const double _kAbilityFactor4c = 0.8;   // 4コーナー
   static const double _kAbilityFactorLast = 0.5; // 直線
+
+  // [追加] フェーズ5-2 スピード指数(巡航能力/限界)の展開反映係数。
+  // バックテストで指数を強く効かせると予想が劣化したため、既存abilityScoreとの
+  // 二重計上を避けて小さめに設定する。調整はこの2定数のみで完結させること (v.2026.7.30+26073001)
+  static const double _kSpeedFactor4c = 0.15;       // 4コーナー(巡航能力)
+  static const double _kSpeedFactorStraight = 0.15; // 直線(限界)
 
   // [追加] 1クラス差あたりの能力補正(点)。実装後の挙動を見て微調整する初期値 (v.2026.7.25+26072502)
   static const double _kClassAbilityWeight = 4.0;
@@ -164,6 +171,14 @@ class RaceAnalyzer {
     }
   }
 
+  // [追加] フェーズ5-2 スピード指数の効き具合をペースで調整するスケール。
+  // ハイペースは地力(巡航/限界)が問われやすく最大、スローは瞬発力勝負のため最小 (v.2026.7.30+26073001)
+  static double _speedPaceMod(String predictedPace) {
+    if (predictedPace.contains('ハイ')) return 1.0;
+    if (predictedPace.contains('スロー')) return 0.3;
+    return 0.6;
+  }
+
   static RacePacePrediction predictRacePace(
       List<PredictionHorseDetail> horses,
       Map<String, List<HorseRaceRecord>> allPastRecords,
@@ -242,6 +257,8 @@ class RaceAnalyzer {
       List<PredictionHorseDetail>? horsesOverride,
       // [追加] フェーズ2: tenAccelIndex/staminaIndex/finishingPowerをキーフレームに反映 (v.2026.6.19)
       Map<String, HorseSimulationParams> simulationParams = const {},
+      // [追加] フェーズ5-2 スピード指数(巡航能力/限界)を4コーナー・直線へ小さく反映 (v.2026.7.30+26073001)
+      Map<String, HorseSpeedIndex> speedIndexParams = const {},
       // [追加] 0-9 馬場の硬軟による前残り/差しの全体バイアス (v.2026.7.27+26072702)
       double trackBias = 0.0,
       // [追加] 0-9b-3 ユーザーによるペース手動選択（未指定時はアプリ予想を使用） (v.2026.7.27+26072707)
@@ -374,6 +391,21 @@ class RaceAnalyzer {
         ? 60.0
         : simHorses.map((h) => h.abilityScore).reduce((a, b) => a + b) /
         simHorses.length;
+
+    // [追加] フェーズ5-2 スピード指数の相対評価用平均。エントリのある馬が
+    // 1頭も無ければnullとし、該当補正を効かせない (v.2026.7.30+26073001)
+    final speedIndexEntries = simHorses
+        .map((h) => speedIndexParams[h.detail.horseNumber.toString()])
+        .whereType<HorseSpeedIndex>()
+        .toList();
+    final double? meanRecentSpeedIndex = speedIndexEntries.isEmpty
+        ? null
+        : speedIndexEntries.map((s) => s.recentAvgIndex).reduce((a, b) => a + b) /
+            speedIndexEntries.length;
+    final double? meanBestSpeedIndex = speedIndexEntries.isEmpty
+        ? null
+        : speedIndexEntries.map((s) => s.bestIndex).reduce((a, b) => a + b) /
+            speedIndexEntries.length;
 
     // [追加] 斤量: 馬体重比ベースの実効kg負担を算出 (v.2026.7.26+26072601)
     final bodyWeights = <_SimHorse, double?>{};
@@ -582,6 +614,19 @@ class RaceAnalyzer {
         final abilityDelta4c = (horse.abilityScore - meanAbility) / 100.0; // 概ね -0.5〜+0.5
         horse.positionScore -= abilityDelta4c * _kAbilityFactor4c;
 
+        // [追加] フェーズ5-2 スピード指数(巡航能力): recentAvgIndexの平均比較を
+        // confidence・ペースで重み付けし小さく反映する (v.2026.7.30+26073001)
+        final speedIndex4c = speedIndexParams[horse.detail.horseNumber.toString()];
+        if (speedIndex4c != null &&
+            speedIndex4c.confidence > 0 &&
+            meanRecentSpeedIndex != null) {
+          final speedDelta4c =
+              (speedIndex4c.recentAvgIndex - meanRecentSpeedIndex) / 100.0;
+          final paceMod4c = _speedPaceMod(predictedPace);
+          horse.positionScore -=
+              speedDelta4c * speedIndex4c.confidence * _kSpeedFactor4c * paceMod4c;
+        }
+
         // [追加] 斤量(差し・追込・自在・マクリ): 再加速=上がりに反映。重い馬は伸び鈍化 (v.2026.7.26+26072601)
         final style = horse.detail.legStyleProfile?.primaryStyle;
         if (style == '差し' || style == '追込' || style == '自在' || style == 'マクリ') {
@@ -608,6 +653,21 @@ class RaceAnalyzer {
         // [追加] 能力反映: 直線でも能力差を反映 (v.2026.7.25)
         final abilityDeltaLast = (horse.abilityScore - meanAbility) / 100.0;
         horse.positionScore -= abilityDeltaLast * _kAbilityFactorLast;
+
+        // [追加] フェーズ5-2 スピード指数(限界/ceiling): bestIndexの平均比較を
+        // confidence・ペースで重み付けし小さく反映する (v.2026.7.30+26073001)
+        final speedIndexLast = speedIndexParams[horse.detail.horseNumber.toString()];
+        if (speedIndexLast != null &&
+            speedIndexLast.confidence > 0 &&
+            meanBestSpeedIndex != null) {
+          final speedDeltaLast =
+              (speedIndexLast.bestIndex - meanBestSpeedIndex) / 100.0;
+          final paceModLast = _speedPaceMod(predictedPace);
+          horse.positionScore -= speedDeltaLast *
+              speedIndexLast.confidence *
+              _kSpeedFactorStraight *
+              paceModLast;
+        }
 
         // [追加] 斤量(差し・追込・自在・マクリ): 再加速=上がりに反映。重い馬は伸び鈍化 (v.2026.7.26+26072601)
         final style = horse.detail.legStyleProfile?.primaryStyle;

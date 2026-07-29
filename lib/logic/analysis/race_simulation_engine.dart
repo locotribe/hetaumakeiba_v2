@@ -4,6 +4,7 @@ import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_speed_index_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 
@@ -36,6 +37,9 @@ class RaceSimulationEngine {
     required RaceCourseData? raceCourse,
     required double raceDistance,
     Map<String, HorseSimulationParams> simulationParams = const {},
+    // [追加] フェーズ5-2 スピード指数。build()自身のレーン/衝突解決ロジックでは使わず、
+    // 内部のRaceAnalyzer.simulateRaceDevelopment呼び出しへそのまま転送するのみ (v.2026.7.30+26073001)
+    Map<String, HorseSpeedIndex> speedIndexParams = const {},
     // [追加] 馬場状態補正: 良=1.00, 稍重=1.03, 重=1.06, 不良=1.10 等 (v2026.6.25)
     double trackSpeedMultiplier = 1.0,
     // [追加] 0-9 馬場の硬軟による前残り/差しの全体バイアス (v.2026.7.27+26072702)
@@ -55,6 +59,7 @@ class RaceSimulationEngine {
       const {},
       horsesOverride: horses,
       simulationParams: simulationParams,
+      speedIndexParams: speedIndexParams,
       trackBias: trackBias,
       paceOverride: paceOverride,
     );
