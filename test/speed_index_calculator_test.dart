@@ -186,6 +186,92 @@ void main() {
       expect(result.trend, 0.0);
     });
 
+    test('sampleCountが多いほどconfidenceが上がる(他条件同一)', () {
+      final oneRace = SpeedIndexCalculator.calculate('T1', [
+        _record(date: '2023/01/01', distance: '芝1800', time: '106.539'),
+      ]);
+      final threeRaces = SpeedIndexCalculator.calculate('T1', [
+        _record(date: '2023/01/01', distance: '芝1800', time: '106.539'),
+        _record(date: '2023/02/01', distance: '芝1800', time: '106.539'),
+        _record(date: '2023/03/01', distance: '芝1800', time: '106.539'),
+      ]);
+      final fiveRaces = SpeedIndexCalculator.calculate('T1', [
+        _record(date: '2023/01/01', distance: '芝1800', time: '106.539'),
+        _record(date: '2023/02/01', distance: '芝1800', time: '106.539'),
+        _record(date: '2023/03/01', distance: '芝1800', time: '106.539'),
+        _record(date: '2023/04/01', distance: '芝1800', time: '106.539'),
+        _record(date: '2023/05/01', distance: '芝1800', time: '106.539'),
+      ]);
+      expect(threeRaces.confidence, greaterThan(oneRace.confidence));
+      expect(fiveRaces.confidence, greaterThan(threeRaces.confidence));
+    });
+
+    test('asOfを与えて直近走が久々(400日前)だとconfidenceが下がる', () {
+      // 直近走 2023/01/01 に対し、asOfを10日後(新鮮)と400日後(久々)で比較する。
+      final records = [
+        _record(date: '2023/01/01', distance: '芝1800', time: '106.539'),
+      ];
+      final fresh = SpeedIndexCalculator.calculate(
+        'T1',
+        records,
+        asOf: DateTime(2023, 1, 11),
+      );
+      final stale = SpeedIndexCalculator.calculate(
+        'T1',
+        records,
+        asOf: DateTime(2023, 1, 1).add(const Duration(days: 400)),
+      );
+      expect(stale.confidence, lessThan(fresh.confidence));
+    });
+
+    test('1走指数のばらつきが大きい馬はconfidenceが下がる', () {
+      // 同一時期・同条件で「タイムが安定している馬」と「タイムが大きく上下する馬」を比較する。
+      final consistent = SpeedIndexCalculator.calculate('T1', [
+        _record(date: '2023/01/01', distance: '芝1800', time: '106.539'),
+        _record(date: '2023/02/01', distance: '芝1800', time: '106.639'),
+        _record(date: '2023/03/01', distance: '芝1800', time: '106.439'),
+      ]);
+      final volatile = SpeedIndexCalculator.calculate('T1', [
+        _record(date: '2023/01/01', distance: '芝1800', time: '106.539'),
+        _record(date: '2023/02/01', distance: '芝1800', time: '86.539'), // 大幅に速い
+        _record(date: '2023/03/01', distance: '芝1800', time: '126.539'), // 大幅に遅い
+      ]);
+      expect(volatile.confidence, lessThan(consistent.confidence));
+    });
+
+    test('confidenceは常に0.0〜1.0の範囲に収まる', () {
+      // 走数が多い・久々でない・ばらつきが小さい(=confidenceが最大化されやすい)組み合わせでも1.0を超えない
+      final records = List.generate(
+        10,
+        (i) => _record(
+          date: '2023/0${(i % 9) + 1}/01',
+          distance: '芝1800',
+          time: '106.539',
+        ),
+      );
+      final result = SpeedIndexCalculator.calculate(
+        'T1',
+        records,
+        asOf: DateTime(2023, 9, 5),
+      );
+      expect(result.confidence, inInclusiveRange(0.0, 1.0));
+
+      // 走数最小・大幅久々・大きなばらつきの組み合わせでも0.0を下回らない
+      final worst = SpeedIndexCalculator.calculate(
+        'T1',
+        [_record(date: '2020/01/01', distance: '芝1800', time: '106.539')],
+        asOf: DateTime(2023, 1, 1),
+      );
+      expect(worst.confidence, inInclusiveRange(0.0, 1.0));
+    });
+
+    test('有効走0件の場合confidenceは0.0になる', () {
+      final result = SpeedIndexCalculator.calculate('T1', [
+        _record(distance: '障3380', time: '230.9'),
+      ]);
+      expect(result.confidence, 0.0);
+    });
+
     test('実データ整合の目安: 1〜3着相当の走は指数が概ね40〜120に収まる', () {
       // 芝2000m・阪神・良・2024年の想定で、標準的な決着タイム帯(118〜122秒)を検証する。
       for (final time in ['118.0', '120.0', '122.0']) {
