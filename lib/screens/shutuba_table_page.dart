@@ -12,9 +12,11 @@ import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/speed_index_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_speed_index_repository.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/logic/race_info_parser.dart';
 // [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
@@ -649,9 +651,37 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     }).toList();
     await HorseSimulationParamsRepository().upsertBatch(simulationParamsList);
 
+    // [追加] スピード指数を全馬分算出してDBに保存 (v.2026.7.28+26072811)
+    // confidenceの久々判定用に対象レース日付をasOfとして渡す。パース不能な場合はnull(中立)で算出する。
+    final DateTime? raceDateForSpeedIndex =
+        _parseRaceDateForSpeedIndex(raceData.raceDate);
+    final speedIndexList = raceData.horses.map((horse) {
+      final records = allPastRecords[horse.horseId] ?? [];
+      return SpeedIndexCalculator.calculate(
+        horse.horseId,
+        records,
+        asOf: raceDateForSpeedIndex,
+      );
+    }).toList();
+    await HorseSpeedIndexRepository().upsertBatch(speedIndexList);
+
     raceData.racePacePrediction = RaceAnalyzer.predictRacePace(
         raceData.horses, allPastRecords, []);
     return raceData;
+  }
+
+  // [追加] raceData.raceDateから年月日を抽出してDateTimeを生成する(スピード指数のconfidence用)。
+  // weather_analyzer.dartの既存パターンに倣い、区切り文字の表記ゆれ(年月日/スラッシュ等)を
+  // 吸収するRegExpで抽出する。変換不能な場合はnullを返し、呼び出し側でasOfを省略させる (v.2026.7.28+26072811)
+  DateTime? _parseRaceDateForSpeedIndex(String raceDateStr) {
+    final match =
+        RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(raceDateStr);
+    if (match == null) return null;
+    final year = int.tryParse(match.group(1)!);
+    final month = int.tryParse(match.group(2)!);
+    final day = int.tryParse(match.group(3)!);
+    if (year == null || month == null || day == null) return null;
+    return DateTime(year, month, day);
   }
 
   @override
