@@ -47,7 +47,8 @@ Future<String> generateNetkeibaRaceSearchUrl({
 }) async {
   final eucJpBytes = await CharsetConverter.encode("EUC-JP", raceName);
   final encodedWord = eucJpBytes.map((byte) => '%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}').join('');
-  return 'https://db.netkeiba.com/?pid=race_list&word=$encodedWord';
+  // [修正] netkeibaの検索仕様変更に合わせてエンドポイントを/race/list.htmlへ変更し、部分一致(match=p)パラメータを追加 (v.1.0)
+  return 'https://db.netkeiba.com/race/list.html?word=$encodedWord&match=p';
 }
 
 String generateRaceListUrl(DateTime date) {

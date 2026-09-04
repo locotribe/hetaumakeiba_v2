@@ -20,6 +20,7 @@ import 'package:hetaumakeiba_v2/models/horse_speed_index_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
+import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_view.dart';
 
 /// 「展開シミュ」タブ：コース平面図上で展開予想アニメーションを表示する。
@@ -177,20 +178,6 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
   String _appPredictedPace() {
     return widget.predictionRaceData.racePacePrediction?.predictedPace ??
         'ミドルペース';
-  }
-
-  // [追加] フェーズ5-2 raceDateから年月日を抽出してDateTimeを生成する(スピード指数のconfidence用)。
-  // weather_analyzer.dart/shutuba_table_page.dartの既存パターンに倣い、区切り文字の
-  // 表記ゆれを吸収するRegExpで抽出する。変換不能な場合はnullを返し、asOfを省略させる (v.2026.7.30+26073001)
-  DateTime? _parseRaceDateForSpeedIndex(String raceDateStr) {
-    final match =
-        RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(raceDateStr);
-    if (match == null) return null;
-    final year = int.tryParse(match.group(1)!);
-    final month = int.tryParse(match.group(2)!);
-    final day = int.tryParse(match.group(3)!);
-    if (year == null || month == null || day == null) return null;
-    return DateTime(year, month, day);
   }
 
   @override
@@ -462,7 +449,7 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     // [追加] フェーズ5-2 スピード指数をsimulationParamsと同じ経路(DB優先・無ければ算出フォールバック)で構築 (v.2026.7.30+26073001)
     final speedIndexByHorseId = await _speedIndexRepo.getByHorseIds(horseIds);
     final raceDateForSpeedIndex =
-        _parseRaceDateForSpeedIndex(widget.predictionRaceData.raceDate);
+        parseRaceDateForSpeedIndex(widget.predictionRaceData.raceDate);
     final speedIndexParams = <String, HorseSpeedIndex>{};
     for (final horse in horsesForSim) {
       final speedIndex = speedIndexByHorseId[horse.horseId] ??

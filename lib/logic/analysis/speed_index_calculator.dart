@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_speed_index_model.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/speed_index_base_time.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/speed_index_constants.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_parser.dart';
 
@@ -134,7 +135,6 @@ class SpeedIndexCalculator {
     if (year == null) return null;
 
     final meters = distanceResult.meters;
-    final distanceDelta = (meters - 1800) / 100.0;
     final venueName = parseVenue(record.venue)?.track;
     final normalizedCondition =
         _normalizeTrackCondition(record.trackCondition);
@@ -142,7 +142,6 @@ class SpeedIndexCalculator {
     final resolved = _resolveSurfaceParams(
       surface: distanceResult.surface,
       meters: meters,
-      distanceDelta: distanceDelta,
       year: year,
       venueName: venueName,
       normalizedCondition: normalizedCondition,
@@ -154,84 +153,23 @@ class SpeedIndexCalculator {
   }
 
   /// 馬場種別に応じた回帰定数群から基準タイムと距離係数を算出する。
-  /// [修正] 競馬場名がVenueOffsetマップに無い(またはvenueNameがnull)場合は
-  /// 東京基準(0.0)を代用せず無効走としてnullを返す。地方・海外開催などJRA外の
-  /// コースを東京基準で計算すると外れ値になり集約値を汚染するため (v.2026.7.28+26072811)
-  /// 馬場状態補正はマップに該当キーが無い場合0.0として継続する。
+  /// [修正] フェーズ7ステップ1: 算出ロジック本体は共有ヘルパー SpeedIndexBaseTime
+  /// へ抽出し、ここでは委譲するのみ(数値・挙動は完全に不変) (v.2026.9.4)
   static ({double baseTime, double distanceCoefficient})?
       _resolveSurfaceParams({
     required String surface,
     required int meters,
-    required double distanceDelta,
     required int year,
     required String? venueName,
     required String normalizedCondition,
   }) {
-    final double baseConst;
-    final double dc;
-    final double dc2;
-    final double yearTrend;
-    final Map<String, double> venueOffsetTable;
-    final Map<String, double> condOffsetTable;
-    final List<List<num>> distCoefTable;
-
-    if (surface == '芝') {
-      baseConst = SpeedIndexConstants.turfConst;
-      dc = SpeedIndexConstants.turfDc;
-      dc2 = SpeedIndexConstants.turfDc2;
-      yearTrend = SpeedIndexConstants.turfYearTrend;
-      venueOffsetTable = SpeedIndexConstants.turfVenueOffset;
-      condOffsetTable = SpeedIndexConstants.turfCondOffset;
-      distCoefTable = SpeedIndexConstants.turfDistCoef;
-    } else if (surface == 'ダ') {
-      baseConst = SpeedIndexConstants.dirtConst;
-      dc = SpeedIndexConstants.dirtDc;
-      dc2 = SpeedIndexConstants.dirtDc2;
-      yearTrend = SpeedIndexConstants.dirtYearTrend;
-      venueOffsetTable = SpeedIndexConstants.dirtVenueOffset;
-      condOffsetTable = SpeedIndexConstants.dirtCondOffset;
-      distCoefTable = SpeedIndexConstants.dirtDistCoef;
-    } else {
-      return null;
-    }
-
-    // [修正] 未知競馬場(VenueOffsetマップに無い名称)は無効走としてスキップする。
-    // 東京は0.0という有効値としてマップに含まれるため除外されない (v.2026.7.28+26072811)
-    if (venueName == null || !venueOffsetTable.containsKey(venueName)) {
-      return null;
-    }
-    final venueOffset = venueOffsetTable[venueName]!;
-    final condOffset = _lookupOffset(condOffsetTable, normalizedCondition);
-
-    final baseTime = baseConst +
-        dc * distanceDelta +
-        dc2 * distanceDelta * distanceDelta +
-        yearTrend * (year - 2023) +
-        venueOffset +
-        condOffset;
-
-    final distanceCoefficient = _distanceCoefficient(distCoefTable, meters);
-
-    return (baseTime: baseTime, distanceCoefficient: distanceCoefficient);
-  }
-
-  /// マップに該当キーが無い場合は補正0.0を返す。
-  static double _lookupOffset(Map<String, double> table, String? key) {
-    if (key == null) return 0.0;
-    return table[key] ?? 0.0;
-  }
-
-  /// distCoef([下限, 上限, 係数]のリスト)から、上限未満で一致する距離帯の係数を返す。
-  static double _distanceCoefficient(List<List<num>> distCoef, int meters) {
-    for (final band in distCoef) {
-      final lower = band[0];
-      final upper = band[1];
-      if (meters >= lower && meters < upper) {
-        return band[2].toDouble();
-      }
-    }
-    // 定義範囲外(理論上到達しない: 最終帯の上限が9999のため)は末尾の係数を採用
-    return distCoef.last[2].toDouble();
+    return SpeedIndexBaseTime.resolve(
+      surface: surface,
+      meters: meters,
+      year: year,
+      venueName: venueName,
+      normalizedCondition: normalizedCondition,
+    );
   }
 
   /// 馬場状態の略記("良""稍""重""不")を正規化する。既に全形("稍重""不良")ならそのまま返す。

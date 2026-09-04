@@ -1,8 +1,10 @@
 // lib/screens/user_settings_page.dart
 
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
+import 'package:hetaumakeiba_v2/screens/debug/speed_index_backtest_page.dart';
 // [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/user_model.dart';
@@ -394,6 +396,28 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
                     style: TextStyle(color: Colors.red),
                   ),
                 ),
+              // [追加] フェーズ6 スピード指数バックテスト・ハーネスへの導線。
+              // 開発ビルド専用(kDebugMode)で、通常UIには一切露出しない (v.2026.9.4)
+              if (kDebugMode) ...[
+                const Divider(height: 48),
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SpeedIndexBacktestPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.bug_report, color: Colors.grey),
+                  label: const Text(
+                    '[Debug] スピード指数バックテスト',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey.shade700,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

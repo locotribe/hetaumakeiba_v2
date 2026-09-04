@@ -263,8 +263,20 @@ class RaceAnalyzer {
       double trackBias = 0.0,
       // [追加] 0-9b-3 ユーザーによるペース手動選択（未指定時はアプリ予想を使用） (v.2026.7.27+26072707)
       String? paceOverride,
+      // [追加] フェーズ6 バックテスト・ハーネス§9(任意)係数掃引用。非nullなら
+      // _kSpeedFactor4c/_kSpeedFactorStraightの代わりにこの値を使う。省略時(null)は
+      // 従来どおり両定数を使うため既存呼び出しの挙動は不変 (v.2026.9.4)
+      double? speedFactorOverride,
+      // [追加] フェーズ6 バックテスト・ハーネス主指標用。非nullなら直線処理後の各馬の
+      // 生positionScoreを horseNumber.toString() キーで格納するだけで、本体の
+      // 隊列生成ロジックには一切影響しない。省略時(null)は何もしない (v.2026.9.4)
+      Map<String, double>? outFinalPositionScores,
       }
       ) async {
+    // [追加] フェーズ6 §1: speedFactorOverride省略時は従来の2定数をそのまま使う (v.2026.9.4)
+    final double effectiveSpeedFactor4c = speedFactorOverride ?? _kSpeedFactor4c;
+    final double effectiveSpeedFactorStraight =
+        speedFactorOverride ?? _kSpeedFactorStraight;
     final CoursePresetRepository coursePresetRepo = CoursePresetRepository();
     final venueCode = venueCodeMap[raceData.venue];
     String trackType = '';
@@ -624,7 +636,7 @@ class RaceAnalyzer {
               (speedIndex4c.recentAvgIndex - meanRecentSpeedIndex) / 100.0;
           final paceMod4c = _speedPaceMod(predictedPace);
           horse.positionScore -=
-              speedDelta4c * speedIndex4c.confidence * _kSpeedFactor4c * paceMod4c;
+              speedDelta4c * speedIndex4c.confidence * effectiveSpeedFactor4c * paceMod4c;
         }
 
         // [追加] 斤量(差し・追込・自在・マクリ): 再加速=上がりに反映。重い馬は伸び鈍化 (v.2026.7.26+26072601)
@@ -665,7 +677,7 @@ class RaceAnalyzer {
           final paceModLast = _speedPaceMod(predictedPace);
           horse.positionScore -= speedDeltaLast *
               speedIndexLast.confidence *
-              _kSpeedFactorStraight *
+              effectiveSpeedFactorStraight *
               paceModLast;
         }
 
@@ -690,6 +702,16 @@ class RaceAnalyzer {
         // [追加] フェーズ1b ブリンカー装着の上がり等価交換（テンで前へ寄せた分だけ終盤を不利にする。差し・追込は係数0で無変化） (v.2026.7.28+26072806)
         horse.positionScore -= horse.blinkerTenDelta;
       }
+
+      // [追加] フェーズ6 バックテスト・ハーネス主指標用: 直線処理後の生positionScoreを
+      // 要求された場合のみ格納する。development(隊列文字列)の生成には一切影響しない (v.2026.9.4)
+      if (outFinalPositionScores != null) {
+        for (final horse in simHorses) {
+          outFinalPositionScores[horse.detail.horseNumber.toString()] =
+              horse.positionScore;
+        }
+      }
+
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['直線'] = _formatTairetsu(simHorses);
     }

@@ -116,12 +116,12 @@ class RaceSimulationEngine {
     final order0Groups = [
       orderedByGate.map((h) => h.horseNumber.toString()).toList()
     ];
-    final order1Groups = _parseTairetsuGroups(development['テン']);
-    final order2Groups = _parseTairetsuGroups(development['1コーナー']);
-    final order3Groups = _parseTairetsuGroups(development['2コーナー']);
-    final order4Groups = _parseTairetsuGroups(development['3コーナー']);
-    final order5Groups = _parseTairetsuGroups(development['4コーナー']);
-    final order6Groups = _parseTairetsuGroups(development['直線']);
+    final order1Groups = parseTairetsuGroups(development['テン']);
+    final order2Groups = parseTairetsuGroups(development['1コーナー']);
+    final order3Groups = parseTairetsuGroups(development['2コーナー']);
+    final order4Groups = parseTairetsuGroups(development['3コーナー']);
+    final order5Groups = parseTairetsuGroups(development['4コーナー']);
+    final order6Groups = parseTairetsuGroups(development['直線']);
 
     final orderGroups = <List<List<String>>>[
       order0Groups, // d0: スタート
@@ -362,7 +362,7 @@ class RaceSimulationEngine {
   /// "(3,5)-7-12" 形式の隊列文字列を [['3','5'], ['7'], ['12']] に変換する。
   /// 「-」区切りの各トークンが1グループ（前後関係）、トークン内の「()」が
   /// 並走する馬（横方向のみの関係）を表す。
-  static List<List<String>> _parseTairetsuGroups(String? tairetsu) {
+  static List<List<String>> parseTairetsuGroups(String? tairetsu) {
     if (tairetsu == null || tairetsu.isEmpty) return [];
     return tairetsu
         .split('-')

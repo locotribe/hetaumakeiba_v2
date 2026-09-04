@@ -11,14 +11,13 @@ import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/logic/race_info_parser.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
 import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/screens/jockey_stats_page.dart';
 import 'package:hetaumakeiba_v2/widgets/race_page_tabs/race_detail_tab.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/race_result_prediction_converter.dart';
 import 'package:hetaumakeiba_v2/screens/odds_page.dart';
 import 'package:hetaumakeiba_v2/widgets/rating/rating_analysis_tab.dart';
 
@@ -103,86 +102,10 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   }
   // ▲ [追加]
 
-  // メソッドをFuture<PredictionRaceData>にし、asyncを追加
+  // [修正] 共有ユーティリティRaceResultPredictionConverterへ処理を委譲（挙動は不変）。
+  // スピード指数バックテストハーネスからも同一ロジックを再利用するため (v.2026.9.4)
   Future<PredictionRaceData> _createPredictionDataFromRaceResult(RaceResult raceResult) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final currentOwnerImagesDir = '${dir.path}/owner_images';
-
-    final horses = await Future.wait(raceResult.horseResults.map((hr) async {
-      final weightMatch = RegExp(r'(\d+)\((.*?)\)').firstMatch(hr.horseWeight);
-      final trainerName = hr.trainerName;
-      final trainerAffiliation = hr.trainerAffiliation;
-
-      final profile = await _horseRepo.getHorseProfile(hr.horseId);
-      String ownerImagePath = '';
-
-      if (profile != null && profile.ownerImageLocalPath.isNotEmpty) {
-        final savedPath = profile.ownerImageLocalPath;
-
-        final fileName = savedPath.split('/').last;
-        final currentFilePath = '$currentOwnerImagesDir/$fileName';
-
-        if (await File(currentFilePath).exists()) {
-          ownerImagePath = currentFilePath;
-        } else if (await File(savedPath).exists()) {
-          ownerImagePath = savedPath;
-        }
-      }
-
-      return PredictionHorseDetail(
-        horseId: hr.horseId,
-        horseNumber: int.tryParse(hr.horseNumber) ?? 0,
-        gateNumber: int.tryParse(hr.frameNumber) ?? 0,
-        horseName: hr.horseName,
-        sexAndAge: hr.sexAndAge,
-        jockey: hr.jockeyName,
-        jockeyId: hr.jockeyId,
-        carriedWeight: double.tryParse(hr.weightCarried) ?? 0.0,
-        trainerName: trainerName,
-        trainerAffiliation: trainerAffiliation,
-        odds: double.tryParse(hr.odds),
-        popularity: int.tryParse(hr.popularity),
-        horseWeight: weightMatch?.group(1),
-        isScratched: int.tryParse(hr.rank) == null,
-        ownerImageLocalPath: ownerImagePath,
-      );
-    }).toList());
-
-    final raceNumber = raceResult.raceId.length >= 2
-        ? int.tryParse(raceResult.raceId.substring(raceResult.raceId.length - 2))?.toString() ?? ''
-        : '';
-
-    String venueName = '';
-    if (raceResult.raceId.length >= 12) {
-      final placeCode = raceResult.raceId.substring(4, 6);
-      venueName = racecourseDict[placeCode] ?? '';
-    }
-
-    if (venueName.isEmpty) {
-      venueName = racecourseDict.entries.firstWhere(
-              (e) => raceResult.raceInfo.contains(e.value),
-          orElse: () => const MapEntry("", "")
-      ).value;
-    }
-
-    // [追加] raceInfoからコース情報(トラック種別/距離/方向/内外回り)を復元 (v.13.41.1)
-    final courseInfo = RaceInfoParser.parse(raceResult.raceInfo);
-
-    return PredictionRaceData(
-      raceId: raceResult.raceId,
-      raceName: raceResult.raceTitle,
-      raceDate: raceResult.raceDate,
-      venue: venueName,
-      raceNumber: raceNumber,
-      shutubaTableUrl: 'https://db.netkeiba.com/race/${raceResult.raceId}',
-      raceGrade: raceResult.raceGrade,
-      raceDetails1: raceResult.raceInfo,
-      horses: horses,
-      trackType: courseInfo.trackType,
-      distanceValue: courseInfo.distanceValue,
-      direction: courseInfo.direction,
-      courseInOut: courseInfo.courseInOut,
-    );
+    return RaceResultPredictionConverter.convert(raceResult, _horseRepo);
   }
 
   @override
