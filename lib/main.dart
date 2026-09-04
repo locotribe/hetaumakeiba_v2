@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hetaumakeiba_v2/screens/auth_gate.dart';
+import 'package:hetaumakeiba_v2/widgets/scraping_progress_banner.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 // [修正] localUserIdグローバル変数を廃止しUserSessionサービスへ移行 (v.13.40.4)
@@ -59,12 +60,29 @@ class MyApp extends StatelessWidget {
       supportedLocales: const [
         Locale('ja', ''),
       ],
-      builder: (context, child) => ResponsiveBreakpoints.builder(
-        child: child!,
-        breakpoints: [
-          const Breakpoint(start: 0, end: 450, name: MOBILE),
-          const Breakpoint(start: 451, end: 800, name: TABLET),
-          const Breakpoint(start: 801, end: 1920, name: DESKTOP),
+      // [修正] Phase 3: スクレイピング進捗バナーをアプリ全体の最前面に重ねるため、
+      // ResponsiveBreakpoints.builder()をStackで包む (v.2026.9.4+26090406)
+      builder: (context, child) => Stack(
+        children: [
+          ResponsiveBreakpoints.builder(
+            child: child!,
+            breakpoints: [
+              const Breakpoint(start: 0, end: 450, name: MOBILE),
+              const Breakpoint(start: 451, end: 800, name: TABLET),
+              const Breakpoint(start: 801, end: 1920, name: DESKTOP),
+            ],
+          ),
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Material(
+              type: MaterialType.transparency,
+              child: IgnorePointer(
+                child: ScrapingProgressBanner(),
+              ),
+            ),
+          ),
         ],
       ),
       // アプリの開始点をMainScaffoldに変更

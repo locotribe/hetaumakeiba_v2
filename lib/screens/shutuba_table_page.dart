@@ -30,7 +30,6 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/horse_profile_sync_service.dart';
-import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
@@ -925,48 +924,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             ],
           ),
         ),
-        _buildScrapingProgressIndicator(),
       ],
-    );
-  }
-
-  Widget _buildScrapingProgressIndicator() {
-    return StreamBuilder<ScrapingStatus>(
-      stream: ScrapingManager().statusStream,
-      initialData: ScrapingStatus.idle(),
-      builder: (context, snapshot) {
-        final status = snapshot.data!;
-
-        if (!status.isRunning) {
-          return const SizedBox.shrink();
-        }
-
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: Colors.blueGrey.shade800,
-          child: Row(
-            children: [
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '${status.currentTaskName} (残り: ${status.queueLength}件)',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 
