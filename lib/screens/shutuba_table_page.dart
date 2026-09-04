@@ -9,6 +9,7 @@ import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/services/jma_weather_service.dart';
 import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
@@ -507,6 +508,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     final marksMap = {for (var mark in userMarks) mark.horseId: mark};
     final memosMap = {for (var memo in userMemos) memo.horseId: memo};
 
+    // [修正] 過去レースで未来の成績が分析に混入するリークを防止 (v.2026.9.4+26090404)
+    final DateTime? asOfForRecords = parseRaceDateForSpeedIndex(raceData.raceDate);
+
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
     final Set<String> pastRaceIdsToFetch = {};
 
@@ -524,7 +528,17 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           horse.popularity = memosMap[horse.horseId]!.popularity;
         }
       }
-      final pastRecords = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
+      // [修正] 過去レースで未来の成績が分析に混入するリークを防止。asOfForRecordsが
+      // パース不能な場合は現行動作を維持しフィルタしない (v.2026.9.4+26090404)
+      final allRecordsForHorse =
+          await _horseRepo.getHorsePerformanceRecords(horse.horseId);
+      final pastRecords = asOfForRecords != null
+          ? filterRecordsBeforeAsOf(
+              allRecordsForHorse,
+              asOf: asOfForRecords,
+              excludeRaceId: widget.raceId,
+            )
+          : allRecordsForHorse;
       allPastRecords[horse.horseId] = pastRecords;
 
       if (pastRecords.isNotEmpty) {

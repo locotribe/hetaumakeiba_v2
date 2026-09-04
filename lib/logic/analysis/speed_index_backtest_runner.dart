@@ -11,6 +11,7 @@
 // 主指標にすると効果を過小評価してしまう） (v.2026.9.4)
 
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_result_prediction_converter.dart';
@@ -154,15 +155,18 @@ class SpeedIndexBacktestRunner {
 
     // §5 【最重要・リーク防止】asOfより前 かつ 対象レース自身を除外したfilteredのみを
     // legStyleProfile / simParams / speedParams / ペース予想の全てに使う
+    // [修正] フィルタ本体をlib/logic/analysis/horse_record_asof_filter.dartへ共通化。
+    // shutuba_table_page.dartの_fetchDataWithUserMarks()からも同一ロジックを再利用するため
+    // （挙動は不変） (v.2026.9.4+26090404)
     int excludedForFutureLeakCount = 0;
     final allPastRecords = <String, List<HorseRaceRecord>>{};
     for (final horse in raceData.horses) {
       final all = await horseRepo.getHorsePerformanceRecords(horse.horseId);
-      final filtered = all.where((r) {
-        if (r.raceId == raceResult.raceId) return false;
-        final d = _parseRecordDate(r.date);
-        return d != null && d.isBefore(asOf);
-      }).toList();
+      final filtered = filterRecordsBeforeAsOf(
+        all,
+        asOf: asOf,
+        excludeRaceId: raceResult.raceId,
+      );
       excludedForFutureLeakCount += all.length - filtered.length;
       allPastRecords[horse.horseId] = filtered;
 
@@ -420,17 +424,5 @@ class SpeedIndexBacktestRunner {
     final b = common.map((k) => actualRanks[k]!).toList();
     return SpeedIndexBacktestRhoResult(
         rho: tieAdjustedSpearman(a, b), n: common.length);
-  }
-
-  // [追加] §5 "YYYY/MM/DD"形式のHorseRaceRecord.dateをDateTimeへ変換。変換不能ならnull
-  // (SpeedIndexCalculatorの同名privateロジックと同一実装) (v.2026.9.4)
-  static DateTime? _parseRecordDate(String date) {
-    final parts = date.split('/');
-    if (parts.length != 3) return null;
-    final y = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    final d = int.tryParse(parts[2]);
-    if (y == null || m == null || d == null) return null;
-    return DateTime(y, m, d);
   }
 }
