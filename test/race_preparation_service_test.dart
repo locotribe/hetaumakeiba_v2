@@ -285,4 +285,240 @@ void main() {
       expect(all, isEmpty);
     });
   });
+
+  group('RacePreparationService カスケード実行 (Phase 4-E)', () {
+    test('shutubaがdoneになった時点でhorseProfile/horsePerformance/trainingが自動的に投入される', () async {
+      final repository = RacePreparationRepository();
+      int horseProfileCalls = 0;
+      int horsePerformanceCalls = 0;
+      int trainingCalls = 0;
+      final service = RacePreparationService(
+        repository: repository,
+        stepExecutors: _fakeExecutors(
+          shutuba: () => 1,
+          horseProfile: () {
+            horseProfileCalls++;
+            return 1;
+          },
+          horsePerformance: () {
+            horsePerformanceCalls++;
+            return 1;
+          },
+          training: () {
+            trainingCalls++;
+            return 1;
+          },
+        ),
+      );
+
+      await service.enqueuePreparation(
+        raceId: 'C1',
+        raceDate: '2026年9月6日',
+        horseIds: const ['h1'],
+        raceName: 'テストステークス',
+        only: {
+          PreparationStep.shutuba,
+          PreparationStep.horseProfile,
+          PreparationStep.horsePerformance,
+          PreparationStep.training,
+        },
+      );
+      // shutuba完了(interval込み) -> カスケードで3ステップ投入 -> 3ステップとも
+      // 開始し終えるまで待つ
+      await Future<void>.delayed(const Duration(milliseconds: 5200));
+
+      expect(horseProfileCalls, 1);
+      expect(horsePerformanceCalls, 1);
+      expect(trainingCalls, 1);
+
+      // 後続テストへタイマーを残さないよう完全にドレインするまで待つ
+      await Future<void>.delayed(const Duration(milliseconds: 1700));
+    });
+
+    test('horsePerformanceがdoneになった時点でpastRaceResultsが自動的に投入される', () async {
+      final repository = RacePreparationRepository();
+      int pastRaceResultsCalls = 0;
+      final service = RacePreparationService(
+        repository: repository,
+        stepExecutors: _fakeExecutors(
+          horsePerformance: () => 3,
+          pastRaceResults: () {
+            pastRaceResultsCalls++;
+            return 0;
+          },
+        ),
+      );
+      await repository.markState(
+          'C2', PreparationStep.shutuba, PreparationState.done, itemCount: 1);
+
+      await service.enqueuePreparation(
+        raceId: 'C2',
+        raceDate: '2026年9月6日',
+        horseIds: const ['h1'],
+        raceName: 'テストステークス',
+        only: {PreparationStep.horsePerformance, PreparationStep.pastRaceResults},
+      );
+      // horsePerformance完了(interval込み) -> カスケードでpastRaceResults投入
+      // -> 開始するまで待つ
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+
+      expect(pastRaceResultsCalls, 1);
+
+      // 後続テストへタイマーを残さないよう完全にドレインするまで待つ
+      await Future<void>.delayed(const Duration(milliseconds: 1700));
+    });
+
+    test('全ステップがdoneに到達したあと、それ以上の投入が発生せず停止する', () async {
+      final repository = RacePreparationRepository();
+      int shutubaCalls = 0;
+      int horseProfileCalls = 0;
+      int horsePerformanceCalls = 0;
+      int pastRaceResultsCalls = 0;
+      int trainingCalls = 0;
+      final service = RacePreparationService(
+        repository: repository,
+        stepExecutors: _fakeExecutors(
+          shutuba: () {
+            shutubaCalls++;
+            return 1;
+          },
+          horseProfile: () {
+            horseProfileCalls++;
+            return 1;
+          },
+          horsePerformance: () {
+            horsePerformanceCalls++;
+            return 1;
+          },
+          pastRaceResults: () {
+            pastRaceResultsCalls++;
+            return 0;
+          },
+          training: () {
+            trainingCalls++;
+            return 1;
+          },
+        ),
+      );
+
+      await service.enqueuePreparation(
+        raceId: 'C3',
+        raceDate: '2026年9月6日',
+        horseIds: const ['h1'],
+        raceName: 'テストステークス',
+      );
+      // shutuba -> (horseProfile/horsePerformance/training) -> pastRaceResults
+      // の全5ステップが連鎖的に完了するまで待つ
+      await Future<void>.delayed(const Duration(milliseconds: 9500));
+
+      expect(shutubaCalls, 1);
+      expect(horseProfileCalls, 1);
+      expect(horsePerformanceCalls, 1);
+      expect(pastRaceResultsCalls, 1);
+      expect(trainingCalls, 1);
+
+      // さらに1間隔以上待っても呼び出し回数が増えない(=投入が停止している)ことを確認する
+      await Future<void>.delayed(const Duration(milliseconds: 1700));
+      expect(shutubaCalls, 1);
+      expect(horseProfileCalls, 1);
+      expect(horsePerformanceCalls, 1);
+      expect(pastRaceResultsCalls, 1);
+      expect(trainingCalls, 1);
+    });
+
+    test('force:trueで開始しても無限ループにならず、各ステップの実処理が1回ずつしか呼ばれない', () async {
+      final repository = RacePreparationRepository();
+      int shutubaCalls = 0;
+      int horseProfileCalls = 0;
+      int horsePerformanceCalls = 0;
+      int pastRaceResultsCalls = 0;
+      int trainingCalls = 0;
+      final service = RacePreparationService(
+        repository: repository,
+        stepExecutors: _fakeExecutors(
+          shutuba: () {
+            shutubaCalls++;
+            return 1;
+          },
+          horseProfile: () {
+            horseProfileCalls++;
+            return 1;
+          },
+          horsePerformance: () {
+            horsePerformanceCalls++;
+            return 1;
+          },
+          pastRaceResults: () {
+            pastRaceResultsCalls++;
+            return 0;
+          },
+          training: () {
+            trainingCalls++;
+            return 1;
+          },
+        ),
+      );
+
+      // 既に全ステップdone済みのレースをforce:trueで開始する状況を再現する
+      for (final step in [
+        PreparationStep.shutuba,
+        PreparationStep.horseProfile,
+        PreparationStep.horsePerformance,
+        PreparationStep.pastRaceResults,
+        PreparationStep.training,
+      ]) {
+        await repository.markState('C4', step, PreparationState.done, itemCount: 1);
+      }
+
+      await service.enqueuePreparation(
+        raceId: 'C4',
+        raceDate: '2026年9月6日',
+        horseIds: const ['h1'],
+        raceName: 'テストステークス',
+        force: true,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 9500));
+
+      expect(shutubaCalls, 1);
+      expect(horseProfileCalls, 1);
+      expect(horsePerformanceCalls, 1);
+      expect(pastRaceResultsCalls, 1);
+      expect(trainingCalls, 1);
+    });
+
+    test('ステップがfailedになった場合、そのステップに依存する後続が投入されない', () async {
+      final repository = RacePreparationRepository();
+      int pastRaceResultsCalls = 0;
+      final service = RacePreparationService(
+        repository: repository,
+        stepExecutors: _fakeExecutors(
+          horsePerformance: () => throw Exception('boom'),
+          pastRaceResults: () {
+            pastRaceResultsCalls++;
+            return 0;
+          },
+        ),
+      );
+      await repository.markState(
+          'C5', PreparationStep.shutuba, PreparationState.done, itemCount: 1);
+
+      await service.enqueuePreparation(
+        raceId: 'C5',
+        raceDate: '2026年9月6日',
+        horseIds: const ['h1'],
+        raceName: 'テストステークス',
+        only: {PreparationStep.horsePerformance, PreparationStep.pastRaceResults},
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+
+      expect(pastRaceResultsCalls, 0);
+      final result =
+          await repository.getStep('C5', PreparationStep.pastRaceResults);
+      expect(result, isNull);
+
+      final failedStatus =
+          await repository.getStep('C5', PreparationStep.horsePerformance);
+      expect(failedStatus!.state, PreparationState.failed);
+    });
+  });
 }

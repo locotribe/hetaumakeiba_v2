@@ -114,7 +114,12 @@ class RacePreparationService {
       if (step == PreparationStep.raceStatistics) {
         // このステップは過去レースの選択がユーザー操作を伴うため自動実行しない。
         // 状態としてはskippedを記録するだけにとどめる。
-        await _repository.markState(raceId, step, PreparationState.skipped);
+        // [修正] Phase 4-E: カスケード(3-1)によりenqueuePreparation()が何度も呼ばれる
+        // ため、既にskipped記録済みならmarkStateを呼ばず不要なDB書き込みを防ぐ
+        // (v.2026.9.5+26090505)
+        if (current[step]?.state != PreparationState.skipped) {
+          await _repository.markState(raceId, step, PreparationState.skipped);
+        }
         continue;
       }
 
@@ -152,6 +157,27 @@ class RacePreparationService {
             );
             // [追加] Phase 4-D: done記録の直後に完了を通知する (v.2026.9.5+26090504)
             _stepCompletedController.add((raceId: raceId, step: step));
+            // [追加] Phase 4-E: ステップ完了時に、依存が解けた次の段を自動投入する。
+            // 無限ループにならない根拠は次の3点:
+            // 1. force:falseで呼ぶため、既にdoneのステップは投入対象から外れる
+            // 2. ScrapingManager.addRequestのkey:'prep:$raceId:${step.name}'により、
+            //    キュー内・実行中の同一ステップは重複投入されない
+            // 3. 全ステップがdone/skippedに到達した時点で投入対象が空になり停止する
+            // onlyは元の呼び出しの値をそのまま伝播し、対象を絞っていた場合に
+            // カスケードで対象外のステップが動き出さないようにする (v.2026.9.5+26090505)
+            try {
+              await enqueuePreparation(
+                raceId: raceId,
+                raceDate: raceDate,
+                horseIds: horseIds,
+                raceName: raceName,
+                force: false,
+                only: only,
+              );
+            } catch (e) {
+              debugPrint(
+                  'RacePreparationService: cascade enqueue failed for $raceId after ${step.name}: $e');
+            }
           } catch (e) {
             debugPrint(
                 'RacePreparationService: step ${step.name} failed for $raceId: $e');
