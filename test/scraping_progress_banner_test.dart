@@ -5,12 +5,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
+import 'package:hetaumakeiba_v2/widgets/scraping_banner_route_observer.dart';
 import 'package:hetaumakeiba_v2/widgets/scraping_progress_banner.dart';
 
 void main() {
   // ScrapingManagerはシングルトンのため、各テストの前に必ずキューをリセットする。
+  // [追加] Phase 4-F: ScrapingBannerRouteObserver.stackDepthもstaticなため、
+  // テスト間で値が残らないようリセットする (v.2026.9.5+26090505)
   setUp(() {
     ScrapingManager().clearQueue();
+    ScrapingBannerRouteObserver.stackDepth.value = 0;
   });
 
   group('ScrapingProgressBanner', () {
@@ -58,6 +62,55 @@ void main() {
       expect(find.textContaining('(1/2)'), findsOneWidget);
 
       // task2完了・間隔待ちまで進めてキューを空にし、後続テストへ影響を残さない
+      await tester.pump(const Duration(milliseconds: 1600));
+    });
+
+    // [追加] Phase 4-F: ボトムナビゲーションバー分の下端パディング付け替えの検証 (v.2026.9.5+26090505)
+    testWidgets('stackDepthが1かつ幅450px以下のときkBottomNavigationBarHeightが加算される', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      ScrapingBannerRouteObserver.stackDepth.value = 1;
+
+      await tester.pumpWidget(const MaterialApp(home: ScrapingProgressBanner()));
+      await tester.pump();
+
+      final completer = Completer<void>();
+      ScrapingManager().addRequest('t', () => completer.future, key: 'banner-test-3');
+      await tester.pump();
+      await tester.pump();
+
+      final container = tester.widget<Container>(find.byType(Container));
+      final padding = container.padding as EdgeInsets;
+      expect(padding.bottom, greaterThanOrEqualTo(kBottomNavigationBarHeight));
+
+      completer.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1600));
+    });
+
+    testWidgets('stackDepthが2のときはkBottomNavigationBarHeightが加算されない', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      ScrapingBannerRouteObserver.stackDepth.value = 2;
+
+      await tester.pumpWidget(const MaterialApp(home: ScrapingProgressBanner()));
+      await tester.pump();
+
+      final completer = Completer<void>();
+      ScrapingManager().addRequest('t', () => completer.future, key: 'banner-test-4');
+      await tester.pump();
+      await tester.pump();
+
+      final container = tester.widget<Container>(find.byType(Container));
+      final padding = container.padding as EdgeInsets;
+      expect(padding.bottom, lessThan(kBottomNavigationBarHeight));
+
+      completer.complete();
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 1600));
     });
   });

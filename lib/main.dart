@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hetaumakeiba_v2/screens/auth_gate.dart';
+import 'package:hetaumakeiba_v2/widgets/scraping_banner_route_observer.dart';
 import 'package:hetaumakeiba_v2/widgets/scraping_progress_banner.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
@@ -72,8 +73,10 @@ class MyApp extends StatelessWidget {
               const Breakpoint(start: 801, end: 1920, name: DESKTOP),
             ],
           ),
+          // [修正] Phase 4-F: RacePageのヘッダー/タブバーと重なり取得中にタブを
+          // 操作できなかったため、バナーを画面上部から下部へ移動した (v.2026.9.5+26090505)
           const Positioned(
-            top: 0,
+            bottom: 0,
             left: 0,
             right: 0,
             child: Material(
@@ -85,6 +88,9 @@ class MyApp extends StatelessWidget {
           ),
         ],
       ),
+      // [追加] Phase 4-F: 進捗バナーがボトムナビゲーションバーを避けるかどうかの
+      // 判定に、ナビゲーションスタックの深さを使う (v.2026.9.5+26090505)
+      navigatorObservers: [ScrapingBannerRouteObserver()],
       // アプリの開始点をMainScaffoldに変更
       home: const AuthGate(),
     );
