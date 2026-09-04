@@ -118,8 +118,10 @@ class RaceSourcePolicy {
       case RaceDataSource.resultPageDb:
         return true;
 
-      // pakara-keiba.com は第三者サイトで保持期間が未検証のため、
-      // 現時点では制限しない。次フェーズで実測して見直す。
+      // [修正] 2026-09-04 実測: 坂路API(get_cyoukyou.php)は10年前のレースでも取得可能。
+      // ウッドAPI(get_cyoukyou_wc.php)は2023年以降は完全、2021年頃は部分的、2018年以前は0件。
+      // どちらも古いレースではHTTP 200で空配列を返すのみで例外にならないため、
+      // 時系列によるガードは不要 (v.2026.9.4+26090405)
       case RaceDataSource.trainingApi:
         return true;
 

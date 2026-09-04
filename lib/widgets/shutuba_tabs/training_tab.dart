@@ -70,6 +70,7 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
 
     debugPrint('DEBUG: [Training API] Request Date: $formattedDate, RaceID: ${widget.raceId}');
 
+    // [修正] Phase 2: keyによる重複排除を追加 (v.2026.9.4+26090405)
     ScrapingManager().addRequest('調教データ取得', () async {
       await _service.fetchAndSaveTrainingData(
         raceId: widget.raceId,
@@ -79,7 +80,7 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
       if (mounted) {
         await _loadTrainingData();
       }
-    });
+    }, key: 'training:${widget.raceId}');
   }
 
   // YYYYMMDD -> YYYY年M月D日(曜) に変換

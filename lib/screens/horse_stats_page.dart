@@ -159,13 +159,17 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     );
 
     if (confirmed == true) {
-      _fetchAndCalculateStats();
+      // [修正] Phase 2: isRefreshをforceRefreshとして伝搬し、更新ボタン経由では
+      // 従来どおり全馬を再スクレイプさせる (v.2026.9.4+26090405)
+      _fetchAndCalculateStats(forceRefresh: isRefresh);
     } else if (!isRefresh) {
       Navigator.of(context).pop();
     }
   }
 
-  Future<void> _fetchAndCalculateStats() async {
+  // [修正] Phase 2: forceRefreshを追加。既にDBに成績がある馬はforceRefresh時以外
+  // スクレイプをスキップする冪等化 (v.2026.9.4+26090405)
+  Future<void> _fetchAndCalculateStats({bool forceRefresh = false}) async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
@@ -188,25 +192,46 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
           });
         }
 
-        try {
-          final scrapedRecords = await HorsePerformanceScraperService.scrapeHorsePerformance(horse.horseId);
-          for (final record in scrapedRecords) {
-            await _horseRepository.insertOrUpdateHorsePerformance(record);
+        // [修正] Phase 2: 既にDBに成績がある馬はforceRefresh時以外スクレイプをスキップする
+        // 冪等化。500ms待機もスキップ側では行わない (v.2026.9.4+26090405)
+        final existing = await _horseRepository.getHorsePerformanceRecords(horse.horseId);
+
+        if (!forceRefresh && existing.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _loadingMessage =
+                  'キャッシュ利用: ${horse.horseName} ($horseIndex/${widget.horses.length})';
+            });
           }
-        } catch (e) {
-          debugPrint('Error scraping horse ${horse.horseName} (${horse.horseId}): $e');
-        }
 
-        final records = await _horseRepository.getHorsePerformanceRecords(horse.horseId);
-        allPerformanceRecords[horse.horseId] = records;
+          allPerformanceRecords[horse.horseId] = existing;
 
-        for (final record in records) {
-          if (record.raceId.isNotEmpty) {
-            allPastRaceIds.add(record.raceId);
+          for (final record in existing) {
+            if (record.raceId.isNotEmpty) {
+              allPastRaceIds.add(record.raceId);
+            }
           }
-        }
+        } else {
+          try {
+            final scrapedRecords = await HorsePerformanceScraperService.scrapeHorsePerformance(horse.horseId);
+            for (final record in scrapedRecords) {
+              await _horseRepository.insertOrUpdateHorsePerformance(record);
+            }
+          } catch (e) {
+            debugPrint('Error scraping horse ${horse.horseName} (${horse.horseId}): $e');
+          }
 
-        await Future.delayed(const Duration(milliseconds: 500));
+          final records = await _horseRepository.getHorsePerformanceRecords(horse.horseId);
+          allPerformanceRecords[horse.horseId] = records;
+
+          for (final record in records) {
+            if (record.raceId.isNotEmpty) {
+              allPastRaceIds.add(record.raceId);
+            }
+          }
+
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
       }
 
       final existingResults = await _raceRepository.getMultipleRaceResults(allPastRaceIds.toList());

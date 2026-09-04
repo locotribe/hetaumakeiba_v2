@@ -27,6 +27,7 @@ class HorseProfileSyncService {
       final existingProfile = await _horseRepository.getHorseProfile(horse.horseId);
 
       if (existingProfile == null || existingProfile.ownerName.isEmpty) {
+        // [修正] Phase 2: keyによる重複排除を追加 (v.2026.9.4+26090405)
         _scrapingManager.addRequest(
             'プロフィール取得: ${horse.horseName}',
                 () async {
@@ -39,7 +40,8 @@ class HorseProfileSyncService {
               } else {
                 debugPrint('DEBUG: Failed to sync profile for ${horse.horseId}');
               }
-            }
+            },
+            key: 'profile:${horse.horseId}',
         );
       }
     }
