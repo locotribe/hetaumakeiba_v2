@@ -28,6 +28,7 @@ import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_combo_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
@@ -102,6 +103,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   bool _isCourseOnlyMode = true;
 
+  // [追加] Phase 4-D: RacePreparationServiceの完了通知を購読し、戦績取得完了時に
+  // 分析をローカル再計算するために保持する (v.2026.9.5+26090504)
+  StreamSubscription<RacePreparationStepCompleted>? _preparationStepSubscription;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -111,6 +116,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
     _loadShutubaData();
+
+    // [追加] Phase 4-D: horsePerformance/pastRaceResultsの完了を受けて、
+    // このレースのキャッシュ済み分析をスクレイプ無しでローカル再計算する (v.2026.9.5+26090504)
+    _preparationStepSubscription =
+        RacePreparationService.stepCompletedStream.listen((event) {
+      if (event.raceId != widget.raceId) return;
+      if (event.step != PreparationStep.horsePerformance &&
+          event.step != PreparationStep.pastRaceResults) {
+        return;
+      }
+      _recomputeAnalysisFromCache();
+    });
   }
 
   // [追加] 0-9b-1 race_info_tab.dartから引き上げ（レース情報タブと展開シミュタブで天気/馬場取得を共有） (v.2026.7.27+26072704)
@@ -202,6 +219,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   @override
   void dispose() {
     _tabController.dispose();
+    // [追加] Phase 4-D: RacePreparationServiceの完了通知の購読を解除する (v.2026.9.5+26090504)
+    _preparationStepSubscription?.cancel();
     super.dispose();
   }
 
@@ -503,13 +522,21 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<PredictionRaceData?> _fetchDataWithUserMarks() async {
+    final raceData = await _scraperService.scrapeAllData(widget.raceId);
+    await _applyAnalysisToRaceData(raceData);
+    return raceData;
+  }
+
+  // [追加] Phase 4-D: _fetchDataWithUserMarks()から分析処理のみを抽出。
+  // スクレイプ結果とキャッシュからの再計算(_recomputeAnalysisFromCache)の両方から
+  // 呼べるようにする。挙動は抽出前と完全に同一（計算式・条件分岐・呼び出し順序・
+  // 引数を一切変更していない） (v.2026.9.5+26090504)
+  Future<void> _applyAnalysisToRaceData(PredictionRaceData raceData) async {
     // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
     final userId = UserSession().localUserId;
     if (userId == null) {
-      return await _scraperService.scrapeAllData(widget.raceId);
+      return;
     }
-
-    final raceData = await _scraperService.scrapeAllData(widget.raceId);
 
     final results = await Future.wait([
       _userRepo.getAllUserMarksForRace(userId, widget.raceId),
@@ -696,7 +723,39 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     raceData.racePacePrediction = RaceAnalyzer.predictRacePace(
         raceData.horses, allPastRecords, []);
-    return raceData;
+  }
+
+  // [追加] Phase 4-D: RacePreparationServiceの完了通知(horsePerformance/pastRaceResults)
+  // を受けて、スクレイプ無しでキャッシュ済み出馬表データに対する分析だけを
+  // ローカル再計算する (v.2026.9.5+26090504)
+  Future<void> _recomputeAnalysisFromCache() async {
+    try {
+      final cache = await _raceRepo.getShutubaTableCache(widget.raceId);
+      if (cache == null) return;
+
+      final raceData = cache.predictionRaceData;
+      await _applyAnalysisToRaceData(raceData);
+
+      final updatedCache = ShutubaTableCache(
+        raceId: raceData.raceId,
+        predictionRaceData: raceData,
+        lastUpdatedAt: DateTime.now(),
+      );
+      await _raceRepo.insertOrUpdateShutubaTableCache(updatedCache);
+
+      final enrichedData = await _getShutubaDataWithProfile(widget.raceId);
+      if (enrichedData != null && mounted) {
+        setState(() {
+          _predictionRaceData = enrichedData;
+          _tableUpdateKey = DateTime.now().millisecondsSinceEpoch;
+        });
+        if (widget.onDataRefreshed != null) {
+          widget.onDataRefreshed!(enrichedData);
+        }
+      }
+    } catch (e) {
+      debugPrint('分析の再計算に失敗: $e');
+    }
   }
 
   @override

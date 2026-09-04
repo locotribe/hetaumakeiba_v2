@@ -3,6 +3,10 @@
 // [追加] Phase 4-B: race_preparation_status（Phase 4-A）を使い、レース準備の各ステップを
 // 依存順に・冪等に・状態を記録しながらScrapingManagerへ投入するサービス。
 // この時点ではどこからも呼ばれない（サービス層のみの新設、UI配線はPhase 4-Cで行う） (v.2026.9.5+26090502)
+// [修正] Phase 4-D: 各ステップ完了(done)を通知するstaticなstreamを追加し、
+// shutuba_table_page.dartがキャッシュ済み分析のローカル再計算を行えるようにした (v.2026.9.5+26090504)
+
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
@@ -26,6 +30,9 @@ typedef PreparationStepExecutor = Future<int> Function({
   required bool force,
 });
 
+/// レース準備の1ステップが done になったことを通知するイベント。
+typedef RacePreparationStepCompleted = ({String raceId, PreparationStep step});
+
 /// レース準備パイプライン（出馬表〜過去10年統計）の取得状態を、
 /// race_preparation_status（Phase 4-A）へ記録しながらScrapingManagerへ投入するサービス。
 class RacePreparationService {
@@ -35,6 +42,18 @@ class RacePreparationService {
   final RaceRepository _raceRepository;
   final TrainingRepository _trainingRepository;
   late final Map<PreparationStep, PreparationStepExecutor> _executors;
+
+  // [追加] Phase 4-D: RacePreparationServiceは呼び出しごとに新しいインスタンスが
+  // 生成されるため、完了通知はstaticなbroadcast StreamControllerで全インスタンスに
+  // 共有する。アプリ生存中ずっと使うため close() は行わない (v.2026.9.5+26090504)
+  static final StreamController<RacePreparationStepCompleted>
+      _stepCompletedController =
+      StreamController<RacePreparationStepCompleted>.broadcast();
+
+  /// 各ステップが [PreparationState.done] を記録した直後に1件emitされる。
+  /// failed / skipped ではemitされない。
+  static Stream<RacePreparationStepCompleted> get stepCompletedStream =>
+      _stepCompletedController.stream;
 
   RacePreparationService({
     RacePreparationRepository? repository,
@@ -131,6 +150,8 @@ class RacePreparationService {
               PreparationState.done,
               itemCount: itemCount,
             );
+            // [追加] Phase 4-D: done記録の直後に完了を通知する (v.2026.9.5+26090504)
+            _stepCompletedController.add((raceId: raceId, step: step));
           } catch (e) {
             debugPrint(
                 'RacePreparationService: step ${step.name} failed for $raceId: $e');
@@ -171,20 +192,23 @@ class RacePreparationService {
     await _repository.deleteForRace(raceId);
   }
 
+  // [修正] Phase 4-D: 「過去成績取得」「過去レース結果取得」が「過去分析」タブ
+  // （raceStatistics、自動投入されずskippedのみ記録）の取得と誤解されていたため、
+  // 誤解のない表現に変更した。enumの値・分岐構造は変更していない (v.2026.9.5+26090504)
   String _labelFor(PreparationStep step) {
     switch (step) {
       case PreparationStep.shutuba:
-        return '出馬表取得';
+        return '出馬表を取得';
       case PreparationStep.horseProfile:
-        return '馬プロフィール確認';
+        return '馬プロフィールを確認';
       case PreparationStep.horsePerformance:
-        return '過去成績取得';
+        return '出走馬の戦績を取得';
       case PreparationStep.pastRaceResults:
-        return '過去レース結果取得';
+        return '戦績内レースの結果を取得';
       case PreparationStep.training:
-        return '調教データ取得';
+        return '調教データを取得';
       case PreparationStep.raceStatistics:
-        return '過去10年統計';
+        return '過去分析データ';
     }
   }
 
