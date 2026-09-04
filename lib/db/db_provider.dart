@@ -333,6 +333,19 @@ class DbProvider {
         calculated_at    TEXT NOT NULL
       )
     ''');
+
+    // [追加] Phase 4-A: レース準備状況保存用テーブル作成 (v.2026.9.5+26090501)
+    await db.execute('''
+      CREATE TABLE ${DbConstants.tableRacePreparationStatus}(
+        race_id    TEXT NOT NULL,
+        step       TEXT NOT NULL,
+        state      TEXT NOT NULL,
+        item_count INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        error      TEXT,
+        PRIMARY KEY (race_id, step)
+      )
+    ''');
   }
 
   // [修正] マイグレーション失敗時にエラーを握りつぶさず、rethrowで上位へ伝播させるよう全catchブロックを修正 (v.13.40.3)
@@ -555,6 +568,25 @@ class DbProvider {
         ''');
       } catch (e) {
         debugPrint('Migration error (v14->v15): $e');
+        rethrow;
+      }
+    }
+    // [追加] Phase 4-A: race_preparation_status テーブル新設 (v.2026.9.5+26090501)
+    if (oldVersion < 16) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS ${DbConstants.tableRacePreparationStatus}(
+            race_id    TEXT NOT NULL,
+            step       TEXT NOT NULL,
+            state      TEXT NOT NULL,
+            item_count INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            error      TEXT,
+            PRIMARY KEY (race_id, step)
+          )
+        ''');
+      } catch (e) {
+        debugPrint('Migration error (v15->v16): $e');
         rethrow;
       }
     }
