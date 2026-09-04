@@ -3,7 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
+import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_preparation_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 import 'package:hetaumakeiba_v2/services/training_data_service.dart';
 import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
@@ -27,7 +29,10 @@ class TrainingTabWidget extends StatefulWidget {
 class _TrainingTabWidgetState extends State<TrainingTabWidget> {
   final TrainingRepository _repository = TrainingRepository();
   final TrainingDataService _service = TrainingDataService();
+  // [追加] Phase 4-C: 調教データの取得状態(未取得/取得中/取得済み0件等)の表示に使う (v.2026.9.5+26090503)
+  final RacePreparationRepository _preparationRepository = RacePreparationRepository();
   Map<String, List<TrainingTimeModel>> _trainingData = {};
+  RacePreparationStatus? _preparationStatus;
   bool _isLoading = true;
 
   @override
@@ -43,11 +48,36 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
       final records = await _repository.getTrainingTimesForHorse(horse.horseId);
       newData[horse.horseId] = records;
     }
+    // [追加] Phase 4-C: 調教データの取得状態を読み、見出し文言に反映する (v.2026.9.5+26090503)
+    final preparationStatus = await _preparationRepository.getStep(
+        widget.raceId, PreparationStep.training);
     if (mounted) {
       setState(() {
         _trainingData = newData;
+        _preparationStatus = preparationStatus;
         _isLoading = false;
       });
+    }
+  }
+
+  // [追加] Phase 4-C: 準備状態に応じた調教データの見出し文言を返す (v.2026.9.5+26090503)
+  String _trainingStatusLabel() {
+    final status = _preparationStatus;
+    if (status == null) return '※調教データ未取得';
+
+    switch (status.state) {
+      case PreparationState.pending:
+        return '※調教データ未取得';
+      case PreparationState.running:
+        return '※調教データ取得中...';
+      case PreparationState.done:
+        return status.itemCount == 0
+            ? '※このレースの調教データは提供されていません'
+            : '※直近の調教タイム・ラップ';
+      case PreparationState.failed:
+        return '※調教データの取得に失敗しました';
+      case PreparationState.skipped:
+        return '※直近の調教タイム・ラップ';
     }
   }
 
@@ -188,9 +218,9 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(left: 8.0),
-                child: Text('※直近の調教タイム・ラップ', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: Text(_trainingStatusLabel(), style: const TextStyle(fontSize: 12, color: Colors.grey)),
               ),
               OutlinedButton.icon(
                 onPressed: _fetchFromApi,

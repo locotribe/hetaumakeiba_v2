@@ -86,7 +86,21 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         _isLoading = false;
       });
     } else {
-      _showConfirmationDialog();
+      // [追加] Phase 4-C: 全出走馬の過去成績が既にDBに揃っている場合は
+      // 確認ダイアログを出さず直接計算する（Phase 2の冪等化により再スクレイプは走らない） (v.2026.9.5+26090503)
+      bool allPerformanceRecordsExist = widget.horses.isNotEmpty;
+      for (final horse in widget.horses) {
+        final records = await _horseRepository.getHorsePerformanceRecords(horse.horseId);
+        if (records.isEmpty) {
+          allPerformanceRecordsExist = false;
+          break;
+        }
+      }
+      if (allPerformanceRecordsExist) {
+        _fetchAndCalculateStats();
+      } else {
+        _showConfirmationDialog();
+      }
     }
   }
 

@@ -1,5 +1,7 @@
 // lib/screens/shutuba_table_page.dart
 
+import 'dart:async';
+
 import 'package:data_table_2/data_table_2.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
@@ -30,6 +32,7 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/horse_profile_sync_service.dart';
+import 'package:hetaumakeiba_v2/services/race_preparation_service.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
@@ -376,6 +379,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               });
             }
           });
+
+          // [追加] Phase 4-C: レース準備の残りステップを自動でバックグラウンド投入 (v.2026.9.5+26090503)
+          if (widget.raceResult == null) {
+            unawaited(RacePreparationService().enqueuePreparation(
+              raceId: widget.raceId,
+              raceDate: data.raceDate,
+              horseIds: data.horses.map((h) => h.horseId).toList(),
+              raceName: data.raceName,
+            ).catchError((e) {
+              debugPrint('RacePreparationService.enqueuePreparation failed: $e');
+            }));
+          }
         }
       }
     } catch (e) {
