@@ -13,6 +13,27 @@ metadata:
 
 **Why:** 競馬予想の分析ロジックと馬券データの管理を統合したパーソナルアプリ。
 
+## 未解決課題 (Current Issues)
+
+- **`historical_match_engine.dart` の引数 `pastRaceVolatility` が未使用**
+  88行目で同名のローカル変数を宣言して上書きしているため、呼び出し側
+  (`stats_match_tab.dart`) が渡す `volResult.averagePopularity` が使われていない。
+  `flutter analyze` で警告が出るか要確認。動作上の実害は今のところなし。
+- **脚質の判定ロジックが3系統あり、数値が一致しない**
+  `statistics_service`（最終コーナー位置率）/ `volatility_analyzer.determineLegStyle()` /
+  `leg_style_analyzer`（コーナー通過＋上がり）の3つ。
+  同一画面のグラフと表で頭数が食い違う。現状は脚質タブの注意書きで説明する対応にとどめ、
+  判定器の統一は未実施。
+- **血統・ローテーションはリフト方式に統一できていない**
+  他タブのリフトは全出走馬が分母だが、この2つは1〜3着馬のみを集計している。
+  ローテはDB読み込みを増やせば対応可能（+約130クエリ）。
+  血統は全出走馬160頭のスクレイピングが必要（取得時間 30秒 → 2分10秒）のため見送り中。
+  各タブの注意書きで基準の違いを明示して対応している。
+- **`FrameFactor` は枠番(1〜8)を馬番(1〜18)のスケールで比較している**
+  12頭立て以上では「外」ゾーンに分類される馬が存在しない。
+  ユーザー判断により **現仕様のまま維持**（過去の傾向を今回に当てはめるファクターとして許容）。
+  再発見して修正しないよう記録しておく。
+
 **Tech Stack:**
 - Flutter (Dart), sqflite（ローカルDB）, shared_preferences
 - HTTPスクレイピング（html, http, charset_converter）
@@ -59,5 +80,40 @@ lib/
 - historical_match_engine — 過去成績マッチング
 - leg_style_analyzer — 脚質解析
 - weather_analyzer — 天候解析
+- race_analysis_bundle_loader — 過去分析タブの子タブ共通データを1回だけ読み込む
+- factor_candidate_selector — 統計由来7ファクターの該当馬選出（リフト方式）
+- bundle_factor_selector — バンドル由来5ファクターの該当馬選出（擬似リフト方式）
 
 **How to apply:** 分析ロジックの変更はlogic/analysis/、スクレイピングはservices/、画面UIはscreens/またはwidgets/を起点に探す。
+
+## 作業履歴
+
+### 2026-09-05 過去分析タブの再編成（フェーズ1〜4完了）
+
+設計レポート: `memory/タブ再編成_設計レポート.md`
+
+- **親タブの並び替え**（race_page.dart）
+  出馬表 / 出走馬分析 / 能力分析(Rt) / 過去分析 / オッズ分析 / 騎手特性 / レース結果 / レース詳細
+- **共有データバンドルの導入**
+  `RaceAnalysisBundle` + `RaceAnalysisBundleLoader` を新設。
+  従来 StatsMatchTab が自前で行っていた約300クエリの読み込みを親ページで1回にまとめた。
+  実測 351クエリ / 4,517ms。子タブを分割しても読み込みは1回のみ。
+- **子タブの再編成**（race_statistics_page.dart）
+  傾向分析タブを廃止し、ペース / 馬場 / 血統 / ローテ / 人気妙味 の5タブへ分割。
+  総合タブから馬場・血統・ラップの3カードを各タブへ移設。
+  StatsMatchTab は結果分析タブ専用として残存（コード無変更）。
+- **各タブへ「今回の該当馬」カードを追加**
+  過去傾向と今回の出走メンバーを突き合わせ、最大5頭を選出。
+  並べ替えは生の率ではなく**リフト値**（率 ÷ 全体平均）。勝率/連対率/複勝率を切替可能。
+- **総合タブに12ファクター横断のマトリクスを追加**
+  ペース・馬場は中庸シナリオ固定で集計（`neutralMetric`）。
+- **馬体重の当日/前走フォールバック**を `weight_factor.dart` と同じ挙動に統一。
+- 脚質タブに、母数が「区分の定員」であることを説明する注意書きを追加（4脚質×4リフト水準の16パターン）。
+- バグ修正: `styleDistribution` は 0.0〜1.0 の比率なのに % 表示していた（0.6→「1%」）。
+
+新規ファイル: `models/race_analysis_bundle.dart` /
+`logic/analysis/race_analysis_bundle_loader.dart` /
+`logic/analysis/factor_candidate_selector.dart` /
+`logic/analysis/bundle_factor_selector.dart` /
+`widgets/factor_candidates_card.dart` / `widgets/horse_number_badge.dart`
+

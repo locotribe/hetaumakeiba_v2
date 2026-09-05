@@ -307,11 +307,12 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                       labelColor: Colors.white,
                       unselectedLabelColor: Colors.white70,
                       tabs: const [
+                        // [修正] 親タブの並び順を変更（出馬表/出走馬分析/能力分析/過去分析/オッズ分析/騎手特性/レース結果/レース詳細） (v.2026.9.5+26090506)
                         Tab(text: '出馬表'),
-                        Tab(text: '能力分析(Rt)'),
-                        Tab(text: 'オッズ分析'),
-                        Tab(text: '過去分析'),
                         Tab(text: '出走馬分析'),
+                        Tab(text: '能力分析(Rt)'),
+                        Tab(text: '過去分析'),
+                        Tab(text: 'オッズ分析'),
                         Tab(text: '騎手特性'),
                         Tab(text: 'レース結果'),
                         Tab(text: 'レース詳細'),
@@ -341,14 +342,15 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
             TabBarView(
               controller: _tabController,
               children: [
+                // [修正] 親タブの並び替えに合わせてプレースホルダの順序も変更 (v.2026.9.5+26090506)
                 ShutubaTablePage(raceId: widget.raceId),
-                const Center(child: Text('レーティング算出中...')), // ★追加
-                const Center(child: Text('オッズを取得中...')),
-                const Center(child: CircularProgressIndicator()),
-                const Center(child: Text('レース結果を取得中です...')),
-                const Center(child: Text('レース結果を取得中です...')),
-                const Center(child: Text('レース結果を取得中です...')),
-                const Center(child: Text('レース結果を取得中です...')),
+                const Center(child: Text('レース結果を取得中です...')), // 出走馬分析
+                const Center(child: Text('レーティング算出中...')), // 能力分析(Rt)
+                const Center(child: CircularProgressIndicator()), // 過去分析
+                const Center(child: Text('オッズを取得中...')), // オッズ分析
+                const Center(child: Text('レース結果を取得中です...')), // 騎手特性
+                const Center(child: Text('レース結果を取得中です...')), // レース結果
+                const Center(child: Text('レース結果を取得中です...')), // レース詳細
               ],
             ),
             const Center(child: CircularProgressIndicator()),
@@ -360,6 +362,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           controller: _tabController,
           physics: const NeverScrollableScrollPhysics(),
           children: [
+            // [修正] 親タブの並び替えに合わせて children の順序も変更（tabs と必ず同順） (v.2026.9.5+26090506)
             ShutubaTablePage(
               // ▼ [追加] 裏スクレイプ成功時(_shutubaRefreshGen加算)にこのタブを再マウントし、
               // ShutubaTablePage内部の初回ロード済みキャッシュではなく最新の本物の出馬表を読み直させる (v.2026.7.28+26072802)
@@ -371,6 +374,15 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               onDataRefreshed: _onShutubaDataRefreshed,
             ),
 
+            if (_predictionRaceData != null)
+              HorseStatsPage(
+                raceId: widget.raceId,
+                raceName: _predictionRaceData!.raceName,
+                horses: _predictionRaceData!.horses,
+                raceData: _predictionRaceData!,
+              )
+            else
+              const Center(child: Text('出馬表データを読み込んでいます...')),
             // ★修正：引数に raceDate も渡す
             if (_predictionRaceData != null)
               RatingAnalysisTab(
@@ -382,11 +394,6 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               const Center(child: CircularProgressIndicator()),
 
             if (_predictionRaceData != null)
-              OddsPage(raceData: _predictionRaceData!)
-            else
-              const Center(child: Text('出馬表データを読み込んでいます...')),
-
-            if (_predictionRaceData != null)
               RaceStatisticsPage(
                 raceId: widget.raceId,
                 raceName: _predictionRaceData!.raceName,
@@ -394,14 +401,10 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),
             if (_predictionRaceData != null)
-              HorseStatsPage(
-                raceId: widget.raceId,
-                raceName: _predictionRaceData!.raceName,
-                horses: _predictionRaceData!.horses,
-                raceData: _predictionRaceData!,
-              )
+              OddsPage(raceData: _predictionRaceData!)
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),
+
             if (_predictionRaceData != null)
               JockeyStatsPage(
                 raceData: _predictionRaceData!,

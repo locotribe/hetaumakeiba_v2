@@ -17,6 +17,9 @@ import 'package:hetaumakeiba_v2/models/relative_evaluation_model.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:intl/intl.dart';
 
+// [追加] 枠色付き馬番バッジ (v.2026.9.5+26090506)
+import 'package:hetaumakeiba_v2/widgets/horse_number_badge.dart';
+
 // 類似度データを保持するクラス
 class SimilarityData {
   final String horseName;
@@ -90,6 +93,14 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
   void initState() {
     super.initState();
     _startAnalysis();
+  }
+
+  // [追加] horseIdから今回の馬番を引く。見つからない場合は0を返す (v.2026.9.5+26090506)
+  int _getHorseNumber(String horseId) {
+    for (final horse in widget.horses) {
+      if (horse.horseId == horseId) return horse.horseNumber;
+    }
+    return 0;
   }
 
   Future<void> _startAnalysis() async {
@@ -693,7 +704,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       columnSpacing: 16,
       columns: [
         if (isComparisonMode) const DataColumn(label: Text('着順/印')),
-        const DataColumn(label: Text('馬名')),
+        const DataColumn(label: Text('馬番/馬名')),
         const DataColumn(label: Text('類似馬(1着)')),
         const DataColumn(label: Text('総合ｼﾝｸﾛ')),
 
@@ -758,7 +769,19 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
                   ),
               ],
             )),
-          DataCell(Text(item.horseName, style: const TextStyle(fontWeight: FontWeight.bold))),
+          // [追加] 馬名の前に枠色付きの馬番を表示 (v.2026.9.5+26090506)
+          DataCell(Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              HorseNumberBadge(
+                horseNumber: _getHorseNumber(item.horseId),
+                gateNumber: item.gateNumber,
+                size: 22.0,
+              ),
+              const SizedBox(width: 6),
+              Text(item.horseName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          )),
           DataCell(_buildSimilarityCell(item.horseId, item.horseName)),
           DataCell(_buildTotalScoreCell(dynamicScore, maxScore, predictionDynamicScore)),
 
@@ -1049,7 +1072,20 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(item.horseName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              // [追加] ダイアログタイトルにも馬番を表示 (v.2026.9.5+26090506)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HorseNumberBadge(
+                    horseNumber: _getHorseNumber(item.horseId),
+                    gateNumber: item.gateNumber,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(item.horseName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
               const SizedBox(height: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

@@ -1,5 +1,6 @@
 // lib/screens/race_statistics_page.dart
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
@@ -16,6 +17,19 @@ import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_analysis_tab.dart';
 
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+
+// [追加] ファクター別「今回の該当馬」選出ロジックと表示カード (v.2026.9.5+26090506)
+import 'package:hetaumakeiba_v2/logic/analysis/factor_candidate_selector.dart';
+import 'package:hetaumakeiba_v2/widgets/factor_candidates_card.dart';
+
+// [追加] 子タブ共通の分析データバンドル（フェーズ2） (v.2026.9.5+26090506)
+import 'package:hetaumakeiba_v2/logic/analysis/bundle_factor_selector.dart';
+import 'package:hetaumakeiba_v2/services/horse_profile_scraper_service.dart';
+import 'package:hetaumakeiba_v2/widgets/volatility_components/lap_time_chart_card.dart';
+import 'package:hetaumakeiba_v2/widgets/volatility_components/pedigree_cross_analysis_card.dart';
+import 'package:hetaumakeiba_v2/widgets/volatility_components/track_condition_trend_card.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/race_analysis_bundle_loader.dart';
+import 'package:hetaumakeiba_v2/models/race_analysis_bundle.dart';
 
 // ★追加：各カードウィジェットとアナライザーのインポート
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
@@ -54,6 +68,20 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   // ★追加：グラフ描画のために過去レース(RaceResult)のリストを保持する変数
   List<RaceResult> _pastRaces = [];
 
+  // [追加] 子タブ共通の分析データ。親で1回だけ読み込み、各子タブへ渡す (v.2026.9.5+26090506)
+  RaceAnalysisBundle? _analysisBundle;
+  List<String> _targetRaceIds = [];
+  bool _isBundleLoading = false;
+  String? _loadedBundleKey;
+
+  // [追加] バンドル由来5ファクターの該当馬。バンドル読み込み時に1回だけ算出して保持する (v.2026.9.5+26090506)
+  Map<String, FactorCandidateResult> _bundleFactors = const {};
+
+  // [追加] 血統情報の取得進捗。総合タブから血統タブへ移設 (v.2026.9.5+26090506)
+  bool _isFetchingPedigree = false;
+  int _currentPedigreeFetchCount = 0;
+  int _totalPedigreeToFetch = 0;
+
   @override
   void initState() {
     super.initState();
@@ -86,8 +114,58 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       if (mounted) {
         setState(() {});
       }
+
+      // [追加] 出馬表が揃ったので分析データの読み込みを試みる (v.2026.9.5+26090506)
+      await _maybeLoadAnalysisBundle();
     } catch (e) {
       debugPrint('Error loading shutuba data: $e');
+    }
+  }
+
+  // [追加] 出馬表と分析対象レースが揃った時点で、子タブ共通の分析データを1回だけ読み込む (v.2026.9.5+26090506)
+  //
+  // 従来は StatsMatchTab が同じ読み込みを自前で行っていた。
+  // 子タブを分割するとタブの数だけ同じ読み込みが走ってしまうため、親で1回にまとめる。
+  Future<void> _maybeLoadAnalysisBundle() async {
+    // 出馬表と分析対象レースの両方が揃うまでは何もしない。
+    // どちらが先に揃うかは実行タイミング次第なので、両方の完了時から呼び出す。
+    if (!mounted) return;
+    if (_horses.isEmpty || _targetRaceIds.isEmpty) return;
+
+    final String key = '${_targetRaceIds.join(",")}|${_horses.length}';
+    if (_isBundleLoading) return;
+    if (_loadedBundleKey == key && _analysisBundle != null) return;
+
+    _isBundleLoading = true;
+    try {
+      final bundle = await RaceAnalysisBundleLoader().load(
+        raceId: widget.raceId,
+        raceName: widget.raceName,
+        horses: _horses,
+        targetRaceIds: _targetRaceIds,
+      );
+      if (!mounted) return;
+      setState(() {
+        _analysisBundle = bundle;
+        _loadedBundleKey = key;
+        // タブを開くたびに再計算しないよう、ここで1回だけ選出しておく
+        _bundleFactors = bundle == null
+            ? const {}
+            : BundleFactorSelector.selectAll(bundle: bundle, horses: _horses);
+      });
+    } catch (e) {
+      debugPrint('[RaceAnalysisBundle] 読み込みに失敗しました: $e');
+      if (mounted) _loadedBundleKey = key;
+    } finally {
+      _isBundleLoading = false;
+    }
+
+    // 読み込み中に分析対象レースが差し替わっていた場合のみ、新しい条件で読み直す。
+    // 読み込み結果がnull（過去レース0件）だった場合はキーが一致するので再試行しない。
+    if (!mounted) return;
+    final String latestKey = '${_targetRaceIds.join(",")}|${_horses.length}';
+    if (latestKey != _loadedBundleKey) {
+      await _maybeLoadAnalysisBundle();
     }
   }
 
@@ -140,6 +218,10 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             final resultsMap = await _raceRepo.getMultipleRaceResults(pastIds);
             _pastRaces = resultsMap.values.toList();
           }
+          // [追加] 分析対象レースが確定したので分析データの読み込みを開始する (v.2026.9.5+26090506)
+          // ここで await すると統計タブ全体の表示が分析データの完了待ちになるため、待たずに走らせる。
+          _targetRaceIds = pastIds;
+          unawaited(_maybeLoadAnalysisBundle());
         }
         return stats;
       });
@@ -190,6 +272,13 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             if (stats != null) {
               final resultsMap = await _raceRepo.getMultipleRaceResults(idsToFetch);
               _pastRaces = resultsMap.values.toList();
+              // [追加] 分析対象レースが入れ替わったので分析データを作り直す (v.2026.9.5+26090506)
+              // ここも await すると統計タブの表示が待たされるため、待たずに走らせる。
+              _targetRaceIds = idsToFetch;
+              _analysisBundle = null;
+              _loadedBundleKey = null;
+              _bundleFactors = const {};
+              unawaited(_maybeLoadAnalysisBundle());
             }
             return stats;
           });
@@ -237,7 +326,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       key: ValueKey(_showResultTab),
-      length: _showResultTab ? 12 : 11,
+      // [修正] ペース/馬場/血統/ローテ/人気妙味の5タブを追加し、傾向分析タブを廃止 (v.2026.9.5+26090506)
+      length: _showResultTab ? 16 : 15,
       child: Scaffold(
         body: Column(
           children: [
@@ -257,8 +347,14 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   const Tab(text: '馬体重'),
                   const Tab(text: '騎手'),
                   const Tab(text: '調教師'),
+                  // [追加] 傾向分析タブから切り出した5ファクター (v.2026.9.5+26090506)
+                  const Tab(text: 'ペース'),
+                  const Tab(text: '馬場'),
+                  const Tab(text: '血統'),
+                  const Tab(text: 'ローテ'),
+                  const Tab(text: '人気妙味'),
                   const Tab(text: '人気分析'),
-                  const Tab(text: '傾向分析'),
+                  // [削除] 傾向分析タブは廃止し、ペース/馬場/血統/ローテ/人気妙味の各タブへ分割 (v.2026.9.5+26090506)
                   if (_showResultTab) const Tab(text: '結果分析'),
                   const Tab(text: '分析対象'),
                 ],
@@ -278,44 +374,95 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   final stats = snapshot.data;
                   if (stats == null) {
                     return TabBarView(
-                      children: List.generate(_showResultTab ? 12 : 11, (index) => _buildInitialView()),
+                      children: List.generate(_showResultTab ? 16 : 15, (index) => _buildInitialView()),
                     );
                   }
 
                   final data = json.decode(stats.statisticsJson);
+
+                  // [追加] 過去傾向と今回の出走メンバーを突き合わせて各ファクターの該当馬を選出 (v.2026.9.5+26090506)
+                  final Map<String, FactorCandidateResult> factorCandidates =
+                      _horses.isEmpty
+                          ? const {}
+                          : FactorCandidateSelector.selectAll(
+                              data: Map<String, dynamic>.from(data as Map),
+                              horses: _horses,
+                            );
 
                   return TabBarView(
                     children: [
                       // 総合
                       VolatilityAnalysisTab(
                         targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
+                        // [修正] 統計由来7 + バンドル由来5 の計12ファクターを横断集計 (v.2026.9.5+26090506)
+                        headerWidget: factorCandidates.isEmpty
+                            ? null
+                            : FactorHitMatrixCard(
+                                results: {
+                                  ...factorCandidates,
+                                  ..._bundleFactors,
+                                },
+                                factorOrder: const [
+                                  ...FactorCandidateSelector.factorKeys,
+                                  ...BundleFactorSelector.factorKeys,
+                                ],
+                                factorLabels: const {
+                                  ...FactorCandidateSelector.factorLabels,
+                                  ...BundleFactorSelector.factorLabels,
+                                },
+                              ),
                       ),
                       // 1. 配当
                       _buildTabContent(child: Column(children: [
+                        // [追加] このタブの傾向に合う今回の出走馬 (v.2026.9.5+26090506)
+                        if (factorCandidates['payout'] != null) ...[
+                          FactorCandidatesCard(result: factorCandidates['payout']!),
+                          const SizedBox(height: 16),
+                        ],
                         if (_pastRaces.isNotEmpty) PayoutComparisonCard(result: PayoutAnalyzer().analyze(_pastRaces)),
                         const SizedBox(height: 16),
                         _buildPayoutTable(data['payoutStats'] ?? const {}),
                       ])),
                       // 2. 人気
                       _buildTabContent(child: Column(children: [
+                        // [追加] このタブの傾向に合う今回の出走馬 (v.2026.9.5+26090506)
+                        if (factorCandidates['popularity'] != null) ...[
+                          FactorCandidatesCard(result: factorCandidates['popularity']!),
+                          const SizedBox(height: 16),
+                        ],
                         if (_pastRaces.isNotEmpty) PopularityChartCard(result: PopularityAnalyzer().analyze(_pastRaces)),
                         const SizedBox(height: 16),
                         _buildPopularityTable(data['popularityStats'] ?? const {}),
                       ])),
                       // 3. 枠番
                       _buildTabContent(child: Column(children: [
+                        // [追加] このタブの傾向に合う今回の出走馬 (v.2026.9.5+26090506)
+                        if (factorCandidates['frame'] != null) ...[
+                          FactorCandidatesCard(result: factorCandidates['frame']!),
+                          const SizedBox(height: 16),
+                        ],
                         if (_pastRaces.isNotEmpty) FrameChartCard(result: FrameAnalyzer().analyze(_pastRaces)),
                         const SizedBox(height: 16),
                         _buildFrameStatsCard(data['frameStats'] ?? const {}),
                       ])),
                       // 4. 脚質
                       _buildTabContent(child: Column(children: [
+                        // [追加] このタブの傾向に合う今回の出走馬 (v.2026.9.5+26090506)
+                        if (factorCandidates['legStyle'] != null) ...[
+                          FactorCandidatesCard(result: factorCandidates['legStyle']!),
+                          const SizedBox(height: 16),
+                        ],
                         if (_pastRaces.isNotEmpty) LegStyleChartCard(result: LegStyleAnalyzer().analyze(_pastRaces)),
                         const SizedBox(height: 16),
                         _buildLegStyleStatsCard(data['legStyleStats'] ?? const {}),
                       ])),
                       // 5. 馬体重
                       _buildTabContent(child: Column(children: [
+                        // [追加] このタブの傾向に合う今回の出走馬 (v.2026.9.5+26090506)
+                        if (factorCandidates['horseWeight'] != null) ...[
+                          FactorCandidatesCard(result: factorCandidates['horseWeight']!),
+                          const SizedBox(height: 16),
+                        ],
                         if (_pastRaces.isNotEmpty) HorseWeightCard(result: HorseWeightAnalyzer().analyze(_pastRaces)),
                         const SizedBox(height: 16),
                         _buildHorseWeightStatsCard(
@@ -324,9 +471,47 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                         ),
                       ])),
                       // 6. 騎手
-                      _buildTabContent(child: _buildJockeyStatsTable(data['jockeyStats'] ?? const {})),
+                      _buildTabContent(
+                        child: Column(
+                          // [追加] 既存テーブルの横幅を従来どおり画面幅いっぱいに保つ (v.2026.9.5+26090506)
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // [追加] このタブの傾向に合う今回の出走馬 (v.2026.9.5+26090506)
+                            if (factorCandidates['jockey'] != null) ...[
+                              FactorCandidatesCard(result: factorCandidates['jockey']!),
+                              const SizedBox(height: 16),
+                            ],
+                            _buildJockeyStatsTable(data['jockeyStats'] ?? const {}),
+                          ],
+                        ),
+                      ),
                       // 7. 調教師
-                      _buildTabContent(child: _buildTrainerStatsTable(data['trainerStats'] ?? const {})),
+                      _buildTabContent(
+                        child: Column(
+                          // [追加] 既存テーブルの横幅を従来どおり画面幅いっぱいに保つ (v.2026.9.5+26090506)
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // [追加] このタブの傾向に合う今回の出走馬 (v.2026.9.5+26090506)
+                            if (factorCandidates['trainer'] != null) ...[
+                              FactorCandidatesCard(result: factorCandidates['trainer']!),
+                              const SizedBox(height: 16),
+                            ],
+                            _buildTrainerStatsTable(data['trainerStats'] ?? const {}),
+                          ],
+                        ),
+                      ),
+                      // [追加] 傾向分析タブから切り出した5ファクター (v.2026.9.5+26090506)
+                      // ペース
+                      _buildBundleFactorTab('pace'),
+                      // 馬場状態
+                      _buildBundleFactorTab('trackCondition'),
+                      // 血統
+                      _buildBundleFactorTab('pedigree'),
+                      // ローテーション
+                      _buildBundleFactorTab('rotation'),
+                      // 人気妙味
+                      _buildBundleFactorTab('popularityValue'),
+
                       // 8. 詳細分析
                       stats.analyzedRacesList.isEmpty
                           ? const Center(child: Text('分析データがありません。'))
@@ -336,16 +521,11 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                         horses: _horses,
                         targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                       ),
-                      // 9. 傾向マッチ (予想データ)
-                      _horses.isEmpty
-                          ? const Center(child: Text('出馬表データが見つかりません。\n先にレース詳細画面を開いてください。'))
-                          : StatsMatchTab(
-                        raceId: widget.raceId,
-                        raceName: widget.raceName,
-                        horses: _horses,
-                        targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
-                      ),
-                      // 10. 結果分析
+                      // [削除] 傾向マッチ(予想データ)のタブは廃止 (v.2026.9.5+26090506)
+                      // 5ファクターは ペース/馬場/血統/ローテ/人気妙味 の各タブへ分割済み。
+                      // StatsMatchTab は下の結果分析タブ専用として残す。
+
+                      // 9. 結果分析
                       if (_showResultTab)
                         StatsMatchTab(
                           raceId: widget.raceId,
@@ -354,7 +534,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                           targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                           comparisonTargets: _horses,
                         ),
-                      // 11. 分析対象
+                      // 10. 分析対象
                       stats.analyzedRacesList.isEmpty
                           ? _buildRefetchView('分析対象レース一覧')
                           : Column(
@@ -419,6 +599,135 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         ),
       ),
     );
+  }
+
+  // [追加] 血統が未取得の過去上位馬をスクレイプする。総合タブから血統タブへ移設 (v.2026.9.5+26090506)
+  Future<void> _fetchMissingPedigreeData() async {
+    final bundle = _analysisBundle;
+    if (bundle == null || _isFetchingPedigree) return;
+
+    setState(() {
+      _isFetchingPedigree = true;
+      _currentPedigreeFetchCount = 0;
+      _totalPedigreeToFetch = 0;
+    });
+
+    try {
+      // 過去レースの1〜3着馬のうち、血統（父名）が未取得の馬を洗い出す
+      final Set<String> targetHorseIds = {};
+      for (final race in bundle.pastRaces) {
+        for (final horse in race.horseResults) {
+          final rank = int.tryParse(horse.rank) ?? 0;
+          if (rank >= 1 && rank <= 3 && horse.horseId.isNotEmpty) {
+            targetHorseIds.add(horse.horseId);
+          }
+        }
+      }
+
+      final List<String> horsesToFetch = [];
+      for (final horseId in targetHorseIds) {
+        final profile = bundle.horseProfileMap[horseId];
+        if (profile == null || profile.fatherName.isEmpty) {
+          horsesToFetch.add(horseId);
+        }
+      }
+
+      if (mounted) {
+        setState(() => _totalPedigreeToFetch = horsesToFetch.length);
+      }
+
+      for (final horseId in horsesToFetch) {
+        await HorseProfileScraperService.scrapeAndSaveProfile(horseId);
+        if (!mounted) return;
+        setState(() => _currentPedigreeFetchCount++);
+        // サーバー負荷軽減のため、1頭取得するごとに1秒待機
+        await Future.delayed(const Duration(milliseconds: 1000));
+      }
+
+      // 取得できた血統を反映するため、分析データを作り直す
+      if (!mounted) return;
+      _analysisBundle = null;
+      _loadedBundleKey = null;
+      _bundleFactors = const {};
+      await _maybeLoadAnalysisBundle();
+    } catch (e) {
+      debugPrint('血統情報の取得中にエラーが発生しました: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isFetchingPedigree = false);
+      }
+    }
+  }
+
+  // [追加] バンドル由来ファクター（ペース/馬場/血統/ローテ/人気妙味）のタブ本体 (v.2026.9.5+26090506)
+  Widget _buildBundleFactorTab(String factorKey) {
+    if (_horses.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Text(
+            '出馬表データが見つかりません。\n先にレース詳細画面を開いてください。',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    final result = _bundleFactors[factorKey];
+    if (result == null) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('分析データを読み込んでいます...', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    // ファクターごとに、対応する「過去傾向カード」を該当馬カードの上に置く
+    final Widget? trendCard = _buildBundleTrendCard(factorKey);
+
+    return _buildTabContent(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (trendCard != null) ...[
+            trendCard,
+            const SizedBox(height: 16),
+          ],
+          FactorCandidatesCard(result: result),
+        ],
+      ),
+    );
+  }
+
+  // [追加] 総合タブから移設した過去傾向カードを、ファクターごとに返す (v.2026.9.5+26090506)
+  Widget? _buildBundleTrendCard(String factorKey) {
+    final bundle = _analysisBundle;
+    if (bundle == null) return null;
+
+    switch (factorKey) {
+      case 'pace':
+        final lap = bundle.lapTimeResult;
+        return lap == null ? null : LapTimeChartCard(result: lap);
+      case 'trackCondition':
+        return TrackConditionTrendCard(result: bundle.trackConditionTrendResult);
+      case 'pedigree':
+        return PedigreeCrossAnalysisCard(
+          result: bundle.pedigreeCrossResult,
+          isFetching: _isFetchingPedigree,
+          currentFetchCount: _currentPedigreeFetchCount,
+          totalFetchCount: _totalPedigreeToFetch,
+          missingPedigreeCount: bundle.missingPedigreeCount,
+          totalTargetHorseCount: bundle.totalTargetHorseCount,
+          onFetchPedigree: _fetchMissingPedigreeData,
+        );
+      default:
+        return null;
+    }
   }
 
   Widget _buildTabContent({required Widget child}) {
