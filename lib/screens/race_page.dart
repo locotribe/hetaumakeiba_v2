@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
@@ -42,6 +43,7 @@ class RacePage extends StatefulWidget {
 class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final RaceRepository _raceRepo = RaceRepository();
+  final ShutubaTableCacheRepository _shutubaTableCacheRepository = ShutubaTableCacheRepository();
   final HorseRepository _horseRepo = HorseRepository();
   // ▼ [追加] 過去レースの出馬表を裏でスクレイプし直すためのサービス (v.2026.7.28+26072802)
   final ShutubaTableScraperService _scraperService = ShutubaTableScraperService();
@@ -122,7 +124,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   }
 
   Future<void> _determineRaceStatus() async {
-    final shutubaCache = await _raceRepo.getShutubaTableCache(widget.raceId);
+    final shutubaCache = await _shutubaTableCacheRepository.getShutubaTableCache(widget.raceId);
     final dbResult = await _raceRepo.getRaceResult(widget.raceId);
 
     if (shutubaCache != null) {
@@ -194,7 +196,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
       // 結果は既に即時表示済みのため、ここはUIをブロックしないベストエフォート処理。失敗時は結果構築データのまま維持する。
       try {
         await _scraperService.scrapeAllData(widget.raceId);
-        final refreshedCache = await _raceRepo.getShutubaTableCache(widget.raceId);
+        final refreshedCache = await _shutubaTableCacheRepository.getShutubaTableCache(widget.raceId);
         if (refreshedCache != null && mounted) {
           final enrichedData = await _applyOwnerImageAndWeightMerge(
               refreshedCache.predictionRaceData, dbResult);

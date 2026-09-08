@@ -6,6 +6,7 @@ import 'package:data_table_2/data_table_2.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
@@ -80,6 +81,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   final ShutubaTableScraperService _scraperService = ShutubaTableScraperService();
 
   final RaceRepository _raceRepo = RaceRepository();
+  final ShutubaTableCacheRepository _shutubaTableCacheRepository = ShutubaTableCacheRepository();
   final HorseRepository _horseRepo = HorseRepository();
   final UserRepository _userRepo = UserRepository();
   final HorseProfileSyncService _horseProfileSyncService = HorseProfileSyncService();
@@ -225,7 +227,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<PredictionRaceData?> _getShutubaDataWithProfile(String raceId) async {
-    final cache = await _raceRepo.getShutubaTableCache(raceId);
+    final cache = await _shutubaTableCacheRepository.getShutubaTableCache(raceId);
     if (cache != null) {
       var data = cache.predictionRaceData;
       final List<PredictionHorseDetail> updatedHorses = [];
@@ -346,7 +348,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             predictionRaceData: data,
             lastUpdatedAt: DateTime.now(),
           );
-          await _raceRepo.insertOrUpdateShutubaTableCache(cache);
+          await _shutubaTableCacheRepository.insertOrUpdateShutubaTableCache(cache);
           final enrichedData = await _getShutubaDataWithProfile(widget.raceId);
           if (enrichedData != null) {
             data = enrichedData;
@@ -431,7 +433,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         predictionRaceData: _predictionRaceData!,
         lastUpdatedAt: DateTime.now(),
       );
-      await _raceRepo.insertOrUpdateShutubaTableCache(newCache);
+      await _shutubaTableCacheRepository.insertOrUpdateShutubaTableCache(newCache);
     }
   }
 
@@ -447,7 +449,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         predictionRaceData: _predictionRaceData!,
         lastUpdatedAt: DateTime.now(),
       );
-      await _raceRepo.insertOrUpdateShutubaTableCache(newCache);
+      await _shutubaTableCacheRepository.insertOrUpdateShutubaTableCache(newCache);
     }
   }
 
@@ -730,7 +732,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   // ローカル再計算する (v.2026.9.5+26090504)
   Future<void> _recomputeAnalysisFromCache() async {
     try {
-      final cache = await _raceRepo.getShutubaTableCache(widget.raceId);
+      final cache = await _shutubaTableCacheRepository.getShutubaTableCache(widget.raceId);
       if (cache == null) return;
 
       final raceData = cache.predictionRaceData;
@@ -741,7 +743,7 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         predictionRaceData: raceData,
         lastUpdatedAt: DateTime.now(),
       );
-      await _raceRepo.insertOrUpdateShutubaTableCache(updatedCache);
+      await _shutubaTableCacheRepository.insertOrUpdateShutubaTableCache(updatedCache);
 
       final enrichedData = await _getShutubaDataWithProfile(widget.raceId);
       if (enrichedData != null && mounted) {

@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
@@ -64,6 +65,7 @@ class StatsMatchTab extends StatefulWidget {
 class _StatsMatchTabState extends State<StatsMatchTab> {
   final HistoricalMatchEngine _engine = HistoricalMatchEngine();
   final RaceRepository _raceRepo = RaceRepository();
+  final ShutubaTableCacheRepository _shutubaTableCacheRepository = ShutubaTableCacheRepository();
   final HorseRepository _horseRepo = HorseRepository();
 
   bool _isLoading = true;
@@ -158,7 +160,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       String targetRaceDateStr;
 
       // まず出馬表キャッシュ(ShutubaTableCache)から芝・ダート判定を取得する
-      final targetCache = await _raceRepo.getShutubaTableCache(widget.raceId);
+      final targetCache = await _shutubaTableCacheRepository.getShutubaTableCache(widget.raceId);
       if (targetCache != null) {
         _isDirt = targetCache.predictionRaceData.trackType?.contains('ダ') ?? false;
       }

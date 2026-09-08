@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_statistics_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
@@ -59,6 +60,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   final PastRaceIdFetcherService _pastRaceIdFetcher = PastRaceIdFetcherService();
   final RaceRepository _raceRepo = RaceRepository();
   final RaceStatisticsRepository _raceStatsRepo = RaceStatisticsRepository();
+  final ShutubaTableCacheRepository _shutubaTableCacheRepository = ShutubaTableCacheRepository();
 
   Future<RaceStatistics?>? _statisticsFuture;
   List<PredictionHorseDetail> _horses = [];
@@ -94,7 +96,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   // 出馬表データの読み込み
   Future<void> _loadShutubaData() async {
     try {
-      final cache = await _raceRepo.getShutubaTableCache(widget.raceId);
+      final cache = await _shutubaTableCacheRepository.getShutubaTableCache(widget.raceId);
       if (cache != null) {
         _horses = cache.predictionRaceData.horses;
         _hasCacheData = true;
