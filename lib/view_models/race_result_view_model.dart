@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
@@ -80,6 +81,7 @@ class RaceResultViewModel extends ChangeNotifier {
   final String raceId;
 
   final RaceRepository _raceRepo = RaceRepository();
+  final RaceMemoRepository _raceMemoRepo = RaceMemoRepository();
   final TicketRepository _ticketRepo = TicketRepository();
   final HorseRepository _horseRepo = HorseRepository();
 
@@ -252,7 +254,7 @@ class RaceResultViewModel extends ChangeNotifier {
     if (userId == null) return;
 
     // レース総評を取得
-    final raceMemo = await _raceRepo.getRaceMemo(userId, raceId);
+    final raceMemo = await _raceMemoRepo.getRaceMemo(userId, raceId);
     final raceMemoText = raceMemo?.memo ?? '';
 
     final List<List<dynamic>> rows = [];
@@ -317,7 +319,7 @@ class RaceResultViewModel extends ChangeNotifier {
       // === 既存データの取得 ===
       final existingHorseMemos = await _horseRepo.getMemosForRace(userId, raceId);
       final existingHorseMemosMap = {for (var m in existingHorseMemos) m.horseId: m};
-      final existingRaceMemo = await _raceRepo.getRaceMemo(userId, raceId);
+      final existingRaceMemo = await _raceMemoRepo.getRaceMemo(userId, raceId);
 
       final List<HorseMemo> memosToUpdate = [];
       bool updateRaceMemo = false;
@@ -418,7 +420,7 @@ class RaceResultViewModel extends ChangeNotifier {
           memo: finalRaceMemo,
           timestamp: DateTime.now(),
         );
-        await _raceRepo.insertOrUpdateRaceMemo(newRaceMemo);
+        await _raceMemoRepo.insertOrUpdateRaceMemo(newRaceMemo);
       }
 
       // 画面を再読み込みして最新データを反映（RaceReviewCardも更新される）

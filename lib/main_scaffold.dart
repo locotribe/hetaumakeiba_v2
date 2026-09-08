@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/db_constants.dart';
 import 'package:hetaumakeiba_v2/db/db_provider.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
@@ -60,7 +60,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   final TrackConditionRepository _trackConditionRepository = TrackConditionRepository();
   bool _isBusy = false;
 
-  final RaceRepository _raceRepo = RaceRepository();
+  final RaceMemoRepository _raceMemoRepo = RaceMemoRepository();
   final HorseRepository _horseRepo = HorseRepository();
 
   String _displayName = '';
@@ -336,7 +336,7 @@ class _MainScaffoldState extends State<MainScaffold> {
         if (!cachedHorseMemos.containsKey(csvRaceId)) {
           final memos = await _horseRepo.getMemosForRace(userId, csvRaceId);
           cachedHorseMemos[csvRaceId] = {for (var m in memos) m.horseId: m};
-          cachedRaceMemos[csvRaceId] = await _raceRepo.getRaceMemo(userId, csvRaceId);
+          cachedRaceMemos[csvRaceId] = await _raceMemoRepo.getRaceMemo(userId, csvRaceId);
         }
 
         final existingHorse = cachedHorseMemos[csvRaceId]![horseId];
@@ -432,7 +432,7 @@ class _MainScaffoldState extends State<MainScaffold> {
 
       // 4. レース総評を個別に保存
       for (final rm in raceMemosToUpdate.values) {
-        await _raceRepo.insertOrUpdateRaceMemo(rm);
+        await _raceMemoRepo.insertOrUpdateRaceMemo(rm);
         updatedRaceMemoCount++;
       }
 

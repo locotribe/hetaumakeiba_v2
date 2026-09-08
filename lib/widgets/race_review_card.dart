@@ -1,7 +1,7 @@
 // lib/widgets/race_review_card.dart
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
 
 class RaceReviewCard extends StatefulWidget {
@@ -19,7 +19,7 @@ class RaceReviewCard extends StatefulWidget {
 }
 
 class _RaceReviewCardState extends State<RaceReviewCard> {
-  final RaceRepository _raceRepo = RaceRepository();
+  final RaceMemoRepository _raceMemoRepo = RaceMemoRepository();
   final TextEditingController _controller = TextEditingController();
   bool _isEditing = false;
   RaceMemo? _currentMemo;
@@ -42,7 +42,7 @@ class _RaceReviewCardState extends State<RaceReviewCard> {
       return;
     }
 
-    final memo = await _raceRepo.getRaceMemo(widget.userId, widget.raceId);
+    final memo = await _raceMemoRepo.getRaceMemo(widget.userId, widget.raceId);
     if (mounted) {
       setState(() {
         _currentMemo = memo;
@@ -61,7 +61,7 @@ class _RaceReviewCardState extends State<RaceReviewCard> {
       memo: text,
       timestamp: DateTime.now(),
     );
-    await _raceRepo.insertOrUpdateRaceMemo(newMemo);
+    await _raceMemoRepo.insertOrUpdateRaceMemo(newMemo);
     if (mounted) {
       setState(() {
         _currentMemo = newMemo;
