@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/featured_race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
@@ -18,6 +19,7 @@ import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 class TicketDataLogic {
   final TicketRepository _ticketRepository = TicketRepository();
   final RaceRepository _raceRepository = RaceRepository();
+  final FeaturedRaceRepository _featuredRaceRepository = FeaturedRaceRepository();
 
   // ★追加: 確定済みデータを保持するメモリキャッシュ (staticにしてインスタンス間で共有)
   static final Map<int, TicketListItem> _memoryCache = {};
@@ -70,7 +72,7 @@ class TicketDataLogic {
 
     // 2. 注目レース(FeaturedRace)の一括取得 [未確定・出馬表データ] (★ここを復元・追加)
     // ※FeaturedRaceには一括取得メソッドがないため、全件取得してメモリでフィルタリング（件数が数千件程度なら高速）
-    final List<FeaturedRace> allFeaturedRaces = await _raceRepository.getAllFeaturedRaces();
+    final List<FeaturedRace> allFeaturedRaces = await _featuredRaceRepository.getAllFeaturedRaces();
     final Map<String, FeaturedRace> batchFeaturedRaces = {
       for (var race in allFeaturedRaces) race.raceId: race
     };
