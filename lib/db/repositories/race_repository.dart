@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/db/db_constants.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
+import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 
 class RaceRepository {
   final DbProvider _dbProvider = DbProvider();
@@ -230,31 +231,20 @@ class RaceRepository {
   // 出馬表キャッシュ (shutuba_table_cache)
   // ===========================================================================
 
-  Future<ShutubaTableCache?> getShutubaTableCache(String raceId) async {
-    final db = await _dbProvider.database;
-    final maps = await db.query(
-      DbConstants.tableShutubaTableCache,
-      where: 'race_id = ?',
-      whereArgs: [raceId],
-      limit: 1,
-    );
+  final ShutubaTableCacheRepository _shutubaTableCacheRepository = ShutubaTableCacheRepository();
 
-    if (maps.isNotEmpty) {
-      return ShutubaTableCache.fromMap(maps.first);
-    }
-    return null;
-  }
+  // [一時] Phase 3 移行用の委譲ブリッジ。Phase 3-D で削除する
+  @Deprecated('ShutubaTableCacheRepository を直接使用してください')
+  Future<ShutubaTableCache?> getShutubaTableCache(String raceId) =>
+      _shutubaTableCacheRepository.getShutubaTableCache(raceId);
 
-  Future<void> insertOrUpdateShutubaTableCache(ShutubaTableCache cache) async {
-    final db = await _dbProvider.database;
-    await db.insert(
-      DbConstants.tableShutubaTableCache,
-      cache.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
+  // [一時] Phase 3 移行用の委譲ブリッジ。Phase 3-D で削除する
+  @Deprecated('ShutubaTableCacheRepository を直接使用してください')
+  Future<void> insertOrUpdateShutubaTableCache(ShutubaTableCache cache) =>
+      _shutubaTableCacheRepository.insertOrUpdateShutubaTableCache(cache);
 
-  Future<void> insertShutubaTableCache(ShutubaTableCache cache) async {
-    await insertOrUpdateShutubaTableCache(cache);
-  }
+  // [一時] Phase 3 移行用の委譲ブリッジ。Phase 3-D で削除する
+  @Deprecated('ShutubaTableCacheRepository を直接使用してください')
+  Future<void> insertShutubaTableCache(ShutubaTableCache cache) =>
+      _shutubaTableCacheRepository.insertShutubaTableCache(cache);
 }
