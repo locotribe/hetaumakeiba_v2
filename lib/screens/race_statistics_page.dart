@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_statistics_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
@@ -57,6 +58,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   final StatisticsService _statisticsService = StatisticsService();
   final PastRaceIdFetcherService _pastRaceIdFetcher = PastRaceIdFetcherService();
   final RaceRepository _raceRepo = RaceRepository();
+  final RaceStatisticsRepository _raceStatsRepo = RaceStatisticsRepository();
 
   Future<RaceStatistics?>? _statisticsFuture;
   List<PredictionHorseDetail> _horses = [];
@@ -210,7 +212,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   // 統計データの読み込みと、グラフ描画に必要な過去レース詳細の取得
   void _checkAndLoadStatistics() {
     setState(() {
-      _statisticsFuture = _raceRepo.getRaceStatistics(widget.raceId).then((stats) async {
+      _statisticsFuture = _raceStatsRepo.getRaceStatistics(widget.raceId).then((stats) async {
         if (stats != null) {
           // statsに記録されている分析対象のRaceIDリストを使ってRaceResultを取得
           final pastIds = stats.analyzedRacesList.map((e) => e['raceId'] as String).toList();

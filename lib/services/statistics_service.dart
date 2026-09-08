@@ -2,6 +2,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_statistics_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
@@ -12,6 +13,7 @@ import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
 class StatisticsService {
   final RaceRepository _raceRepo = RaceRepository();
+  final RaceStatisticsRepository _raceStatsRepo = RaceStatisticsRepository();
 
   /// [新規追加] レースIDのリストを直接受け取り、統計データを生成・保存する
   Future<RaceStatistics?> processAndSaveRaceStatisticsByIds({
@@ -73,7 +75,7 @@ class StatisticsService {
       lastUpdatedAt: DateTime.now(),
     );
 
-    await _raceRepo.insertOrUpdateRaceStatistics(statsToSave);
+    await _raceStatsRepo.insertOrUpdateRaceStatistics(statsToSave);
     return statsToSave;
   }
 
@@ -131,7 +133,7 @@ class StatisticsService {
     );
 
     // 4. DBに保存
-    await _raceRepo.insertOrUpdateRaceStatistics(statsToSave);
+    await _raceStatsRepo.insertOrUpdateRaceStatistics(statsToSave);
     return statsToSave;
   }
 

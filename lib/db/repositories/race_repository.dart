@@ -7,7 +7,6 @@ import 'package:hetaumakeiba_v2/db/db_provider.dart';
 import 'package:hetaumakeiba_v2/db/db_constants.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
-import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 
@@ -135,38 +134,6 @@ class RaceRepository {
   Future<int> deleteAllFeaturedRaces() async {
     final db = await _dbProvider.database;
     return await db.delete(DbConstants.tableFeaturedRaces);
-  }
-
-  // ===========================================================================
-  // レース統計 (race_statistics)
-  // ===========================================================================
-
-  Future<int> insertOrUpdateRaceStatistics(RaceStatistics stats) async {
-    final db = await _dbProvider.database;
-    return await db.insert(
-      DbConstants.tableRaceStatistics,
-      stats.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<RaceStatistics?> getRaceStatistics(String raceId) async {
-    final db = await _dbProvider.database;
-    final maps = await db.query(
-      DbConstants.tableRaceStatistics,
-      where: 'raceId = ?',
-      whereArgs: [raceId],
-      limit: 1,
-    );
-    if (maps.isNotEmpty) {
-      return RaceStatistics.fromMap(maps.first);
-    }
-    return null;
-  }
-
-  Future<void> clearRaceStatistics() async {
-    final db = await _dbProvider.database;
-    await db.delete(DbConstants.tableRaceStatistics);
   }
 
   // ===========================================================================
