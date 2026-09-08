@@ -3,6 +3,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
@@ -25,6 +26,7 @@ import 'package:intl/intl.dart';
 /// 類似馬分析だけは結果分析タブ専用のためここには含めない。
 class RaceAnalysisBundleLoader {
   final RaceRepository _raceRepo = RaceRepository();
+  final ShutubaTableCacheRepository _shutubaTableCacheRepository = ShutubaTableCacheRepository();
   final HorseRepository _horseRepo = HorseRepository();
   final TrackConditionRepository _tcRepo = TrackConditionRepository();
   final HistoricalMatchEngine _engine = HistoricalMatchEngine();
@@ -87,7 +89,7 @@ class RaceAnalysisBundleLoader {
 
     // 4. 今回のレースの基本情報（芝ダ判定・開催日）
     bool isDirt = false;
-    final targetCache = await _raceRepo.getShutubaTableCache(raceId);
+    final targetCache = await _shutubaTableCacheRepository.getShutubaTableCache(raceId);
     queryCount++;
     if (targetCache != null) {
       isDirt = targetCache.predictionRaceData.trackType?.contains('ダ') ?? false;

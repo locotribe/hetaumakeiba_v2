@@ -5,11 +5,11 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_horse_detail_model.dart';
 import 'package:hetaumakeiba_v2/services/newspaper_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 
 class ShutubaTableScraperService {
-  final RaceRepository _raceRepo = RaceRepository();
+  final ShutubaTableCacheRepository _shutubaTableCacheRepository = ShutubaTableCacheRepository();
 
   Future<PredictionRaceData> scrapeAllData(String raceId) async {
     final completer = Completer<PredictionRaceData>();
@@ -62,7 +62,7 @@ class ShutubaTableScraperService {
               predictionRaceData: data,
               lastUpdatedAt: DateTime.now(),
             );
-            await _raceRepo.insertOrUpdateShutubaTableCache(cache);
+            await _shutubaTableCacheRepository.insertOrUpdateShutubaTableCache(cache);
 
             completer.complete(data);
           } else {

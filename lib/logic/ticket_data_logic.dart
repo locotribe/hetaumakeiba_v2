@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/featured_race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
@@ -20,6 +21,7 @@ class TicketDataLogic {
   final TicketRepository _ticketRepository = TicketRepository();
   final RaceRepository _raceRepository = RaceRepository();
   final FeaturedRaceRepository _featuredRaceRepository = FeaturedRaceRepository();
+  final ShutubaTableCacheRepository _shutubaTableCacheRepository = ShutubaTableCacheRepository();
 
   // ★追加: 確定済みデータを保持するメモリキャッシュ (staticにしてインスタンス間で共有)
   static final Map<int, TicketListItem> _memoryCache = {};
@@ -138,7 +140,7 @@ class TicketDataLogic {
         // ステップ3: 情報がない場合、出馬表キャッシュ(ShutubaTableCache)をDBから探す
         // ---------------------------------------------------------
         if (raceDate.isEmpty) {
-          final shutubaCache = await _raceRepository.getShutubaTableCache(raceId);
+          final shutubaCache = await _shutubaTableCacheRepository.getShutubaTableCache(raceId);
           if (shutubaCache != null) {
             // すでにパース済みのデータ(predictionRaceData)から直接取得します
             final data = shutubaCache.predictionRaceData;
