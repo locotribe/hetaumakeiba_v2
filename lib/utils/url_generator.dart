@@ -140,3 +140,102 @@ String generateOddsUrl({
   // housiki=c0 と rf=shutuba_submenu は現状の仕様に合わせて固定で付与
   return 'https://race.netkeiba.com/odds/index.html?type=$oddsType&race_id=$raceId&housiki=c0&rf=shutuba_submenu';
 }
+
+// [追加] 過去レース検索の複数ワード(スペース区切り)AND詳細検索対応 (v.2026.9.9+26090903)
+const Map<String, String> _pastRaceSearchJyoCodeMap = {
+  '札幌': '01',
+  '函館': '02',
+  '福島': '03',
+  '新潟': '04',
+  '東京': '05',
+  '中山': '06',
+  '中京': '07',
+  '京都': '08',
+  '阪神': '09',
+  '小倉': '10',
+};
+
+// [追加] 過去レース検索の複数ワード(スペース区切り)AND詳細検索対応 (v.2026.9.9+26090903)
+const Map<String, String> _pastRaceSearchTrackCodeMap = {
+  '芝': '1',
+  'ダート': '2',
+  '障害': '3',
+};
+
+/// [追加] "芝"/"ダ"/"障"などの表記ゆれを検索用の正式表記に正規化します (v.2026.9.9+26090903)
+String normalizeTrackTypeLabel(String? raw) {
+  switch (raw) {
+    case '芝':
+      return '芝';
+    case 'ダ':
+    case 'ダート':
+      return 'ダート';
+    case '障':
+    case '障害':
+      return '障害';
+    default:
+      return '';
+  }
+}
+
+/// [追加] スペース区切りの検索クエリを解析し、レース名/開催場/馬場/距離の
+/// AND詳細検索URLを生成します。既存の [generateNetkeibaRaceSearchUrl] はレース名検索専用として維持し、
+/// この関数はそれとは別の新規エンドポイントとして追加しています (v.2026.9.9+26090902)
+Future<String> generateNetkeibaRaceSearchUrlFromQuery({
+  required String query,
+}) async {
+  final tokens = query.split(RegExp(r'[\s　]+')).where((t) => t.isNotEmpty);
+
+  final List<String> trackCodes = [];
+  final List<String> jyoCodes = [];
+  final List<String> kyoriValues = [];
+  final List<String> raceNameTokens = [];
+
+  for (final token in tokens) {
+    if (RegExp(r'^\d{4}$').hasMatch(token)) {
+      kyoriValues.add(token);
+      continue;
+    }
+
+    final normalizedTrack = normalizeTrackTypeLabel(token);
+    if (normalizedTrack.isNotEmpty && _pastRaceSearchTrackCodeMap.containsKey(normalizedTrack)) {
+      trackCodes.add(_pastRaceSearchTrackCodeMap[normalizedTrack]!);
+      continue;
+    }
+
+    final jyoKey = token.endsWith('競馬場')
+        ? token.substring(0, token.length - '競馬場'.length)
+        : token;
+    if (_pastRaceSearchJyoCodeMap.containsKey(jyoKey)) {
+      jyoCodes.add(_pastRaceSearchJyoCodeMap[jyoKey]!);
+      continue;
+    }
+
+    raceNameTokens.add(token);
+  }
+
+  final String raceNameQuery = raceNameTokens.join(' ');
+  final String encodedWord;
+  if (raceNameQuery.isEmpty) {
+    encodedWord = '';
+  } else {
+    final eucJpBytes = await CharsetConverter.encode("EUC-JP", raceNameQuery);
+    encodedWord = eucJpBytes.map((byte) => '%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}').join('');
+  }
+
+  final buffer = StringBuffer('https://db.netkeiba.com/race/list.html?word=$encodedWord&match=p');
+
+  for (final code in trackCodes) {
+    buffer.write('&track%5B%5D=$code');
+  }
+  for (final code in jyoCodes) {
+    buffer.write('&jyo%5B%5D=$code');
+  }
+  for (final value in kyoriValues) {
+    buffer.write('&kyori%5B%5D=$value');
+  }
+
+  buffer.write('&sort=date-desc&limit=20');
+
+  return buffer.toString();
+}

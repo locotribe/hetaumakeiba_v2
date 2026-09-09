@@ -10,11 +10,18 @@ import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 class PastRaceSelectionDialog extends StatefulWidget {
   final PastRaceIdResult initialResult;
   final String defaultSearchText;
+  // [追加] 詳細検索の初期値用 (v.2026.9.9+26090903)
+  final String? location;
+  final String? trackType;
+  final String? distance;
 
   const PastRaceSelectionDialog({
     Key? key,
     required this.initialResult,
     required this.defaultSearchText,
+    this.location,
+    this.trackType,
+    this.distance,
   }) : super(key: key);
 
   @override
@@ -44,7 +51,17 @@ class _PastRaceSelectionDialogState extends State<PastRaceSelectionDialog> {
   @override
   void initState() {
     super.initState();
-    _searchController = TextEditingController(text: widget.defaultSearchText);
+    // [追加] レース名/開催場/馬場/距離を結合して検索ボックスの初期値にする (v.2026.9.9+26090903)
+    final List<String> initialTokens = [
+      widget.defaultSearchText,
+      widget.location,
+      normalizeTrackTypeLabel(widget.trackType),
+      widget.distance,
+    ]
+        .map((e) => e?.trim() ?? '')
+        .where((e) => e.isNotEmpty)
+        .toList();
+    _searchController = TextEditingController(text: initialTokens.join(' '));
 
     // 初期データのロード
     if (widget.initialResult.pastRaceItems.isNotEmpty) {
@@ -79,8 +96,8 @@ class _PastRaceSelectionDialogState extends State<PastRaceSelectionDialog> {
     });
 
     try {
-      // 検索URL生成
-      final searchUrl = await generateNetkeibaRaceSearchUrl(raceName: query);
+      // [修正] 単純なレース名EUC-JPエンコードから、複数ワードAND詳細検索ビルダー経由に変更 (v.2026.9.9+26090903)
+      final searchUrl = await generateNetkeibaRaceSearchUrlFromQuery(query: query);
       final listUrl = "$searchUrl&front=1";
 
       final response = await http.get(
@@ -217,9 +234,9 @@ class _PastRaceSelectionDialogState extends State<PastRaceSelectionDialog> {
                 controller: _searchController,
                 style: const TextStyle(fontSize: 13), // 入力文字を小さく
                 decoration: const InputDecoration(
-                  labelText: 'レース名で検索',
+                  labelText: 'レース名 競馬場 馬場 距離 (スペース区切り)',
                   labelStyle: TextStyle(fontSize: 12),
-                  hintText: '例: 有馬記念',
+                  hintText: '例: チャレンジC 阪神 芝 2000',
                   border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 ),

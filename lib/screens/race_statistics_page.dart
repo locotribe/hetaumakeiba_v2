@@ -64,6 +64,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   Future<RaceStatistics?>? _statisticsFuture;
   List<PredictionHorseDetail> _horses = [];
+  // [追加] 過去レース詳細検索の初期値(開催場/馬場/距離)に使う出馬表データ (v.2026.9.9+26090903)
+  PredictionRaceData? _currentRaceData;
 
   List<PredictionHorseDetail>? _resultHorses;
   bool _hasCacheData = false;
@@ -99,6 +101,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       final cache = await _shutubaTableCacheRepository.getShutubaTableCache(widget.raceId);
       if (cache != null) {
         _horses = cache.predictionRaceData.horses;
+        // [追加] 過去レース詳細検索の初期値に使うため保持する (v.2026.9.9+26090903)
+        _currentRaceData = cache.predictionRaceData;
         _hasCacheData = true;
       } else {
         _hasCacheData = false;
@@ -261,6 +265,10 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         builder: (context) => PastRaceSelectionDialog(
           initialResult: result,
           defaultSearchText: widget.raceName,
+          // [追加] 詳細検索の初期値 (v.2026.9.9+26090903)
+          location: _currentRaceData?.venue,
+          trackType: _currentRaceData?.trackType,
+          distance: _currentRaceData?.distanceValue?.toString(),
         ),
       );
 

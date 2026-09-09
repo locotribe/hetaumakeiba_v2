@@ -72,7 +72,8 @@ class PastRaceIdFetcherService {
 
   /// 追加読み込み用メソッド (ページネーション)
   Future<List<PastRaceItem>> fetchMorePastRaces(String baseListUrl, int page) async {
-    final targetUrl = "$baseListUrl&page=$page";
+    // [修正] 複数クエリを含む詳細検索URLでもページングが機能するよう結合を堅牢化 (v.2026.9.9+26090903)
+    final targetUrl = _buildPagedUrl(baseListUrl, page);
     debugPrint("DEBUG: Fetching more races from: $targetUrl");
 
     final htmlContent = await _fetchHtmlContent(targetUrl);
@@ -90,6 +91,39 @@ class PastRaceIdFetcherService {
   }
 
   // ---------------- private methods ----------------
+
+  // [追加] 複数クエリパラメータを含むURLへ page を安全に付与する (v.2026.9.9+26090903)
+  //
+  // Uri.parse/Uri.replace/queryParameters は使わない。
+  // word パラメータは EUC-JP のバイト列をパーセントエンコードしたものであり、
+  // Dart の Uri はクエリを UTF-8 として復号→再エンコードするため、
+  // 日本語レース名が U+FFFD に化けて検索が壊れる。
+  String _buildPagedUrl(String baseUrl, int page) {
+    String url = baseUrl;
+    String fragment = '';
+
+    final hashIndex = url.indexOf('#');
+    if (hashIndex != -1) {
+      fragment = url.substring(hashIndex);
+      url = url.substring(0, hashIndex);
+    }
+
+    final questionIndex = url.indexOf('?');
+    if (questionIndex == -1) {
+      return '$url?page=$page$fragment';
+    }
+
+    final base = url.substring(0, questionIndex);
+    final queryString = url.substring(questionIndex + 1);
+
+    final params = queryString.isEmpty
+        ? <String>[]
+        : queryString.split('&').where((p) => p.isNotEmpty).toList();
+    params.removeWhere((p) => p == 'page' || p.startsWith('page='));
+    params.add('page=$page');
+
+    return '$base?${params.join('&')}$fragment';
+  }
 
   /// past10.html にアクセスし、最新の過去ID（踏み台）を取得する
   /// ロジック: baseRaceIdの1年前の年号を含む db.netkeiba.com のリンクを探す
