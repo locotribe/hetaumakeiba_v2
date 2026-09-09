@@ -7,7 +7,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:charset_converter/charset_converter.dart';
 import '../models/track_conditions_model.dart';
 import '../db/repositories/track_condition_repository.dart';
-import '../db/repositories/race_repository.dart';
+import '../db/repositories/race_schedule_repository.dart';
 import '../models/race_schedule_model.dart';
 
 /// スクレイピング中の一時データ保持用クラス
@@ -159,7 +159,7 @@ class TrackConditionsScraperService {
       // ---------------------------------------------------------
       List<TrackConditionRecord> newRecords = [];
       final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
-      final RaceRepository _raceRepo = RaceRepository();
+      final RaceScheduleRepository _raceRepo = RaceScheduleRepository();
 
       // 同じプレフィックス（同一競馬場の同一日など）でIDが重複しないよう、セッション内でNNを記憶
       Map<String, int> sessionNextIdMap = {};

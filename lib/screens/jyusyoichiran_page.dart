@@ -6,7 +6,7 @@ import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/models/jyusyoichiran_page_data_model.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
 import 'package:hetaumakeiba_v2/db/repositories/jyusyo_race_repository.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_schedule_repository.dart';
 import 'package:hetaumakeiba_v2/services/jyusyo_matching_service.dart';
 import 'package:hetaumakeiba_v2/services/race_schedule_scraper_service.dart';
 
@@ -19,7 +19,7 @@ class JyusyoIchiranPage extends StatefulWidget {
 
 class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   final JyusyoRaceRepository _jyusyoRepo = JyusyoRaceRepository();
-  final RaceRepository _raceRepo = RaceRepository();
+  final RaceScheduleRepository _raceRepo = RaceScheduleRepository();
   final JyusyoMatchingService _matchingService = JyusyoMatchingService();
   final RaceScheduleScraperService _scheduleScraper = RaceScheduleScraperService();
 

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_schedule_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/featured_race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
@@ -20,6 +21,7 @@ import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 class TicketDataLogic {
   final TicketRepository _ticketRepository = TicketRepository();
   final RaceRepository _raceRepository = RaceRepository();
+  final RaceScheduleRepository _raceScheduleRepository = RaceScheduleRepository();
   final FeaturedRaceRepository _featuredRaceRepository = FeaturedRaceRepository();
   final ShutubaTableCacheRepository _shutubaTableCacheRepository = ShutubaTableCacheRepository();
 
@@ -153,7 +155,7 @@ class TicketDataLogic {
         // ステップ4: それでも情報がない場合、開催スケジュール(RaceSchedule)をDBから探す
         // ---------------------------------------------------------
         if (raceDate.isEmpty) {
-          final scheduleDate = await _raceRepository.getDateFromScheduleByRaceId(raceId);
+          final scheduleDate = await _raceScheduleRepository.getDateFromScheduleByRaceId(raceId);
           if (scheduleDate != null) {
             raceDate = scheduleDate;
             // スケジュールからは日付のみ取得（タイトルは後続処理で「開催場+R」として生成されるため問題なし）

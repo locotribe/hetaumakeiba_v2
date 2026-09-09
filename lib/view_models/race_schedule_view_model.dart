@@ -1,7 +1,7 @@
 // lib/view_models/race_schedule_view_model.dart
 
 import 'package:flutter/foundation.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_schedule_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/services/jyusyo_matching_service.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
@@ -12,7 +12,7 @@ import 'package:intl/intl.dart';
 /// 開催スケジュール画面のUIロジックとビジネスロジックを分離するためのViewModel
 class RaceScheduleViewModel extends ChangeNotifier {
   final RaceScheduleScraperService _scraperService = RaceScheduleScraperService();
-  final RaceRepository _raceRepository = RaceRepository();
+  final RaceScheduleRepository _raceScheduleRepository = RaceScheduleRepository();
   final JyusyoMatchingService _jyusyoService = JyusyoMatchingService();
 
   bool _disposed = false;
@@ -88,7 +88,7 @@ class RaceScheduleViewModel extends ChangeNotifier {
     try {
       if (!isInitial && weekDates.isNotEmpty) {
         final weekKey = DateFormat('yyyyMMdd').format(weekDates.first);
-        final cachedDates = await _raceRepository.getWeekCache(weekKey);
+        final cachedDates = await _raceScheduleRepository.getWeekCache(weekKey);
 
         if (cachedDates != null && cachedDates.isNotEmpty) {
           _setupTabs(cachedDates);
@@ -119,14 +119,14 @@ class RaceScheduleViewModel extends ChangeNotifier {
 
       if (weekDates.isNotEmpty) {
         final weekKey = DateFormat('yyyyMMdd').format(weekDates.first);
-        await _raceRepository.insertOrUpdateWeekCache(weekKey, dates);
+        await _raceScheduleRepository.insertOrUpdateWeekCache(weekKey, dates);
       }
 
       // 初期ロード時のスケジュール保存も mergeRaceSchedule を使い
       // 既存の isConfirmed を引き継ぐ
       if (schedule != null) {
-        await _raceRepository.mergeRaceSchedule(schedule);
-        final merged = await _raceRepository.getRaceSchedule(schedule.date);
+        await _raceScheduleRepository.mergeRaceSchedule(schedule);
+        final merged = await _raceScheduleRepository.getRaceSchedule(schedule.date);
         if (merged != null) {
           _initializeStatusMapFromSchedule(merged);
           raceSchedules[merged.date] = merged;
@@ -226,11 +226,11 @@ class RaceScheduleViewModel extends ChangeNotifier {
         // 引き継いでから保存し、DBから読み直して確定版を使う
         final scraped = await _scraperService.scrapeRaceSchedule(date);
         if (scraped != null) {
-          await _raceRepository.mergeRaceSchedule(scraped);
-          schedule = await _raceRepository.getRaceSchedule(dateString);
+          await _raceScheduleRepository.mergeRaceSchedule(scraped);
+          schedule = await _raceScheduleRepository.getRaceSchedule(dateString);
         }
       } else {
-        schedule = await _raceRepository.getRaceSchedule(dateString);
+        schedule = await _raceScheduleRepository.getRaceSchedule(dateString);
 
         if (schedule != null) {
           final now = DateTime.now();
@@ -247,8 +247,8 @@ class RaceScheduleViewModel extends ChangeNotifier {
               // 不完全なキャッシュの補完時も mergeRaceSchedule を使う
               final scraped = await _scraperService.scrapeRaceSchedule(date);
               if (scraped != null) {
-                await _raceRepository.mergeRaceSchedule(scraped);
-                schedule = await _raceRepository.getRaceSchedule(dateString);
+                await _raceScheduleRepository.mergeRaceSchedule(scraped);
+                schedule = await _raceScheduleRepository.getRaceSchedule(dateString);
               }
             }
           }
@@ -258,8 +258,8 @@ class RaceScheduleViewModel extends ChangeNotifier {
           // 新規取得時も mergeRaceSchedule 経由で保存する
           final scraped = await _scraperService.scrapeRaceSchedule(date);
           if (scraped != null) {
-            await _raceRepository.mergeRaceSchedule(scraped);
-            schedule = await _raceRepository.getRaceSchedule(dateString);
+            await _raceScheduleRepository.mergeRaceSchedule(scraped);
+            schedule = await _raceScheduleRepository.getRaceSchedule(dateString);
           }
         }
       }
@@ -277,7 +277,7 @@ class RaceScheduleViewModel extends ChangeNotifier {
         // ステータス確認完了後にDBと画面を再同期する
         _checkRaceStatusesForSchedule(schedule).then((_) async {
           if (_disposed) return;
-          final updated = await _raceRepository.getRaceSchedule(dateString);
+          final updated = await _raceScheduleRepository.getRaceSchedule(dateString);
           if (!_disposed && updated != null) {
             _initializeStatusMapFromSchedule(updated);
             raceSchedules[dateString] = updated;
@@ -364,7 +364,7 @@ class RaceScheduleViewModel extends ChangeNotifier {
     // isConfirmed 更新後は schedule オブジェクトが正しい状態なので
     // insertOrUpdateRaceSchedule でそのまま保存する
     if (needUpdateDb) {
-      await _raceRepository.insertOrUpdateRaceSchedule(schedule);
+      await _raceScheduleRepository.insertOrUpdateRaceSchedule(schedule);
     }
   }
 }

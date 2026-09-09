@@ -2,19 +2,19 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:hetaumakeiba_v2/db/repositories/jyusyo_race_repository.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_schedule_repository.dart';
 import 'package:hetaumakeiba_v2/models/jyusyoichiran_page_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 
 class JyusyoMatchingService {
   final JyusyoRaceRepository _jyusyoRaceRepository;
-  final RaceRepository _raceRepository;
+  final RaceScheduleRepository _raceRepository;
 
   JyusyoMatchingService({
     JyusyoRaceRepository? jyusyoRaceRepository,
-    RaceRepository? raceRepository,
+    RaceScheduleRepository? raceScheduleRepository,
   })  : _jyusyoRaceRepository = jyusyoRaceRepository ?? JyusyoRaceRepository(),
-        _raceRepository = raceRepository ?? RaceRepository();
+        _raceRepository = raceScheduleRepository ?? RaceScheduleRepository();
 
   /// スケジュールデータから重賞一覧のIDを更新・自動連携する
   Future<void> reflectScheduleDataToJyusyoRaces(RaceSchedule schedule) async {
