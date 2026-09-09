@@ -68,7 +68,8 @@ class BundleFactorSelector {
         ..sort((a, b) {
           final cmp = b.liftFor(metric).compareTo(a.liftFor(metric));
           if (cmp != 0) return cmp;
-          return a.horseNumber.compareTo(b.horseNumber);
+          // [修正] 馬番未確定(0)同士では並び順が不定になるため馬名昇順へフォールバックする (v.2026.9.9+26090905)
+          return FactorCandidateSelector.compareForTie(a, b);
         });
       final filtered = sorted.where((c) => c.liftFor(metric) > 0).toList();
       byMetric[metric] = filtered.length <= maxCandidates
@@ -101,7 +102,8 @@ class BundleFactorSelector {
 
     final List<FactorCandidate> list = [];
     for (final horse in horses) {
-      if (horse.isScratched || horse.horseNumber <= 0) continue;
+      // [修正] 枠順確定前は馬番が全頭0になり、この条件で全頭が除外されていたため馬番の条件を外す (v.2026.9.9+26090905)
+      if (horse.isScratched) continue;
       final rel = bundle.relativeBattleResults[horse.horseId];
       if (rel == null) continue;
 
@@ -191,7 +193,8 @@ class BundleFactorSelector {
     final List<FactorCandidate> list = [];
     for (final match in bundle.matchResults) {
       final horse = _findHorse(horses, match.horseId);
-      if (horse == null || horse.isScratched || horse.horseNumber <= 0) continue;
+      // [修正] 枠順確定前は馬番が全頭0になり、この条件で全頭が除外されていたため馬番の条件を外す (v.2026.9.9+26090905)
+      if (horse == null || horse.isScratched) continue;
 
       final Map<String, double> lifts = {};
       for (final entry in slotToScenario.entries) {
@@ -277,7 +280,8 @@ class BundleFactorSelector {
     final List<FactorCandidate> list = [];
     for (final match in bundle.matchResults) {
       final horse = _findHorse(horses, match.horseId);
-      if (horse == null || horse.isScratched || horse.horseNumber <= 0) continue;
+      // [修正] 枠順確定前は馬番が全頭0になり、この条件で全頭が除外されていたため馬番の条件を外す (v.2026.9.9+26090905)
+      if (horse == null || horse.isScratched) continue;
 
       final profile = bundle.horseProfileMap[match.horseId];
       final String pedigreeText = profile == null || profile.fatherName.isEmpty
@@ -313,6 +317,11 @@ class BundleFactorSelector {
       '血統データが未取得の馬は一律40点（0.80倍）になります。'
       '「総合」タブの血統カードにある取得ボタンを押すと、'
       '過去の1〜3着馬の血統がまとめて取得され、この画面の精度が上がります。',
+      // [追加] 枠順確定前は同点馬が多数並ぶため、順位の意味を誤読させない注記 (v.2026.9.9+26090905)
+      '枠順が確定していないレースでは、同じ点数の馬が多数並びます。'
+      'その場合の並び順は馬名の昇順で固定しているだけなので、'
+      '上位に出ていること自体に意味はありません。'
+      '枠順確定後に改めてご確認ください。',
       _disclaimer,
     ];
 
@@ -348,7 +357,8 @@ class BundleFactorSelector {
     final List<FactorCandidate> list = [];
     for (final match in bundle.matchResults) {
       final horse = _findHorse(horses, match.horseId);
-      if (horse == null || horse.isScratched || horse.horseNumber <= 0) continue;
+      // [修正] 枠順確定前は馬番が全頭0になり、この条件で全頭が除外されていたため馬番の条件を外す (v.2026.9.9+26090905)
+      if (horse == null || horse.isScratched) continue;
 
       list.add(FactorCandidate(
         horseId: match.horseId,
@@ -373,8 +383,11 @@ class BundleFactorSelector {
       'この点数は「1〜3着に入った馬」の前走だけを数えています。'
       '同じ路線から来て凡走した馬は数えていないため、'
       '「その路線から来れば good」ではなく「好走馬にはこの路線が多かった」という意味です。'
+      // [修正] 枠順確定前は馬名順になるため、並び順の説明を実装に合わせる (v.2026.9.9+26090905)
       'また点数が95・80・50・40の4段階しかないため、同点の馬が多く出ます。'
-      '同点の場合は馬番順に並んでいるだけなので、順位の上下に意味はありません。',
+      '同点の場合は馬番順（枠順が確定していないレースでは馬名の昇順）に並んでいるだけなので、'
+      '順位の上下に意味はありません。'
+      '枠順確定前は同点の馬が特に多く並ぶため、上位に出ていること自体に意味はありません。',
       _disclaimer,
     ];
 
@@ -412,7 +425,8 @@ class BundleFactorSelector {
     final List<FactorCandidate> list = [];
     for (final match in bundle.matchResults) {
       final horse = _findHorse(horses, match.horseId);
-      if (horse == null || horse.isScratched || horse.horseNumber <= 0) continue;
+      // [修正] 枠順確定前は馬番が全頭0になり、この条件で全頭が除外されていたため馬番の条件を外す (v.2026.9.9+26090905)
+      if (horse == null || horse.isScratched) continue;
 
       final String sign = match.valueIndex >= 0 ? '+' : '';
       list.add(FactorCandidate(

@@ -786,7 +786,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
 
   // [追加] 今回の出走馬が牝馬のみか判定する (v.2026.9.9+26090904)
   bool _isFemaleOnlyRace() {
-    final active = _horses.where((h) => !h.isScratched && h.horseNumber > 0);
+    // [修正] 枠順確定前は馬番が全頭0になり判定できず、カード側の判定と食い違うため馬番の条件を外す (v.2026.9.9+26090905)
+    final active = _horses.where((h) => !h.isScratched);
     if (active.isEmpty) return false;
     return !active.any((h) {
       if (h.sexAndAge.isEmpty) return false;
@@ -1078,7 +1079,13 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   final placeRate = (data['place'] / total * 100);
                   final showRate = (data['show'] / total * 100);
                   return DataRow(cells: [
-                    DataCell(Text(entry.key)),
+                    // [修正] 騎手集計がIDキーになったため、表示名は値の name を使う。
+                    // 旧形式（名前キー）では name が無いのでキーをそのまま表示する (v.2026.9.9+26090905)
+                    DataCell(Text(
+                        (data['name'] is String &&
+                                (data['name'] as String).isNotEmpty)
+                            ? data['name'] as String
+                            : entry.key)),
                     DataCell(Text('${winRate.toStringAsFixed(1)}%')),
                     DataCell(Text('${placeRate.toStringAsFixed(1)}%')),
                     DataCell(Text('${showRate.toStringAsFixed(1)}%')),

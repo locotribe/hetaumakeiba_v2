@@ -208,12 +208,32 @@ class StatisticsService {
         if (isShow) frameStats[frame]!['show'] = (frameStats[frame]!['show'] ?? 0) + 1;
 
         // 騎手別成績
-        final jockey = horse.jockeyName;
-        jockeyStats.putIfAbsent(jockey, () => {'total': 0, 'win': 0, 'place': 0, 'show': 0});
-        jockeyStats[jockey]!['total'] = (jockeyStats[jockey]!['total'] ?? 0) + 1;
-        if (isWin) jockeyStats[jockey]!['win'] = (jockeyStats[jockey]!['win'] ?? 0) + 1;
-        if (isPlace) jockeyStats[jockey]!['place'] = (jockeyStats[jockey]!['place'] ?? 0) + 1;
-        if (isShow) jockeyStats[jockey]!['show'] = (jockeyStats[jockey]!['show'] ?? 0) + 1;
+        // [修正] 騎手名の表記揺れ(「M.デム」⇔「Mデムーロ」等)で照合できないため騎手IDをキーにする。
+        // jockeyId は後付けフィールドで古い保存済みレース結果では空文字になりうるため、
+        // 空の場合は従来どおり騎手名をキーにして、空文字キーへ全騎手が合算されるのを防ぐ。
+        // 表示用に 'name' を値へ保持する (v.2026.9.9+26090905)
+        final String jockeyKey =
+            horse.jockeyId.isNotEmpty ? horse.jockeyId : horse.jockeyName;
+        if (jockeyKey.isNotEmpty) {
+          jockeyStats.putIfAbsent(
+              jockeyKey,
+              () => {
+                    'name': horse.jockeyName,
+                    'total': 0,
+                    'win': 0,
+                    'place': 0,
+                    'show': 0
+                  });
+          final jockeyEntry = jockeyStats[jockeyKey]!;
+          final currentName = jockeyEntry['name'];
+          if (currentName is! String || currentName.isEmpty) {
+            jockeyEntry['name'] = horse.jockeyName;
+          }
+          jockeyEntry['total'] = (jockeyEntry['total'] ?? 0) + 1;
+          if (isWin) jockeyEntry['win'] = (jockeyEntry['win'] ?? 0) + 1;
+          if (isPlace) jockeyEntry['place'] = (jockeyEntry['place'] ?? 0) + 1;
+          if (isShow) jockeyEntry['show'] = (jockeyEntry['show'] ?? 0) + 1;
+        }
 
         // 調教師別成績
         final trainer = horse.trainerName;

@@ -235,9 +235,35 @@ class FactorCandidateSelector {
   // 内部ヘルパー
   // ---------------------------------------------------------------------------
 
+  // [修正] 枠順確定前は馬番が全頭0になり、この条件で全頭が除外されて各ファクターが
+  // 「該当馬なし」になっていたため、馬番の条件を外す (v.2026.9.9+26090905)
   static List<PredictionHorseDetail> _activeHorses(
       List<PredictionHorseDetail> horses) {
-    return horses.where((h) => !h.isScratched && h.horseNumber > 0).toList();
+    return horses.where((h) => !h.isScratched).toList();
+  }
+
+  // [追加] 同スコア時の並び順フォールバック (v.2026.9.9+26090905)
+  //
+  // 枠順確定前は馬番が全頭0になり、馬番同士の比較では並び順が不定になる。
+  // 両者とも馬番が確定していれば従来どおり馬番の昇順、
+  // 片方だけ未確定ならその馬を後ろへ、両者とも未確定なら馬名の昇順で安定させる。
+  static int compareForTie(FactorCandidate a, FactorCandidate b) {
+    if (a.horseNumber > 0 && b.horseNumber > 0) {
+      return a.horseNumber.compareTo(b.horseNumber);
+    }
+    if (a.horseNumber > 0) return -1;
+    if (b.horseNumber > 0) return 1;
+    return a.horseName.compareTo(b.horseName);
+  }
+
+  // [追加] 集計エントリの表示名を返す (v.2026.9.9+26090905)
+  //
+  // 騎手集計は騎手IDをキーにするため、キーをそのまま表示するとIDが画面に出てしまう。
+  // 値の 'name' があればそれを使い、無ければ（旧形式＝名前キー）キーをそのまま使う。
+  static String _displayNameOf(String key, Map<String, dynamic> data) {
+    final name = data['name'];
+    if (name is String && name.trim().isNotEmpty) return name;
+    return key;
   }
 
   static int _statInt(Map<String, dynamic>? data, String key) {
@@ -311,7 +337,8 @@ class FactorCandidateSelector {
         ..sort((a, b) {
           final cmp = b.liftFor(metric).compareTo(a.liftFor(metric));
           if (cmp != 0) return cmp;
-          return a.horseNumber.compareTo(b.horseNumber);
+          // [修正] 馬番未確定(0)同士では並び順が不定になるため馬名昇順へフォールバックする (v.2026.9.9+26090905)
+          return compareForTie(a, b);
         });
       final filtered = sorted.where((c) => c.liftFor(metric) > 0).toList();
       byMetric[metric] = filtered.length <= maxCandidates
@@ -336,7 +363,9 @@ class FactorCandidateSelector {
       final map = Map<String, dynamic>.from(entry.value as Map);
       if (_statInt(map, 'total') < minTotal) continue;
       final rates = _ratesOf(map);
-      entries.add(MapEntry(entry.key, rates[metric] ?? 0.0));
+      // [修正] 騎手集計がIDキーになったため、表示にはキーではなく name を使う (v.2026.9.9+26090905)
+      entries.add(
+          MapEntry(_displayNameOf(entry.key, map), rates[metric] ?? 0.0));
     }
     entries.sort((a, b) => b.value.compareTo(a.value));
 
@@ -958,7 +987,9 @@ class FactorCandidateSelector {
 
     final List<FactorCandidate> list = [];
     for (final horse in _activeHorses(horses)) {
-      final matched = _findByName(jockeyStats, horse.jockey);
+      // [修正] 騎手名の表記揺れ(「M.デム」⇔「Mデムーロ」等)で照合できないため騎手IDで突合する (v.2026.9.9+26090905)
+      final matched =
+          _findJockeyStats(jockeyStats, horse.jockeyId, horse.jockey);
       if (matched == null) continue;
       final rates = _ratesOf(matched);
       list.add(FactorCandidate(
@@ -1013,6 +1044,7 @@ class FactorCandidateSelector {
 
     final List<FactorCandidate> list = [];
     for (final horse in _activeHorses(horses)) {
+      // [修正] 「友道」⇔「友道康夫」等の表記揺れを吸収するため _findByName の照合を三段階化した (v.2026.9.9+26090905)
       final matched = _findByName(trainerStats, horse.trainerName);
       if (matched == null) continue;
       final rates = _ratesOf(matched);
@@ -1049,19 +1081,94 @@ class FactorCandidateSelector {
     );
   }
 
-  /// 空白を無視して名前一致する集計エントリを探す
+  // [追加] 照合用の名前正規化。空白・ピリオド・中黒・ハイフン・長音符を除去する (v.2026.9.9+26090905)
+  static String _normalizeName(String raw) {
+    return raw.replaceAll(
+        RegExp(r'[\s　\.．・･·\-－ー_]'), '');
+  }
+
+  // [修正] 空白除去の完全一致のみでは「友道」⇔「友道康夫」等の表記揺れを吸収できないため、
+  // ①完全一致 → ②正規化後の完全一致 → ③正規化後の包含（候補が1件に定まる場合のみ）
+  // の三段階で照合する (v.2026.9.9+26090905)
+  //
+  /// 名前で集計エントリを探す。
+  ///
+  /// 集計キーは旧形式では名前、新形式（騎手）ではIDになるため、
+  /// キーと値の 'name' の両方を照合対象にする。
+  /// 包含判定は、双方が2文字以上で、かつ候補が1件に定まるときのみ採用する。
+  /// （「田中」が「田中博康」「田中剛」の両方に当たるような誤マッチを防ぐため）
   static Map<String, dynamic>? _findByName(
       Map<String, dynamic> stats, String rawName) {
-    final name = rawName.replaceAll(RegExp(r'\s+'), '');
-    if (name.isEmpty) return null;
+    final raw = rawName.trim();
+    if (raw.isEmpty) return null;
+    final normalized = _normalizeName(raw);
+    if (normalized.isEmpty) return null;
+
+    Map<String, dynamic>? exact;
+    final List<Map<String, dynamic>> partial = [];
+
     for (final entry in stats.entries) {
       if (entry.value is! Map) continue;
-      if (entry.key.replaceAll(RegExp(r'\s+'), '') != name) continue;
       final map = Map<String, dynamic>.from(entry.value as Map);
-      if (_statInt(map, 'total') <= 0) return null;
-      return map;
+      if (_statInt(map, 'total') <= 0) continue;
+
+      final List<String> labels = <String>[entry.key];
+      final nameValue = map['name'];
+      if (nameValue is String && nameValue.isNotEmpty) {
+        labels.add(nameValue);
+      }
+
+      bool isExact = false;
+      bool isPartial = false;
+      for (final label in labels) {
+        if (label == raw) {
+          isExact = true;
+          break;
+        }
+        final normalizedLabel = _normalizeName(label);
+        if (normalizedLabel.isEmpty) continue;
+        if (normalizedLabel == normalized) {
+          isExact = true;
+          break;
+        }
+        // 1文字だけの一致は誤マッチが多いため、双方2文字以上のときだけ包含を認める
+        if (normalized.length >= 2 &&
+            normalizedLabel.length >= 2 &&
+            (normalizedLabel.contains(normalized) ||
+                normalized.contains(normalizedLabel))) {
+          isPartial = true;
+        }
+      }
+
+      if (isExact) {
+        exact = map;
+        break;
+      }
+      if (isPartial) partial.add(map);
     }
+
+    if (exact != null) return exact;
+    if (partial.length == 1) return partial.first;
     return null;
+  }
+
+  // [追加] 騎手IDで集計を引き、見つからなければ従来の名前照合にフォールバックする (v.2026.9.9+26090905)
+  //
+  // 保存済みの statisticsJson は騎手名をキーにした旧形式のままなので、
+  // ID検索が外れても名前照合が効くようにして既存データを壊さない。
+  static Map<String, dynamic>? _findJockeyStats(
+    Map<String, dynamic> stats,
+    String jockeyId,
+    String jockeyName,
+  ) {
+    if (jockeyId.isNotEmpty) {
+      final data = stats[jockeyId];
+      if (data is Map) {
+        final map = Map<String, dynamic>.from(data);
+        if (_statInt(map, 'total') > 0) return map;
+      }
+    }
+    return _findByName(stats, jockeyName);
   }
 
   // ---------------------------------------------------------------------------
@@ -1132,7 +1239,13 @@ class FactorCandidateSelector {
         if (cmp != 0) return cmp;
         final liftCmp = b.liftTotal.compareTo(a.liftTotal);
         if (liftCmp != 0) return liftCmp;
-        return a.horseNumber.compareTo(b.horseNumber);
+        // [修正] 枠順確定前は馬番が全頭0になり並び順が不定になるため、馬名昇順へフォールバックする (v.2026.9.9+26090905)
+        if (a.horseNumber > 0 && b.horseNumber > 0) {
+          return a.horseNumber.compareTo(b.horseNumber);
+        }
+        if (a.horseNumber > 0) return -1;
+        if (b.horseNumber > 0) return 1;
+        return a.horseName.compareTo(b.horseName);
       });
 
     return list;
