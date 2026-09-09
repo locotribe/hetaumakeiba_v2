@@ -88,6 +88,18 @@ lib/
 
 ## 作業履歴
 
+### 2026-09-09 過去レース複数ワードAND詳細検索対応
+
+指示書: `memory/過去レース複数ワード検索_CLI指示書.md`
+
+- 過去レース検索を単一テキストボックスの複数ワード(スペース区切り)AND詳細検索に対応。
+  開催場/馬場/距離を検索ボックス初期値へ自動投入。
+- `url_generator.dart`: `generateNetkeibaRaceSearchUrlFromQuery` を新設。
+  距離 → 馬場 → 開催地 の優先順で判定し `kyori[]` / `track%5B%5D` / `jyo%5B%5D` パラメータへマッピング。非該当トークンをEUC-JP大文字パーセントエンコードして `word` に付与。
+- `past_race_selection_dialog.dart`: `location` / `trackType` / `distance` を任意引数として受取り、初期表示時にスペース区切りで自動結合。
+- `race_statistics_page.dart`: キャッシュから `PredictionRaceData` を保持し、ダイアログに開催場/馬場/距離を受け渡し。
+- `past_race_id_fetcher_service.dart`: ページネーション時のURL結合を文字列分割・再構築で堅牢化（`Uri` によるEUC-JPバイト列破壊を防止）。
+
 ### 2026-09-09 開催日程の分離（Phase 4）— RaceRepository の責務分割が完了
 
 指示書: `memory/RaceSchedule分割_CLI指示書_Phase4.md`
