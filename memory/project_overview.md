@@ -88,6 +88,26 @@ lib/
 
 ## 作業履歴
 
+### 2026-09-09 RaceRepository のドメイン分割（SRP違反の解消）
+
+指示書: `memory/RaceRepository分割_CLI指示書.md`
+
+- ゴッドクラス化していた `RaceRepository`（370行 / 6ドメイン）から4ドメインを分離。残り228行。
+- 新設リポジトリ（いずれも `lib/db/repositories/`）
+  `race_memo_repository.dart` (race_memos) / `race_statistics_repository.dart` (race_statistics) /
+  `featured_race_repository.dart` (featured_races) / `shutuba_table_cache_repository.dart` (shutuba_table_cache)
+- 移行は3フェーズ・7コミット。呼び出し元が7ファイルに及ぶ出馬表キャッシュのみ、
+  一時的な `@Deprecated` 委譲ブリッジを挟んで段階移行し、最後に撤去した。
+- **ロジック・SQL・スキーマ・メソッドシグネチャは一切変更していない。**
+  `race_repository.dart` の差分は削除143行・追加0行。呼び出し元12ファイルの変更は
+  import / フィールド宣言 / レシーバ名のみ。
+- `flutter analyze` 新規エラー0件、`flutter test` 107件全パス。
+  実機で起動・未来レースの情報取得・確定済みレース表示を確認済み。
+- `RaceRepository` の残存は レース結果5メソッド / 開催日程7メソッド。
+  次の分離候補は `race_schedules` + `week_schedules_cache`（呼び出し元5ファイル）。
+- 注意: `test_apps/database_migration_app.dart`（`.gitignore` 対象）も1箇所修正済み。
+  未追跡のためコミットには含まれず、ローカル変更として残っている。
+
 ### 2026-09-05 過去分析タブの再編成（フェーズ1〜4完了）
 
 設計レポート: `memory/タブ再編成_設計レポート.md`
