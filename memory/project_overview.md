@@ -88,6 +88,28 @@ lib/
 
 ## 作業履歴
 
+### 2026-09-09 開催日程の分離（Phase 4）— RaceRepository の責務分割が完了
+
+指示書: `memory/RaceSchedule分割_CLI指示書_Phase4.md`
+
+- `RaceRepository` に残っていた最後の別ドメイン「開催日程」を `RaceScheduleRepository` へ分離。
+  対象は `race_schedules` と `week_schedules_cache` の7メソッド
+  （`insertOrUpdateRaceSchedule` / `getMultipleRaceSchedules` / `getRaceSchedule` /
+  `insertOrUpdateWeekCache` / `getWeekCache` / `getDateFromScheduleByRaceId` / `mergeRaceSchedule`）。
+- 呼び出し元5ファイルを移行。`JyusyoMatchingService` のみコンストラクタDI設計のため、
+  注入する型と引数名を `RaceScheduleRepository? raceScheduleRepository` へ変更した
+  （生成箇所2つはいずれも引数なし呼び出しのため影響なし）。
+  `TrackConditionsScraperService` の `_raceRepo` はフィールドではなくメソッド内ローカル変数だった。
+- 3サブフェーズ・3コミット。前回同様、一時的な `@Deprecated` 委譲ブリッジを挟んで段階移行し最後に撤去。
+- **ロジック・SQL・スキーマ・メソッドシグネチャは無変更。**
+  `race_repository.dart` の差分は削除133行・追加0行。
+- `flutter analyze` はベースラインと完全一致（679件 / error 0）、`flutter test` 107件全パス。
+  実機で開催日程・重賞一覧・購入履歴の日付・馬場情報を確認済み。
+- **結果: `RaceRepository` は 370行/6ドメイン → 94行/レース結果5メソッドのみに純化。**
+  `db/repositories/` は11 → 16ファイル。
+- 今後の候補（未着手）: `RaceRepository` を `RaceResultRepository` へリネーム（呼び出し元20ファイル超のため
+  IDEの一括リネーム推奨）。Smart UIパターンの解消（UI層からのDBアクセス）、シングルトンのDI化。
+
 ### 2026-09-09 RaceRepository のドメイン分割（SRP違反の解消）
 
 指示書: `memory/RaceRepository分割_CLI指示書.md`
