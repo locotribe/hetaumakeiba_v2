@@ -5,13 +5,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:hetaumakeiba_v2/db/db_provider.dart';
 import 'package:hetaumakeiba_v2/db/db_constants.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
-import 'package:hetaumakeiba_v2/db/repositories/race_schedule_repository.dart';
 
 class RaceRepository {
   final DbProvider _dbProvider = DbProvider();
-  // [一時] Phase 4 移行用の委譲ブリッジ。Phase 4-C で削除する
-  final RaceScheduleRepository _raceScheduleRepository = RaceScheduleRepository();
 
   // ===========================================================================
   // レース結果 (race_results)
@@ -95,44 +91,5 @@ class RaceRepository {
     }
     return matches;
   }
-
-  // ===========================================================================
-  // 開催日程 (race_schedules, week_schedules_cache)
-  // ===========================================================================
-
-  // [一時] Phase 4 移行用の委譲ブリッジ。Phase 4-C で削除する
-  @Deprecated('RaceScheduleRepository を直接使用してください')
-  Future<int> insertOrUpdateRaceSchedule(RaceSchedule schedule) =>
-      _raceScheduleRepository.insertOrUpdateRaceSchedule(schedule);
-
-  // [一時] Phase 4 移行用の委譲ブリッジ。Phase 4-C で削除する
-  @Deprecated('RaceScheduleRepository を直接使用してください')
-  Future<Map<String, RaceSchedule>> getMultipleRaceSchedules(List<String> dates) =>
-      _raceScheduleRepository.getMultipleRaceSchedules(dates);
-
-  // [一時] Phase 4 移行用の委譲ブリッジ。Phase 4-C で削除する
-  @Deprecated('RaceScheduleRepository を直接使用してください')
-  Future<RaceSchedule?> getRaceSchedule(String date) =>
-      _raceScheduleRepository.getRaceSchedule(date);
-
-  // [一時] Phase 4 移行用の委譲ブリッジ。Phase 4-C で削除する
-  @Deprecated('RaceScheduleRepository を直接使用してください')
-  Future<void> insertOrUpdateWeekCache(String weekKey, List<String> availableDates) =>
-      _raceScheduleRepository.insertOrUpdateWeekCache(weekKey, availableDates);
-
-  // [一時] Phase 4 移行用の委譲ブリッジ。Phase 4-C で削除する
-  @Deprecated('RaceScheduleRepository を直接使用してください')
-  Future<List<String>?> getWeekCache(String weekKey) =>
-      _raceScheduleRepository.getWeekCache(weekKey);
-
-  // [一時] Phase 4 移行用の委譲ブリッジ。Phase 4-C で削除する
-  @Deprecated('RaceScheduleRepository を直接使用してください')
-  Future<String?> getDateFromScheduleByRaceId(String raceId) =>
-      _raceScheduleRepository.getDateFromScheduleByRaceId(raceId);
-
-  // [一時] Phase 4 移行用の委譲ブリッジ。Phase 4-C で削除する
-  @Deprecated('RaceScheduleRepository を直接使用してください')
-  Future<int> mergeRaceSchedule(RaceSchedule newSchedule) =>
-      _raceScheduleRepository.mergeRaceSchedule(newSchedule);
 
 }
