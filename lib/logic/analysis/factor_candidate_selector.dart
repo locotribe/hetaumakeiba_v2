@@ -212,6 +212,8 @@ class FactorCandidateSelector {
     'frame',
     'legStyle',
     'horseWeight',
+    // [追加] 性別（牡・牝・セ） (v.2026.9.9+26090904)
+    'gender',
     'jockey',
     'trainer',
   ];
@@ -223,6 +225,8 @@ class FactorCandidateSelector {
     'frame': '枠番',
     'legStyle': '脚質',
     'horseWeight': '馬体重',
+    // [追加] 性別（牡・牝・セ） (v.2026.9.9+26090904)
+    'gender': '性別',
     'jockey': '騎手',
     'trainer': '調教師',
   };
@@ -816,6 +820,127 @@ class FactorCandidateSelector {
   }
 
   // ---------------------------------------------------------------------------
+  // [追加] 6. 性別 : 混合戦での性別傾向に合致する馬を抽出 (v.2026.9.9+26090904)
+  // ---------------------------------------------------------------------------
+
+  /// 牡・牝・セの過去成績（混合戦のみ集計）と今回のメンバーを突き合わせる。
+  ///
+  /// セン馬は母数が極端に小さくなりやすく、単独で率を出すと歪むため、
+  /// 判定・リフト算出では常に「牡＋セ」を合算した数値を用いる。
+  static FactorCandidateResult selectByGender(
+    Map<String, dynamic> genderStats,
+    List<PredictionHorseDetail> horses,
+  ) {
+    const label = '性別';
+    const criteria =
+        '過去の混合戦における性別別の複勝率が全体平均を上回る性別の馬を上位$maxCandidates頭まで選出'
+        '（セン馬は母数が小さいため牡と合算して判定）';
+
+    const List<String> notes = [
+      '※夏開催の牝馬は斤量減（牝馬は定量・別定戦で原則2kg減）の恩恵も含まれた成績です。'
+          '馬体重タブや各馬の斤量と合わせて判断してください。',
+      'このファクターは牝と牡・セが両方出走した「混合戦」の過去データのみを集計しています。'
+          '牝馬限定戦などの過去レースは母集団から除外されています。',
+      'セン馬は母数が小さく単独では率が安定しないため、牡と合算した数値で判定しています。',
+      ..._commonNotes,
+    ];
+
+    final baseline = _baselineOf(genderStats);
+
+    // 牡＋セの合成データを作る
+    final Map<String, dynamic> maleData = {'total': 0, 'win': 0, 'place': 0, 'show': 0};
+    for (final key in const ['牡', 'セ']) {
+      final data = genderStats[key];
+      if (data is! Map) continue;
+      final map = Map<String, dynamic>.from(data);
+      for (final field in const ['total', 'win', 'place', 'show']) {
+        maleData[field] = (maleData[field] as int) + _statInt(map, field);
+      }
+    }
+
+    final Map<String, dynamic>? femaleData = genderStats['牝'] is Map
+        ? Map<String, dynamic>.from(genderStats['牝'] as Map)
+        : null;
+
+    // 傾向要約
+    final List<String> summaryParts = [];
+    if (_statInt(maleData, 'total') > 0) {
+      final rate = _ratesOf(maleData)[FactorMetric.show] ?? 0.0;
+      final base = baseline.rate(FactorMetric.show);
+      final liftText = base > 0 ? '(${(rate / base).toStringAsFixed(1)}倍)' : '';
+      summaryParts.add('牡・セ 複勝率 ${rate.toStringAsFixed(0)}%$liftText');
+    }
+    if (femaleData != null && _statInt(femaleData, 'total') > 0) {
+      final rate = _ratesOf(femaleData)[FactorMetric.show] ?? 0.0;
+      final base = baseline.rate(FactorMetric.show);
+      final liftText = base > 0 ? '(${(rate / base).toStringAsFixed(1)}倍)' : '';
+      summaryParts.add('牝 複勝率 ${rate.toStringAsFixed(0)}%$liftText');
+    }
+    final summary = summaryParts.isEmpty
+        ? '混合戦の性別別成績の集計データがありません。'
+        : summaryParts.join(' / ');
+
+    final active = _activeHorses(horses);
+
+    // 牝馬限定戦ガード: 今回の出走馬に牡・セが1頭もいない場合は選出しない
+    final bool hasMaleOrGeldingEntry = active.any((h) {
+      if (h.sexAndAge.isEmpty) return false;
+      final s = h.sexAndAge.substring(0, 1);
+      return s == '牡' || s == 'セ';
+    });
+    if (!hasMaleOrGeldingEntry) {
+      return FactorCandidateResult(
+        factorKey: 'gender',
+        factorLabel: label,
+        trendSummary: summary,
+        criteria: criteria,
+        candidatesByMetric: const {},
+        emptyMessage:
+            '当レースは牝馬限定戦のため、性別による有利不利の判定は適用されません。',
+        notes: notes,
+        baseline: baseline,
+      );
+    }
+
+    final List<FactorCandidate> list = [];
+    for (final horse in active) {
+      if (horse.sexAndAge.isEmpty) continue;
+      final sex = horse.sexAndAge.substring(0, 1);
+      if (sex != '牡' && sex != '牝' && sex != 'セ') continue;
+
+      final Map<String, dynamic>? data = sex == '牝' ? femaleData : maleData;
+      if (data == null || _statInt(data, 'total') <= 0) continue;
+
+      final rates = _ratesOf(data);
+      final reason = sex == '牝' ? '牝' : '$sex（牡・セ合算で判定）';
+
+      list.add(FactorCandidate(
+        horseId: horse.horseId,
+        horseNumber: horse.horseNumber,
+        gateNumber: horse.gateNumber,
+        horseName: horse.horseName,
+        reason: reason,
+        recordText: '${_statInt(data, 'show')}/${_statInt(data, 'total')}',
+        rates: rates,
+        lifts: _liftsOf(rates, baseline),
+      ));
+    }
+
+    return FactorCandidateResult(
+      factorKey: 'gender',
+      factorLabel: label,
+      trendSummary: summary,
+      criteria: criteria,
+      candidatesByMetric: _buildByMetric(list),
+      emptyMessage: list.isEmpty
+          ? '混合戦の性別別成績が集計されていないため選出できません。'
+          : null,
+      notes: notes,
+      baseline: baseline,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // 6. 騎手 : 過去にこのレースで好成績の騎手が騎乗する馬を抽出
   // ---------------------------------------------------------------------------
 
@@ -964,6 +1089,8 @@ class FactorCandidateSelector {
       'legStyle': selectByLegStyle(pick('legStyleStats'), horses),
       'horseWeight': selectByHorseWeight(
           pick('horseWeightChangeStats'), avgWeight, horses),
+      // [追加] 性別（牡・牝・セ） (v.2026.9.9+26090904)
+      'gender': selectByGender(pick('genderStats'), horses),
       'jockey': selectByJockey(pick('jockeyStats'), horses),
       'trainer': selectByTrainer(pick('trainerStats'), horses),
     };

@@ -146,6 +146,8 @@ class StatisticsService {
     final Map<String, Map<String, dynamic>> jockeyStats = {};
     final Map<String, Map<String, dynamic>> trainerStats = {};
     final Map<String, Map<String, dynamic>> legStyleStats = {};
+    // [追加] 性別（牡・牝・セ）別成績。混合戦のみを母集団とする (v.2026.9.9+26090904)
+    final Map<String, Map<String, dynamic>> genderStats = {};
     final Map<String, List<int>> payoutStats = {
       for (var v in bettingDict.values) v: []
     };
@@ -154,6 +156,20 @@ class StatisticsService {
 
     // 集計用のループ
     for (final result in results) {
+      // [追加] 混合戦判定: 牝 と 牡/セ が両方出走しているレースのみ性別集計の対象とする (v.2026.9.9+26090904)
+      bool hasFemale = false;
+      bool hasMaleOrGelding = false;
+      for (final h in result.horseResults) {
+        if (h.sexAndAge.isEmpty) continue;
+        final s = h.sexAndAge.substring(0, 1);
+        if (s == '牝') {
+          hasFemale = true;
+        } else if (s == '牡' || s == 'セ') {
+          hasMaleOrGelding = true;
+        }
+      }
+      final bool isMixedGenderRace = hasFemale && hasMaleOrGelding;
+
       // 配当データの集計
       for (final refund in result.refunds) {
         final ticketTypeName = bettingDict[refund.ticketTypeId];
@@ -226,6 +242,18 @@ class StatisticsService {
           if (isShow) legStyleStats[style]!['show'] = (legStyleStats[style]!['show'] ?? 0) + 1;
         }
 
+        // [追加] 性別別成績 (混合戦のみ集計) (v.2026.9.9+26090904)
+        if (isMixedGenderRace && horse.sexAndAge.isNotEmpty) {
+          final gender = horse.sexAndAge.substring(0, 1);
+          if (gender == '牡' || gender == '牝' || gender == 'セ') {
+            genderStats.putIfAbsent(gender, () => {'total': 0, 'win': 0, 'place': 0, 'show': 0});
+            genderStats[gender]!['total'] = (genderStats[gender]!['total'] ?? 0) + 1;
+            if (isWin) genderStats[gender]!['win'] = (genderStats[gender]!['win'] ?? 0) + 1;
+            if (isPlace) genderStats[gender]!['place'] = (genderStats[gender]!['place'] ?? 0) + 1;
+            if (isShow) genderStats[gender]!['show'] = (genderStats[gender]!['show'] ?? 0) + 1;
+          }
+        }
+
         // 馬体重別成績
         final weightMatch = RegExp(r'(\d+)\(([\+\-]\d+)\)').firstMatch(horse.horseWeight);
         if (weightMatch != null) {
@@ -273,6 +301,8 @@ class StatisticsService {
       'jockeyStats': jockeyStats,
       'trainerStats': trainerStats,
       'legStyleStats': legStyleStats,
+      // [追加] 性別別成績（混合戦のみ） (v.2026.9.9+26090904)
+      'genderStats': genderStats,
       'payoutStats': finalPayoutStats,
       'horseWeightChangeStats': horseWeightChangeStats,
       'avgWinningHorseWeight': avgWinningHorseWeight,

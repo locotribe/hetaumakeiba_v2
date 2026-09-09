@@ -40,6 +40,8 @@ import 'package:hetaumakeiba_v2/widgets/volatility_components/popularity_chart_c
 import 'package:hetaumakeiba_v2/widgets/volatility_components/frame_chart_card.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/leg_style_chart_card.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/horse_weight_card.dart';
+// [追加] 性別（牡・牝・セ）別の入線分布カード (v.2026.9.9+26090904)
+import 'package:hetaumakeiba_v2/widgets/volatility_components/gender_chart_card.dart';
 
 class RaceStatisticsPage extends StatefulWidget {
   final String raceId;
@@ -338,8 +340,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       key: ValueKey(_showResultTab),
-      // [修正] ペース/馬場/血統/ローテ/人気妙味の5タブを追加し、傾向分析タブを廃止 (v.2026.9.5+26090506)
-      length: _showResultTab ? 16 : 15,
+      // [修正] 性別タブを追加 (v.2026.9.9+26090904)
+      length: _showResultTab ? 17 : 16,
       child: Scaffold(
         body: Column(
           children: [
@@ -357,6 +359,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   const Tab(text: '枠番'),
                   const Tab(text: '脚質'),
                   const Tab(text: '馬体重'),
+                  // [追加] 性別（牡・牝・セ）傾向タブ (v.2026.9.9+26090904)
+                  const Tab(text: '性別'),
                   const Tab(text: '騎手'),
                   const Tab(text: '調教師'),
                   // [追加] 傾向分析タブから切り出した5ファクター (v.2026.9.5+26090506)
@@ -386,7 +390,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   final stats = snapshot.data;
                   if (stats == null) {
                     return TabBarView(
-                      children: List.generate(_showResultTab ? 16 : 15, (index) => _buildInitialView()),
+                      // [修正] 性別タブを追加 (v.2026.9.9+26090904)
+                      children: List.generate(_showResultTab ? 17 : 16, (index) => _buildInitialView()),
                     );
                   }
 
@@ -481,6 +486,43 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                             data['horseWeightChangeStats'] ?? const {},
                             (data['avgWinningHorseWeight'] ?? 0.0).toDouble()
                         ),
+                      ])),
+                      // [追加] 6. 性別（牡・牝・セ） (v.2026.9.9+26090904)
+                      _buildTabContent(child: Column(children: [
+                        // 牝馬限定戦の警告
+                        if (_isFemaleOnlyRace()) ...[
+                          Card(
+                            color: Colors.orange.shade50,
+                            child: const Padding(
+                              padding: EdgeInsets.all(12.0),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.info_outline, size: 18, color: Colors.orange),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '※当レースは牝馬限定戦のため、性別による有利不利の判定は適用されません。',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        // このタブの傾向に合う今回の出走馬
+                        if (factorCandidates['gender'] != null) ...[
+                          FactorCandidatesCard(result: factorCandidates['gender']!),
+                          const SizedBox(height: 16),
+                        ],
+                        GenderChartCard(
+                          genderStats: Map<String, dynamic>.from(
+                              (data['genderStats'] ?? const {}) as Map),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildGenderStatsCard(data['genderStats'] ?? const {}),
                       ])),
                       // 6. 騎手
                       _buildTabContent(
@@ -742,6 +784,17 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     }
   }
 
+  // [追加] 今回の出走馬が牝馬のみか判定する (v.2026.9.9+26090904)
+  bool _isFemaleOnlyRace() {
+    final active = _horses.where((h) => !h.isScratched && h.horseNumber > 0);
+    if (active.isEmpty) return false;
+    return !active.any((h) {
+      if (h.sexAndAge.isEmpty) return false;
+      final s = h.sexAndAge.substring(0, 1);
+      return s == '牡' || s == 'セ';
+    });
+  }
+
   Widget _buildTabContent({required Widget child}) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -911,6 +964,49 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                 subtitle: Text('勝率 ${winRate.toStringAsFixed(1)}% / 連対率 ${placeRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}%\n($total頭)'),
               );
             }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // [追加] 性別別成績カード（混合戦のみ集計） (v.2026.9.9+26090904)
+  Widget _buildGenderStatsCard(Map<String, dynamic> stats) {
+    const order = ['牡', '牝', 'セ'];
+    final keys = order.where((k) {
+      final data = stats[k];
+      if (data is! Map) return false;
+      final total = data['total'];
+      return total is num && total > 0;
+    }).toList();
+
+    if (keys.isEmpty) return const Text('データがありません（混合戦の過去データが見つかりません）');
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('性別別成績 (混合戦のみ)', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            ...keys.map((key) {
+              final data = stats[key] as Map;
+              final total = (data['total'] as num).toInt();
+              final winRate = ((data['win'] as num) / total * 100);
+              final placeRate = ((data['place'] as num) / total * 100);
+              final showRate = ((data['show'] as num) / total * 100);
+              return ListTile(
+                title: Text(key, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('勝率 ${winRate.toStringAsFixed(1)}% / 連対率 ${placeRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}%\n($total頭)'),
+              );
+            }),
+            const SizedBox(height: 8),
+            const Text(
+              '※牝と牡・セが両方出走した混合戦のみを集計対象としています（牝馬限定戦などは除外）。\n'
+              '※夏開催の牝馬は斤量減の恩恵も含まれるため、馬体重タブや各馬の斤量と合わせて判断してください。',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
           ],
         ),
       ),
