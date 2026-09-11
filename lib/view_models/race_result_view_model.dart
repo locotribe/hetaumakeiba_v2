@@ -13,6 +13,7 @@ import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
+import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -125,7 +126,16 @@ class RaceResultViewModel extends ChangeNotifier {
       List<Map<String, dynamic>> parsedTickets = [];
       for (var qr in qrDataList) {
         try {
-          final parsed = json.decode(qr.parsedDataJson) as Map<String, dynamic>;
+          Map<String, dynamic> parsed;
+          if (qr.qrCode.isNotEmpty && qr.qrCode.length >= 190) {
+            parsed = parseHorseracingTicketQr(qr.qrCode);
+            parsed['QR'] = qr.qrCode;
+          } else {
+            parsed = json.decode(qr.parsedDataJson) as Map<String, dynamic>;
+            if (qr.qrCode.isNotEmpty) {
+              parsed['QR'] = qr.qrCode;
+            }
+          }
           parsedTickets.add(parsed);
         } catch (e) {
           debugPrint('Error parsing ticket: $e');

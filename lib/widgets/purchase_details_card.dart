@@ -270,7 +270,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     final String symbol = _getHorseNumberSymbol(shikibetsu, betType);
 
     for (int i = 0; i < groups.length; i++) {
-      children.add(Flexible(child: _buildGroupLayoutItem(groups[i], isFormation: isFormation, maxCount: maxCount)));
+      children.add(_buildGroupLayoutItem(groups[i], isFormation: isFormation, maxCount: maxCount));
       if (shouldShowSymbol && symbol.isNotEmpty && i < groups.length - 1) {
         children.add(
           Transform.scale(
@@ -386,7 +386,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           children: [
             axisColumn,
             const SizedBox(width: 15), // 罫線を描画するスペース
-            Flexible(child: opponentColumn),
+            opponentColumn,
           ],
         ),
         Positioned.fill(
@@ -582,14 +582,18 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       );
     }
 
-    // IntrinsicWidthを削除し、Columnを直接返す
     return [
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          firstLine,
-          amountLine,
-        ],
+      IntrinsicWidth(
+        // [修正] Column(stretch)がFittedBoxの無制約(幅Infinity)を直接受け取り
+        // BoxConstraints forces an infinite width. で例外になるため、
+        // IntrinsicWidthで有限の横幅に変換してからstretchさせる (v.13.41.1)
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            firstLine,
+            amountLine,
+          ],
+        ),
       )
     ];
   }
@@ -719,16 +723,14 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
             children: [
               horseNumbersDisplay,
               const SizedBox(width: 8.0),
-              Flexible(
-                child: Text(
-                  horseNameToDisplay,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+              Text(
+                horseNameToDisplay,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           );
@@ -819,39 +821,29 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       return const SizedBox.shrink();
     }
 
-    // 応援馬券の場合のレイアウトを特別に分離
-    if (widget.betType == '応援馬券') {
-      // 応援馬券はFittedBoxを使わず、Centerで中央揃えする
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.only(top: 4.0),
-          child: Column(
-            // mainAxisSizeをminにして、Columnが必要最小限の高さになるようにする
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
-          ),
-        ),
-      );
-    } else {
-      // 応援馬券以外の場合
-      // 中央揃えにしたい馬券種別かを判断
-      final bool isCenterAligned =
-          widget.betType == 'ながし' || widget.betType == 'フォーメーション';
+    final bool isCenterAligned =
+        widget.betType == '応援馬券' || widget.betType == 'ながし' || widget.betType == 'フォーメーション';
 
-      return FittedBox(
-        fit: BoxFit.scaleDown,
-        // isCenterAligned が true なら中央、false なら左上に設定
-        alignment: isCenterAligned ? Alignment.center : Alignment.topLeft,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 4.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SizedBox(
+          width: constraints.maxWidth.isFinite ? constraints.maxWidth : null,
+          height: constraints.maxHeight.isFinite ? constraints.maxHeight : null,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: isCenterAligned ? Alignment.center : Alignment.topLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
+              ),
+            ),
           ),
-        ),
-      );
-    }
+        );
+      },
+    );
   }
 }
 

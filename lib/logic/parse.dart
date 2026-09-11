@@ -90,7 +90,6 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
         }
         di["馬番"] = [ for (int i = 0; i < count; i++) int.parse(itr.next() + itr.next()) ];
         int c = (int.parse(ticketFormat) + 1) ~/ 2;
-        if (bettingCode == "5" && ticketFormat == "3") c += 1;
         if (c > count && typeCode != "5" && bettingCode != "6") itr.move((c - count) * 2);
         if (bettingCode == "1" || bettingCode == "2" || bettingCode == "3" ||
             bettingCode == "5" || bettingCode == "6" || bettingCode == "7") {

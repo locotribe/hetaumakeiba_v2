@@ -59,3 +59,10 @@ memory/
 /web/
 /windows/
 /firebase.json
+
+# Working documents and output files
+Claude outputs/
+/Claude outputs/
+QR_mapping_verification_template.csv
+QR_parse_analysis_report.md
+QRcode_generation_tools_report.md

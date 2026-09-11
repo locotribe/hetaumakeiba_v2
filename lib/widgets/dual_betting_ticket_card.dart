@@ -1,33 +1,18 @@
-// lib/widgets/betting_ticket_card.dart
+// lib/widgets/dual_betting_ticket_card.dart
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-// 半角数字を全角数字に変換するヘルパー関数
-String _convertHalfWidthNumbersToFullWidth(String text) {
-  return text
-      .replaceAll('0', '０')
-      .replaceAll('1', '１')
-      .replaceAll('2', '２')
-      .replaceAll('3', '３')
-      .replaceAll('4', '４')
-      .replaceAll('5', '５')
-      .replaceAll('6', '６')
-      .replaceAll('7', '７')
-      .replaceAll('8', '８')
-      .replaceAll('9', '９');
-}
-
-/// JRAの馬券を模したUIを表示するウィジェット
-class BettingTicketCard extends StatelessWidget {
+/// 1枚の馬券に2種類の式別（例: ワイド + 3連複）が含まれる通常馬券用カードウィジェット
+class DualBettingTicketCard extends StatelessWidget {
   final Map<String, dynamic> ticketData;
   final RaceResult? raceResult;
 
-  const BettingTicketCard({
+  const DualBettingTicketCard({
     super.key,
     required this.ticketData,
     this.raceResult,
@@ -40,107 +25,33 @@ class BettingTicketCard extends StatelessWidget {
       salesLocation = ticketData['発売所'] as String;
     }
 
-    String shikibetsuToDisplay = '';
-    String hoshikiToDisplay = '';
-    String primaryShikibetsuFromDetails = '';
-    String overallMethod = '';
-    Widget topWidget = const Text('Top', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white));
-    Widget bottomWidget = const Text('Bottom', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white));
-    Color topContainerColor = Colors.black;
-    Color bottomContainerColor = Colors.black;
-    Color middleContainerColor = Colors.transparent;
-    Color middleTextColor = Colors.black;
-
-    if (ticketData.containsKey('方式')) {
-      overallMethod = ticketData['方式'] ?? '';
-      List<Map<String, dynamic>> purchaseDetails = [];
-      if (ticketData.containsKey('購入内容')) {
-        purchaseDetails = (ticketData['購入内容'] as List).cast<Map<String, dynamic>>();
-        if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
-          final shikibetsuId = purchaseDetails[0]['式別'];
-          primaryShikibetsuFromDetails = bettingDict[shikibetsuId] ?? '';
-        }
-      }
-
-      if (overallMethod == '応援馬券') {
-        shikibetsuToDisplay = '単勝✙複勝';
-        hoshikiToDisplay = 'が　ん　ば　れ！';
-        topWidget = const SizedBox(
-          height: 15.0,
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: Text('WIN', textAlign: TextAlign.center, style: TextStyle(color: Colors.black)),
-          ),
-        );
-        topContainerColor = Colors.transparent;
-        bottomWidget = const SizedBox(
-          height: 30.0,
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: Text('PLACE\nSHOW', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
-          ),
-        );
-        bottomContainerColor = Colors.black;
-      } else {
-        if (overallMethod == '通常') {
-          shikibetsuToDisplay = purchaseDetails.map((p) => bettingDict[p['式別']] ?? '').toSet().join(',');
-          hoshikiToDisplay = '';
-        } else {
-          shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
-          if (overallMethod == 'ながし' && purchaseDetails.isNotEmpty) {
-            final detail = purchaseDetails[0];
-            if (detail.containsKey('ながし種別')) {
-              hoshikiToDisplay = detail['ながし種別'];
-            } else if (detail.containsKey('ながし')) {
-              hoshikiToDisplay = detail['ながし'];
-            } else {
-              hoshikiToDisplay = overallMethod;
-            }
-          } else {
-            hoshikiToDisplay = overallMethod;
-          }
-        }
-        shikibetsuToDisplay = _convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
-
-        switch (primaryShikibetsuFromDetails) {
-          case '単勝':
-            topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('WIN', textAlign: TextAlign.center, style: TextStyle(color: Colors.black))));
-            topContainerColor = bottomContainerColor = Colors.transparent;
-            break;
-          case '複勝':
-            topWidget = bottomWidget = const SizedBox(height: 30.0, child: FittedBox(fit: BoxFit.contain, child: Text('PLACE\nSHOW', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-            topContainerColor = bottomContainerColor = Colors.black;
-            break;
-          case '馬連':
-            topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('QUINELLA', textAlign: TextAlign.center, style: TextStyle(color: Colors.black))));
-            topContainerColor = bottomContainerColor = Colors.transparent;
-            break;
-          case '馬単':
-            topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('EXACTA', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-            topContainerColor = bottomContainerColor = Colors.black;
-            break;
-          case 'ワイド':
-            topWidget = bottomWidget = const SizedBox(height: 30.0, child: FittedBox(fit: BoxFit.contain, child: Text('QUINELLA\nPLACE', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-            topContainerColor = bottomContainerColor = Colors.black;
-            break;
-          case '枠連':
-            Widget wakurenText = const Text('BRACKET\nQUINELLA', textAlign: TextAlign.center, style: TextStyle(color: Colors.white));
-            topWidget = bottomWidget = SizedBox(height: 30.0, child: FittedBox(fit: BoxFit.contain, child: wakurenText));
-            topContainerColor = bottomContainerColor = Colors.black;
-            middleContainerColor = Colors.black;
-            middleTextColor = Colors.white;
-            break;
-          case '3連複':
-            topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('TRIO', textAlign: TextAlign.center, style: TextStyle(color: Colors.black))));
-            topContainerColor = bottomContainerColor = Colors.transparent;
-            break;
-          case '3連単':
-            topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('TRIFECTA', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-            topContainerColor = bottomContainerColor = Colors.black;
-            break;
-        }
+    List<Map<String, dynamic>> purchaseDetails = [];
+    if (ticketData.containsKey('購入内容')) {
+      final rawList = ticketData['購入内容'];
+      if (rawList is List) {
+        purchaseDetails = rawList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
     }
+
+    // 式別コードごとにグループ分け
+    final Map<String, List<Map<String, dynamic>>> groupedDetails = {};
+    for (var detail in purchaseDetails) {
+      final rawCode = detail['式別']?.toString() ?? '';
+      String code = rawCode;
+      if (rawCode.isNotEmpty) {
+        try {
+          code = int.parse(rawCode).toString();
+        } catch (_) {}
+      }
+      groupedDetails.putIfAbsent(code, () => []).add(detail);
+    }
+
+    final List<String> betCodes = groupedDetails.keys.toList();
+    final String code1 = betCodes.isNotEmpty ? betCodes[0] : '';
+    final String code2 = betCodes.length > 1 ? betCodes[1] : '';
+
+    final List<Map<String, dynamic>> group1Details = groupedDetails[code1] ?? [];
+    final List<Map<String, dynamic>> group2Details = groupedDetails[code2] ?? [];
 
     return AspectRatio(
       aspectRatio: 86 / 53,
@@ -167,7 +78,7 @@ class BettingTicketCard extends StatelessWidget {
             builder: (context, constraints) {
               final w = constraints.maxWidth;
               final h = constraints.maxHeight;
-              final leftPadding = w * 0.018; // 赤色縦線(QRコード左端)にインデントを正確に揃えるオフセット
+              final leftPadding = w * 0.018;
 
               return Stack(
                 children: [
@@ -338,109 +249,41 @@ class BettingTicketCard extends StatelessWidget {
                     ),
                   ),
 
-                  // === 中央列: 式別 (36%, 0%, 11%, 82%) ===
-                  Positioned(
+                  // === 上段（第1式別ブロック: Y 0% 〜 41%）===
+                  _buildSingleShikibetsuBand(
                     left: w * 0.36,
                     top: 0,
                     width: w * 0.11,
-                    height: h * 0.82,
-                    child: Container(
-                      decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.0)),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: double.infinity,
-                            color: topContainerColor,
-                            padding: const EdgeInsets.symmetric(vertical: 0.5),
-                            child: Center(child: topWidget),
-                          ),
-                          Expanded(
-                            child: Container(
-                              alignment: Alignment.center,
-                              color: middleContainerColor,
-                              child: (ticketData.containsKey('方式'))
-                                  ? Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        for (int i = 0; i < shikibetsuToDisplay.characters.length; i++) ...[
-                                          if (i > 0) const SizedBox(height: 2),
-                                          Text(
-                                            shikibetsuToDisplay.characters.elementAt(i),
-                                            style: GoogleFonts.notoSerifJp(color: middleTextColor, fontSize: 22, fontWeight: FontWeight.bold),
-                                          ),
-                                        ],
-                                      ],
-                                    )
-                                  : const SizedBox.shrink(),
-                            ),
-                          ),
-                          Container(
-                            width: double.infinity,
-                            color: bottomContainerColor,
-                            padding: const EdgeInsets.symmetric(vertical: 0.5),
-                            child: Center(child: bottomWidget),
-                          ),
-                        ],
-                      ),
-                    ),
+                    height: h * 0.41,
+                    shikibetsuCode: code1,
                   ),
-
-                  // === 右列1: 上部方式等 (47%, 0%, 53%, 33%) ===
                   Positioned(
                     left: w * 0.47,
                     top: 0,
                     width: w * 0.53,
-                    height: h * 0.33,
+                    height: h * 0.41,
                     child: Padding(
-                      padding: const EdgeInsets.only(left: 2.0, right: 2.0, top: 1.0),
-                      child: Column(
-                        children: [
-                          if (hoshikiToDisplay.isNotEmpty)
-                            DecoratedBox(
-                              decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.5)),
-                              child: SizedBox(
-                                height: h * 0.12,
-                                child: Center(
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(hoshikiToDisplay, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 24)),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                      padding: const EdgeInsets.all(2.0),
+                      child: _buildDetailsListForGroup(group1Details, h * 0.41),
                     ),
                   ),
 
-                  // === 右列2: 購入内容 (47%, 33%, 53%, 22%) ===
-                  Positioned(
-                    left: w * 0.47,
-                    top: hoshikiToDisplay.isNotEmpty ? h * 0.33 : h * 0.02,
-                    width: w * 0.53,
-                    height: hoshikiToDisplay.isNotEmpty ? h * 0.22 : h * 0.53,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                      child: PurchaseDetailsCard(
-                        parsedResult: ticketData,
-                        betType: overallMethod,
-                        raceResult: raceResult,
-                      ),
-                    ),
+                  // === 下段（第2式別ブロック: Y 41% 〜 82%）===
+                  _buildSingleShikibetsuBand(
+                    left: w * 0.36,
+                    top: h * 0.41,
+                    width: w * 0.11,
+                    height: h * 0.41,
+                    shikibetsuCode: code2,
                   ),
-
-                  // === 右列3: 組合せ・金額 (47%, 55%, 53%, 27%) ===
                   Positioned(
                     left: w * 0.47,
-                    top: h * 0.55,
+                    top: h * 0.41,
                     width: w * 0.53,
-                    height: h * 0.27,
+                    height: h * 0.41,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                      child: PurchaseCombinationsCard(
-                        parsedResult: ticketData,
-                        betType: overallMethod,
-                      ),
+                      padding: const EdgeInsets.all(2.0),
+                      child: _buildDetailsListForGroup(group2Details, h * 0.41),
                     ),
                   ),
 
@@ -505,4 +348,203 @@ class BettingTicketCard extends StatelessWidget {
       ),
     );
   }
+
+  /// 既存の帯の分岐スタイルを100%保持したまま、指定された領域(高さ)に帯を描画するヘルパー
+  Widget _buildSingleShikibetsuBand({
+    required double left,
+    required double top,
+    required double width,
+    required double height,
+    required String shikibetsuCode,
+  }) {
+    String normalizedCode = shikibetsuCode;
+    if (int.tryParse(shikibetsuCode) != null) {
+      normalizedCode = int.parse(shikibetsuCode).toString();
+    }
+    final String shikibetsuName = bettingDict[normalizedCode] ?? bettingDict[shikibetsuCode] ?? '';
+    Widget topWidget = const SizedBox.shrink();
+    Widget bottomWidget = const SizedBox.shrink();
+    Color topBg = Colors.black;
+    Color bottomBg = Colors.black;
+    Color middleBg = Colors.transparent;
+    Color middleTextColor = Colors.black;
+
+    switch (shikibetsuName) {
+      case '単勝':
+        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('WIN', style: TextStyle(color: Colors.black)));
+        topBg = bottomBg = Colors.transparent;
+        break;
+      case '複勝':
+        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('PLACE\nSHOW', style: TextStyle(color: Colors.white)));
+        topBg = bottomBg = Colors.black;
+        break;
+      case '馬連':
+        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('QUINELLA', style: TextStyle(color: Colors.black)));
+        topBg = bottomBg = Colors.transparent;
+        break;
+      case '馬単':
+        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('EXACTA', style: TextStyle(color: Colors.white)));
+        topBg = bottomBg = Colors.black;
+        break;
+      case 'ワイド':
+        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('QUINELLA\nPLACE', style: TextStyle(color: Colors.white)));
+        topBg = bottomBg = Colors.black;
+        break;
+      case '枠連':
+        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('BRACKET\nQUINELLA', style: TextStyle(color: Colors.white)));
+        topBg = bottomBg = Colors.black;
+        middleBg = Colors.black;
+        middleTextColor = Colors.white;
+        break;
+      case '3連複':
+        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('TRIO', style: TextStyle(color: Colors.black)));
+        topBg = bottomBg = Colors.transparent;
+        break;
+      case '3連単':
+        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('TRIFECTA', style: TextStyle(color: Colors.white)));
+        topBg = bottomBg = Colors.black;
+        break;
+    }
+
+    final String fullWidthName = _convertHalfWidthNumbersToFullWidth(shikibetsuName);
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      child: Container(
+        decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.0)),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              color: topBg,
+              padding: const EdgeInsets.symmetric(vertical: 0.5),
+              child: SizedBox(height: height * 0.22, child: Center(child: topWidget)),
+            ),
+            Expanded(
+              child: Container(
+                alignment: Alignment.center,
+                color: middleBg,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (int i = 0; i < fullWidthName.characters.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 1),
+                        Text(
+                          fullWidthName.characters.elementAt(i),
+                          style: GoogleFonts.notoSerifJp(color: middleTextColor, fontSize: 22, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Container(
+              width: double.infinity,
+              color: bottomBg,
+              padding: const EdgeInsets.symmetric(vertical: 0.5),
+              child: SizedBox(height: height * 0.22, child: Center(child: bottomWidget)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 1つの式別グループ内の購入リストを描画するヘルパー
+  Widget _buildDetailsListForGroup(List<Map<String, dynamic>> groupDetails, double availableHeight) {
+    if (groupDetails.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var detail in groupDetails) ...[
+          _buildGroupItemRow(detail),
+        ]
+      ],
+    );
+  }
+
+  Widget _buildGroupItemRow(Map<String, dynamic> detail) {
+    final String rawCode = detail['式別']?.toString() ?? '';
+    String normalizedCode = rawCode;
+    if (int.tryParse(rawCode) != null) {
+      normalizedCode = int.parse(rawCode).toString();
+    }
+    final String shikibetsu = bettingDict[normalizedCode] ?? bettingDict[rawCode] ?? '';
+    final horseNumbers = detail['馬番'];
+    final int? amount = detail['購入金額'];
+
+    String symbol = '━';
+    if (shikibetsu == '馬単' || shikibetsu == '3連単') symbol = '▶';
+    if (shikibetsu == 'ワイド') symbol = '◆';
+
+    List<int> numbers = [];
+    if (horseNumbers is List) {
+      numbers = horseNumbers.cast<int>();
+    } else if (horseNumbers is int) {
+      numbers = [horseNumbers];
+    }
+
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          for (int i = 0; i < numbers.length; i++) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+              decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.0)),
+              child: Text(
+                '${numbers[i]}',
+                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+            if (i < numbers.length - 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                child: Text(symbol, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+          ],
+          const SizedBox(width: 8),
+          if (amount != null) ...[
+            Text(_getStars(amount), style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10)),
+            Text('$amount円', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String _convertHalfWidthNumbersToFullWidth(String text) {
+  return text
+      .replaceAll('0', '０')
+      .replaceAll('1', '１')
+      .replaceAll('2', '２')
+      .replaceAll('3', '３')
+      .replaceAll('4', '４')
+      .replaceAll('5', '５')
+      .replaceAll('6', '６')
+      .replaceAll('7', '７')
+      .replaceAll('8', '８')
+      .replaceAll('9', '９');
+}
+
+String _getStars(int amount) {
+  String amountStr = amount.toString();
+  int numDigits = amountStr.length;
+  if (numDigits >= 6) return '';
+  if (numDigits == 5) return '☆';
+  if (numDigits == 4) return '☆☆';
+  if (numDigits == 3) return '☆☆☆';
+  return '';
 }

@@ -49,7 +49,12 @@ class TicketDataLogic {
       }
 
       try {
-        final parsedTicket = jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>;
+        Map<String, dynamic> parsedTicket;
+        if (qrData.qrCode.isNotEmpty) {
+          parsedTicket = parseHorseracingTicketQr(qrData.qrCode);
+        } else {
+          parsedTicket = jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>;
+        }
         if (parsedTicket.isEmpty) continue;
         if (qrData.id == null) continue;
 
@@ -95,10 +100,15 @@ class TicketDataLogic {
       }
 
       try {
-        // 事前パースデータの利用
-        final parsedTicket = (qrData.id != null && parsedTicketCache.containsKey(qrData.id))
-            ? parsedTicketCache[qrData.id!]!
-            : (jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>);
+        // 事前パースデータの利用（生QRコードがあれば常に最新パーサーで再計算）
+        Map<String, dynamic> parsedTicket;
+        if (qrData.qrCode.isNotEmpty) {
+          parsedTicket = parseHorseracingTicketQr(qrData.qrCode);
+        } else if (qrData.id != null && parsedTicketCache.containsKey(qrData.id)) {
+          parsedTicket = parsedTicketCache[qrData.id!]!;
+        } else {
+          parsedTicket = jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>;
+        }
 
         if (parsedTicket.isEmpty) continue;
 
