@@ -168,7 +168,7 @@ class TrackConditionRepository {
       DbConstants.tableTrackConditions,
       where: 'CAST(track_condition_id AS TEXT) LIKE ? AND track_condition_id % 100 != 0',
       whereArgs: ['$prefix8%'],
-      orderBy: 'track_condition_id ASC',
+      orderBy: 'date ASC, track_condition_id ASC',
     );
     return maps.map((e) => TrackConditionRecord.fromJson(e)).toList();
   }
