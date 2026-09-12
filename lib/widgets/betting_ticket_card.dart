@@ -199,9 +199,9 @@ class BettingTicketCard extends StatelessWidget {
                   // === 左列2: 開催場 (0%, 11%, 36%, 14%) ===
                   Positioned(
                     left: leftPadding,
-                    top: h * 0.11,
+                    top: h * 0.09,
                     width: w * 0.36 - leftPadding,
-                    height: h * 0.14,
+                    height: h * 0.17,
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: FittedBox(
@@ -213,7 +213,7 @@ class BettingTicketCard extends StatelessWidget {
                                 style: GoogleFonts.notoSerifJp(
                                   color: Colors.black,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 28,
+                                  fontSize: 30,
                                 ),
                               )
                             : const SizedBox.shrink(),
@@ -231,25 +231,38 @@ class BettingTicketCard extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       child: ticketData.containsKey('レース')
                           ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Container(
-                                  width: w * 0.13,
-                                  height: h * 0.11,
-                                  alignment: Alignment.center,
-                                  color: Colors.black,
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      '${ticketData['レース']}',
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
-                                    ),
-                                  ),
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: w * 0.13,
+                            height: h * 0.11,
+                            alignment: Alignment.center,
+                            color: Colors.black,
+                            padding: const EdgeInsets.symmetric(vertical: 1.0), // 黒枠内の微小なパディング
+                            child: FittedBox(
+                              fit: BoxFit.contain, // ★ 枠の高さに合わせて自動で限界まで拡大
+                              child: Text(
+                                '${ticketData['レース']}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900, // ★ 極太にする
+                                  fontSize: 32, // ★ 基準サイズを大きくする
+                                  height: 1.0,  // ★ 上下の余白をカットして黒枠いっぱいに広げる
                                 ),
-                                const SizedBox(width: 4),
-                                const Text('レース', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
-                              ],
-                            )
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'レース',
+                            style: GoogleFonts.notoSerifJp( // ★ 明朝体（GoogleFonts.notoSerifJp）に変更
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      )
                           : const SizedBox.shrink(),
                     ),
                   ),
@@ -257,7 +270,7 @@ class BettingTicketCard extends StatelessWidget {
                   // === 左列4: QRコード (0%, 37%, 36%, 26%) ===
                   Positioned(
                     left: 0,
-                    top: h * 0.37,
+                    top: h * 0.38,
                     width: w * 0.36,
                     height: h * 0.26,
                     child: Row(
@@ -317,7 +330,7 @@ class BettingTicketCard extends StatelessWidget {
                                     FittedBox(
                                       fit: BoxFit.scaleDown,
                                       alignment: Alignment.centerLeft,
-                                      child: Text("$numberPart  ($gradePart)", style: GoogleFonts.notoSerifJp(fontSize: 11, color: Colors.black)),
+                                      child: Text("$numberPart  ($gradePart)", style: GoogleFonts.notoSerifJp(fontSize: 15, color: Colors.black)),
                                     ),
                                     FittedBox(
                                       fit: BoxFit.scaleDown,
@@ -358,19 +371,27 @@ class BettingTicketCard extends StatelessWidget {
                             child: Container(
                               alignment: Alignment.center,
                               color: middleContainerColor,
+                              padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
                               child: (ticketData.containsKey('方式'))
-                                  ? Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        for (int i = 0; i < shikibetsuToDisplay.characters.length; i++) ...[
-                                          if (i > 0) const SizedBox(height: 2),
-                                          Text(
-                                            shikibetsuToDisplay.characters.elementAt(i),
-                                            style: GoogleFonts.notoSerifJp(color: middleTextColor, fontSize: 22, fontWeight: FontWeight.bold),
-                                          ),
-                                        ],
-                                      ],
-                                    )
+                                  ? FittedBox(
+                                fit: BoxFit.fitWidth, // ← 横幅いっぱいにフィットさせる設定
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    for (int i = 0; i < shikibetsuToDisplay.characters.length; i++) ...[
+                                      if (i > 0) const SizedBox(height: 2),
+                                      Text(
+                                        shikibetsuToDisplay.characters.elementAt(i),
+                                        style: GoogleFonts.notoSerifJp(
+                                          color: middleTextColor,
+                                          fontSize: 30, // ← 基準サイズを 36 など大きめにする
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              )
                                   : const SizedBox.shrink(),
                             ),
                           ),
@@ -392,7 +413,7 @@ class BettingTicketCard extends StatelessWidget {
                     width: w * 0.53,
                     height: h * 0.33,
                     child: Padding(
-                      padding: const EdgeInsets.only(left: 2.0, right: 2.0, top: 1.0),
+                      padding: const EdgeInsets.only(left: 6.0, right: 2.0, top: 1.0),
                       child: Column(
                         children: [
                           if (hoshikiToDisplay.isNotEmpty)
@@ -459,7 +480,7 @@ class BettingTicketCard extends StatelessWidget {
                           salesLocation != null && salesLocation.startsWith('JRA') && !salesLocation.startsWith('JRA ')
                               ? salesLocation.replaceFirst('JRA', 'JRA ')
                               : (salesLocation ?? ''),
-                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
+                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                       ),
                     ),
@@ -470,9 +491,9 @@ class BettingTicketCard extends StatelessWidget {
                     left: w * 0.36,
                     top: h * 0.82,
                     width: w * 0.64,
-                    height: h * 0.09,
+                    height: h * 0.14,
                     child: Align(
-                      alignment: Alignment.centerRight,
+                      alignment: Alignment.centerLeft,
                       child: PurchaseTotalAmountCard(parsedResult: ticketData),
                     ),
                   ),
@@ -490,9 +511,17 @@ class BettingTicketCard extends StatelessWidget {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           raceResult != null && raceResult!.raceDate.isNotEmpty
-                              ? raceResult!.raceDate
+                              ? () {
+                            final match = RegExp(r'(\d{1,2})[月/\.-](\d{1,2})').firstMatch(raceResult!.raceDate);
+                            if (match != null) {
+                              final month = int.parse(match.group(1)!); // 02 -> 2 に変換
+                              final day = int.parse(match.group(2)!);   // 02 -> 2 に変換
+                              return '$month月$day日';                  // 2月2日 にして返す
+                            }
+                            return raceResult!.raceDate;
+                          }()
                               : '',
-                          style: const TextStyle(color: Colors.black, fontSize: 11),
+                          style: const TextStyle(color: Colors.black, fontSize: 13),
                         ),
                       ),
                     ),

@@ -1044,49 +1044,56 @@ class PurchaseTotalAmountCard extends StatelessWidget {
 
     String totalStars = _getTotalAmountStars(totalAmount);
     String totalAmountString = totalAmount.toString();
-
-    // 枚数を計算（10分の1にする）
     int totalSheets = totalAmount ~/ 10;
 
-    // フォントスタイル
+    // ★ 実物馬券に近いバランスの良いフォントサイズ
     const TextStyle labelTextStyle = TextStyle(
       color: Colors.black,
       fontWeight: FontWeight.bold,
-      fontSize: 10, // 「合計」「枚」「円」
+      fontSize: 14, // 「合計」「枚」「円」
     );
     const TextStyle starTextStyle = TextStyle(
       color: Colors.black,
       fontWeight: FontWeight.bold,
-      fontSize: 8, // 「★」
+      fontSize: 12, // 「★」
     );
     const TextStyle numberTextStyle = TextStyle(
       color: Colors.black,
       fontWeight: FontWeight.bold,
-      fontSize: 16, // 「□」「〇」
+      fontSize: 22, // 「数字」
     );
 
     return FittedBox(
       fit: BoxFit.scaleDown,
-      alignment: Alignment.centerRight,
+      alignment: Alignment.centerLeft,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // 「合計」
-          const Text('合計　', style: labelTextStyle),
-
-          // 「★□枚」
-          Text(totalStars, style: starTextStyle),
-          Text('$totalSheets', style: numberTextStyle),
-          const Text('枚　', style: labelTextStyle),
-
-          // 「★〇円」
-          Text(totalStars, style: starTextStyle),
-          Text(totalAmountString, style: numberTextStyle),
-          const Text('円', style: labelTextStyle),
+          // 左側: 合計 ★★★600枚
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Text('合計　', style: labelTextStyle),
+              Text(totalStars, style: starTextStyle),
+              Text('$totalSheets', style: numberTextStyle),
+              const Text('枚', style: labelTextStyle),
+            ],
+          ),
+          const SizedBox(width: 8), // ★ 「枚」と右側の「★」の間のスペース
+          // 右側: ★★★6000円
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(totalStars, style: starTextStyle),
+              Text(totalAmountString, style: numberTextStyle),
+              const Text('円', style: labelTextStyle),
+            ],
+          ),
         ],
       ),
     );
   }
-
 }
