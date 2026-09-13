@@ -1,21 +1,19 @@
-// lib/widgets/ticket/cards/betting_ticket_card.dart
+// lib/widgets/ticket/cards/ouen_baken_ticket_card.dart
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/details/purchase_details_card.dart';
-import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
-import 'package:hetaumakeiba_v2/widgets/ticket/parts/purchase_combinations_card.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/parts/purchase_total_amount_card.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-/// JRAの馬券を模したUIを表示するウィジェット
-class BettingTicketCard extends StatelessWidget {
+/// 応援馬券専用のJRAの馬券を模したUIを表示するウィジェット
+class OuenBakenTicketCard extends StatelessWidget {
   final Map<String, dynamic> ticketData;
   final RaceResult? raceResult;
 
-  const BettingTicketCard({
+  const OuenBakenTicketCard({
     super.key,
     required this.ticketData,
     this.raceResult,
@@ -28,85 +26,30 @@ class BettingTicketCard extends StatelessWidget {
       salesLocation = ticketData['発売所'] as String;
     }
 
-    String shikibetsuToDisplay = '';
-    String hoshikiToDisplay = '';
-    String primaryShikibetsuFromDetails = '';
+    String shikibetsuToDisplay = '単勝✙複勝';
+    String hoshikiToDisplay = 'が　ん　ば　れ！';
     String overallMethod = '';
-    Widget topWidget = const Text('Top', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white));
-    Widget bottomWidget = const Text('Bottom', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white));
-    Color topContainerColor = Colors.black;
+    Widget topWidget = const SizedBox(
+      height: 15.0,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: Text('WIN', textAlign: TextAlign.center, style: TextStyle(color: Colors.black)),
+      ),
+    );
+    Widget bottomWidget = const SizedBox(
+      height: 30.0,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: Text('PLACE\nSHOW', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
+      ),
+    );
+    Color topContainerColor = Colors.transparent;
     Color bottomContainerColor = Colors.black;
     Color middleContainerColor = Colors.transparent;
     Color middleTextColor = Colors.black;
 
     if (ticketData.containsKey('方式')) {
       overallMethod = ticketData['方式'] ?? '';
-      List<Map<String, dynamic>> purchaseDetails = [];
-      if (ticketData.containsKey('購入内容')) {
-        purchaseDetails = (ticketData['購入内容'] as List).cast<Map<String, dynamic>>();
-        if (purchaseDetails.isNotEmpty && purchaseDetails[0].containsKey('式別')) {
-          final shikibetsuId = purchaseDetails[0]['式別'];
-          primaryShikibetsuFromDetails = bettingDict[shikibetsuId] ?? '';
-        }
-      }
-
-      if (overallMethod == '通常') {
-        shikibetsuToDisplay = purchaseDetails.map((p) => bettingDict[p['式別']] ?? '').toSet().join(',');
-        hoshikiToDisplay = '';
-      } else {
-        shikibetsuToDisplay = primaryShikibetsuFromDetails.isNotEmpty ? primaryShikibetsuFromDetails : overallMethod;
-        if (overallMethod == 'ながし' && purchaseDetails.isNotEmpty) {
-          final detail = purchaseDetails[0];
-          if (detail.containsKey('ながし種別')) {
-            hoshikiToDisplay = detail['ながし種別'];
-          } else if (detail.containsKey('ながし')) {
-            hoshikiToDisplay = detail['ながし'];
-          } else {
-            hoshikiToDisplay = overallMethod;
-          }
-        } else {
-          hoshikiToDisplay = overallMethod;
-        }
-      }
-      shikibetsuToDisplay = convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
-
-      switch (primaryShikibetsuFromDetails) {
-        case '単勝':
-          topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('WIN', textAlign: TextAlign.center, style: TextStyle(color: Colors.black))));
-          topContainerColor = bottomContainerColor = Colors.transparent;
-          break;
-        case '複勝':
-          topWidget = bottomWidget = const SizedBox(height: 30.0, child: FittedBox(fit: BoxFit.contain, child: Text('PLACE\nSHOW', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-          topContainerColor = bottomContainerColor = Colors.black;
-          break;
-        case '馬連':
-          topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('QUINELLA', textAlign: TextAlign.center, style: TextStyle(color: Colors.black))));
-          topContainerColor = bottomContainerColor = Colors.transparent;
-          break;
-        case '馬単':
-          topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('EXACTA', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-          topContainerColor = bottomContainerColor = Colors.black;
-          break;
-        case 'ワイド':
-          topWidget = bottomWidget = const SizedBox(height: 30.0, child: FittedBox(fit: BoxFit.contain, child: Text('QUINELLA\nPLACE', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-          topContainerColor = bottomContainerColor = Colors.black;
-          break;
-        case '枠連':
-          Widget wakurenText = const Text('BRACKET\nQUINELLA', textAlign: TextAlign.center, style: TextStyle(color: Colors.white));
-          topWidget = bottomWidget = SizedBox(height: 30.0, child: FittedBox(fit: BoxFit.contain, child: wakurenText));
-          topContainerColor = bottomContainerColor = Colors.black;
-          middleContainerColor = Colors.black;
-          middleTextColor = Colors.white;
-          break;
-        case '3連複':
-          topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('TRIO', textAlign: TextAlign.center, style: TextStyle(color: Colors.black))));
-          topContainerColor = bottomContainerColor = Colors.transparent;
-          break;
-        case '3連単':
-          topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('TRIFECTA', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-          topContainerColor = bottomContainerColor = Colors.black;
-          break;
-      }
     }
 
     return AspectRatio(
@@ -425,10 +368,7 @@ class BettingTicketCard extends StatelessWidget {
                     height: h * 0.27,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                      child: PurchaseCombinationsCard(
-                        parsedResult: ticketData,
-                        betType: overallMethod,
-                      ),
+                      child: _buildOuenAmountDisplay(ticketData),
                     ),
                   ),
 
@@ -501,4 +441,30 @@ class BettingTicketCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 応援馬券の「単勝◯円」「複勝◯円」2行表示
+Widget _buildOuenAmountDisplay(Map<String, dynamic> ticketData) {
+  if (!ticketData.containsKey('購入内容')) {
+    return const SizedBox.shrink();
+  }
+  List<Map<String, dynamic>> purchaseDetails = (ticketData['購入内容'] as List).cast<Map<String, dynamic>>();
+  if (purchaseDetails.length < 2) {
+    return const SizedBox.shrink();
+  }
+  final detail = purchaseDetails.first;
+
+  const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
+  const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0,);
+
+  int kingaku = detail['購入金額'] as int;
+  String starsForAmount = getStars(kingaku);
+  String amountValue = kingaku.toString();
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [const Text('単勝 ', style: amountStyle), Text(starsForAmount, style: starStyle), Text('$amountValue円', style: amountStyle)])),
+      FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [const Text('複勝 ', style: amountStyle), Text(starsForAmount, style: starStyle), Text('$amountValue円', style: amountStyle)])),
+    ],
+  );
 }

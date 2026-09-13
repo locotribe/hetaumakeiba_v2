@@ -5,6 +5,7 @@ import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/cards/betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/cards/dual_betting_ticket_card.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/cards/ouen_baken_ticket_card.dart';
 
 Widget buildTicketCard(Map<String, dynamic> ticketData, {RaceResult? raceResult}) {
   Map<String, dynamic> activeTicketData = Map<String, dynamic>.from(ticketData);
@@ -51,7 +52,9 @@ Widget buildTicketCard(Map<String, dynamic> ticketData, {RaceResult? raceResult}
 
   final bool isDual = !isOuenBaken && shikibetsuTypes.length >= 2;
 
-  if (isDual) {
+  if (isOuenBaken) {
+    return OuenBakenTicketCard(ticketData: activeTicketData, raceResult: raceResult);
+  } else if (isDual) {
     return DualBettingTicketCard(ticketData: activeTicketData, raceResult: raceResult);
   } else {
     return BettingTicketCard(ticketData: activeTicketData, raceResult: raceResult);

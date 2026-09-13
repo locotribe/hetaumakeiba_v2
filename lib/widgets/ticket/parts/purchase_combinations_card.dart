@@ -81,19 +81,6 @@ class PurchaseCombinationsCard extends StatelessWidget {
       );
     }
 
-    if (betType == '応援馬券' && purchaseDetails.length >= 2) {
-      int kingaku = detail['購入金額'] as int;
-      String starsForAmount = getStars(kingaku);
-      String amountValue = kingaku.toString();
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [const Text('単勝 ', style: amountStyle), Text(starsForAmount, style: starStyle), Text('$amountValue円', style: amountStyle)])),
-          FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [const Text('複勝 ', style: amountStyle), Text(starsForAmount, style: starStyle), Text('$amountValue円', style: amountStyle)])),
-        ],
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: widgets,
