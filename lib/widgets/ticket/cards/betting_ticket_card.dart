@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/parts/purchase_combinations_card.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/layout/ticket_common_layer.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/layout/shikibetsu_band_spec.dart';
 
 /// JRAの馬券を模したUIを表示するウィジェット
 class BettingTicketCard extends StatelessWidget {
@@ -64,42 +65,22 @@ class BettingTicketCard extends StatelessWidget {
       }
       shikibetsuToDisplay = convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
 
-      switch (primaryShikibetsuFromDetails) {
-        case '単勝':
-          topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('WIN', textAlign: TextAlign.center, style: TextStyle(color: Colors.black))));
-          topContainerColor = bottomContainerColor = Colors.transparent;
-          break;
-        case '複勝':
-          topWidget = bottomWidget = const SizedBox(height: 30.0, child: FittedBox(fit: BoxFit.contain, child: Text('PLACE\nSHOW', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-          topContainerColor = bottomContainerColor = Colors.black;
-          break;
-        case '馬連':
-          topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('QUINELLA', textAlign: TextAlign.center, style: TextStyle(color: Colors.black))));
-          topContainerColor = bottomContainerColor = Colors.transparent;
-          break;
-        case '馬単':
-          topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('EXACTA', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-          topContainerColor = bottomContainerColor = Colors.black;
-          break;
-        case 'ワイド':
-          topWidget = bottomWidget = const SizedBox(height: 30.0, child: FittedBox(fit: BoxFit.contain, child: Text('QUINELLA\nPLACE', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-          topContainerColor = bottomContainerColor = Colors.black;
-          break;
-        case '枠連':
-          Widget wakurenText = const Text('BRACKET\nQUINELLA', textAlign: TextAlign.center, style: TextStyle(color: Colors.white));
-          topWidget = bottomWidget = SizedBox(height: 30.0, child: FittedBox(fit: BoxFit.contain, child: wakurenText));
-          topContainerColor = bottomContainerColor = Colors.black;
-          middleContainerColor = Colors.black;
-          middleTextColor = Colors.white;
-          break;
-        case '3連複':
-          topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('TRIO', textAlign: TextAlign.center, style: TextStyle(color: Colors.black))));
-          topContainerColor = bottomContainerColor = Colors.transparent;
-          break;
-        case '3連単':
-          topWidget = bottomWidget = const SizedBox(height: 15.0, child: FittedBox(fit: BoxFit.contain, child: Text('TRIFECTA', textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
-          topContainerColor = bottomContainerColor = Colors.black;
-          break;
+      final ShikibetsuBandSpec? bandSpec = resolveShikibetsuBandSpec(primaryShikibetsuFromDetails);
+      if (bandSpec != null) {
+        topWidget = bottomWidget = SizedBox(
+          height: bandSpec.singleLabelHeight,
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: Text(
+              bandSpec.label,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: bandSpec.labelColor),
+            ),
+          ),
+        );
+        topContainerColor = bottomContainerColor = bandSpec.labelBackgroundColor;
+        middleContainerColor = bandSpec.middleBackgroundColor;
+        middleTextColor = bandSpec.middleTextColor;
       }
     }
 
