@@ -5,8 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
-import 'package:hetaumakeiba_v2/widgets/ticket/parts/purchase_total_amount_card.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/layout/ticket_common_layer.dart';
 
 /// 1枚の馬券に2種類の式別（例: ワイド + 3連複）が含まれる通常馬券用カードウィジェット
 class DualBettingTicketCard extends StatelessWidget {
@@ -21,11 +20,6 @@ class DualBettingTicketCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String? salesLocation;
-    if (ticketData.containsKey('発売所')) {
-      salesLocation = ticketData['発売所'] as String;
-    }
-
     List<Map<String, dynamic>> purchaseDetails = [];
     if (ticketData.containsKey('購入内容')) {
       final rawList = ticketData['購入内容'];
@@ -79,175 +73,14 @@ class DualBettingTicketCard extends StatelessWidget {
             builder: (context, constraints) {
               final w = constraints.maxWidth;
               final h = constraints.maxHeight;
-              final leftPadding = w * 0.018;
 
               return Stack(
                 children: [
-                  // === 左列1: 年月日 (0%, 0%, 36%, 11%) ===
-                  Positioned(
-                    left: leftPadding,
-                    top: 0,
-                    width: w * 0.36 - leftPadding,
-                    height: h * 0.11,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: ticketData.containsKey('年') && ticketData.containsKey('回') && ticketData.containsKey('日')
-                            ? Text(
-                                '20${ticketData['年']}年${ticketData['回']}回${ticketData['日']}日',
-                                style: GoogleFonts.notoSerifJp(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-
-                  // === 左列2: 開催場 (0%, 11%, 36%, 14%) ===
-                  Positioned(
-                    left: leftPadding,
-                    top: h * 0.11,
-                    width: w * 0.36 - leftPadding,
-                    height: h * 0.14,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: ticketData.containsKey('開催場')
-                            ? Text(
-                                '${ticketData['開催場']}',
-                                style: GoogleFonts.notoSerifJp(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 28,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-
-                  // === 左列3: レース番号 (0%, 25%, 36%, 12%) ===
-                  Positioned(
-                    left: leftPadding,
-                    top: h * 0.25,
-                    width: w * 0.36 - leftPadding,
-                    height: h * 0.12,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: ticketData.containsKey('レース')
-                          ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Container(
-                                  width: w * 0.13,
-                                  height: h * 0.11,
-                                  alignment: Alignment.center,
-                                  color: Colors.black,
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      '${ticketData['レース']}',
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                const Text('レース', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
-                              ],
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                  ),
-
-                  // === 左列4: QRコード (0%, 37%, 36%, 26%) ===
-                  Positioned(
-                    left: 0,
-                    top: h * 0.37,
-                    width: w * 0.36,
-                    height: h * 0.26,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(1.0),
-                            child: Image.asset('assets/images/QR_JRA.png', fit: BoxFit.contain),
-                          ),
-                        ),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(1.0),
-                            child: Builder(builder: (context) {
-                              if (raceResult != null && raceResult!.raceId.isNotEmpty) {
-                                final url = 'https://db.netkeiba.com/race/${raceResult!.raceId}';
-                                return QrImageView(
-                                  data: url,
-                                  version: QrVersions.auto,
-                                  backgroundColor: Colors.transparent,
-                                  padding: EdgeInsets.zero,
-                                );
-                              } else {
-                                return Image.asset('assets/images/QR_JRA.png', fit: BoxFit.contain);
-                              }
-                            }),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // === 左列5: 第86回 菊花賞 (0%, 63%, 36%, 19%) ===
-                  Positioned(
-                    left: leftPadding,
-                    top: h * 0.63,
-                    width: w * 0.36 - leftPadding,
-                    height: h * 0.19,
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: raceResult != null && raceResult!.raceTitle.isNotEmpty
-                          ? Builder(builder: (context) {
-                              final RegExp regExp = RegExp(r"^(第.+?回)(.+?)\((.+?)\)$");
-                              final match = regExp.firstMatch(raceResult!.raceTitle);
-
-                              if (match != null && match.groupCount >= 3) {
-                                final String numberPart = match.group(1)!;
-                                final String namePart = match.group(2)!;
-                                final String gradePart = match.group(3)!;
-
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      alignment: Alignment.centerLeft,
-                                      child: Text("$numberPart  ($gradePart)", style: GoogleFonts.notoSerifJp(fontSize: 11, color: Colors.black)),
-                                    ),
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(namePart, style: GoogleFonts.notoSerifJp(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
-                                    ),
-                                  ],
-                                );
-                              } else {
-                                return FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(raceResult!.raceTitle, style: GoogleFonts.notoSerifJp(fontSize: 13, color: Colors.black)),
-                                );
-                              }
-                            })
-                          : const SizedBox.shrink(),
-                    ),
+                  ...buildTicketCommonLayer(
+                    w: w,
+                    h: h,
+                    ticketData: ticketData,
+                    raceResult: raceResult,
                   ),
 
                   // === 上段（第1式別ブロック: Y 0% 〜 41%）===
@@ -285,60 +118,6 @@ class DualBettingTicketCard extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(2.0),
                       child: _buildDetailsListForGroup(group2Details, h * 0.41),
-                    ),
-                  ),
-
-                  // === フッター1・左: 発券場所 (0%, 82%, 36%, 9%) ===
-                  Positioned(
-                    left: leftPadding,
-                    top: h * 0.82,
-                    width: w * 0.36 - leftPadding,
-                    height: h * 0.09,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          salesLocation != null && salesLocation.startsWith('JRA') && !salesLocation.startsWith('JRA ')
-                              ? salesLocation.replaceFirst('JRA', 'JRA ')
-                              : (salesLocation ?? ''),
-                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // === フッター1・右: 合計金額 (36%, 82%, 64%, 9%) ===
-                  Positioned(
-                    left: w * 0.36,
-                    top: h * 0.82,
-                    width: w * 0.64,
-                    height: h * 0.09,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: PurchaseTotalAmountCard(parsedResult: ticketData),
-                    ),
-                  ),
-
-                  // === フッター2・左: 日付 (0%, 91%, 36%, 9%) ===
-                  Positioned(
-                    left: leftPadding,
-                    top: h * 0.91,
-                    width: w * 0.36 - leftPadding,
-                    height: h * 0.09,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          raceResult != null && raceResult!.raceDate.isNotEmpty
-                              ? raceResult!.raceDate
-                              : '',
-                          style: const TextStyle(color: Colors.black, fontSize: 11),
-                        ),
-                      ),
                     ),
                   ),
                 ],
