@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/layout/ticket_common_layer.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/layout/shikibetsu_band_spec.dart';
 
 /// 1枚の馬券に2種類の式別（例: ワイド + 3連複）が含まれる通常馬券用カードウィジェット
 class DualBettingTicketCard extends StatelessWidget {
@@ -149,41 +150,15 @@ class DualBettingTicketCard extends StatelessWidget {
     Color middleBg = Colors.transparent;
     Color middleTextColor = Colors.black;
 
-    switch (shikibetsuName) {
-      case '単勝':
-        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('WIN', style: TextStyle(color: Colors.black)));
-        topBg = bottomBg = Colors.transparent;
-        break;
-      case '複勝':
-        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('PLACE\nSHOW', style: TextStyle(color: Colors.white)));
-        topBg = bottomBg = Colors.black;
-        break;
-      case '馬連':
-        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('QUINELLA', style: TextStyle(color: Colors.black)));
-        topBg = bottomBg = Colors.transparent;
-        break;
-      case '馬単':
-        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('EXACTA', style: TextStyle(color: Colors.white)));
-        topBg = bottomBg = Colors.black;
-        break;
-      case 'ワイド':
-        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('QUINELLA\nPLACE', style: TextStyle(color: Colors.white)));
-        topBg = bottomBg = Colors.black;
-        break;
-      case '枠連':
-        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('BRACKET\nQUINELLA', style: TextStyle(color: Colors.white)));
-        topBg = bottomBg = Colors.black;
-        middleBg = Colors.black;
-        middleTextColor = Colors.white;
-        break;
-      case '3連複':
-        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('TRIO', style: TextStyle(color: Colors.black)));
-        topBg = bottomBg = Colors.transparent;
-        break;
-      case '3連単':
-        topWidget = bottomWidget = const FittedBox(fit: BoxFit.contain, child: Text('TRIFECTA', style: TextStyle(color: Colors.white)));
-        topBg = bottomBg = Colors.black;
-        break;
+    final ShikibetsuBandSpec? bandSpec = resolveShikibetsuBandSpec(shikibetsuName);
+    if (bandSpec != null) {
+      topWidget = bottomWidget = FittedBox(
+        fit: BoxFit.contain,
+        child: Text(bandSpec.label, style: TextStyle(color: bandSpec.labelColor)),
+      );
+      topBg = bottomBg = bandSpec.labelBackgroundColor;
+      middleBg = bandSpec.middleBackgroundColor;
+      middleTextColor = bandSpec.middleTextColor;
     }
 
     final String fullWidthName = convertHalfWidthNumbersToFullWidth(shikibetsuName);
