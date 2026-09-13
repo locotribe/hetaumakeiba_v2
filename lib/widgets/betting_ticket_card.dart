@@ -5,22 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-
-// 半角数字を全角数字に変換するヘルパー関数
-String _convertHalfWidthNumbersToFullWidth(String text) {
-  return text
-      .replaceAll('0', '０')
-      .replaceAll('1', '１')
-      .replaceAll('2', '２')
-      .replaceAll('3', '３')
-      .replaceAll('4', '４')
-      .replaceAll('5', '５')
-      .replaceAll('6', '６')
-      .replaceAll('7', '７')
-      .replaceAll('8', '８')
-      .replaceAll('9', '９');
-}
 
 /// JRAの馬券を模したUIを表示するウィジェット
 class BettingTicketCard extends StatelessWidget {
@@ -100,7 +86,7 @@ class BettingTicketCard extends StatelessWidget {
             hoshikiToDisplay = overallMethod;
           }
         }
-        shikibetsuToDisplay = _convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
+        shikibetsuToDisplay = convertHalfWidthNumbersToFullWidth(shikibetsuToDisplay);
 
         switch (primaryShikibetsuFromDetails) {
           case '単勝':

@@ -3,27 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-
-String _getStars(int amount) {
-  String amountStr = amount.toString();
-  int numDigits = amountStr.length;
-  if (numDigits >= 6) return '';
-  if (numDigits == 5) return '☆';
-  if (numDigits == 4) return '☆☆';
-  if (numDigits == 3) return '☆☆☆';
-  return '';
-}
-
-String _getTotalAmountStars(int amount) {
-  String amountStr = amount.toString();
-  int numDigits = amountStr.length;
-  if (numDigits >= 7) return '';
-  if (numDigits == 6) return '★';
-  if (numDigits == 5) return '★★';
-  if (numDigits == 4) return '★★★';
-  if (numDigits == 3) return '★★★★';
-  return '';
-}
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
 
 // グループ内の馬番の数に応じて、馬番を囲う枠のサイズ（縦長）を決定する関数
 Size _getBoxSizeByHorseCount(int count) {
@@ -70,16 +50,6 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         setState(() {});
       }
     });
-  }
-
-  String _getHorseNumberSymbol(String shikibetsu, String betType, {String? uraStatus}) {
-    if (uraStatus == 'あり') return '◀ ▶';
-    if (betType == '通常' || betType == 'フォーメーション' || betType == 'ながし') {
-      if (shikibetsu == '馬単' || shikibetsu == '3連単') return '▶';
-      if (shikibetsu == '馬連' || shikibetsu == '3連複' || shikibetsu == '枠連') return '━';
-      if (shikibetsu == 'ワイド') return '◆';
-    }
-    return '';
   }
 
   List<Widget> _buildHorseNumberDisplay(dynamic horseNumbers, {String symbol = '', int? horseCountForSizing, Key? key}) {
@@ -267,7 +237,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
 
     List<Widget> children = [];
     final bool shouldShowSymbol = isFormation || (shikibetsu == '3連単' && (betType == 'ながし' || betType == '通常'));
-    final String symbol = _getHorseNumberSymbol(shikibetsu, betType);
+    final String symbol = getHorseNumberSymbol(shikibetsu, betType);
 
     for (int i = 0; i < groups.length; i++) {
       children.add(_buildGroupLayoutItem(groups[i], isFormation: isFormation, maxCount: maxCount));
@@ -576,7 +546,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           const Text('各', style: amountStyle),
-          Text(_getStars(kingaku), style: starStyle),
+          Text(getStars(kingaku), style: starStyle),
           Text('$kingaku円', style: amountStyle),
         ],
       );
@@ -670,7 +640,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     final String shikibetsuId = detail['式別'] ?? '';
     final String shikibetsu = bettingDict[shikibetsuId] ?? '';
 
-    String currentSymbol = _getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
+    String currentSymbol = getHorseNumberSymbol(shikibetsu, currentBetType, uraStatus: detail['ウラ']);
     final dynamic horseNumbers = detail['馬番'];
     final int horseCount = horseNumbers is List ? horseNumbers.length : 1;
     final int? kingaku = detail['購入金額'];
@@ -751,7 +721,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(width: 16.0),
-          Text(_getStars(kingaku), style: starStyle),
+          Text(getStars(kingaku), style: starStyle),
           Text('$kingaku円', style: amountStyle),
         ],
       );
@@ -997,7 +967,7 @@ class PurchaseCombinationsCard extends StatelessWidget {
                       height: 1)),
                 ),
               Text(isComplexCombinationForPrefix ? '各組' : '', style: amountStyle),
-              Text(_getStars(kingaku), style: starStyle),
+              Text(getStars(kingaku), style: starStyle),
               Text('$kingaku円', style: amountStyle),
             ],
           ),
@@ -1007,7 +977,7 @@ class PurchaseCombinationsCard extends StatelessWidget {
 
     if (betType == '応援馬券' && purchaseDetails.length >= 2) {
       int kingaku = detail['購入金額'] as int;
-      String starsForAmount = _getStars(kingaku);
+      String starsForAmount = getStars(kingaku);
       String amountValue = kingaku.toString();
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -1042,7 +1012,7 @@ class PurchaseTotalAmountCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    String totalStars = _getTotalAmountStars(totalAmount);
+    String totalStars = getTotalAmountStars(totalAmount);
     String totalAmountString = totalAmount.toString();
     int totalSheets = totalAmount ~/ 10;
 

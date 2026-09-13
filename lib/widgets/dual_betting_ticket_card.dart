@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 /// 1枚の馬券に2種類の式別（例: ワイド + 3連複）が含まれる通常馬券用カードウィジェット
@@ -406,7 +407,7 @@ class DualBettingTicketCard extends StatelessWidget {
         break;
     }
 
-    final String fullWidthName = _convertHalfWidthNumbersToFullWidth(shikibetsuName);
+    final String fullWidthName = convertHalfWidthNumbersToFullWidth(shikibetsuName);
 
     return Positioned(
       left: left,
@@ -516,35 +517,11 @@ class DualBettingTicketCard extends StatelessWidget {
           ],
           const SizedBox(width: 8),
           if (amount != null) ...[
-            Text(_getStars(amount), style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10)),
+            Text(getStars(amount), style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10)),
             Text('$amount円', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
           ],
         ],
       ),
     );
   }
-}
-
-String _convertHalfWidthNumbersToFullWidth(String text) {
-  return text
-      .replaceAll('0', '０')
-      .replaceAll('1', '１')
-      .replaceAll('2', '２')
-      .replaceAll('3', '３')
-      .replaceAll('4', '４')
-      .replaceAll('5', '５')
-      .replaceAll('6', '６')
-      .replaceAll('7', '７')
-      .replaceAll('8', '８')
-      .replaceAll('9', '９');
-}
-
-String _getStars(int amount) {
-  String amountStr = amount.toString();
-  int numDigits = amountStr.length;
-  if (numDigits >= 6) return '';
-  if (numDigits == 5) return '☆';
-  if (numDigits == 4) return '☆☆';
-  if (numDigits == 3) return '☆☆☆';
-  return '';
 }
