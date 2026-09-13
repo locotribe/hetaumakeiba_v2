@@ -4,22 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
-
-// グループ内の馬番の数に応じて、馬番を囲う枠のサイズ（縦長）を決定する関数
-Size _getBoxSizeByHorseCount(int count) {
-  // 枠の大きさを指定する場所（高さは横幅の1.35倍の縦長とする）
-  // 列をまたいだ揃えではなく、頭数のみで「大・中・小」の3段階を独立して決定する
-  double width;
-  if (count == 1) {
-    // [修正] 1頭単独ボックスの横幅を細身に調整 (v.13.40.2)
-    width = 44.0; // 【大】1頭のみ
-  } else if (count >= 2 && count <= 6) {
-    width = 35.0; // 【中】2〜6頭
-  } else {
-    width = 22.0; // 【小】7頭以上（全体縮小を防ぐため、現状の25.0から少しスリム化）
-  }
-  return Size(width, width * 1.35);
-}
+import 'package:hetaumakeiba_v2/widgets/ticket/parts/horse_number_box.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/parts/nagashi_connector_painter.dart';
 
 class PurchaseDetailsCard extends StatefulWidget {
   final Map<String, dynamic> parsedResult;
@@ -52,211 +38,6 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     });
   }
 
-  List<Widget> _buildHorseNumberDisplay(dynamic horseNumbers, {String symbol = '', int? horseCountForSizing, Key? key}) {
-    List<Widget> widgets = [];
-    final int count = horseCountForSizing ?? (horseNumbers is List ? horseNumbers.length : 1);
-    final Size boxSize = _getBoxSizeByHorseCount(count);
-
-    List<int> numbersToProcess = [];
-
-    if (horseNumbers is List) {
-      numbersToProcess.addAll(horseNumbers.cast<int>());
-    } else if (horseNumbers is int) {
-      numbersToProcess.add(horseNumbers);
-    }
-
-    for (int i = 0; i < numbersToProcess.length; i++) {
-      final String numberStr = numbersToProcess[i].toString();
-      // 縦の大きさはボックスの高さを基準に確保する（横幅基準だと二桁で縮小しすぎるため）
-      // [修正] 中・小サイズの馬番フォントを微調整（-1pt） (v.13.40.2)
-      final double fontSize = boxSize.height * 0.88 - (count == 1 ? 0.0 : 1.0);
-
-      Widget numberText = Text(
-        numberStr,
-        maxLines: 1,
-        softWrap: false,
-        style: TextStyle(
-          fontSize: fontSize,
-          color: Colors.black,
-          fontWeight: FontWeight.bold,
-          height: 1.0, // 行の高さを詰めて上下の余白を最小化
-        ),
-      );
-
-      // 二桁以上の馬番は、縦の大きさを保ったまま横幅のみ圧縮する「長体」にする
-      if (numberStr.length >= 2) {
-        numberText = Transform.scale(
-          scaleX: 0.65, // バランスを見て0.63〜0.67で調整
-          child: OverflowBox(
-            // ボックス幅の制約を外し、Textを改行させずに1行で描画させる
-            maxWidth: boxSize.height,
-            child: numberText,
-          ),
-        );
-      }
-
-      widgets.add(
-        Container(
-          key: key,
-          width: boxSize.width,
-          height: boxSize.height,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(border: Border.all(color: Colors.black)),
-          child: numberText,
-        ),
-      );
-      if (symbol.isNotEmpty && i < numbersToProcess.length - 1) {
-        widgets.add(Text(symbol, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)));
-      }
-    }
-    return widgets;
-  }
-
-  Widget _buildHorseNumberGrid(List<int> horseNumbers, {int starCount = 0}) {
-    List<Widget> gridRows = [];
-    final int horseCount = horseNumbers.length;
-    final Size boxSize = _getBoxSizeByHorseCount(horseCount);
-    final List<dynamic> items = [
-      ...horseNumbers,
-      for (int i = 0; i < starCount; i++) '☆',
-    ];
-
-    for (int i = 0; i < items.length; i += 2) {
-      List<Widget> rowChildren = [];
-      rowChildren.add(_buildGridCell(items[i], horseCount, boxSize));
-      if (i + 1 < items.length) {
-        rowChildren.add(const SizedBox(width: 2.0));
-        rowChildren.add(_buildGridCell(items[i + 1], horseCount, boxSize));
-      }
-      gridRows.add(
-        Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: rowChildren),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (int i = 0; i < gridRows.length; i++) ...[
-          if (i > 0) const SizedBox(height: 2.0),
-          gridRows[i],
-        ],
-      ],
-    );
-  }
-
-  // 馬番グリッドの1セルを生成する（馬番セルまたは不足分の☆セル）
-  Widget _buildGridCell(dynamic item, int horseCount, Size boxSize) {
-    if (item is int) {
-      return _buildHorseNumberDisplay(item, horseCountForSizing: horseCount).first;
-    }
-    return _buildStarCell(boxSize);
-  }
-
-  // 馬番セルと同じ占有領域（幅・高さ）で☆を中央配置するセル
-  Widget _buildStarCell(Size boxSize) {
-    return SizedBox(
-      // _buildHorseNumberDisplayのセルと同じ幅にし、垂直軸のズレを防ぐ
-      width: boxSize.width,
-      height: boxSize.height,
-      child: Center(
-        child: Text(
-          '☆',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: boxSize.width * 0.6,
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            height: 1.0,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGroupLayoutItem(Map<String, dynamic> group, {required bool isFormation, int maxCount = 0}) {
-    final String label = group['label'] as String? ?? '';
-    final List<int> horseNumbers = group['horseNumbers'] as List<int>? ?? [];
-    final int count = horseNumbers.length;
-    // 馬番が1つだけの列（軸など）は☆によるパディング対象外とする
-    final bool isSingleHorse = count == 1;
-
-    // 他列の頭数(maxCount)には依存せず、自身の頭数のみで不足数を決定する
-    int missingCount = 0;
-    if (!isSingleHorse) {
-      int totalSlots;
-      if (count <= 4) {
-        // 2〜4頭は、最低4スロット（2行）保証
-        totalSlots = 4;
-      } else if (count >= 7 && count <= 10) {
-        // JRAの特異仕様: 7〜10頭は8スロット(4行)の枠が存在せず、一律10スロット(5行)の枠が使われる
-        totalSlots = 10;
-      } else {
-        // 5, 6, 11頭以上などは、端数が出ないように偶数スロットに丸める（奇数なら+1）
-        totalSlots = count + (count % 2);
-      }
-      missingCount = totalSlots - count;
-    }
-
-    final Widget horseDisplayWidget = isSingleHorse
-        ? _buildHorseNumberDisplay(horseNumbers, horseCountForSizing: 1).first
-        : isFormation
-        ? _buildHorseNumberGrid(horseNumbers, starCount: missingCount)
-        : Wrap(
-      spacing: 2.0,
-      runSpacing: 2.0,
-      alignment: WrapAlignment.center,
-      children: [
-        ..._buildHorseNumberDisplay(horseNumbers, symbol: '', horseCountForSizing: horseNumbers.length),
-        for (int i = 0; i < missingCount; i++)
-          _buildStarCell(_getBoxSizeByHorseCount(horseNumbers.length)),
-      ],
-    );
-
-    if (label.isNotEmpty) {
-      return Column(
-        children: [
-          Text(label, style: const TextStyle(color: Colors.black)),
-          const SizedBox(height: 4),
-          horseDisplayWidget,
-        ],
-      );
-    }
-    return horseDisplayWidget;
-  }
-
-  Widget _buildHorizontalGroupLayout(
-      List<Map<String, dynamic>> groups, {
-        required bool isFormation,
-        required String shikibetsu,
-        required String betType,
-      }) {
-    if (groups.isEmpty) return const SizedBox.shrink();
-
-    final int maxCount = groups
-        .map((g) => (g['horseNumbers'] as List<int>? ?? []).length)
-        .fold(0, (a, b) => a > b ? a : b);
-
-    List<Widget> children = [];
-    final bool shouldShowSymbol = isFormation || (shikibetsu == '3連単' && (betType == 'ながし' || betType == '通常'));
-    final String symbol = getHorseNumberSymbol(shikibetsu, betType);
-
-    for (int i = 0; i < groups.length; i++) {
-      children.add(_buildGroupLayoutItem(groups[i], isFormation: isFormation, maxCount: maxCount));
-      if (shouldShowSymbol && symbol.isNotEmpty && i < groups.length - 1) {
-        children.add(
-          Transform.scale(
-            scaleX: 0.5,
-            scaleY: 1.5,
-            child: Text(symbol, style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        );
-      }
-    }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: children,
-    );
-  }
   /// 罫線付きのながしレイアウトを生成する
   Widget _buildNagashiWithConnector({required List<int> axisHorses, required List<int> opponentHorses}) {
     _axisKeys.clear();
@@ -268,7 +49,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       _axisKeys.add(key);
       return Padding(
         padding: const EdgeInsets.only(bottom: 4.0),
-        child: _buildHorseNumberDisplay(horse, key: key, horseCountForSizing: 1).first,
+        child: buildHorseNumberDisplay(horse, key: key, horseCountForSizing: 1).first,
       );
     }).toList();
 
@@ -278,7 +59,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     const int totalCells = numOpponentRows * numOpponentCols;
     final int opponentCount = opponentHorses.length;
     // 枠の大きさを指定する場所
-    final Size boxSizeForOpponent = _getBoxSizeByHorseCount(opponentCount > 6 ? 7 : opponentCount);
+    final Size boxSizeForOpponent = getBoxSizeByHorseCount(opponentCount > 6 ? 7 : opponentCount);
 
 
     List<dynamic> opponentItems = List.from(opponentHorses);
@@ -294,7 +75,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       for (int j = 0; j < numOpponentCols; j++) {
         final item = opponentItems[i * numOpponentCols + j];
         if (item is int) {
-          rowChildren.add(_buildHorseNumberDisplay(item, horseCountForSizing: opponentCount).first);
+          rowChildren.add(buildHorseNumberDisplay(item, horseCountForSizing: opponentCount).first);
         } else {
           rowChildren.add(
             SizedBox(
@@ -361,7 +142,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         ),
         Positioned.fill(
           child: CustomPaint(
-            painter: _ConnectorPainter(
+            painter: NagashiConnectorPainter(
               canvasKey: _paintAreaKey,
               axisKeys: _axisKeys,
               opponentRowKeys: _opponentRowKeys,
@@ -516,7 +297,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       }
     }
 
-    final Widget horseNumberWidget = _buildHorseNumberDisplay(horseNumber, horseCountForSizing: 1).first;
+    final Widget horseNumberWidget = buildHorseNumberDisplay(horseNumber, horseCountForSizing: 1).first;
 
     const TextStyle amountStyle = TextStyle(
       color: Colors.black,
@@ -595,7 +376,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         if (detail.containsKey('軸')) groupsData.add({'label': '(軸)', 'horseNumbers': (detail['軸'] as List).cast<int>()});
         if (detail.containsKey('相手')) groupsData.add({'label': '(相手)', 'horseNumbers': (detail['相手'] as List).cast<int>()});
       }
-      return _buildHorizontalGroupLayout(
+      return buildHorizontalGroupLayout(
         groupsData,
         isFormation: true,
         shikibetsu: shikibetsu,
@@ -627,7 +408,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         {'horseNumbers': horseGroups.length > 1 ? horseGroups[1] : <int>[]},
       ]);
     }
-    return _buildHorizontalGroupLayout(
+    return buildHorizontalGroupLayout(
       groupsData,
       isFormation: true,
       shikibetsu: shikibetsu,
@@ -657,7 +438,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         return {'horseNumbers': [horseNum]};
       }).toList();
 
-      horseDisplayWidget = _buildHorizontalGroupLayout(
+      horseDisplayWidget = buildHorizontalGroupLayout(
         groupsData,
         isFormation: false,
         shikibetsu: shikibetsu,
@@ -670,7 +451,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
         runSpacing: 4.0,
         alignment: WrapAlignment.center,
         crossAxisAlignment: WrapCrossAlignment.center,
-        children: [..._buildHorseNumberDisplay(horseNumbers, symbol: currentSymbol, horseCountForSizing: horseCount)],
+        children: [...buildHorseNumberDisplay(horseNumbers, symbol: currentSymbol, horseCountForSizing: horseCount)],
       );
 
       if ((shikibetsu == '単勝' || shikibetsu == '複勝') && widget.raceResult != null) {
@@ -813,257 +594,6 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           ),
         );
       },
-    );
-  }
-}
-
-class _ConnectorPainter extends CustomPainter {
-  final GlobalKey canvasKey;
-  final List<GlobalKey> axisKeys;
-  final List<GlobalKey> opponentRowKeys;
-  final Paint linePaint;
-
-  _ConnectorPainter({
-    required this.canvasKey,
-    required this.axisKeys,
-    required this.opponentRowKeys,
-  }) : linePaint = Paint()
-    ..color = Colors.black
-    ..strokeWidth = 3.0 // 太さを調整
-    ..style = PaintingStyle.stroke;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final canvasBox = canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    if (canvasBox == null) return;
-
-    final axisBoxes = axisKeys.map((key) => key.currentContext?.findRenderObject() as RenderBox?).toList();
-    final opponentRowBoxes = opponentRowKeys.map((key) => key.currentContext?.findRenderObject() as RenderBox?).toList();
-
-    if (axisBoxes.isEmpty || opponentRowBoxes.isEmpty || axisBoxes.contains(null) || opponentRowBoxes.contains(null)) {
-      return;
-    }
-
-    final axisPoints = axisBoxes
-        .map((box) {
-      final position = box!.localToGlobal(Offset.zero);
-      final localPosition = canvasBox.globalToLocal(position);
-      return Offset(localPosition.dx + box.size.width, localPosition.dy + box.size.height / 2);
-    })
-        .where((p) => p.isFinite)
-        .toList();
-
-    final opponentPoints = opponentRowBoxes
-        .map((box) {
-      final position = box!.localToGlobal(Offset.zero);
-      final localPosition = canvasBox.globalToLocal(position);
-      return Offset(localPosition.dx, localPosition.dy + box.size.height / 2);
-    })
-        .where((p) => p.isFinite)
-        .toList();
-
-    if (axisPoints.isEmpty || opponentPoints.isEmpty) return;
-
-    final path = Path();
-    final double spineX = axisPoints.first.dx + 8; // 縦線のX座標
-    final double verticalPadding = 1.5; // 上下に延長する長さ（お好みで調整してください）
-
-    // 縦線（背骨）のY座標の範囲を、相手リストを基準に決定
-    final double spineTopY = opponentPoints.first.dy;
-    final double spineBottomY = opponentPoints.last.dy;
-
-    // 1. 縦線（背骨）を、上下に少し延長して描画
-    path.moveTo(spineX, spineTopY - verticalPadding);
-    path.lineTo(spineX, spineBottomY + verticalPadding);
-
-    // 2. 軸馬から背骨への水平線を描画
-    // これが┏の左から伸びる横線になります
-    if (axisPoints.isNotEmpty) {
-      path.moveTo(axisPoints.first.dx, axisPoints.first.dy);
-      path.lineTo(spineX, axisPoints.first.dy);
-    }
-
-    // 3. 背骨から各相手馬の行への水平線を描画
-    // このループが┏の上辺、┗の下辺、および中間の横線を描画します
-    for (final point in opponentPoints) {
-      path.moveTo(spineX, point.dy);
-      path.lineTo(point.dx, point.dy);
-    }
-
-    canvas.drawPath(path, linePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _ConnectorPainter oldDelegate) => true;
-}
-
-class PurchaseCombinationsCard extends StatelessWidget {
-  final Map<String, dynamic> parsedResult;
-  final String betType;
-
-  const PurchaseCombinationsCard({
-    super.key,
-    required this.parsedResult,
-    required this.betType,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (!parsedResult.containsKey('購入内容')) {
-      return const SizedBox.shrink();
-    }
-    List<Map<String, dynamic>> purchaseDetails = (parsedResult['購入内容'] as List).cast<Map<String, dynamic>>();
-    if (purchaseDetails.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    final detail = purchaseDetails.first;
-
-    final int? kingaku = detail['購入金額'];
-    final int combinations = detail['組合せ数'] as int? ?? 0;
-    final bool isComplexCombinationForPrefix = (betType == 'ボックス' || betType == 'ながし' || betType == 'フォーメーション');
-
-    const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
-    const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0,);
-
-    String combinationDisplayString = detail['組合せ数_表示用'] as String? ?? '';
-    if (combinationDisplayString.isEmpty && combinations > 0) {
-      combinationDisplayString = '$combinations';
-    }
-
-    List<Widget> widgets = [];
-
-    if (combinationDisplayString.isNotEmpty) {
-      widgets.add(
-        Text(
-          '組合せ数 $combinationDisplayString',
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            height: 1.0, // または 0.9 など、適宜調整してください
-            leadingDistribution: TextLeadingDistribution.even, // 上下の余白を均等に分配
-          ),
-        ),
-      );
-    }
-
-    if (kingaku != null && isComplexCombinationForPrefix) {
-      widgets.add(
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerRight,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              if (detail['マルチ'] == 'あり')
-                Container(
-                  margin: const EdgeInsets.only(right: 8.0),
-                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                  decoration: const BoxDecoration(color: Colors.black, borderRadius: BorderRadius.all(Radius.circular(0))),
-                  child: const Text('マルチ', style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      height: 1)),
-                ),
-              Text(isComplexCombinationForPrefix ? '各組' : '', style: amountStyle),
-              Text(getStars(kingaku), style: starStyle),
-              Text('$kingaku円', style: amountStyle),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (betType == '応援馬券' && purchaseDetails.length >= 2) {
-      int kingaku = detail['購入金額'] as int;
-      String starsForAmount = getStars(kingaku);
-      String amountValue = kingaku.toString();
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [const Text('単勝 ', style: amountStyle), Text(starsForAmount, style: starStyle), Text('$amountValue円', style: amountStyle)])),
-          FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [const Text('複勝 ', style: amountStyle), Text(starsForAmount, style: starStyle), Text('$amountValue円', style: amountStyle)])),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: widgets,
-    );
-  }
-}
-
-
-class PurchaseTotalAmountCard extends StatelessWidget {
-  final Map<String, dynamic> parsedResult;
-
-  const PurchaseTotalAmountCard({
-    super.key,
-    required this.parsedResult,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final int totalAmount = parsedResult['合計金額'] as int? ?? 0;
-
-    if (totalAmount == 0) {
-      return const SizedBox.shrink();
-    }
-
-    String totalStars = getTotalAmountStars(totalAmount);
-    String totalAmountString = totalAmount.toString();
-    int totalSheets = totalAmount ~/ 10;
-
-    // ★ 実物馬券に近いバランスの良いフォントサイズ
-    const TextStyle labelTextStyle = TextStyle(
-      color: Colors.black,
-      fontWeight: FontWeight.bold,
-      fontSize: 14, // 「合計」「枚」「円」
-    );
-    const TextStyle starTextStyle = TextStyle(
-      color: Colors.black,
-      fontWeight: FontWeight.bold,
-      fontSize: 12, // 「★」
-    );
-    const TextStyle numberTextStyle = TextStyle(
-      color: Colors.black,
-      fontWeight: FontWeight.bold,
-      fontSize: 22, // 「数字」
-    );
-
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 左側: 合計 ★★★600枚
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Text('合計　', style: labelTextStyle),
-              Text(totalStars, style: starTextStyle),
-              Text('$totalSheets', style: numberTextStyle),
-              const Text('枚', style: labelTextStyle),
-            ],
-          ),
-          const SizedBox(width: 8), // ★ 「枚」と右側の「★」の間のスペース
-          // 右側: ★★★6000円
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(totalStars, style: starTextStyle),
-              Text(totalAmountString, style: numberTextStyle),
-              const Text('円', style: labelTextStyle),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

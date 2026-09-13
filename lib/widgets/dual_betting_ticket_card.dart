@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/widgets/purchase_details_card.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/parts/purchase_total_amount_card.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 /// 1枚の馬券に2種類の式別（例: ワイド + 3連複）が含まれる通常馬券用カードウィジェット
