@@ -136,8 +136,8 @@ List<Widget> buildTicketCommonLayer({
             child: Padding(
               padding: const EdgeInsets.all(1.0),
               child: Builder(builder: (context) {
-                if (raceResult != null && raceResult!.raceId.isNotEmpty) {
-                  final url = 'https://db.netkeiba.com/race/${raceResult!.raceId}';
+                if (raceResult != null && raceResult.raceId.isNotEmpty) {
+                  final url = 'https://db.netkeiba.com/race/${raceResult.raceId}';
                   return QrImageView(
                     data: url,
                     version: QrVersions.auto,
@@ -162,10 +162,10 @@ List<Widget> buildTicketCommonLayer({
       height: h * 0.19,
       child: Align(
         alignment: Alignment.topLeft,
-        child: raceResult != null && raceResult!.raceTitle.isNotEmpty
+        child: raceResult != null && raceResult.raceTitle.isNotEmpty
             ? Builder(builder: (context) {
                 final RegExp regExp = RegExp(r"^(第.+?回)(.+?)\((.+?)\)$");
-                final match = regExp.firstMatch(raceResult!.raceTitle);
+                final match = regExp.firstMatch(raceResult.raceTitle);
 
                 if (match != null && match.groupCount >= 3) {
                   final String numberPart = match.group(1)!;
@@ -192,7 +192,7 @@ List<Widget> buildTicketCommonLayer({
                   return FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: Text(raceResult!.raceTitle, style: GoogleFonts.notoSerifJp(fontSize: 13, color: Colors.black)),
+                    child: Text(raceResult.raceTitle, style: GoogleFonts.notoSerifJp(fontSize: 13, color: Colors.black)),
                   );
                 }
               })
@@ -245,15 +245,15 @@ List<Widget> buildTicketCommonLayer({
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
           child: Text(
-            raceResult != null && raceResult!.raceDate.isNotEmpty
+            raceResult != null && raceResult.raceDate.isNotEmpty
                 ? () {
-              final match = RegExp(r'(\d{1,2})[月/\.-](\d{1,2})').firstMatch(raceResult!.raceDate);
+              final match = RegExp(r'(\d{1,2})[月/\.-](\d{1,2})').firstMatch(raceResult.raceDate);
               if (match != null) {
                 final month = int.parse(match.group(1)!); // 02 -> 2 に変換
                 final day = int.parse(match.group(2)!);   // 02 -> 2 に変換
                 return '$month月$day日';                  // 2月2日 にして返す
               }
-              return raceResult!.raceDate;
+              return raceResult.raceDate;
             }()
                 : '',
             style: const TextStyle(color: Colors.black, fontSize: 13),
