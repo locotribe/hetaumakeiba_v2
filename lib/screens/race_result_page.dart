@@ -13,9 +13,7 @@ import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 // [追加] 状態管理・ビジネスロジックをViewModelへ分離 (v.13.41.0)
 import 'package:hetaumakeiba_v2/view_models/race_result_view_model.dart';
-import 'package:hetaumakeiba_v2/widgets/betting_ticket_card.dart';
-import 'package:hetaumakeiba_v2/widgets/dual_betting_ticket_card.dart';
-import 'package:hetaumakeiba_v2/logic/parse.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/ticket_card_selector.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
 import 'package:hetaumakeiba_v2/widgets/race_review_card.dart';
 
@@ -432,7 +430,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                 child: Stack(
                   children: [
                     // 1層目: 馬券カード本体
-                    _buildBettingTicketCard(ticket, raceResult),
+                    buildTicketCard(ticket, raceResult: raceResult),
 
                     // 2層目: 的中画像 (的中時のみ表示)
                     if (isHit)
@@ -818,55 +816,4 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  Widget _buildBettingTicketCard(Map<String, dynamic> ticketData, RaceResult? raceResult) {
-    Map<String, dynamic> activeTicketData = Map<String, dynamic>.from(ticketData);
-
-    String foundQr = '';
-    for (var entry in ticketData.entries) {
-      if (entry.value is String && (entry.value as String).length >= 190) {
-        foundQr = entry.value as String;
-        break;
-      }
-    }
-    if (foundQr.isNotEmpty) {
-      try {
-        activeTicketData = parseHorseracingTicketQr(foundQr);
-      } catch (_) {}
-    }
-
-    List<dynamic> rawList = [];
-    if (activeTicketData.containsKey('購入内容') && activeTicketData['購入内容'] is List) {
-      rawList = activeTicketData['購入内容'] as List;
-    } else if (activeTicketData.containsKey('purchase_details') && activeTicketData['purchase_details'] is List) {
-      rawList = activeTicketData['purchase_details'] as List;
-    } else if (activeTicketData.containsKey('purchaseDetails') && activeTicketData['purchaseDetails'] is List) {
-      rawList = activeTicketData['purchaseDetails'] as List;
-    }
-
-    List<Map<String, dynamic>> purchaseDetails = [];
-    for (var item in rawList) {
-      if (item is Map) {
-        purchaseDetails.add(Map<String, dynamic>.from(item));
-      }
-    }
-
-    final String method = (activeTicketData['方式'] ?? '').toString();
-    final bool isOuenBaken = (method == '応援馬券' || method == '5');
-
-    final Set<String> shikibetsuTypes = {};
-    for (var p in purchaseDetails) {
-      final code = p['式別']?.toString() ?? '';
-      if (code.isNotEmpty) {
-        shikibetsuTypes.add(code);
-      }
-    }
-
-    final bool isDual = !isOuenBaken && shikibetsuTypes.length >= 2;
-
-    if (isDual) {
-      return DualBettingTicketCard(ticketData: activeTicketData, raceResult: raceResult);
-    } else {
-      return BettingTicketCard(ticketData: activeTicketData, raceResult: raceResult);
-    }
-  }
 }

@@ -1,4 +1,4 @@
-// lib/widgets/dual_betting_ticket_card.dart
+// lib/widgets/ticket/cards/dual_betting_ticket_card.dart
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
