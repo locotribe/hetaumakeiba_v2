@@ -3,26 +3,43 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
 
-// グループ内の馬番の数に応じて、馬番を囲う枠のサイズ（縦長）を決定する関数
-Size getBoxSizeByHorseCount(int count) {
-  // 枠の大きさを指定する場所（高さは横幅の1.35倍の縦長とする）
-  // 列をまたいだ揃えではなく、頭数のみで「大・中・小」の3段階を独立して決定する
+// 馬番の頭数および馬名表示スタイルの有無に応じて、馬番を囲む四角枠のサイズ（幅・高さ）を決定する関数
+Size getBoxSizeByHorseCount(
+  int count, {
+  bool isHorseNameStyle = false, // ★馬名が表示される馬券スタイルかどうか
+  int horseNumber = 1,           // ★馬番号（桁数による枠幅切り替え用）
+}) {
+  if (isHorseNameStyle) {
+    // 【馬名表示あり馬券専用（単勝・複勝・応援馬券）】
+    // 馬番枠の高さを馬名の文字高と同等（22.0px）に設定
+    const double baseHeight = 22.0;
+    // 1桁(1〜9)なら正方形に近い幅 (高さ×1.05)、2桁(10〜18)なら横長枠 (高さ×1.25)
+    final double width = (horseNumber >= 10) ? baseHeight * 1.25 : baseHeight * 1.05;
+    return Size(width, baseHeight);
+  }
+
+  // 【従来の連勝式馬券用（高さは横幅の1.35倍の縦長枠）】
   double width;
   if (count == 1) {
-    // [修正] 1頭単独ボックスの横幅を細身に調整 (v.13.40.2)
     width = 44.0; // 【大】1頭のみ
   } else if (count >= 2 && count <= 6) {
     width = 35.0; // 【中】2〜6頭
   } else {
-    width = 22.0; // 【小】7頭以上（全体縮小を防ぐため、現状の25.0から少しスリム化）
+    width = 22.0; // 【小】7頭以上
   }
   return Size(width, width * 1.35);
 }
 
-List<Widget> buildHorseNumberDisplay(dynamic horseNumbers, {String symbol = '', int? horseCountForSizing, Key? key}) {
+// 馬番枠ウィジェットを生成するメイン関数
+List<Widget> buildHorseNumberDisplay(
+  dynamic horseNumbers, {
+  String symbol = '',
+  int? horseCountForSizing,
+  bool isHorseNameStyle = false, // ★追加: 馬名表示スタイルフラグ (デフォルトは false)
+  Key? key,
+}) {
   List<Widget> widgets = [];
   final int count = horseCountForSizing ?? (horseNumbers is List ? horseNumbers.length : 1);
-  final Size boxSize = getBoxSizeByHorseCount(count);
 
   List<int> numbersToProcess = [];
 
@@ -33,43 +50,57 @@ List<Widget> buildHorseNumberDisplay(dynamic horseNumbers, {String symbol = '', 
   }
 
   for (int i = 0; i < numbersToProcess.length; i++) {
-    final String numberStr = numbersToProcess[i].toString();
-    // 縦の大きさはボックスの高さを基準に確保する（横幅基準だと二桁で縮小しすぎるため）
-    // [修正] 中・小サイズの馬番フォントを微調整（-1pt） (v.13.40.2)
-    final double fontSize = boxSize.height * 0.88 - (count == 1 ? 0.0 : 1.0);
+    final int currentNum = numbersToProcess[i];
+    final String numberStr = currentNum.toString();
 
+    // 馬名表示スタイルかどうかに合わせて四角枠サイズを取得
+    final Size boxSize = getBoxSizeByHorseCount(
+      count,
+      isHorseNameStyle: isHorseNameStyle,
+      horseNumber: currentNum,
+    );
+
+    // ★枠の中の数字の「フォントサイズ」決定
+    final double fontSize = isHorseNameStyle
+        ? boxSize.height * 0.85 // 馬名スタイル時は高さの85%
+        : boxSize.height * 0.88 - (count == 1 ? 0.0 : 1.0);
+
+    // 馬番テキスト本体
     Widget numberText = Text(
       numberStr,
       maxLines: 1,
       softWrap: false,
       style: TextStyle(
-        fontSize: fontSize,
-        color: Colors.black,
-        fontWeight: FontWeight.bold,
-        height: 1.0, // 行の高さを詰めて上下の余白を最小化
+        fontSize: fontSize,         // ★馬番数字のフォントサイズ
+        color: Colors.black,        // 文字色: 黒
+        fontWeight: FontWeight.bold,// 太字
+        height: 1.0,                // 行の高さを詰めて上下余白を最小化
       ),
     );
 
-    // 二桁以上の馬番は、縦の大きさを保ったまま横幅のみ圧縮する「長体」にする
+    // 2桁以上の馬番（例: 10番〜）の長体処理
     if (numberStr.length >= 2) {
       numberText = Transform.scale(
-        scaleX: 0.65, // バランスを見て0.63〜0.67で調整
+        // ★馬名スタイル時は横長枠になるため長体圧縮を緩める (85%)
+        scaleX: isHorseNameStyle ? 0.85 : 0.65,
         child: OverflowBox(
-          // ボックス幅の制約を外し、Textを改行させずに1行で描画させる
-          maxWidth: boxSize.height,
+          maxWidth: boxSize.height * 1.5,
           child: numberText,
         ),
       );
     }
 
+    // 四角い枠線（Container）の中に数字を配置
     widgets.add(
       Container(
         key: key,
-        width: boxSize.width,
-        height: boxSize.height,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(border: Border.all(color: Colors.black)),
-        child: numberText,
+        width: boxSize.width,   // ★四角枠の横幅
+        height: boxSize.height, // ★四角枠の高さ
+        alignment: Alignment.center, // 数字を枠の中央に配置
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.black), // ★四角枠の「黒い外枠線」
+        ),
+        child: numberText, // 枠の中に馬番数字を入れる
       ),
     );
     if (symbol.isNotEmpty && i < numbersToProcess.length - 1) {

@@ -136,25 +136,32 @@ class OuenBakenTicketCard extends StatelessWidget {
                     ),
                   ),
 
-                  // === 右列1: 上部方式等 (47%, 0%, 53%, 33%) ===
+                  // ★【右列1】「が　ん　ば　れ！」枠の配置領域 (横幅: 53%, 高さ: 18%)
                   Positioned(
-                    left: w * 0.47,
-                    top: 0,
-                    width: w * 0.53,
-                    height: h * 0.33,
+                    left: w * 0.47,   // 左端から 47% の位置
+                    top: 0,           // 最上部
+                    width: w * 0.53,  // 横幅 53%
+                    height: h * 0.18, // 高さ 18%
                     child: Padding(
                       padding: const EdgeInsets.only(left: 6.0, right: 2.0, top: 1.0),
                       child: Column(
                         children: [
                           if (hoshikiToDisplay.isNotEmpty)
                             DecoratedBox(
-                              decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.5)),
+                              decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.5)), // 「がんばれ！」の黒い囲み枠
                               child: SizedBox(
-                                height: h * 0.12,
+                                height: h * 0.12, // 枠の高さ
                                 child: Center(
                                   child: FittedBox(
                                     fit: BoxFit.scaleDown,
-                                    child: Text(hoshikiToDisplay, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 24)),
+                                    child: Text(
+                                      hoshikiToDisplay, 
+                                      style: const TextStyle(
+                                        color: Colors.black, 
+                                        fontWeight: FontWeight.bold, 
+                                        fontSize: 24, // ★「が　ん　ば　れ！」の文字サイズ (24pt)
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -164,12 +171,12 @@ class OuenBakenTicketCard extends StatelessWidget {
                     ),
                   ),
 
-                  // === 右列2: 購入内容 (47%, 33%, 53%, 22%) ===
+                  // ★【右列2】「購入内容（馬番・馬名・各100円）」の大元表示領域 (横幅: 53%, 高さ: 37%)
                   Positioned(
-                    left: w * 0.47,
-                    top: hoshikiToDisplay.isNotEmpty ? h * 0.33 : h * 0.02,
-                    width: w * 0.53,
-                    height: hoshikiToDisplay.isNotEmpty ? h * 0.22 : h * 0.53,
+                    left: w * 0.47,  // 左端から 47% の位置
+                    top: hoshikiToDisplay.isNotEmpty ? h * 0.18 : h * 0.02, // 「がんばれ！」枠のすぐ下(高さ18%の位置)から開始
+                    width: w * 0.53, // 横幅 53%
+                    height: hoshikiToDisplay.isNotEmpty ? h * 0.37 : h * 0.53, // ★大元の表示箱の高さ (37%)
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2.0),
                       child: PurchaseDetailsCard(
@@ -180,12 +187,12 @@ class OuenBakenTicketCard extends StatelessWidget {
                     ),
                   ),
 
-                  // === 右列3: 組合せ・金額 (47%, 55%, 53%, 27%) ===
+                  // ★【右列3】「単勝 100円」「複勝 100円」の配置領域 (横幅: 53%, 高さ: 27%)
                   Positioned(
-                    left: w * 0.47,
-                    top: h * 0.55,
-                    width: w * 0.53,
-                    height: h * 0.27,
+                    left: w * 0.47,  // 左端から 47% の位置
+                    top: h * 0.55,   // 上から 55% の位置から開始
+                    width: w * 0.53, // 横幅 53%
+                    height: h * 0.27, // 高さ 27%
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2.0),
                       child: _buildOuenAmountDisplay(ticketData),
@@ -201,7 +208,7 @@ class OuenBakenTicketCard extends StatelessWidget {
   }
 }
 
-/// 応援馬券の「単勝◯円」「複勝◯円」2行表示
+/// 応援馬券の「単勝◯円」「複勝◯円」2行表示の描画関数
 Widget _buildOuenAmountDisplay(Map<String, dynamic> ticketData) {
   if (!ticketData.containsKey('購入内容')) {
     return const SizedBox.shrink();
@@ -212,8 +219,20 @@ Widget _buildOuenAmountDisplay(Map<String, dynamic> ticketData) {
   }
   final detail = purchaseDetails.first;
 
-  const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
-  const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0,);
+  // 伏せ字「☆」のフォントスタイル
+  const TextStyle starStyle = TextStyle(
+    color: Colors.black, 
+    fontWeight: FontWeight.bold, 
+    fontSize: 10, // ★単勝・複勝の「☆」の文字サイズ (10pt)
+  );
+  
+  // 「単勝」「複勝」「100円」のフォントスタイル
+  const TextStyle amountStyle = TextStyle(
+    color: Colors.black, 
+    fontWeight: FontWeight.bold, 
+    fontSize: 14, // ★「単勝」「複勝」「100円」の文字サイズ (14pt)
+    height: 1.0,
+  );
 
   int kingaku = detail['購入金額'] as int;
   String starsForAmount = getStars(kingaku);

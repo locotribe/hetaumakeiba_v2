@@ -27,54 +27,76 @@ List<Widget> buildOuenBakenDetails(List<Map<String, dynamic>> purchaseDetails, R
     }
   }
 
-  final Widget horseNumberWidget = buildHorseNumberDisplay(horseNumber, horseCountForSizing: 1).first;
+  // 馬番を囲む四角枠ウィジェット（馬名表示スタイルフラグ isHorseNameStyle: true を指定して正方形/横長枠に）
+  final Widget horseNumberWidget = buildHorseNumberDisplay(
+    horseNumber,
+    horseCountForSizing: 1,
+    isHorseNameStyle: true, // ★馬名あり馬券スタイルの四角枠（高さ＝馬名と同等）を適用
+  ).first;
 
+  // 「各100円」行の「各」「円」のフォントスタイル（文字サイズ、太さ、色など）
   const TextStyle amountStyle = TextStyle(
-    color: Colors.black,
-    fontWeight: FontWeight.bold,
-    fontSize: 14,
-    height: 1.0,);
-  const TextStyle kiminoAibaStyle = TextStyle(
-      color: Colors.black,
-      fontWeight:
-      FontWeight.bold,
-      fontSize: 13);
+    color: Colors.black,        // 文字色: 黒
+    fontWeight: FontWeight.bold,// 文字の太さ: 太字
+    fontSize: 14,               // ★「各」「100円」の文字サイズ (14pt)
+    height: 1.0,                // 行の高さ
+  );
 
-  // 1行目: 馬番とテキスト
+  // 馬名（例: スターアニス）のフォントスタイル
+  const TextStyle kiminoAibaStyle = TextStyle(
+    color: Colors.black,        // 文字色: 黒
+    fontWeight: FontWeight.bold,// 文字の太さ: 太字
+    fontSize: 18,               // ★馬名の文字サイズ (18pt)
+  );
+
+  // 【1行目】馬番の四角枠 ＋ 馬名テキスト（表示領域の左端に配置）
   final Widget firstLine = Row(
-    mainAxisSize: MainAxisSize.min,
+    mainAxisSize: MainAxisSize.max,           // 横幅を表示領域いっぱいに確保
+    mainAxisAlignment: MainAxisAlignment.start, // 馬番と馬名を「左寄せ」に配置
     children: [
-      horseNumberWidget,
-      Text(' $horseNameToDisplay', style: kiminoAibaStyle),
+      horseNumberWidget,                       // [馬番の四角枠]
+      Text(' $horseNameToDisplay', style: kiminoAibaStyle), // [馬名テキスト]
     ],
   );
 
-  // 2行目: 金額
+  // 【2行目】金額表示「各☆☆☆100円」（表示領域の一番右端に配置）
   Widget amountLine = const SizedBox.shrink();
   if (kingaku != null) {
-    const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10);
+    // 伏せ字「☆」のフォントスタイル
+    const TextStyle starStyle = TextStyle(
+      color: Colors.black,        // 文字色: 黒
+      fontWeight: FontWeight.bold,// 文字の太さ: 太字
+      fontSize: 10,               // ★伏せ字「☆」の文字サイズ (10pt)
+    );
+
     amountLine = Row(
-      mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisSize: MainAxisSize.max,           // 横幅を表示領域いっぱいに確保
+      mainAxisAlignment: MainAxisAlignment.end,    // 金額を「一番右端」に配置
+      crossAxisAlignment: CrossAxisAlignment.baseline, // 「円」と数字のベースライン（下位置）を揃える
+      textBaseline: TextBaseline.alphabetic,       // ベースライン指定
       children: [
-        const Text('各', style: amountStyle),
-        Text(getStars(kingaku), style: starStyle),
-        Text('$kingaku円', style: amountStyle),
+        const Text('各', style: amountStyle),    // 「各」テキスト
+        Text(getStars(kingaku), style: starStyle), // 伏せ字「☆☆☆」
+        // ★金額数字部分のみを実物馬券同様に「縦長・スリム（長体）」に伸ばす処理
+        Transform.scale(
+          scaleY: 1.25,                           // 縦方向に 1.25 倍引き伸ばす
+          scaleX: 0.85,                           // 横方向に 0.85 倍引き締める（スリム化）
+          child: Text('$kingaku', style: amountStyle), // 金額数値 (例: 100)
+        ),
+        const Text('円', style: amountStyle),         // 単位「円」
       ],
     );
   }
 
   return [
-    IntrinsicWidth(
-      // [修正] Column(stretch)がFittedBoxの無制約(幅Infinity)を直接受け取り
-      // BoxConstraints forces an infinite width. で例外になるため、
-      // IntrinsicWidthで有限の横幅に変換してからstretchさせる (v.13.41.1)
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          firstLine,
-          amountLine,
-        ],
-      ),
+    // 1行目（馬名：左寄せ）と2行目（各100円：右寄せ）を縦に並べるメインカラム
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch, // 子要素の横幅を表示領域いっぱいに広げる
+      children: [
+        firstLine,                   // 1行目: 馬番＋馬名
+        const SizedBox(height: 2.0), // 1行目と2行目の間の縦余白 (2px)
+        amountLine,                  // 2行目: 各◯円
+      ],
     )
   ];
 }

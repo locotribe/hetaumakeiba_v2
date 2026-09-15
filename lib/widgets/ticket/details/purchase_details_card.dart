@@ -90,23 +90,47 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
       return const SizedBox.shrink();
     }
 
+    // [追加] 単勝・複勝で馬名が表示される場合のみ、購入内容を表示枠の縦中央に寄せる
+    // 式別コード "1"=単勝 / "2"=複勝。日本語名で入っている場合にも備えて両方を判定する (v.2026.9.14+26091401)
+    bool isHorseNameLayout = false;
+    if (widget.betType == '通常' && widget.raceResult != null) {
+      final dynamic rawList = widget.parsedResult['購入内容'];
+      if (rawList is List && rawList.isNotEmpty) {
+        isHorseNameLayout = rawList.every((e) {
+          if (e is! Map) return false;
+          final String code = e['式別']?.toString() ?? '';
+          return code == '1' || code == '2' || code == '単勝' || code == '複勝';
+        });
+      }
+    }
+
     final bool isCenterAligned =
-        widget.betType == '応援馬券' || widget.betType == 'ながし' || widget.betType == 'フォーメーション';
+        widget.betType == 'ながし' ||
+        widget.betType == 'フォーメーション' ||
+        isHorseNameLayout;
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final double? parentWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : null;
+        final double? parentHeight = constraints.maxHeight.isFinite ? constraints.maxHeight : null;
+
         return SizedBox(
-          width: constraints.maxWidth.isFinite ? constraints.maxWidth : null,
-          height: constraints.maxHeight.isFinite ? constraints.maxHeight : null,
+          width: parentWidth,
+          height: parentHeight,
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: isCenterAligned ? Alignment.center : Alignment.topLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 2.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
+            // 【レイアウト調整】SizedBoxで親領域の横幅(parentWidth)を子要素へ伝播させる
+            // これにより、応援馬券の「各◯円」などの右寄せ行が、馬名の幅に留まらず馬券の右端まで確実に配置されます
+            child: SizedBox(
+              width: parentWidth,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: _buildPurchaseDetailsInternal(widget.parsedResult['購入内容'], widget.betType),
+                ),
               ),
             ),
           ),

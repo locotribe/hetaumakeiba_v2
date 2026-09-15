@@ -84,6 +84,11 @@ class BettingTicketCard extends StatelessWidget {
       }
     }
 
+    // [追加] 単勝・複勝で馬名が表示される場合、組合せ欄が空になるため購入内容の枠を下まで広げる (v.2026.9.14+26091401)
+    final bool isHorseNameLayout = overallMethod == '通常' &&
+        raceResult != null &&
+        (primaryShikibetsuFromDetails == '単勝' || primaryShikibetsuFromDetails == '複勝');
+
     return AspectRatio(
       aspectRatio: 86 / 53,
       child: Container(
@@ -147,7 +152,8 @@ class BettingTicketCard extends StatelessWidget {
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     for (int i = 0; i < shikibetsuToDisplay.characters.length; i++) ...[
-                                      if (i > 0) const SizedBox(height: 2),
+                                      // [修正] 実物馬券に合わせ、2文字の式別(単勝・複勝等)の時は文字間を1文字分(18px)空ける (v.2026.9.14+26091401)
+                                      if (i > 0) SizedBox(height: shikibetsuToDisplay.characters.length == 2 ? 18.0 : 2.0),
                                       Text(
                                         shikibetsuToDisplay.characters.elementAt(i),
                                         style: GoogleFonts.notoSerifJp(
@@ -207,7 +213,10 @@ class BettingTicketCard extends StatelessWidget {
                     left: w * 0.47,
                     top: hoshikiToDisplay.isNotEmpty ? h * 0.33 : h * 0.02,
                     width: w * 0.53,
-                    height: hoshikiToDisplay.isNotEmpty ? h * 0.22 : h * 0.53,
+                    // [修正] 単勝・複勝は組合せ欄が空になるため、その分まで枠を広げて縦中央を正す (v.2026.9.14+26091401)
+                    height: isHorseNameLayout
+                        ? h * 0.80
+                        : (hoshikiToDisplay.isNotEmpty ? h * 0.22 : h * 0.53),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2.0),
                       child: PurchaseDetailsCard(
@@ -219,19 +228,21 @@ class BettingTicketCard extends StatelessWidget {
                   ),
 
                   // === 右列3: 組合せ・金額 (47%, 55%, 53%, 27%) ===
-                  Positioned(
-                    left: w * 0.47,
-                    top: h * 0.55,
-                    width: w * 0.53,
-                    height: h * 0.27,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                      child: PurchaseCombinationsCard(
-                        parsedResult: ticketData,
-                        betType: overallMethod,
+                  // [修正] 単勝・複勝では組合せ欄が空になるため、領域ごと描画しない (v.2026.9.14+26091401)
+                  if (!isHorseNameLayout)
+                    Positioned(
+                      left: w * 0.47,
+                      top: h * 0.55,
+                      width: w * 0.53,
+                      height: h * 0.27,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                        child: PurchaseCombinationsCard(
+                          parsedResult: ticketData,
+                          betType: overallMethod,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               );
             },
