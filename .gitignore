@@ -46,6 +46,8 @@ app.*.map.json
 /android/app/release
 # [追加] テスト用ミニアプリフォルダーを Git 管理から除外 (v.1.0)
 test_apps/
+# [追加] テストフォルダをローカルに保持したまま Git 管理から除外 (v.2026.9.17+26091701)
+/test/
 
 # AI Assistant Memory Files
 memory/
