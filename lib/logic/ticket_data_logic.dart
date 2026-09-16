@@ -12,6 +12,7 @@ import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
+import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/ticket_list_item.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
@@ -27,6 +28,21 @@ class TicketDataLogic {
 
   // ★追加: 確定済みデータを保持するメモリキャッシュ (staticにしてインスタンス間で共有)
   static final Map<int, TicketListItem> _memoryCache = {};
+
+  // [追加] 保存済みparsed_data_jsonを解析結果として利用するヘルパー。
+  // JSONが空またはデコード失敗時、かつqrCodeがある場合のみ例外的にQRを再解析する (v.2026.9.17+26091701)
+  Map<String, dynamic> _loadParsedTicket(QrData qrData) {
+    try {
+      final decoded = jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>;
+      if (decoded.isNotEmpty) return decoded;
+    } catch (e) {
+      // デコード失敗時は下のフォールバックへ
+    }
+    if (qrData.qrCode.isNotEmpty) {
+      return parseHorseracingTicketQr(qrData.qrCode);
+    }
+    return {};
+  }
 
   Future<List<TicketListItem>> fetchAndProcessTickets(String userId) async {
     final allQrData = await _ticketRepository.getAllQrData(userId);
@@ -49,25 +65,27 @@ class TicketDataLogic {
       }
 
       try {
-        Map<String, dynamic> parsedTicket;
-        if (qrData.qrCode.isNotEmpty) {
-          parsedTicket = parseHorseracingTicketQr(qrData.qrCode);
-        } else {
-          parsedTicket = jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>;
-        }
+        // [修正] 保存済みparsed_data_jsonを使用し、QRの再解析をやめる (v.2026.9.17+26091701)
+        final parsedTicket = _loadParsedTicket(qrData);
         if (parsedTicket.isEmpty) continue;
         if (qrData.id == null) continue;
 
         parsedTicketCache[qrData.id!] = parsedTicket;
 
-        final url = generateNetkeibaUrl(
-          year: parsedTicket['年'].toString(),
-          racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
-          round: parsedTicket['回'].toString(),
-          day: parsedTicket['日'].toString(),
-          race: parsedTicket['レース'].toString(),
-        );
-        final raceId = RaceResultScraperService.getRaceIdFromUrl(url)!;
+        // [修正] qrData.raceIdがあればそれを使い、URL生成による再算出をやめる (v.2026.9.17+26091701)
+        String raceId;
+        if (qrData.raceId != null && qrData.raceId!.isNotEmpty) {
+          raceId = qrData.raceId!;
+        } else {
+          final url = generateNetkeibaUrl(
+            year: parsedTicket['年'].toString(),
+            racecourseCode: racecourseDict.entries.firstWhere((e) => e.value == parsedTicket['開催場']).key,
+            round: parsedTicket['回'].toString(),
+            day: parsedTicket['日'].toString(),
+            race: parsedTicket['レース'].toString(),
+          );
+          raceId = RaceResultScraperService.getRaceIdFromUrl(url)!;
+        }
 
         raceIdCache[qrData.id!] = raceId;
         raceIdsToFetch.add(raceId);
@@ -100,14 +118,12 @@ class TicketDataLogic {
       }
 
       try {
-        // 事前パースデータの利用（生QRコードがあれば常に最新パーサーで再計算）
+        // [修正] 事前パースデータの利用（Step 0のキャッシュがあればそれを使い、なければ保存済みJSONを使用。QRの再解析はしない） (v.2026.9.17+26091701)
         Map<String, dynamic> parsedTicket;
-        if (qrData.qrCode.isNotEmpty) {
-          parsedTicket = parseHorseracingTicketQr(qrData.qrCode);
-        } else if (qrData.id != null && parsedTicketCache.containsKey(qrData.id)) {
+        if (qrData.id != null && parsedTicketCache.containsKey(qrData.id)) {
           parsedTicket = parsedTicketCache[qrData.id!]!;
         } else {
-          parsedTicket = jsonDecode(qrData.parsedDataJson) as Map<String, dynamic>;
+          parsedTicket = _loadParsedTicket(qrData);
         }
 
         if (parsedTicket.isEmpty) continue;
@@ -115,6 +131,9 @@ class TicketDataLogic {
         String raceId;
         if (qrData.id != null && raceIdCache.containsKey(qrData.id)) {
           raceId = raceIdCache[qrData.id]!;
+        } else if (qrData.raceId != null && qrData.raceId!.isNotEmpty) {
+          // [修正] qrData.raceIdがあればそれを使い、URL生成による再算出をやめる (v.2026.9.17+26091701)
+          raceId = qrData.raceId!;
         } else {
           final url = generateNetkeibaUrl(
             year: parsedTicket['年'].toString(),
@@ -172,42 +191,7 @@ class TicketDataLogic {
           }
         }
 
-        // ---------------------------------------------------------
-        // ステップ5: 【最終手段】Webスクレイピング (未知の馬券のみ)
-        // ---------------------------------------------------------
-        // DBのどこにも情報がなく、完全に新規のレースの場合のみWebへ取りに行きます。
-        if (raceDate.isEmpty && raceId.length == 12) {
-          try {
-            // 既存のURLジェネレーターを使用してURLを生成
-            // raceId (12桁): YYYY(4) PP(2) KK(2) DD(2) RR(2)
-            // generateNetkeibaUrlは年を2桁で受け取り "20" を付与するため、raceIdからは下2桁を渡す
-            final year = raceId.substring(2, 4);
-            final place = raceId.substring(4, 6);
-            final kai = raceId.substring(6, 8);
-            final day = raceId.substring(8, 10);
-            final r = raceId.substring(10, 12);
-
-            final dbUrl = generateNetkeibaUrl(
-              year: year,
-              racecourseCode: place,
-              round: kai,
-              day: day,
-              race: r,
-            );
-
-            // Webからレース詳細を取得
-            final fetched = await RaceResultScraperService.scrapeRaceDetails(dbUrl);
-
-            if (fetched.raceDate.isNotEmpty) {
-              raceDate = fetched.raceDate;
-              raceName = fetched.raceTitle;
-
-            }
-          } catch (e) {
-            debugPrint('新規レース情報のWeb取得に失敗: $raceId - $e');
-            // 失敗時は処理を止めず、表示可能な情報だけでリストを生成します
-          }
-        }
+        // [削除] ステップ5（一覧読み込み中のWebスクレイピング）を廃止 (v.2026.9.17+26091701)
 
         // 日付フォーマットの正規化
         raceDate = _normalizeDate(raceDate);

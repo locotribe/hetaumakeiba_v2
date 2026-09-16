@@ -48,7 +48,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       initialPage: _initialPage,
       viewportFraction: 0.33,
     );
-    reloadData();
+    // [削除] 起動時の自動再解析をやめ、タブ表示時のみ読み込むように変更 (v.2026.9.17+26091701)
   }
 
   @override

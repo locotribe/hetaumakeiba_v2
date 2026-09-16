@@ -53,6 +53,9 @@ class _MainScaffoldState extends State<MainScaffold> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<SavedTicketsListPageState> _savedListKey =
   GlobalKey<SavedTicketsListPageState>();
+  // [追加] タブレット版馬券タブの再読み込み用GlobalKey (v.2026.9.17+26091701)
+  final GlobalKey<TabletSavedTicketsListPageState> _tabletSavedListKey =
+  GlobalKey<TabletSavedTicketsListPageState>();
   final GlobalKey<RaceSchedulePageState> _raceScheduleKey = GlobalKey<RaceSchedulePageState>();
 
   final DbProvider _dbProvider = DbProvider();
@@ -540,6 +543,8 @@ class _MainScaffoldState extends State<MainScaffold> {
   void _onItemTapped(int index) {
     if (index == 4) {
       _savedListKey.currentState?.reloadData();
+      // [追加] タブレット版馬券タブ表示時の再読み込み (v.2026.9.17+26091701)
+      _tabletSavedListKey.currentState?.reloadData();
     }
     setState(() {
       _selectedIndex = index;
@@ -556,7 +561,8 @@ class _MainScaffoldState extends State<MainScaffold> {
       const TrackConditionPage(),
       const TabletScheduleWrapperPage(),
       const JyusyoIchiranPage(),
-      const TabletSavedTicketsListPage(),
+      // [修正] タブ表示時の再読み込みのためGlobalKeyを付与 (v.2026.9.17+26091701)
+      TabletSavedTicketsListPage(key: _tabletSavedListKey),
     ];
 
     return Scaffold(

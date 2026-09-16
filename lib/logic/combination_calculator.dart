@@ -193,7 +193,6 @@ void generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMethod
         allCombinations = (di['馬番'] as List).map((c) => (c as List).cast<int>()).toList();
         break;
     }
-    debugPrint('DEBUG: 生成直後の組み合わせ (ソート前): $allCombinations');
 
     if (['馬連', 'ワイド', '枠連', '3連複'].contains(ticketType)) {
       final unique = <String, List<int>>{};
@@ -202,10 +201,8 @@ void generateAndSetAllCombinations(Map<String, dynamic> di, String bettingMethod
         unique[sorted.join('-')] = sorted;
       }
       di['all_combinations'] = unique.values.toList();
-      debugPrint('DEBUG: DB保存直前の組み合わせ (3連複など): ${di['all_combinations']}');
     } else {
       di['all_combinations'] = allCombinations;
-      debugPrint('DEBUG: DB保存直前の組み合わせ (3連単など): ${di['all_combinations']}');
     }
   } catch (e) {
     debugPrint('Error generating combinations for $ticketType ($bettingMethod): $e');

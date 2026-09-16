@@ -126,15 +126,22 @@ class RaceResultViewModel extends ChangeNotifier {
       List<Map<String, dynamic>> parsedTickets = [];
       for (var qr in qrDataList) {
         try {
+          // [修正] 保存済みparsed_data_jsonを使用し、QRの再解析をやめる。
+          // JSONが空またはデコード失敗時のみ例外的にQRを解析する (v.2026.9.17+26091701)
           Map<String, dynamic> parsed;
-          if (qr.qrCode.isNotEmpty && qr.qrCode.length >= 190) {
-            parsed = parseHorseracingTicketQr(qr.qrCode);
-            parsed['QR'] = qr.qrCode;
-          } else {
+          bool useFallback = false;
+          try {
             parsed = json.decode(qr.parsedDataJson) as Map<String, dynamic>;
-            if (qr.qrCode.isNotEmpty) {
-              parsed['QR'] = qr.qrCode;
-            }
+            if (parsed.isEmpty) useFallback = true;
+          } catch (e) {
+            parsed = {};
+            useFallback = true;
+          }
+          if (useFallback && qr.qrCode.isNotEmpty && qr.qrCode.length >= 190) {
+            parsed = parseHorseracingTicketQr(qr.qrCode);
+          }
+          if (qr.qrCode.isNotEmpty) {
+            parsed['QR'] = qr.qrCode;
           }
           parsedTickets.add(parsed);
         } catch (e) {
