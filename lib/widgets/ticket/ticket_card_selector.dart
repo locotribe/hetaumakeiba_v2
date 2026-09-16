@@ -7,6 +7,10 @@ import 'package:hetaumakeiba_v2/widgets/ticket/cards/betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/cards/dual_betting_ticket_card.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/cards/ouen_baken_ticket_card.dart';
 
+// [追加] 券面固定サイズ化の設計幅・設計高さ (v.2026.9.17+26091702)
+const double kTicketDesignWidth = 404.16;
+const double kTicketDesignHeight = kTicketDesignWidth * 53 / 86;
+
 Widget buildTicketCard(Map<String, dynamic> ticketData, {RaceResult? raceResult}) {
   Map<String, dynamic> activeTicketData = Map<String, dynamic>.from(ticketData);
 
@@ -52,11 +56,25 @@ Widget buildTicketCard(Map<String, dynamic> ticketData, {RaceResult? raceResult}
 
   final bool isDual = !isOuenBaken && shikibetsuTypes.length >= 2;
 
+  final Widget card;
   if (isOuenBaken) {
-    return OuenBakenTicketCard(ticketData: activeTicketData, raceResult: raceResult);
+    card = OuenBakenTicketCard(ticketData: activeTicketData, raceResult: raceResult);
   } else if (isDual) {
-    return DualBettingTicketCard(ticketData: activeTicketData, raceResult: raceResult);
+    card = DualBettingTicketCard(ticketData: activeTicketData, raceResult: raceResult);
   } else {
-    return BettingTicketCard(ticketData: activeTicketData, raceResult: raceResult);
+    card = BettingTicketCard(ticketData: activeTicketData, raceResult: raceResult);
   }
+
+  // [追加] 券面全体を固定サイズで組み、丸ごと拡大縮小する (v.2026.9.17+26091702)
+  return AspectRatio(
+    aspectRatio: 86 / 53,
+    child: FittedBox(
+      fit: BoxFit.contain,
+      child: SizedBox(
+        width: kTicketDesignWidth,
+        height: kTicketDesignHeight,
+        child: MediaQuery.withNoTextScaling(child: card),
+      ),
+    ),
+  );
 }
