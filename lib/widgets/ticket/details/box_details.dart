@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/details/normal_details.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_fonts.dart';
 
 /// ボックス投票のグリッド内のセル（馬番または☆）を1つ生成する
 Widget buildBoxHorseNumberCell(dynamic content, {required double scaleFactor}) {
@@ -32,7 +33,7 @@ Widget buildBoxHorseNumberCell(dynamic content, {required double scaleFactor}) {
                 scaleY: content > 9 ? 1.4 : 1.0,
                 child: Text(
                   content.toString(),
-                  style: const TextStyle(
+                  style: ticketGothic(
                     fontSize: 43,
                     color: Colors.black,
                     fontWeight: FontWeight.bold,
@@ -53,7 +54,7 @@ Widget buildBoxHorseNumberCell(dynamic content, {required double scaleFactor}) {
           width: boxSize,
           height: containerHeight,
           child: Center(
-            child: Text('☆', style: TextStyle(fontSize: boxSize * 0.6, color: Colors.black)),
+            child: Text('☆', style: ticketMincho(fontSize: boxSize * 0.6, color: Colors.black)),
           ),
         ),
       ),

@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_fonts.dart';
 
 // 馬番の頭数および馬名表示スタイルの有無に応じて、馬番を囲む四角枠のサイズ（幅・高さ）を決定する関数
 Size getBoxSizeByHorseCount(
@@ -10,9 +11,7 @@ Size getBoxSizeByHorseCount(
   int horseNumber = 1,           // ★馬番号（桁数による枠幅切り替え用）
 }) {
   if (isHorseNameStyle) {
-    // 【馬名表示あり馬券専用（単勝・複勝・応援馬券）】
-    // 馬番枠の高さを馬名の文字高と同等（22.0px）に設定
-    const double baseHeight = 22.0;
+    const double baseHeight = 24.0;
     // 1桁(1〜9)なら正方形に近い幅 (高さ×1.05)、2桁(10〜18)なら横長枠 (高さ×1.25)
     final double width = (horseNumber >= 10) ? baseHeight * 1.25 : baseHeight * 1.05;
     return Size(width, baseHeight);
@@ -70,7 +69,7 @@ List<Widget> buildHorseNumberDisplay(
       numberStr,
       maxLines: 1,
       softWrap: false,
-      style: TextStyle(
+      style: ticketGothic(
         fontSize: fontSize,         // ★馬番数字のフォントサイズ
         color: Colors.black,        // 文字色: 黒
         fontWeight: FontWeight.bold,// 太字
@@ -104,7 +103,7 @@ List<Widget> buildHorseNumberDisplay(
       ),
     );
     if (symbol.isNotEmpty && i < numbersToProcess.length - 1) {
-      widgets.add(Text(symbol, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)));
+      widgets.add(Text(symbol, style: ticketMincho(color: Colors.black, fontWeight: FontWeight.bold)));
     }
   }
   return widgets;
@@ -159,7 +158,7 @@ Widget buildStarCell(Size boxSize) {
       child: Text(
         '☆',
         textAlign: TextAlign.center,
-        style: TextStyle(
+        style: ticketMincho(
           fontSize: boxSize.width * 0.6,
           color: Colors.black,
           fontWeight: FontWeight.bold,
@@ -212,7 +211,7 @@ Widget buildGroupLayoutItem(Map<String, dynamic> group, {required bool isFormati
   if (label.isNotEmpty) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: Colors.black)),
+        Text(label, style: ticketMincho(color: Colors.black)),
         const SizedBox(height: 4),
         horseDisplayWidget,
       ],
@@ -244,7 +243,7 @@ Widget buildHorizontalGroupLayout(
         Transform.scale(
           scaleX: 0.5,
           scaleY: 1.5,
-          child: Text(symbol, style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold)),
+          child: Text(symbol, style: ticketMincho(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold)),
         ),
       );
     }

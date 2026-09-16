@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_fonts.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/parts/horse_number_box.dart';
 
 /// 通常投票のレイアウト
@@ -75,8 +76,8 @@ Widget buildNormalDetails(Map<String, dynamic> detail, String currentBetType, Ra
         const double firstLineHeight = 30.0;   // 1行目（馬番枠＋馬名）の高さ
         const double amountLineHeight = 34.0;  // 2行目（☆＋金額＋円）の高さ
 
-        const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0);
-        const TextStyle horseNameStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16); // ★fontSize: 16pt (最長9文字収まるサイズ)
+        final TextStyle amountStyle = ticketMincho(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0);
+        final TextStyle horseNameStyle = ticketGothic(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16); // ★fontSize: 16pt (最長9文字収まるサイズ)
 
         // 【1行目】馬番枠 ＋ 馬名（左寄せ ＆ 馬名の横幅を 80% に長体化）
         // [修正] FittedBox(contain) で行の高さまで拡大する。
@@ -125,7 +126,7 @@ Widget buildNormalDetails(Map<String, dynamic> detail, String currentBetType, Ra
                           padding: const EdgeInsets.only(bottom: 15.0), // ☆を縦中央に持ち上げる
                           child: Text(
                             getStars(kingaku),
-                            style: const TextStyle(
+                            style: ticketMincho(
                               color: Colors.black,
                               fontWeight: FontWeight.bold,
                               fontSize: 45,                    // 基準文字サイズ
@@ -134,7 +135,7 @@ Widget buildNormalDetails(Map<String, dynamic> detail, String currentBetType, Ra
                         ),
                         Text(
                           '$kingaku',
-                          style: const TextStyle(
+                          style: ticketGothic(
                             color: Colors.black,
                             fontWeight: FontWeight.bold,
                             fontSize: 100,                      // 設計上の基準値。実サイズは行の高さが決める
@@ -145,7 +146,7 @@ Widget buildNormalDetails(Map<String, dynamic> detail, String currentBetType, Ra
                     ),
                   ),
                 ),
-                const Text('円', style: amountStyle),            // 単位「円」
+                Text('円', style: amountStyle),            // 単位「円」
               ],
             ),
           );
@@ -177,8 +178,9 @@ Widget buildNormalDetails(Map<String, dynamic> detail, String currentBetType, Ra
   // 馬名なし/連勝式の場合は、馬番と金額を Row で横並びにして結合する
   Widget amountDisplay = const SizedBox.shrink();
   if (kingaku != null && currentBetType == '通常') {
-    const TextStyle starStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10); // 「☆」の文字サイズ
-    const TextStyle amountStyle = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0); // 金額数値の文字サイズ
+    final TextStyle starStyle = ticketMincho(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10); // 「☆」の文字サイズ
+    final TextStyle amountNumberStyle = ticketGothic(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0); // 金額数値の文字サイズ
+    final TextStyle amountUnitStyle = ticketMincho(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0); // 単位「円」の文字サイズ
     amountDisplay = Row(
       mainAxisSize: MainAxisSize.min,                           // 横幅を最小限に抑える
       crossAxisAlignment: CrossAxisAlignment.baseline,          // ベースライン揃え
@@ -190,9 +192,9 @@ Widget buildNormalDetails(Map<String, dynamic> detail, String currentBetType, Ra
         Transform.scale(
           scaleY: 1.25,                                         // 縦方向に 1.25 倍引き伸ばす
           scaleX: 0.85,                                         // 横方向に 0.85 倍引き締める（スリム化）
-          child: Text('$kingaku', style: amountStyle),         // 金額数値 (例: 5000)
+          child: Text('$kingaku', style: amountNumberStyle),         // 金額数値 (例: 5000)
         ),
-        const Text('円', style: amountStyle),                       // 単位「円」
+        Text('円', style: amountUnitStyle),                       // 単位「円」
       ],
     );
   }

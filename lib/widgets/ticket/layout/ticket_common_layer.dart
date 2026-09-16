@@ -1,10 +1,10 @@
 // lib/widgets/ticket/layout/ticket_common_layer.dart
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/parts/purchase_total_amount_card.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_fonts.dart';
 
 List<Widget> buildTicketCommonLayer({
   required double w,
@@ -34,7 +34,7 @@ List<Widget> buildTicketCommonLayer({
           child: ticketData.containsKey('年') && ticketData.containsKey('回') && ticketData.containsKey('日')
               ? Text(
                   '20${ticketData['年']}年${ticketData['回']}回${ticketData['日']}日',
-                  style: GoogleFonts.notoSerifJp(
+                  style: ticketMincho(
                     color: Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -59,7 +59,7 @@ List<Widget> buildTicketCommonLayer({
           child: ticketData.containsKey('開催場')
               ? Text(
                   '${ticketData['開催場']}',
-                  style: GoogleFonts.notoSerifJp(
+                  style: ticketMincho(
                     color: Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 30,
@@ -92,7 +92,7 @@ List<Widget> buildTicketCommonLayer({
                 fit: BoxFit.contain, // ★ 枠の高さに合わせて自動で限界まで拡大
                 child: Text(
                   '${ticketData['レース']}',
-                  style: const TextStyle(
+                  style: ticketGothic(
                     color: Colors.white,
                     fontWeight: FontWeight.w900, // ★ 極太にする
                     fontSize: 32, // ★ 基準サイズを大きくする
@@ -104,7 +104,7 @@ List<Widget> buildTicketCommonLayer({
             const SizedBox(width: 4),
             Text(
               'レース',
-              style: GoogleFonts.notoSerifJp( // ★ 明朝体（GoogleFonts.notoSerifJp）に変更
+              style: ticketMincho( // ★ 明朝体（GoogleFonts.notoSerifJp）に変更
                 color: Colors.black,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
@@ -179,12 +179,12 @@ List<Widget> buildTicketCommonLayer({
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
-                        child: Text("$numberPart  ($gradePart)", style: GoogleFonts.notoSerifJp(fontSize: 15, color: Colors.black)),
+                        child: Text("$numberPart  ($gradePart)", style: ticketMincho(fontSize: 15, color: Colors.black)),
                       ),
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
-                        child: Text(namePart, style: GoogleFonts.notoSerifJp(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+                        child: Text(namePart, style: ticketMincho(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
                       ),
                     ],
                   );
@@ -192,7 +192,7 @@ List<Widget> buildTicketCommonLayer({
                   return FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: Text(raceResult.raceTitle, style: GoogleFonts.notoSerifJp(fontSize: 13, color: Colors.black)),
+                    child: Text(raceResult.raceTitle, style: ticketMincho(fontSize: 13, color: Colors.black)),
                   );
                 }
               })
@@ -215,21 +215,24 @@ List<Widget> buildTicketCommonLayer({
             salesLocation != null && salesLocation.startsWith('JRA') && !salesLocation.startsWith('JRA ')
                 ? salesLocation.replaceFirst('JRA', 'JRA ')
                 : (salesLocation ?? ''),
-            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14),
+            style: ticketMincho(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14),
           ),
         ),
       ),
     ),
 
-    // === フッター1・右: 合計金額 (36%, 82%, 64%, 9%) ===
+    // === フッター1・右: 合計金額 ===
     Positioned(
       left: w * 0.36,
-      top: h * 0.82,
+      top: h * 0.79,
       width: w * 0.64,
-      height: h * 0.14,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: PurchaseTotalAmountCard(parsedResult: ticketData),
+      height: h * 0.17,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 2.0), // ★上と同じ右余白 2.0px を追加する
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: PurchaseTotalAmountCard(parsedResult: ticketData),
+        ),
       ),
     ),
 
@@ -256,7 +259,7 @@ List<Widget> buildTicketCommonLayer({
               return raceResult.raceDate;
             }()
                 : '',
-            style: const TextStyle(color: Colors.black, fontSize: 13),
+            style: ticketMincho(color: Colors.black, fontSize: 13),
           ),
         ),
       ),

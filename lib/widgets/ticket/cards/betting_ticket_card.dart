@@ -1,11 +1,11 @@
 // lib/widgets/ticket/cards/betting_ticket_card.dart
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/details/purchase_details_card.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_fonts.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/parts/purchase_combinations_card.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/layout/ticket_common_layer.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/layout/shikibetsu_band_spec.dart';
@@ -27,8 +27,8 @@ class BettingTicketCard extends StatelessWidget {
     String hoshikiToDisplay = '';
     String primaryShikibetsuFromDetails = '';
     String overallMethod = '';
-    Widget topWidget = const Text('Top', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white));
-    Widget bottomWidget = const Text('Bottom', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white));
+    Widget topWidget = Text('Top', textAlign: TextAlign.center, style: ticketGothic(fontSize: 12, color: Colors.white));
+    Widget bottomWidget = Text('Bottom', textAlign: TextAlign.center, style: ticketGothic(fontSize: 12, color: Colors.white));
     Color topContainerColor = Colors.black;
     Color bottomContainerColor = Colors.black;
     Color middleContainerColor = Colors.transparent;
@@ -74,7 +74,7 @@ class BettingTicketCard extends StatelessWidget {
             child: Text(
               bandSpec.label,
               textAlign: TextAlign.center,
-              style: TextStyle(color: bandSpec.labelColor),
+              style: ticketGothic(color: bandSpec.labelColor),
             ),
           ),
         );
@@ -91,7 +91,9 @@ class BettingTicketCard extends StatelessWidget {
 
     return AspectRatio(
       aspectRatio: 86 / 53,
-      child: Container(
+      child: DefaultTextStyle.merge(
+        style: ticketMincho(),
+        child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: Colors.grey),
@@ -156,7 +158,7 @@ class BettingTicketCard extends StatelessWidget {
                                       if (i > 0) SizedBox(height: shikibetsuToDisplay.characters.length == 2 ? 18.0 : 2.0),
                                       Text(
                                         shikibetsuToDisplay.characters.elementAt(i),
-                                        style: GoogleFonts.notoSerifJp(
+                                        style: ticketMincho(
                                           color: middleTextColor,
                                           fontSize: 30, // ← 基準サイズを 36 など大きめにする
                                           fontWeight: FontWeight.bold,
@@ -198,7 +200,7 @@ class BettingTicketCard extends StatelessWidget {
                                 child: Center(
                                   child: FittedBox(
                                     fit: BoxFit.scaleDown,
-                                    child: Text(hoshikiToDisplay, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 24)),
+                                    child: Text(hoshikiToDisplay, style: ticketGothic(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 24)),
                                   ),
                                 ),
                               ),
@@ -247,6 +249,7 @@ class BettingTicketCard extends StatelessWidget {
               );
             },
           ),
+        ),
         ),
       ),
     );

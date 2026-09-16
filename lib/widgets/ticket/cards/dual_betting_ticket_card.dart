@@ -1,10 +1,10 @@
 // lib/widgets/ticket/cards/dual_betting_ticket_card.dart
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_fonts.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/layout/ticket_common_layer.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/layout/shikibetsu_band_spec.dart';
 
@@ -51,7 +51,9 @@ class DualBettingTicketCard extends StatelessWidget {
 
     return AspectRatio(
       aspectRatio: 86 / 53,
-      child: Container(
+      child: DefaultTextStyle.merge(
+        style: ticketMincho(),
+        child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: Colors.grey),
@@ -126,6 +128,7 @@ class DualBettingTicketCard extends StatelessWidget {
             },
           ),
         ),
+        ),
       ),
     );
   }
@@ -154,7 +157,7 @@ class DualBettingTicketCard extends StatelessWidget {
     if (bandSpec != null) {
       topWidget = bottomWidget = FittedBox(
         fit: BoxFit.contain,
-        child: Text(bandSpec.label, style: TextStyle(color: bandSpec.labelColor)),
+        child: Text(bandSpec.label, style: ticketGothic(color: bandSpec.labelColor)),
       );
       topBg = bottomBg = bandSpec.labelBackgroundColor;
       middleBg = bandSpec.middleBackgroundColor;
@@ -191,7 +194,7 @@ class DualBettingTicketCard extends StatelessWidget {
                         if (i > 0) const SizedBox(height: 1),
                         Text(
                           fullWidthName.characters.elementAt(i),
-                          style: GoogleFonts.notoSerifJp(color: middleTextColor, fontSize: 22, fontWeight: FontWeight.bold),
+                          style: ticketMincho(color: middleTextColor, fontSize: 22, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ],
@@ -260,19 +263,26 @@ class DualBettingTicketCard extends StatelessWidget {
               decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.0)),
               child: Text(
                 '${numbers[i]}',
-                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
+                style: ticketGothic(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ),
             if (i < numbers.length - 1)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                child: Text(symbol, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
+                child: Text(symbol, style: ticketMincho(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
               ),
           ],
           const SizedBox(width: 8),
           if (amount != null) ...[
-            Text(getStars(amount), style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10)),
-            Text('$amount円', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(getStars(amount), style: ticketMincho(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10)),
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: '$amount', style: ticketGothic(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+                  TextSpan(text: '円', style: ticketMincho(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+                ],
+              ),
+            ),
           ],
         ],
       ),

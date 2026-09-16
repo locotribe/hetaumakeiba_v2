@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_fonts.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/parts/horse_number_box.dart';
 
 /// 応援馬券のレイアウト
@@ -34,68 +35,97 @@ List<Widget> buildOuenBakenDetails(List<Map<String, dynamic>> purchaseDetails, R
     isHorseNameStyle: true, // ★馬名あり馬券スタイルの四角枠（高さ＝馬名と同等）を適用
   ).first;
 
-  // 「各100円」行の「各」「円」のフォントスタイル（文字サイズ、太さ、色など）
-  const TextStyle amountStyle = TextStyle(
-    color: Colors.black,        // 文字色: 黒
-    fontWeight: FontWeight.bold,// 文字の太さ: 太字
-    fontSize: 14,               // ★「各」「100円」の文字サイズ (14pt)
-    height: 1.0,                // 行の高さ
-  );
+  // 行の高さを決めて中身を FittedBox で合わせることで、実物馬券と同じ比率のレイアウトを実現 (v.2026.9.15+26091501)
+  const double firstLineHeight = 30.0;   // 1行目（馬番枠＋馬名）の高さ
+  const double amountLineHeight = 34.0;  // 2行目（各＋☆＋金額＋円）の高さ
 
-  // 馬名（例: スターアニス）のフォントスタイル
-  const TextStyle kiminoAibaStyle = TextStyle(
-    color: Colors.black,        // 文字色: 黒
-    fontWeight: FontWeight.bold,// 文字の太さ: 太字
-    fontSize: 18,               // ★馬名の文字サイズ (18pt)
-  );
+  final TextStyle amountStyle = ticketMincho(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0);
 
-  // 【1行目】馬番の四角枠 ＋ 馬名テキスト（表示領域の左端に配置）
-  final Widget firstLine = Row(
-    mainAxisSize: MainAxisSize.max,           // 横幅を表示領域いっぱいに確保
-    mainAxisAlignment: MainAxisAlignment.start, // 馬番と馬名を「左寄せ」に配置
-    children: [
-      horseNumberWidget,                       // [馬番の四角枠]
-      Text(' $horseNameToDisplay', style: kiminoAibaStyle), // [馬名テキスト]
-    ],
-  );
-
-  // 【2行目】金額表示「各☆☆☆100円」（表示領域の一番右端に配置）
-  Widget amountLine = const SizedBox.shrink();
-  if (kingaku != null) {
-    // 伏せ字「☆」のフォントスタイル
-    const TextStyle starStyle = TextStyle(
-      color: Colors.black,        // 文字色: 黒
-      fontWeight: FontWeight.bold,// 文字の太さ: 太字
-      fontSize: 10,               // ★伏せ字「☆」の文字サイズ (10pt)
-    );
-
-    amountLine = Row(
-      mainAxisSize: MainAxisSize.max,           // 横幅を表示領域いっぱいに確保
-      mainAxisAlignment: MainAxisAlignment.end,    // 金額を「一番右端」に配置
-      crossAxisAlignment: CrossAxisAlignment.baseline, // 「円」と数字のベースライン（下位置）を揃える
-      textBaseline: TextBaseline.alphabetic,       // ベースライン指定
+  // 【1行目】馬番の四角枠 ＋ 馬名テキスト（左寄せ ＆ 横幅80%に長体化）
+  // FittedBoxによる相殺を防ぎ、高さ100%を保持したまま確実に横幅のみ80%に長体化する (v.2026.9.15+26091501)
+  final Widget firstLine = SizedBox(
+    height: firstLineHeight,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Text('各', style: amountStyle),    // 「各」テキスト
-        Text(getStars(kingaku), style: starStyle), // 伏せ字「☆☆☆」
-        // ★金額数字部分のみを実物馬券同様に「縦長・スリム（長体）」に伸ばす処理
+        // [追加] 馬番枠の左側に隙間を空け、1行目だけを右へずらす (v.2026.9.16+XXXXXXXX)
+        const SizedBox(width: 4.0),
+        horseNumberWidget,                               // 馬番枠（正方形/横長）
+        const SizedBox(width: 4.0),
+        // 馬名の縦高さ(100%)を維持したまま横幅のみ 80% (0.8) にスリム化
         Transform.scale(
-          scaleY: 1.25,                           // 縦方向に 1.25 倍引き伸ばす
-          scaleX: 0.85,                           // 横方向に 0.85 倍引き締める（スリム化）
-          child: Text('$kingaku', style: amountStyle), // 金額数値 (例: 100)
+          scaleX: 0.8,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            horseNameToDisplay,
+            style: ticketGothic(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 20),
+          ),
         ),
-        const Text('円', style: amountStyle),         // 単位「円」
       ],
+    ),
+  );
+
+  // 【2行目】「各」＋ ☆（縦中央）＋ 金額（行の高さいっぱいに縦長・隙間なし）＋ 円（下端）
+  Widget amountLine = const SizedBox(height: amountLineHeight);
+  if (kingaku != null) {
+    amountLine = SizedBox(
+      height: amountLineHeight,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,         // 右寄せ
+        crossAxisAlignment: CrossAxisAlignment.end,       // 下端揃え（「円」がここに来る）
+        children: [
+          // 「各」と「☆」の間の不要な余白を完全に消去し、数字まで密着させて縦長に拡大 (v.2026.9.15+26091501)
+          Transform.scale(
+            scaleX: 0.75,                                 // 横方向の圧縮率（長体の強さ）
+            alignment: Alignment.bottomRight,
+            child: FittedBox(
+              fit: BoxFit.fitHeight,                      // 行の高さに合わせて100%拡大
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '各',
+                    style: ticketMincho(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 45),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0), // ☆を縦中央に持ち上げる
+                    child: Text(
+                      getStars(kingaku),
+                      style: ticketMincho(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 45,                    // 基準文字サイズ
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '$kingaku',
+                    style: ticketGothic(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 100,                      // 設計上の基準値。実サイズは行の高さが決める
+                      height: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Text('円', style: amountStyle),            // 単位「円」
+        ],
+      ),
     );
   }
 
   return [
     // 1行目（馬名：左寄せ）と2行目（各100円：右寄せ）を縦に並べるメインカラム
     Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch, // 子要素の横幅を表示領域いっぱいに広げる
       children: [
-        firstLine,                   // 1行目: 馬番＋馬名
-        const SizedBox(height: 2.0), // 1行目と2行目の間の縦余白 (2px)
-        amountLine,                  // 2行目: 各◯円
+        firstLine,                                     // 1行目: 馬番＋馬名
+        amountLine,                                    // 2行目: 各◯円
       ],
     )
   ];

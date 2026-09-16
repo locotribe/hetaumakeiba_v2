@@ -7,6 +7,7 @@ import 'package:hetaumakeiba_v2/widgets/ticket/details/box_details.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/details/nagashi_details.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/details/formation_details.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/details/ouen_baken_details.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_fonts.dart';
 
 class PurchaseDetailsCard extends StatefulWidget {
   final Map<String, dynamic> parsedResult;
@@ -74,9 +75,9 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
           children: [
             content,
             if (detail['ウラ'] == 'あり')
-              const Padding(
-                padding: EdgeInsets.only(left: 16.0),
-                child: Text('ウラ: あり', style: TextStyle(color: Colors.black)),
+              Padding(
+                padding: const EdgeInsets.only(left: 16.0),
+                child: Text('ウラ: あり', style: ticketGothic(color: Colors.black)),
               ),
           ],
         ),
@@ -107,6 +108,7 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
     final bool isCenterAligned =
         widget.betType == 'ながし' ||
         widget.betType == 'フォーメーション' ||
+        widget.betType == '応援馬券' ||
         isHorseNameLayout;
 
     return LayoutBuilder(

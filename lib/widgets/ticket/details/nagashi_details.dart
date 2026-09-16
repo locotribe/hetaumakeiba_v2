@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/parts/horse_number_box.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/parts/nagashi_connector_painter.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_fonts.dart';
 
 class NagashiDetails extends StatefulWidget {
   final Map<String, dynamic> detail;
@@ -110,7 +111,7 @@ class _NagashiDetailsState extends State<NagashiDetails> {
               height: boxSizeForOpponent.height + 4.0,
               child: Center(
                 // ながし投票の相手馬が20頭に満たない場合のプレースホルダー('☆')のフォントサイズ
-                child: Text('☆', style: TextStyle(fontSize: boxSizeForOpponent.width * 0.5, color: Colors.black)),
+                child: Text('☆', style: ticketMincho(fontSize: boxSizeForOpponent.width * 0.5, color: Colors.black)),
               ),
             ),
           );
@@ -128,9 +129,9 @@ class _NagashiDetailsState extends State<NagashiDetails> {
     final Widget axisColumn = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
+        Text(
           '(軸)',
-          style: TextStyle(
+          style: ticketMincho(
             color: Colors.black,
             fontSize: 11,
           ),
@@ -143,9 +144,9 @@ class _NagashiDetailsState extends State<NagashiDetails> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Text(
+        Text(
           '(相手)',
-          style: TextStyle(
+          style: ticketMincho(
             color: Colors.black,
             fontSize: 10,
           ),
