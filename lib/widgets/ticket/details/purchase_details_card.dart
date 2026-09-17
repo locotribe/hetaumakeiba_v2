@@ -125,7 +125,8 @@ class _PurchaseDetailsCardState extends State<PurchaseDetailsCard> {
             // 【レイアウト調整】SizedBoxで親領域の横幅(parentWidth)を子要素へ伝播させる
             // これにより、応援馬券の「各◯円」などの右寄せ行が、馬名の幅に留まらず馬券の右端まで確実に配置されます
             child: SizedBox(
-              width: parentWidth,
+              // 応援馬券のみ幅固定(parentWidth)を適用し、それ以外は中身の自然な幅をとらせて FittedBox で自動縮小させる
+              width: widget.betType == '応援馬券' ? parentWidth : null,
               child: Padding(
                 padding: const EdgeInsets.only(top: 2.0),
                 child: Column(

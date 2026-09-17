@@ -17,16 +17,15 @@ Size getBoxSizeByHorseCount(
     return Size(width, baseHeight);
   }
 
-  // 【従来の連勝式馬券用（高さは横幅の1.35倍の縦長枠）】
-  double width;
+  // 【従来の連勝式馬券用】
   if (count == 1) {
-    width = 44.0; // 【大】1頭のみ
+    return const Size(35.0, 40.0 * 1.4); // 【大】1頭のみ（縦長）
   } else if (count >= 2 && count <= 6) {
-    width = 35.0; // 【中】2〜6頭
+    return const Size(25.0, 25.0 * 1.4); // 【中】2〜6頭（縦長）
   } else {
-    width = 22.0; // 【小】7頭以上
+    // ★ 【小】7頭以上は横幅をしっかり確保し、高さを抑えて「横長枠」にする！
+    return const Size(23.0, 18.0); // 例: 横幅 18.0 / 高さ 14.0 （横長）
   }
-  return Size(width, width * 1.35);
 }
 
 // 馬番枠ウィジェットを生成するメイン関数
@@ -62,7 +61,7 @@ List<Widget> buildHorseNumberDisplay(
     // ★枠の中の数字の「フォントサイズ」決定
     final double fontSize = isHorseNameStyle
         ? boxSize.height * 0.85 // 馬名スタイル時は高さの85%
-        : boxSize.height * 0.88 - (count == 1 ? 0.0 : 1.0);
+        : boxSize.height * 0.93 - (count == 1 ? 0.0 : 1.0);
 
     // 馬番テキスト本体
     Widget numberText = Text(
@@ -79,9 +78,13 @@ List<Widget> buildHorseNumberDisplay(
 
     // 2桁以上の馬番（例: 10番〜）の長体処理
     if (numberStr.length >= 2) {
+      // 7頭以上の小枠(count >= 7)の時は scaleX を 0.88 や 0.92 に広げて数字を太く見せる！
+      final double scaleXValue = isHorseNameStyle
+          ? 0.85
+          : (count >= 7 ? 0.90 : 0.72);
+
       numberText = Transform.scale(
-        // ★馬名スタイル時は横長枠になるため長体圧縮を緩める (85%)
-        scaleX: isHorseNameStyle ? 0.85 : 0.65,
+        scaleX: scaleXValue, // ← ここを大きな値（0.88 〜 0.92 など）にする
         child: OverflowBox(
           maxWidth: boxSize.height * 1.5,
           child: numberText,
@@ -150,8 +153,15 @@ Widget buildGridCell(dynamic item, int horseCount, Size boxSize) {
 
 // 馬番セルと同じ占有領域（幅・高さ）で☆を中央配置するセル
 Widget buildStarCell(Size boxSize) {
+  // ★ 高さや幅が小さい小枠（7頭以上）かどうか判定
+  final bool isSmallBox = boxSize.height <= 20.0;
+
+  // ★ 小枠の時は高さの65%（小さめ）、大・中枠の時は幅の80%（大きめ）にする
+  final double starFontSize = isSmallBox
+      ? boxSize.height * 0.65 // ← 7頭以上の小枠のときは控えめなサイズに！
+      : boxSize.width * 0.8;
+
   return SizedBox(
-    // _buildHorseNumberDisplayのセルと同じ幅にし、垂直軸のズレを防ぐ
     width: boxSize.width,
     height: boxSize.height,
     child: Center(
@@ -159,7 +169,7 @@ Widget buildStarCell(Size boxSize) {
         '☆',
         textAlign: TextAlign.center,
         style: ticketMincho(
-          fontSize: boxSize.width * 0.6,
+          fontSize: starFontSize, // ← 計算したフォントサイズを適用
           color: Colors.black,
           fontWeight: FontWeight.bold,
           height: 1.0,
@@ -241,9 +251,9 @@ Widget buildHorizontalGroupLayout(
     if (shouldShowSymbol && symbol.isNotEmpty && i < groups.length - 1) {
       children.add(
         Transform.scale(
-          scaleX: 0.5,
-          scaleY: 1.5,
-          child: Text(symbol, style: ticketMincho(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold)),
+          scaleX: 0.6,
+          scaleY: 1.8,
+          child: Text(symbol, style: ticketMincho(fontSize: 18, color: Colors.black, fontWeight: FontWeight.bold)),
         ),
       );
     }

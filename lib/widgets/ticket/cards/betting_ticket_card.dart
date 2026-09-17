@@ -187,7 +187,7 @@ class BettingTicketCard extends StatelessWidget {
                     left: w * 0.47,
                     top: 0,
                     width: w * 0.53,
-                    height: h * 0.33,
+                    height: h * 0.15,
                     child: Padding(
                       padding: const EdgeInsets.only(left: 6.0, right: 2.0, top: 1.0),
                       child: Column(
@@ -213,12 +213,12 @@ class BettingTicketCard extends StatelessWidget {
                   // === 右列2: 購入内容 (47%, 33%, 53%, 22%) ===
                   Positioned(
                     left: w * 0.47,
-                    top: hoshikiToDisplay.isNotEmpty ? h * 0.33 : h * 0.02,
+                    top: hoshikiToDisplay.isNotEmpty ? h * 0.15 : h * 0.02,
                     width: w * 0.53,
                     // [修正] 単勝・複勝は組合せ欄が空になるため、その分まで枠を広げて縦中央を正す (v.2026.9.14+26091401)
                     height: isHorseNameLayout
                         ? h * 0.80
-                        : (hoshikiToDisplay.isNotEmpty ? h * 0.22 : h * 0.53),
+                        : (hoshikiToDisplay.isNotEmpty ? h * 0.45 : h * 0.53),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2.0),
                       child: PurchaseDetailsCard(
@@ -234,9 +234,9 @@ class BettingTicketCard extends StatelessWidget {
                   if (!isHorseNameLayout)
                     Positioned(
                       left: w * 0.47,
-                      top: h * 0.55,
+                      top: h * 0.60,
                       width: w * 0.53,
-                      height: h * 0.27,
+                      height: h * 0.22,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 2.0),
                         child: PurchaseCombinationsCard(

@@ -48,7 +48,7 @@ class PurchaseCombinationsCard extends StatelessWidget {
                 text: '組合せ数 ',
                 style: ticketMincho(
                   color: Colors.black,
-                  fontSize: 14,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   height: 1.0, // または 0.9 など、適宜調整してください
                   leadingDistribution: TextLeadingDistribution.even, // 上下の余白を均等に分配
@@ -58,7 +58,7 @@ class PurchaseCombinationsCard extends StatelessWidget {
                 text: combinationDisplayString,
                 style: ticketGothic(
                   color: Colors.black,
-                  fontSize: 14,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   height: 1.0,
                   leadingDistribution: TextLeadingDistribution.even,
@@ -94,7 +94,7 @@ class PurchaseCombinationsCard extends StatelessWidget {
               Text.rich(
                 TextSpan(
                   children: [
-                    TextSpan(text: '$kingaku', style: ticketGothic(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0)),
+                    TextSpan(text: '$kingaku', style: ticketGothic(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 25, height: 1.0)),
                     TextSpan(text: '円', style: ticketMincho(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14, height: 1.0)),
                   ],
                 ),
@@ -106,7 +106,8 @@ class PurchaseCombinationsCard extends StatelessWidget {
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.end, // ← これを追加！（縦方向の下寄せ）
+      crossAxisAlignment: CrossAxisAlignment.end, // （横方向の右寄せ）
       children: widgets,
     );
   }
