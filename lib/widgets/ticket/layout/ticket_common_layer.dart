@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/parts/purchase_total_amount_card.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_fonts.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/parts/ticket_serial_number_line.dart'; // [追加] 下端番号表示 (v.2026.9.18+26091801)
 
 List<Widget> buildTicketCommonLayer({
   required double w,
@@ -261,6 +262,22 @@ List<Widget> buildTicketCommonLayer({
                 : '',
             style: ticketMincho(color: Colors.black, fontSize: 13),
           ),
+        ),
+      ),
+    ),
+
+    // [追加] 券面最下段に下端番号（40桁）を表示 (v.2026.9.18+26091801)
+    // === フッター2・右: 下端番号 ===
+    Positioned(
+      left: w * kSerialLineLeftRatio,
+      top: h * kSerialLineTopRatio,
+      right: 0,
+      bottom: 0,
+      child: Padding(
+        padding: const EdgeInsets.only(right: kSerialLineRightPadding),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: TicketSerialNumberLine(ticketData: ticketData),
         ),
       ),
     ),

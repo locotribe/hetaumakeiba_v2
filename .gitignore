@@ -63,6 +63,7 @@ memory/
 /firebase.json
 
 # Working documents and output files
+project_overview.md
 Claude outputs/
 /Claude outputs/
 QR_mapping_verification_template.csv
