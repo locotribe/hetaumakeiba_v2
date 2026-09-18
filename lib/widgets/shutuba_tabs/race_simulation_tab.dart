@@ -60,6 +60,8 @@ class _CachedSimInputs {
   final Map<String, HorseSimulationParams> simulationParams;
   // [追加] フェーズ5-2 スピード指数(simulationParamsと同一経路でRaceSimulationEngine.buildへ転送) (v.2026.7.30+26073001)
   final Map<String, HorseSpeedIndex> speedIndexParams;
+  // [追加] 改善Phase7 枠順が発表済みかどうか (v.2026.9.18+26091802)
+  final bool gatesConfirmed;
   final String? predictedPace;
   final String? trackConditionText;
   final bool hasActualToday;
@@ -83,6 +85,7 @@ class _CachedSimInputs {
     required this.allPastRecords,
     required this.simulationParams,
     required this.speedIndexParams,
+    required this.gatesConfirmed,
     required this.predictedPace,
     required this.trackConditionText,
     required this.hasActualToday,
@@ -424,9 +427,11 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     final activeHorses = widget.horses.where((h) => !h.isScratched).toList();
     if (activeHorses.isEmpty) return null;
 
-    final horsesForSim = activeHorses.every((h) => h.horseNumber == 0)
-        ? RaceSimulationEngine.assignTempNumbers(activeHorses)
-        : activeHorses;
+    // [追加] 改善Phase7 全馬 horseNumber=0 なら枠順発表前(仮枠番)と判定する (v.2026.9.18+26091802)
+    final gatesConfirmed = !activeHorses.every((h) => h.horseNumber == 0);
+    final horsesForSim = gatesConfirmed
+        ? activeHorses
+        : RaceSimulationEngine.assignTempNumbers(activeHorses);
 
     final allPastRecords = <String, List<HorseRaceRecord>>{};
     await Future.wait(horsesForSim.map((horse) async {
@@ -473,6 +478,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       allPastRecords: allPastRecords,
       simulationParams: simulationParams,
       speedIndexParams: speedIndexParams,
+      // [追加] 改善Phase7 (v.2026.9.18+26091802)
+      gatesConfirmed: gatesConfirmed,
       predictedPace: widget.predictionRaceData.racePacePrediction?.predictedPace,
       trackConditionText: widget.predictionRaceData.trackCondition,
       hasActualToday: hasActualToday,
@@ -536,6 +543,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       trackBias: trackBias,
       // [追加] 0-9b-3 ペース手動選択 (v.2026.7.27+26072707)
       paceOverride: _selectedPace,
+      // [追加] 改善Phase7 (v.2026.9.18+26091802)
+      gatesConfirmed: cached.gatesConfirmed,
     );
     if (simulationData == null) return null;
 

@@ -50,12 +50,13 @@ class RaceSimFrame {
   });
 }
 
-/// 1頭分の、5キーフレーム分のSnapshot配列を保持するトラック情報。
+/// 1頭分のSnapshot配列を保持するトラック情報。
 class RaceSimHorseTrack {
   final String horseNumber;
   final int gateNumber;
 
-  /// time昇順、必ず5要素（発走/1-2コーナー/3コーナー/4コーナー/ゴール）
+  /// time昇順。要素数はレース距離に依存する
+  /// (RaceSimulationEngineが7点のキーフレームを100m刻みにリサンプリングして生成する)
   final List<RaceSimSnapshot> snapshots;
 
   const RaceSimHorseTrack({

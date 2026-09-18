@@ -144,11 +144,23 @@ class LegStyleAnalyzer {
 
     final totalRaces = validRaceData.length;
 
+    // [修正] マクリ判定のレースが分母(totalRaces)に含まれるため4脚質の合計が
+    // 100%にならず、その分だけ前寄りに計算されていた問題を修正。
+    // 4脚質の実数合計で正規化する (v.2026.9.18+26091802)
+    final int styleTotalCount = (styleCounts['逃げ'] ?? 0) +
+        (styleCounts['先行'] ?? 0) +
+        (styleCounts['差し'] ?? 0) +
+        (styleCounts['追込'] ?? 0);
+    // 全レースがマクリ判定の場合は0除算になるためtotalRacesにフォールバックする
+    // (この場合4脚質は全て0となり、primaryStyleはマクリ判定側で決まる)
+    final int styleDenominator =
+        styleTotalCount > 0 ? styleTotalCount : totalRaces;
+
     final Map<String, double> styleDistribution = {
-      '逃げ': (styleCounts['逃げ'] ?? 0) / totalRaces,
-      '先行': (styleCounts['先行'] ?? 0) / totalRaces,
-      '差し': (styleCounts['差し'] ?? 0) / totalRaces,
-      '追込': (styleCounts['追込'] ?? 0) / totalRaces,
+      '逃げ': (styleCounts['逃げ'] ?? 0) / styleDenominator,
+      '先行': (styleCounts['先行'] ?? 0) / styleDenominator,
+      '差し': (styleCounts['差し'] ?? 0) / styleDenominator,
+      '追込': (styleCounts['追込'] ?? 0) / styleDenominator,
     };
 
     // ★追加: 勝率計算 (その脚質をとった回数のうち、勝った割合)

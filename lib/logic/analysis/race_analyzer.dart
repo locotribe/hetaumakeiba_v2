@@ -117,7 +117,50 @@ class RaceAnalyzer {
   static const double _kMarginPowerFactor = 0.3;
 
   // [追加] 0-9 トラックバイアスの全体スケール係数（実装後に微調整する初期値） (v.2026.7.27+26072702)
-  static const double _kTrackBiasScale = 0.05;
+  // [修正] 改善Phase4 0.05では最大でも0.09しか動かず実質無効だったため0.20へ引き上げ。
+  // バイアス-1.0で先行と差しの相対差が0.44(約3.5m相当)になる (v.2026.9.18+26091802)
+  static const double _kTrackBiasScale = 0.20;
+
+  // [追加] 改善Phase4 ペースによる前後バイアスの全体スケール係数。
+  // 4コーナーと直線で0.5倍ずつ適用し、合計で1.0倍になる (v.2026.9.18+26091802)
+  static const double _kPaceBiasScale = 0.20;
+
+  // [追加] 改善Phase4 ペースから前後バイアスを返す。正=前有利(スロー)、負=差し有利(ハイ)。
+  // ハイペースでは前の馬が消耗し、スローペースでは前が残る挙動を再現する (v.2026.9.18+26091802)
+  static double _pacePositionBias(String predictedPace) {
+    if (predictedPace.contains('ハイ')) return -1.0;
+    if (predictedPace.contains('スロー')) return 1.0;
+    return 0.0;
+  }
+
+  // [追加] 改善Phase5 直線での「動きやすさ」係数。直線で加える変化量の合計に掛ける。
+  // 小さいほど4角の位置がそのまま残り、大きいほど直線で入れ替わる (v.2026.9.18+26091802)
+  static const double _kStraightMoveSlow = 0.7;   // スロー: 前残り
+  static const double _kStraightMoveMiddle = 1.0; // ミドル: 従来どおり
+  static const double _kStraightMoveHigh = 1.3;   // ハイ: 消耗戦で入れ替わりやすい
+
+  // [追加] 改善Phase5 馬場バイアスによる動きやすさの増減幅(最大±20%) (v.2026.9.18+26091802)
+  static const double _kStraightMoveBiasEffect = 0.2;
+
+  // [追加] 改善Phase5 ペースと馬場バイアスから直線の動きやすさ係数を算出する。
+  // trackBiasは正=前有利/負=差し有利 (v.2026.9.18+26091802)
+  static double _straightMoveFactor(String predictedPace, double trackBias) {
+    double factor = _kStraightMoveMiddle;
+    if (predictedPace.contains('ハイ')) {
+      factor = _kStraightMoveHigh;
+    } else if (predictedPace.contains('スロー')) {
+      factor = _kStraightMoveSlow;
+    }
+    final biasMagnitude = trackBias.abs().clamp(0.0, 1.0);
+    if (trackBias > 0.0) {
+      // 前有利の馬場: 直線での動きを抑える
+      factor *= (1.0 - _kStraightMoveBiasEffect * biasMagnitude);
+    } else if (trackBias < 0.0) {
+      // 差し有利の馬場: 直線での動きを大きくする
+      factor *= (1.0 + _kStraightMoveBiasEffect * biasMagnitude);
+    }
+    return factor.clamp(0.5, 1.6);
+  }
 
   // [追加] 0-9 馬場の硬軟から前残り/差しの全体バイアスBを算出（正=高速/前有利, 負=タフ/差し有利） (v.2026.7.27+26072702)
   // 芝: クッション値・含水率の線形。ダート: 含水率の単調写像(差し側に振らせない・芝より小さめ)。必要値がnullなら0.0(=バイアスなし)。
@@ -271,6 +314,14 @@ class RaceAnalyzer {
       // 生positionScoreを horseNumber.toString() キーで格納するだけで、本体の
       // 隊列生成ロジックには一切影響しない。省略時(null)は何もしない (v.2026.9.4)
       Map<String, double>? outFinalPositionScores,
+      // [追加] 改善Phase2 展開シミュレーションの距離算出用。非nullなら各局面
+      // (テン/1コーナー/2コーナー/3コーナー/4コーナー/直線)時点の各馬のpositionScoreを
+      // 局面名 -> horseNumber.toString() -> score の形で格納するだけで、本体の
+      // 隊列生成ロジックには一切影響しない。省略時(null)は何もしない (v.2026.9.18+26091802)
+      Map<String, Map<String, double>>? outPhaseScores,
+      // [追加] 改善Phase7 枠順が発表済みかどうか。falseのとき(仮枠番)は
+      // コースプリセットの枠番補正(内枠有利/外枠不利)を適用しない (v.2026.9.18+26091802)
+      bool gatesConfirmed = true,
       }
       ) async {
     // [追加] フェーズ6 §1: speedFactorOverride省略時は従来の2定数をそのまま使う (v.2026.9.4)
@@ -349,7 +400,8 @@ class RaceAnalyzer {
       initialPositionScore -= (earlySpeedScore / 100.0) * 0.5;
 
       // コース特性による補正
-      if (coursePreset != null) {
+      // [修正] 改善Phase7 枠順発表前は仮枠番のため、枠番由来の補正を適用しない (v.2026.9.18+26091802)
+      if (coursePreset != null && gatesConfirmed) {
         if (coursePreset.keyPoints.contains('内枠有利') &&
             horse.gateNumber <= 2) {
           initialPositionScore -= 0.2; // 内枠ボーナス
@@ -547,6 +599,7 @@ class RaceAnalyzer {
     // [追加] テン: 初期ソート直後の隊列（枠番・脚質ベース、テン指数未反映） (v.2026.6.19)
     if (cornersToPredict.contains('テン')) {
       development['テン'] = _formatTairetsu(simHorses);
+      _recordPhaseScores(outPhaseScores, 'テン', simHorses);
     }
 
     // [追加] 1コーナー: テン加速指数が高い馬が前に出る (v.2026.6.19)
@@ -559,12 +612,14 @@ class RaceAnalyzer {
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['1コーナー'] = _formatTairetsu(simHorses);
+      _recordPhaseScores(outPhaseScores, '1コーナー', simHorses);
     }
 
     // [修正] スタミナ不足補正のforループを削除（2コーナーは疲労で動く局面ではないため、隊列出力自体は維持） (v.2026.7.26+26072603)
     if (cornersToPredict.contains('2コーナー')) {
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['2コーナー'] = _formatTairetsu(simHorses);
+      _recordPhaseScores(outPhaseScores, '2コーナー', simHorses);
     }
 
     if (cornersToPredict.contains('1-2コーナー')) {
@@ -585,10 +640,17 @@ class RaceAnalyzer {
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['3コーナー'] = _formatTairetsu(simHorses);
+      _recordPhaseScores(outPhaseScores, '3コーナー', simHorses);
     }
 
     if (cornersToPredict.contains('4コーナー')) {
-      for (final horse in simHorses) {
+      // [修正] 絶対値しきい値(positionScore < 3.0)は累積加算で基準が変動し
+      // ほぼ全馬が該当してしまうため、3コーナー終了時点の並び順による
+      // 前方グループ判定(上位1/3・切り上げ)に置き換える (v.2026.9.18+26091802)
+      final int frontGroupCount = (simHorses.length / 3).ceil();
+      for (int i = 0; i < simHorses.length; i++) {
+        final horse = simHorses[i];
+        final bool isFrontGroup = i < frontGroupCount;
         // ペースによる影響
         double kickFactor = 1.5;
         if (predictedPace.contains('スロー')) {
@@ -605,8 +667,10 @@ class RaceAnalyzer {
           } else if (coursePreset.straightLength < 330) { // 短い直線
             horse.positionScore -=
                 (horse.finishingKickScore / 100.0) * kickFactor * 0.8;
-            if (horse.positionScore < 3.0 && horse.finishingKickScore < 75.0) {
-              horse.positionScore += 0.4; // 前の馬はさらに粘りやすく
+            // [修正] コメント(前の馬はさらに粘りやすく)に対し符号が逆で
+            // 後退させていたため前進方向に修正 (v.2026.9.18+26091802)
+            if (isFrontGroup && horse.finishingKickScore < 75.0) {
+              horse.positionScore -= 0.4; // 前の馬はさらに粘りやすく
             }
           } else {
             horse.positionScore -=
@@ -618,7 +682,9 @@ class RaceAnalyzer {
         }
 
 
-        if (horse.positionScore < 3.0 && horse.finishingKickScore < 70.0) {
+        // [修正] 絶対値しきい値を前方グループ判定に置き換え。末脚の無い先行馬が
+        // 終盤に垂れる処理として維持する (v.2026.9.18+26091802)
+        if (isFrontGroup && horse.finishingKickScore < 70.0) {
           horse.positionScore += 0.3;
         }
 
@@ -644,14 +710,30 @@ class RaceAnalyzer {
         if (style == '差し' || style == '追込' || style == '自在' || style == 'マクリ') {
           horse.positionScore += horse.weightBurden * _kWeightFactorBack;
         }
+
+        // [追加] 改善Phase4 ペースによる前後バイアス(4コーナー分=全体の0.5倍)。
+        // ハイペースは前が消耗して差しが届き、スローペースは前残りになる (v.2026.9.18+26091802)
+        final kPace4c = _trackBiasKStr(style);
+        if (kPace4c != 0.0) {
+          horse.positionScore -=
+              _pacePositionBias(predictedPace) * _kPaceBiasScale * 0.5 * kPace4c;
+        }
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['4コーナー'] = _formatTairetsu(simHorses);
+      _recordPhaseScores(outPhaseScores, '4コーナー', simHorses);
     }
 
     // [追加] 直線: finishingPowerで上がり3F区間の伸び/粘りを反映 (v.2026.6.19)
     if (cornersToPredict.contains('直線')) {
+      // [追加] 改善Phase5 直線で加える変化量の倍率。ペースと馬場バイアスで決まる
+      // 「どれくらい直線で動くか」の一元的なつまみ (v.2026.9.18+26091802)
+      final double straightMoveFactor =
+          _straightMoveFactor(predictedPace, trackBias);
+
       for (final horse in simHorses) {
+        // [追加] 改善Phase5 直線開始時(4コーナー終了時)のスコアを退避する (v.2026.9.18+26091802)
+        final double straightBaseScore = horse.positionScore;
         final params = simulationParams[horse.detail.horseNumber.toString()];
         final finishingPower = params?.finishingPower ?? 0.5;
         double kickFactor = 1.5;
@@ -697,10 +779,18 @@ class RaceAnalyzer {
         final kStr = _trackBiasKStr(horse.detail.legStyleProfile?.primaryStyle);
         if (kStr != 0.0) {
           horse.positionScore -= trackBias * _kTrackBiasScale * kStr;
+          // [追加] 改善Phase4 ペースによる前後バイアス(直線分=全体の0.5倍) (v.2026.9.18+26091802)
+          horse.positionScore -=
+              _pacePositionBias(predictedPace) * _kPaceBiasScale * 0.5 * kStr;
         }
 
         // [追加] フェーズ1b ブリンカー装着の上がり等価交換（テンで前へ寄せた分だけ終盤を不利にする。差し・追込は係数0で無変化） (v.2026.7.28+26072806)
         horse.positionScore -= horse.blinkerTenDelta;
+
+        // [追加] 改善Phase5 直線で加わった変化量の合計に動きやすさ係数を掛ける。
+        // 「4角スコア + 変化量 × 係数」であり、当初案の加重平均(4角位置×w + 末脚×(1-w))と等価 (v.2026.9.18+26091802)
+        horse.positionScore = straightBaseScore +
+            (horse.positionScore - straightBaseScore) * straightMoveFactor;
       }
 
       // [追加] フェーズ6 バックテスト・ハーネス主指標用: 直線処理後の生positionScoreを
@@ -714,9 +804,24 @@ class RaceAnalyzer {
 
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['直線'] = _formatTairetsu(simHorses);
+      _recordPhaseScores(outPhaseScores, '直線', simHorses);
     }
 
     return development;
+  }
+
+  // [追加] 改善Phase2 指定局面時点の各馬のpositionScoreをoutPhaseScoresへ記録する。
+  // outPhaseScoresがnullの場合は何もしない (v.2026.9.18+26091802)
+  static void _recordPhaseScores(
+    Map<String, Map<String, double>>? outPhaseScores,
+    String phaseName,
+    List<_SimHorse> simHorses,
+  ) {
+    if (outPhaseScores == null) return;
+    outPhaseScores[phaseName] = {
+      for (final horse in simHorses)
+        horse.detail.horseNumber.toString(): horse.positionScore
+    };
   }
 
   static String _formatTairetsu(List<_SimHorse> simHorses) {

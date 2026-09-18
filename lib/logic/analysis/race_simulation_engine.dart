@@ -28,6 +28,87 @@ class RaceSimulationEngine {
   /// 約+1m走路側に来るよう設定。
   static const double innerMarginPx = 4.75;
 
+  /// [追加] 改善Phase2 positionScore 1点あたりの距離差(m)。
+  /// 順位ベース(順位×4m)の瞬間移動を解消し、スコア差を距離差として表現する。
+  /// [修正] 改善Phase11 8.0では馬群が約20mにしかならず画面(幅60m相当)を持て余すため
+  /// 16.0へ。13頭で約40mとなり、実際の決着時の馬群の長さに近づく (v.2026.9.18+26091802)
+  static const double scoreToMeters = 16.0;
+
+  /// [追加] 改善Phase2 先頭馬からの距離差の上限(m)。
+  /// スコアが外れ値になった場合でも馬群が破綻しないようクランプする。
+  /// [修正] 改善Phase11 scoreToMetersを2倍にしたため、上限も比例して引き上げる (v.2026.9.18+26091802)
+  static const double maxScoreSpreadMeters = 160.0;
+
+  /// [追加] 改善Phase2 キーフレーム間の最小前進量(m)。
+  /// スコア差の変動で残距離が増える(馬が後退する)ことを防ぐ。
+  static const double minForwardStepMeters = 1.0;
+
+  /// [追加] 改善Phase3 スナップショットの刻み(m)。
+  /// 7点のキーフレームをこの間隔でリサンプリングし、動きをなめらかにする。
+  static const double snapshotIntervalMeters = 100.0;
+
+  /// [追加] 改善Phase9 同じレーンで必要な前後の間隔(m)。1馬身=2.4m。
+  /// 画面のマーカーが重なる場合はこの値だけを4.0に上げて調整する。
+  static const double horseLengthMeters = 2.4;
+
+  /// [追加] 改善Phase9 横に並んで走れるとみなす最小レーン差(≒1m)。
+  static const double sideBySideLaneGap = 1.0;
+
+  /// [修正] 改善Phase10 区間別の「100mで馬群内の相対位置を動かせる割合」。
+  /// メートルで制限すると馬群自体が縮んでしまうため、馬群の長さは目標どおりにし、
+  /// 隊列の中での位置(0=先頭, 1=最後方)の変化だけを制限する (v.2026.9.18+26091802)
+  static const double moveAllowanceStart = 0.15;
+  static const double moveAllowanceCorner = 0.02;
+  static const double moveAllowanceBackstretch = 0.06;
+  static const double moveAllowanceHomeStraight = 0.12;
+  static const double moveAllowanceDefault = 0.06;
+
+  /// [修正] 改善Phase10 坂での上乗せ(割合)と、坂とみなす勾配 (v.2026.9.18+26091802)
+  static const double moveAllowanceSlopeBonus = 0.04;
+  static const double slopeThreshold = 0.005;
+
+  /// [追加] 改善Phase9 ゴール手前で移動制限を解除する距離(m)。
+  /// この区間では計算結果どおりの位置へ到達させる。
+  static const double finalConvergeMeters = 100.0;
+
+  /// [修正] 改善Phase13 100mあたりの内寄せ量を「最内までの距離に対する割合」にする。
+  /// 固定値(0.5レーン)では外にいる馬がラチ沿いに到達するのに3000m以上かかり、
+  /// 隊列が絞られなかった。外にいる馬ほど速く寄り、内に近いほど緩やかになる
+  /// (v.2026.9.18+26091802)
+  static const double inwardFractionPer100m = 0.30;
+
+  /// [追加] 改善Phase13 内へ移るときにだけ必要な前後の間隔の倍率。
+  /// 並走を続ける判定は horseLengthMeters(2.4m)のままだが、内へ入るときは
+  /// その2倍(4.8m)空いていることを要求し、全馬が最内の1列に並ぶのを防ぐ
+  /// (v.2026.9.18+26091802)
+  static const double innerEntryClearanceFactor = 2.0;
+
+  /// [追加] 改善Phase9 進出中の馬が100mで外へ持ち出せる最大レーン数。
+  static const double outwardStepPer100m = 1.0;
+
+  /// [追加] 改善Phase10 発走時のゲート1頭分の幅(レーン単位=m)。
+  /// 実際のゲートは1頭あたり約1.1m。sideBySideLaneGap(1.0)より広くすることで、
+  /// 発走直後に全馬が衝突扱いになるのを防ぐ (v.2026.9.18+26091802)
+  static const double gateLaneSpacing = 1.1;
+
+  /// [追加] 改善Phase6 スタミナ差による距離補正の強さ(m / 負荷km / スタミナ差1.0)。
+  static const double staminaMeterFactor = 8.0;
+
+  /// [追加] 改善Phase6 ペース圧(前にいる馬の消耗)の強さ(m / km)。
+  static const double paceMeterFactor = 10.0;
+
+  /// [追加] 改善Phase6 累積の上り1mを何km相当の負荷とみなすかの係数。
+  static const double climbToKmFactor = 0.15;
+
+  /// [追加] 改善Phase6 累積標高の算出ステップ(m)。
+  static const double _climbSampleStepMeters = 50.0;
+
+  /// [追加] 改善Phase8 最内レーン(_styleLaneRankの逃げの基準値と同値)。
+  static const double laneRailMin = 0.5;
+
+  /// [追加] 改善Phase8 「進出中」と判定する、先頭からの遅れの縮小量(m)。
+  static const double gainThresholdMeters = 3.0;
+
   /// 出走取消済み除外後の各馬について、発走(d0)〜ゴール(d6)の7キーフレーム分の
   /// Snapshot配列(time, distanceFromGoal, laneRank)を構築する。
   static Future<RaceSimulationData?> build({
@@ -46,11 +127,17 @@ class RaceSimulationEngine {
     double trackBias = 0.0,
     // [追加] 0-9b-3 ユーザーによるペース手動選択（未指定時はアプリ予想を使用） (v.2026.7.27+26072707)
     String? paceOverride,
+    // [追加] 改善Phase7 枠順が発表済みかどうか。falseのとき(仮枠番)は枠番由来の
+    // 有利不利を計算に入れない (v.2026.9.18+26091802)
+    bool gatesConfirmed = true,
   }) async {
     if (horses.isEmpty || raceDistance <= 0) return null;
 
     // raceDistanceと馬場状態補正から実レース時間(秒)を算出し、アニメーション基準時間とする
     final totalAnimationSeconds = raceDistance / _baseSpeedMps * trackSpeedMultiplier;
+
+    // [追加] 改善Phase2 各局面のpositionScoreを受け取り距離算出に使う (v.2026.9.18+26091802)
+    final phaseScores = <String, Map<String, double>>{};
 
     final development = await RaceAnalyzer.simulateRaceDevelopment(
       raceData,
@@ -62,6 +149,10 @@ class RaceSimulationEngine {
       speedIndexParams: speedIndexParams,
       trackBias: trackBias,
       paceOverride: paceOverride,
+      // [追加] 改善Phase2 (v.2026.9.18+26091802)
+      outPhaseScores: phaseScores,
+      // [追加] 改善Phase7 (v.2026.9.18+26091802)
+      gatesConfirmed: gatesConfirmed,
     );
 
     // 「ゴールからの絶対残距離」(d0=raceDistance→d6=0, 単調減少)
@@ -133,6 +224,34 @@ class RaceSimulationEngine {
       order6Groups, // d6: ゴール（直線）
     ];
 
+    // [追加] 改善Phase2 キーフレームindex -> 局面名。d0(スタート)は対応する局面が無い (v.2026.9.18+26091802)
+    const phaseNames = <String?>[
+      null,
+      'テン',
+      '1コーナー',
+      '2コーナー',
+      '3コーナー',
+      '4コーナー',
+      '直線',
+    ];
+
+    // [追加] 改善Phase2 各キーフレームの先頭馬(最小)スコア。
+    // スコアが取得できないキーフレームはnullのままとし、従来の順位ベースで距離を算出する (v.2026.9.18+26091802)
+    final phaseMinScores = List<double?>.filled(7, null);
+    for (int i = 1; i < 7; i++) {
+      final phaseName = phaseNames[i];
+      final scores = phaseName == null ? null : phaseScores[phaseName];
+      if (scores == null || scores.isEmpty) continue;
+      double minScore = double.infinity;
+      for (final horse in horses) {
+        final score = scores[horse.horseNumber.toString()];
+        if (score != null && score < minScore) minScore = score;
+      }
+      if (minScore != double.infinity) {
+        phaseMinScores[i] = minScore;
+      }
+    }
+
     final int n = horses.length;
 
     // Phase1: 全馬×全キーフレームの生(distanceFromGoal, laneRank)を計算
@@ -174,53 +293,249 @@ class RaceSimulationEngine {
               _styleLaneRank(simulationParams[horseNumber], horse.gateNumber);
         }
 
-        // 確定的ゆらぎ: horseIdとキーフレームから±1グループの予想誤差を付与
-        // d0(スタート)のみゆらぎなし（スタートゲートは枠番固定）
-        final int effectiveGroupIndex;
-        if (i > 0 && groupIndex >= 0) {
-          final variance = _deterministicVariance(horse.horseId, i);
-          effectiveGroupIndex =
-              (groupIndex + variance).clamp(0, groups.length - 1);
+        // [削除] 改善Phase7 確定的ゆらぎ(±1グループ)はデータに基づかない順位変動であり、
+        // ゴール順位まで動かしていたため廃止。順位ベースのフォールバックは
+        // 隊列の並び順をそのまま使う (v.2026.9.18+26091802)
+        final int effectiveGroupIndex = groupIndex;
+        // [修正] 改善Phase2 距離を「順位×4m」ではなく「先頭馬とのpositionScore差×k」で
+        // 算出する。スコアが取得できないキーフレーム(d0や取得失敗時)は従来の
+        // 順位ベースにフォールバックする (v.2026.9.18+26091802)
+        final double distanceFromGoal;
+        final phaseName = phaseNames[i];
+        final phaseScore =
+            phaseName == null ? null : phaseScores[phaseName]?[horseNumber];
+        final minPhaseScore = phaseMinScores[i];
+        if (i > 0 && phaseScore != null && minPhaseScore != null) {
+          final gapMeters = ((phaseScore - minPhaseScore) * scoreToMeters)
+              .clamp(0.0, maxScoreSpreadMeters);
+          distanceFromGoal = distances[i] + gapMeters;
         } else {
-          effectiveGroupIndex = groupIndex;
+          distanceFromGoal = effectiveGroupIndex >= 0
+              ? distances[i] + effectiveGroupIndex * groupSpacingMeters
+              : distances[i];
         }
-        final distanceFromGoal = effectiveGroupIndex >= 0
-            ? distances[i] + effectiveGroupIndex * groupSpacingMeters
-            : distances[i];
 
         rawDistances[h][i] = distanceFromGoal;
         rawLaneRanks[h][i] = laneRank;
       }
     }
 
-    // Phase2: d1〜d6をビルド時に衝突解決（d0=スタートゲートはスキップ）
-    // 各キーフレームで衝突を静的解決することでPainterのリアルタイム当たり判定を不要にし、
-    // Y軸の急激なジャンプを根本的に排除する。
+    // [追加] 改善Phase6 走破距離・累積の上り・ペースから消耗を積み上げ、
+    // 各馬の「先頭からの遅れ(m)」を直接補正する。スタミナの高い馬は遅れが縮み、
+    // 低い馬・前にいる馬ほど遅れが広がる (v.2026.9.18+26091802)
+    final effectivePace = paceOverride ??
+        raceData.racePacePrediction?.predictedPace ??
+        'ミドルペース';
+    final paceLoadFactor = _paceLoadFactor(effectivePace);
+    final cumulativeClimbs =
+        _cumulativeClimbAtKeyframes(raceCourse, distances, raceDistance);
+
     for (int i = 1; i < 7; i++) {
-      final lrList = List<double>.generate(n, (h) => rawLaneRanks[h][i]);
-      final dfgList = List<double>.generate(n, (h) => rawDistances[h][i]);
-      final resolved = _resolveCollisionsForKeyframe(lrList, dfgList);
+      final travelled = raceDistance - distances[i];
+      if (travelled <= 0) continue;
+
+      double maxGap = 0.0;
       for (int h = 0; h < n; h++) {
-        rawLaneRanks[h][i] = resolved[h];
+        final gap = rawDistances[h][i] - distances[i];
+        if (gap > maxGap) maxGap = gap;
+      }
+
+      final loadKm = (travelled / 1000.0) * paceLoadFactor +
+          cumulativeClimbs[i] * climbToKmFactor;
+
+      for (int h = 0; h < n; h++) {
+        final gap = rawDistances[h][i] - distances[i];
+        final frontness = maxGap > 0.0 ? (1.0 - gap / maxGap) : 1.0;
+        final stamina =
+            simulationParams[horses[h].horseNumber.toString()]?.staminaIndex ??
+                0.5;
+
+        // スタミナ差による消耗(前にいる馬ほど負荷が大きい)
+        final staminaDelta = loadKm *
+            (0.5 - stamina) *
+            staminaMeterFactor *
+            (0.5 + frontness);
+        // ペース圧(ハイペースは前が消耗、スローは前が有利。後方の馬には効かない)
+        final pacePressure = (paceLoadFactor - 1.0) *
+            frontness *
+            (travelled / 1000.0) *
+            paceMeterFactor;
+
+        final adjustedGap = (gap + staminaDelta + pacePressure)
+            .clamp(0.0, maxScoreSpreadMeters);
+        rawDistances[h][i] = distances[i] + adjustedGap;
       }
     }
 
-    // Phase3: スナップショット構築
-    final horseTracks = <RaceSimHorseTrack>[];
+    // [追加] 改善Phase12 消耗補正で全馬の遅れが同時に増えると、先頭馬でも遅れが
+    // 0にならず、誰もゴール(残距離0m)に到達しなくなる。各キーフレームで最小の遅れが
+    // 0になるよう正規化する。馬同士の差は変わらない (v.2026.9.18+26091802)
+    for (int i = 1; i < 7; i++) {
+      double minGap = double.infinity;
+      for (int h = 0; h < n; h++) {
+        final gap = rawDistances[h][i] - distances[i];
+        if (gap < minGap) minGap = gap;
+      }
+      if (minGap.isFinite && minGap != 0.0) {
+        for (int h = 0; h < n; h++) {
+          rawDistances[h][i] -= minGap;
+        }
+      }
+    }
+
+    // [追加] 改善Phase2 スコア差の変動でキーフレーム間の残距離が増える(＝馬が
+    // 後退して見える)ことを防ぐため、各馬の残距離を単調減少に補正する (v.2026.9.18+26091802)
     for (int h = 0; h < n; h++) {
-      final horse = horses[h];
-      final snapshots = <RaceSimSnapshot>[];
-      for (int i = 0; i < 7; i++) {
-        snapshots.add(RaceSimSnapshot(
-          time: times[i],
-          distanceFromGoal: rawDistances[h][i],
-          laneRank: rawLaneRanks[h][i],
+      for (int i = 1; i < 7; i++) {
+        final maxAllowed = rawDistances[h][i - 1] - minForwardStepMeters;
+        if (rawDistances[h][i] > maxAllowed) {
+          rawDistances[h][i] = maxAllowed;
+        }
+      }
+    }
+
+    // [修正] 改善Phase10 100mごとの逐次計算。移動制限は「メートル」ではなく
+    // 「馬群内の相対位置の割合」にかける。これにより馬群の長さは目標(スコア計算)
+    // どおりに伸び縮みし、隊列の中での位置だけが区間ごとの割合で動く。
+    // 発走地点(最初のサンプル)は隊列整形を行わず、ゲートの並びをそのまま出す
+    // (v.2026.9.18+26091802)
+    // [追加] 改善Phase13 最終コーナーを出た地点。これ以降は内寄せを行わない (v.2026.9.18+26091802)
+    final double? finalStraightStart = _finalStraightStartFromStart(raceCourse);
+
+    final sampleRefDistances = <double>[];
+    for (double refDistance = d0;
+        refDistance > 0.0;
+        refDistance -= snapshotIntervalMeters) {
+      sampleRefDistances.add(refDistance);
+    }
+    sampleRefDistances.add(0.0);
+
+    // スタート時のレーン: ゲートの並び(d0)を最内基準に、1頭分の幅で配置する
+    double startLaneMin = rawLaneRanks[0][0];
+    for (int h = 1; h < n; h++) {
+      if (rawLaneRanks[h][0] < startLaneMin) startLaneMin = rawLaneRanks[h][0];
+    }
+    final currentLanes = List<double>.generate(
+        n,
+        (h) =>
+            laneRailMin +
+            (rawLaneRanks[h][0] - startLaneMin) * gateLaneSpacing);
+    final currentGaps = List<double>.filled(n, 0.0);
+    final targetGaps = List<double>.filled(n, 0.0);
+    final wantsToAdvance = List<bool>.filled(n, false);
+    final previousDistances = List<double>.filled(n, double.infinity);
+    final snapshotsByHorse =
+        List<List<RaceSimSnapshot>>.generate(n, (_) => <RaceSimSnapshot>[]);
+
+    for (int s = 0; s < sampleRefDistances.length; s++) {
+      final refDistance = sampleRefDistances[s];
+
+      // refDistanceが属するキーフレーム区間(seg = 0〜5)
+      int seg = 0;
+      while (seg < 5 && distances[seg + 1] > refDistance) {
+        seg++;
+      }
+      final segStart = distances[seg];
+      final segEnd = distances[seg + 1];
+      final span = segStart - segEnd;
+      final u = span > 0.0
+          ? ((segStart - refDistance) / span).clamp(0.0, 1.0)
+          : 1.0;
+      final eased = _smoothStep(u);
+      final time = times[seg] + (times[seg + 1] - times[seg]) * u;
+
+      final distanceFromStart = raceDistance - refDistance;
+      final bool converging = refDistance <= finalConvergeMeters;
+      final double allowanceRatio = converging
+          ? 1.0
+          : _moveAllowanceRatioPer100m(raceCourse, distanceFromStart) *
+              (snapshotIntervalMeters / 100.0);
+
+      // 目標の遅れと、その時点の馬群の長さ(目標)
+      double targetSpread = 0.0;
+      for (int h = 0; h < n; h++) {
+        final targetStart = rawDistances[h][seg] - distances[seg];
+        final targetEnd = rawDistances[h][seg + 1] - distances[seg + 1];
+        targetGaps[h] = targetStart + (targetEnd - targetStart) * eased;
+        if (targetGaps[h] > targetSpread) targetSpread = targetGaps[h];
+      }
+
+      // 現在の馬群の長さ
+      double currentSpread = 0.0;
+      for (int h = 0; h < n; h++) {
+        if (currentGaps[h] > currentSpread) currentSpread = currentGaps[h];
+      }
+
+      for (int h = 0; h < n; h++) {
+        final targetRatio =
+            targetSpread > 0.0 ? targetGaps[h] / targetSpread : 0.0;
+        final currentRatio =
+            currentSpread > 0.0 ? currentGaps[h] / currentSpread : 0.0;
+
+        // 進出中(馬群内で前へ上がろうとしている)かどうか
+        wantsToAdvance[h] =
+            (currentRatio - targetRatio) * targetSpread >= gainThresholdMeters;
+
+        final diff = targetRatio - currentRatio;
+        double nextRatio;
+        if (converging || diff.abs() <= allowanceRatio) {
+          nextRatio = targetRatio;
+        } else {
+          nextRatio =
+              currentRatio + (diff > 0 ? allowanceRatio : -allowanceRatio);
+        }
+        if (nextRatio < 0.0) nextRatio = 0.0;
+
+        // 馬群の長さは目標どおりにし、その中での位置だけを制限する
+        currentGaps[h] = nextRatio * targetSpread;
+      }
+
+      // 発走地点(s == 0)はゲートの並びをそのまま使う
+      if (s > 0) {
+        // [追加] 改善Phase13 最終コーナーを出た以降は内寄せを行わない (v.2026.9.18+26091802)
+        final bool inFinalStraight = finalStraightStart != null &&
+            distanceFromStart >= finalStraightStart;
+
+        _resolveFormationAtSample(
+          n: n,
+          horses: horses,
+          simulationParams: simulationParams,
+          currentGaps: currentGaps,
+          currentLanes: currentLanes,
+          wantsToAdvance: wantsToAdvance,
+          allowPushBack: !converging,
+          allowInward: !inFinalStraight,
+        );
+      }
+
+      for (int h = 0; h < n; h++) {
+        if (currentGaps[h] > maxScoreSpreadMeters) {
+          currentGaps[h] = maxScoreSpreadMeters;
+        }
+        double distanceFromGoal = refDistance + currentGaps[h];
+        final maxAllowed = previousDistances[h] - minForwardStepMeters;
+        if (distanceFromGoal > maxAllowed) {
+          distanceFromGoal = maxAllowed;
+        }
+        if (distanceFromGoal < 0.0) {
+          distanceFromGoal = 0.0;
+        }
+        previousDistances[h] = distanceFromGoal;
+
+        snapshotsByHorse[h].add(RaceSimSnapshot(
+          time: time,
+          distanceFromGoal: distanceFromGoal,
+          laneRank: currentLanes[h],
         ));
       }
+    }
+
+    final horseTracks = <RaceSimHorseTrack>[];
+    for (int h = 0; h < n; h++) {
       horseTracks.add(RaceSimHorseTrack(
-        horseNumber: horse.horseNumber.toString(),
-        gateNumber: horse.gateNumber,
-        snapshots: snapshots,
+        horseNumber: horses[h].horseNumber.toString(),
+        gateNumber: horses[h].gateNumber,
+        snapshots: snapshotsByHorse[h],
       ));
     }
 
@@ -229,6 +544,12 @@ class RaceSimulationEngine {
       developmentTexts: development,
       totalTime: totalAnimationSeconds,
     );
+  }
+
+  /// [追加] 改善Phase3 スムーズステップ補間 (0→1の変化を両端でなだらかにする) (v.2026.9.18+26091802)
+  static double _smoothStep(double t) {
+    final u = t.clamp(0.0, 1.0);
+    return u * u * (3.0 - 2.0 * u);
   }
 
   static double _clampD(double v, double lo, double hi) {
@@ -321,44 +642,6 @@ class RaceSimulationEngine {
     return raceCourse.raceDistance - midFromStart;
   }
 
-  /// horseIdとキーフレームインデックスから -1/0/+1 の確定的変動値を返す。
-  /// 同じ馬・同じキーフレームでは常に同じ値を返すためアニメーション中にちらつかない。
-  static int _deterministicVariance(String horseId, int keyframe) {
-    final hash = (horseId.hashCode ^ (keyframe * 2654435761)) & 0x7FFFFFFF;
-    return (hash % 3) - 1; // -1, 0, +1
-  }
-
-  /// 1キーフレーム分の全馬laneRankをビルド時に衝突解決する。
-  /// 進行距離が近い馬（|dx| < 6.0m）のみ対象とし、
-  /// 内側(laneRank小)から順に処理して重なりを外側へ押し出す。
-  static List<double> _resolveCollisionsForKeyframe(
-    List<double> rawLaneRanks,
-    List<double> distancesFromGoal,
-  ) {
-    const double collisionThresholdMeters = 6.0;
-    const double minLaneGap = 18.0 / 13.0; // markerDiameter / laneSpacingY ≈ 1.38
-
-    final n = rawLaneRanks.length;
-    final indices = List<int>.generate(n, (i) => i);
-    indices.sort((a, b) => rawLaneRanks[a].compareTo(rawLaneRanks[b]));
-
-    final resolved = List<double>.from(rawLaneRanks);
-    for (int i = 0; i < n; i++) {
-      final idx = indices[i];
-      for (int j = 0; j < i; j++) {
-        final jdx = indices[j];
-        final dx = (distancesFromGoal[idx] - distancesFromGoal[jdx]).abs();
-        if (dx < collisionThresholdMeters) {
-          final gap = resolved[idx] - resolved[jdx];
-          if (gap < minLaneGap) {
-            resolved[idx] = resolved[jdx] + minLaneGap;
-          }
-        }
-      }
-    }
-    return resolved;
-  }
-
   /// "(3,5)-7-12" 形式の隊列文字列を [['3','5'], ['7'], ['12']] に変換する。
   /// 「-」区切りの各トークンが1グループ（前後関係）、トークン内の「()」が
   /// 並走する馬（横方向のみの関係）を表す。
@@ -395,6 +678,213 @@ class RaceSimulationEngine {
     }
     // 同脚質内で枠番を使って微分散（0〜1.05の範囲）
     return base + (gateNumber - 1) * 0.15;
+  }
+
+  /// [追加] 改善Phase8 脚質ごとの「内を取りたい強さ」(0.0〜1.0) (v.2026.9.18+26091802)
+  static double _styleInwardTendency(HorseSimulationParams? params) {
+    switch (params?.legStyle) {
+      case '逃げ':
+        return 1.0;
+      case '先行':
+        return 0.8;
+      case '自在':
+        return 0.6;
+      case 'マクリ':
+        return 0.5;
+      case '差し':
+        return 0.4;
+      case '追込':
+        return 0.3;
+      default:
+        return 0.5;
+    }
+  }
+
+  /// [追加] 改善Phase13 最後の corner_4 区間が終わる地点(スタートからの距離)を返す。
+  /// これ以降は最終直線とみなし、内寄せを行わない。
+  /// コーナーが無いコース(直線競走)や区間データが無い場合は null (v.2026.9.18+26091802)
+  static double? _finalStraightStartFromStart(RaceCourseData? raceCourse) {
+    if (raceCourse == null) return null;
+    double? lastCornerEnd;
+    for (final section in raceCourse.sections) {
+      if (section.name == 'corner_4') {
+        if (lastCornerEnd == null || section.endDistance > lastCornerEnd) {
+          lastCornerEnd = section.endDistance;
+        }
+      }
+    }
+    return lastCornerEnd;
+  }
+
+  /// [修正] 改善Phase10 その地点(スタートからの距離)で、100mあたり馬群内の相対位置を
+  /// 動かしてよい割合を返す。コース区間(start/corner/backstretch/home_straight/finish)と
+  /// 坂の有無で決まる。コーナーでは小さく、直線とスタート直後・坂では大きくする
+  /// (v.2026.9.18+26091802)
+  static double _moveAllowanceRatioPer100m(
+    RaceCourseData? raceCourse,
+    double distanceFromStart,
+  ) {
+    if (raceCourse == null) return moveAllowanceDefault;
+
+    String sectionName = '';
+    for (final section in raceCourse.sections) {
+      if (distanceFromStart >= section.startDistance &&
+          distanceFromStart < section.endDistance) {
+        sectionName = section.name;
+        break;
+      }
+    }
+
+    double allowance;
+    switch (sectionName) {
+      case 'start':
+      case 'start_turf':
+      case 'start_dirt':
+        allowance = moveAllowanceStart;
+        break;
+      case 'corner_1':
+      case 'corner_2':
+      case 'corner_3':
+      case 'corner_4':
+        allowance = moveAllowanceCorner;
+        break;
+      case 'backstretch':
+      case 'straight':
+        allowance = moveAllowanceBackstretch;
+        break;
+      case 'home_straight':
+      case 'finish':
+        allowance = moveAllowanceHomeStraight;
+        break;
+      default:
+        allowance = moveAllowanceDefault;
+    }
+
+    // 坂: 勾配が閾値以上の地点は動きやすさを上乗せする
+    final lapDistance = raceCourse.baseData.lapDistance;
+    if (lapDistance > 0) {
+      final lapPos = distanceFromStart % lapDistance;
+      const double delta = 50.0;
+      final e1 = raceCourse.baseData
+          .getElevationAt((lapPos - delta).clamp(0.0, lapDistance));
+      final e2 = raceCourse.baseData
+          .getElevationAt((lapPos + delta).clamp(0.0, lapDistance));
+      final gradient = (e2 - e1) / (2 * delta);
+      if (gradient.abs() >= slopeThreshold) {
+        allowance += moveAllowanceSlopeBonus;
+      }
+    }
+    return allowance;
+  }
+
+  /// [修正] 改善Phase10 1サンプル地点の隊列整形。先頭の馬から順に配置する。
+  /// 内寄せは「その位置のまま内側が空いている場合」だけ行い、空いていなければ
+  /// 今のレーンを維持する(位置を落としてまで内に入らない)。
+  /// 後ろへ下げるのは、今のレーンで前が詰まったときだけ。
+  /// 進出中の馬は外へ持ち出して抜く。先頭の馬は押されない (v.2026.9.18+26091802)
+  static void _resolveFormationAtSample({
+    required int n,
+    required List<PredictionHorseDetail> horses,
+    required Map<String, HorseSimulationParams> simulationParams,
+    required List<double> currentGaps,
+    required List<double> currentLanes,
+    required List<bool> wantsToAdvance,
+    required bool allowPushBack,
+    // [追加] 改善Phase13 最終直線では内寄せを行わない (v.2026.9.18+26091802)
+    required bool allowInward,
+  }) {
+    if (n == 0) return;
+
+    final inwardLanes = List<double>.filled(n, 0.0);
+    final laneCeilings = List<double>.filled(n, 0.0);
+    for (int h = 0; h < n; h++) {
+      final params = simulationParams[horses[h].horseNumber.toString()];
+      // [修正] 改善Phase13 最内までの距離に対する割合で内へ寄る。
+      // 最終直線(allowInward == false)では内寄せを行わない (v.2026.9.18+26091802)
+      double inward = currentLanes[h];
+      if (allowInward) {
+        inward = currentLanes[h] -
+            (currentLanes[h] - laneRailMin) *
+                inwardFractionPer100m *
+                _styleInwardTendency(params);
+        if (inward < laneRailMin) inward = laneRailMin;
+      }
+      inwardLanes[h] = inward;
+      laneCeilings[h] = currentLanes[h] + outwardStepPer100m;
+    }
+
+    // 先頭(遅れが小さい馬)から順に置く
+    final order = List<int>.generate(n, (h) => h)
+      ..sort((a, b) => currentGaps[a].compareTo(currentGaps[b]));
+
+    final placedLanes = <double>[];
+    final placedGaps = <double>[];
+
+    for (final h in order) {
+      double lane = currentLanes[h];
+      double gap = currentGaps[h];
+
+      // 1) 内側が空いているときだけ内へ寄る。空いていなければ今のレーンを維持する
+      final inwardLane = inwardLanes[h];
+      // [修正] 改善Phase13 内へ入るときだけ、必要な前後の間隔を
+      // innerEntryClearanceFactor倍にする。はっきり空いているときだけ内へ入る
+      // (v.2026.9.18+26091802)
+      if (inwardLane < lane &&
+          _findConflictIndex(inwardLane, gap, placedLanes, placedGaps,
+                  horseLengthMeters * innerEntryClearanceFactor) <
+              0) {
+        lane = inwardLane;
+      }
+
+      // 2) 今のレーンで前が詰まっている場合だけ解決する
+      for (int attempt = 0; attempt < 16; attempt++) {
+        final conflict = _findConflictIndex(
+            lane, gap, placedLanes, placedGaps, horseLengthMeters);
+        if (conflict < 0) break;
+
+        final blockerLane = placedLanes[conflict];
+        final blockerGap = placedGaps[conflict];
+        final outerCandidate = blockerLane + sideBySideLaneGap;
+
+        if (wantsToAdvance[h] && outerCandidate <= laneCeilings[h]) {
+          // 進出中の馬は外へ持ち出して抜く(まくり・進出)
+          lane = outerCandidate;
+          continue;
+        }
+        if (allowPushBack) {
+          // 同じレーンの後ろに並ぶ(自分が後方なので自分が下がる)
+          gap = blockerGap + horseLengthMeters;
+          continue;
+        }
+        // ゴール前は下げずに横へ逃がす
+        lane = outerCandidate;
+      }
+
+      currentLanes[h] = lane;
+      currentGaps[h] = gap;
+      placedLanes.add(lane);
+      placedGaps.add(gap);
+    }
+  }
+
+  /// [追加] 改善Phase10 配置済みの馬と重なるかを判定する。
+  /// 横に sideBySideLaneGap 以上離れていれば並走とみなして衝突としない。
+  /// 同じレーン(横がそれ未満)で前後 horseLengthMeters 未満なら衝突 (v.2026.9.18+26091802)
+  static int _findConflictIndex(
+    double lane,
+    double gap,
+    List<double> placedLanes,
+    List<double> placedGaps,
+    // [追加] 改善Phase13 必要な前後の間隔(m)。内へ入るときだけ大きくする (v.2026.9.18+26091802)
+    double requiredGapMeters,
+  ) {
+    for (int p = 0; p < placedLanes.length; p++) {
+      if ((lane - placedLanes[p]).abs() < sideBySideLaneGap &&
+          (gap - placedGaps[p]).abs() < requiredGapMeters) {
+        return p;
+      }
+    }
+    return -1;
   }
 
   /// 枠順発表前（全馬 horseNumber=0）のときに呼ぶ仮番号付与ヘルパー。
@@ -489,6 +979,57 @@ class RaceSimulationEngine {
     // 最終時刻が totalAnimationSeconds になるよう正規化
     final rawTotal = times.last;
     return [for (final t in times) t / rawTotal * totalAnimationSeconds];
+  }
+
+  /// [追加] 改善Phase6 ペース文字列から距離あたりの負荷係数を返す。
+  /// ハイ=消耗が大きい、スロー=小さい (v.2026.9.18+26091802)
+  static double _paceLoadFactor(String pace) {
+    if (pace.contains('ハイ')) return 1.3;
+    if (pace.contains('スロー')) return 0.8;
+    return 1.0;
+  }
+
+  /// [追加] 改善Phase6 スタートから各キーフレーム地点までの「累積の上り(m)」を返す。
+  /// 標高データが無い場合は全て0.0を返す(＝坂の影響なし)。
+  /// 多周回コースは lapDistance で折り返して参照する (v.2026.9.18+26091802)
+  static List<double> _cumulativeClimbAtKeyframes(
+    RaceCourseData? raceCourse,
+    List<double> distances,
+    double raceDistance,
+  ) {
+    final result = List<double>.filled(distances.length, 0.0);
+    if (raceCourse == null) return result;
+    final lapDistance = raceCourse.baseData.lapDistance;
+    if (lapDistance <= 0) return result;
+
+    double climb = 0.0;
+    double travelled = 0.0;
+    double previousElevation = raceCourse.baseData.getElevationAt(0.0);
+
+    while (travelled < raceDistance) {
+      final next = travelled + _climbSampleStepMeters;
+      travelled = next > raceDistance ? raceDistance : next;
+      final elevation =
+          raceCourse.baseData.getElevationAt(travelled % lapDistance);
+      final diff = elevation - previousElevation;
+      if (diff > 0) climb += diff;
+      previousElevation = elevation;
+
+      for (int i = 0; i < distances.length; i++) {
+        // そのキーフレームの走破距離に到達していれば、その時点の累積上りを記録する
+        if (raceDistance - distances[i] <= travelled && result[i] == 0.0) {
+          result[i] = climb;
+        }
+      }
+    }
+
+    // 到達判定から漏れたキーフレーム(ゴール付近)には最終値を入れる
+    for (int i = 0; i < distances.length; i++) {
+      if (raceDistance - distances[i] >= raceDistance) {
+        result[i] = climb;
+      }
+    }
+    return result;
   }
 
   /// distanceFromGoal 区間の中点における 1周分標高データの平均勾配 (m/m) を返す。

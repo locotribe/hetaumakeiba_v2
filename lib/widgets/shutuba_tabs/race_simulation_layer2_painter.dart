@@ -1,7 +1,5 @@
 // lib/widgets/shutuba_tabs/race_simulation_layer2_painter.dart
 
-import 'dart:math' show min;
-
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
@@ -9,6 +7,7 @@ import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_camera_transform.dart';
 
 /// 展開シミュレーション Layer2 オーバーレイ。
 ///
@@ -16,8 +15,9 @@ import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 /// 「進行距離（distanceFromGoal）× 横位置（laneRank）」の正規化座標系で
 /// 馬番マーカーを描画する。シュート区間でもコース角度に引きずられない。
 ///
-/// X座標: 設計書の統一式 — 先頭馬を進行方向の端から10%に固定し、
-///        馬群の縦の広がりに応じて中央寄せ→先頭固定を自動切替。
+/// X座標: 先頭馬をLayer1(カメラ)と同じ画面位置
+///        ([RaceSimulationCameraTransform.anchorXFor])に固定し、
+///        後続をその後方へ実距離で配置する。
 /// Y座標: エンジン算出済みlaneRankから直接マッピングし、コーナー遠心力・
 ///        最終直線のfinishingPower広がりを加算オフセットとして重ねる。
 class RaceSimulationLayer2Painter extends CustomPainter {
@@ -34,8 +34,14 @@ class RaceSimulationLayer2Painter extends CustomPainter {
   static const double _markerRadius = 9.0;
   // Layer1の_railOffsetRatioと同一値でinnerRailYを揃える
   static const double _railOffsetRatio = 0.1;
-  // laneRank 1単位あたりの画面Y間隔(px)。馬群の縦の広がりを制御する
-  static const double _laneSpacingY = 13.0;
+  // [修正] 改善Phase10 laneRank 1単位あたりの実距離(m)。横の縮尺と同じ倍率で
+  // 描画することで、縦横が実寸どおりの俯瞰図になる (v.2026.9.18+26091802)
+  static const double metersPerLane = 1.0;
+  // [追加] 改善Phase11 内外方向(縦)の強調率。実寸(1.0)では馬群の幅7mが45pxにしかならず
+  // 画面上部に貼り付いて見えるため、2.0倍に誇張して描く。
+  // 走路の幅を実寸より広く描くのは競馬中継や俯瞰図でも一般的な表現。
+  // 内外の位置関係そのものは変わらない (v.2026.9.18+26091802)
+  static const double lateralExaggeration = 2.0;
   // [追加] 候補A: 4コーナー入口→ゴールの一体化展開係数。finishingPower×外側度合いで広がり量が決まる (v2026.6.25)
   static const double _finalSpreadFactor = 0.20;
 
@@ -67,8 +73,10 @@ class RaceSimulationLayer2Painter extends CustomPainter {
         .toList();
 
     // ── X座標計算 (設計書の統一式) ──
-    // Layer1と共通のscaleを使用: viewportHeight = 50m相当
-    final scaleMeters = size.height / 50.0; // screen-px / m
+    // Layer1と共通のscaleを使用
+    // [修正] 改善Phase10 縮尺の基準をRaceSimulationCameraTransformと共有する (v.2026.9.18+26091802)
+    final scaleMeters =
+        size.height / RaceSimulationCameraTransform.viewportHeightMeters; // screen-px / m
 
     // 右回り: 先頭馬→画面左 / 左回り: 先頭馬→画面右
     final dirSign = isLeftHanded ? -1.0 : 1.0;
@@ -81,9 +89,14 @@ class RaceSimulationLayer2Painter extends CustomPainter {
     }
 
     final spread = lastDist - leadDist;
-    final viewportWidthMeters = size.width / scaleMeters;
-    // spread≤0.8×viewportWidth: 中央モード / 超過: 先頭10%固定に自動移行
-    final anchorDist = leadDist + min(spread, viewportWidthMeters * 0.8) / 2;
+    // [修正] 改善Phase12 Layer1(コース・ゴール線)は先頭馬を基準に描いているのに対し、
+    // Layer2は馬群の中心を基準にしていたため、馬群の広がりの半分だけマーカーが
+    // 進行方向へずれて描かれていた。先頭馬基準に統一する (v.2026.9.18+26091802)
+    final anchorDist = leadDist;
+    final anchorX = RaceSimulationCameraTransform.anchorXFor(
+      viewportSize: size,
+      isLeftHanded: isLeftHanded,
+    );
 
     // ── Y座標計算 (laneRank直接マッピング・MVPバージョン) ──
     final innerRailY = size.height * _railOffsetRatio;
@@ -102,16 +115,20 @@ class RaceSimulationLayer2Painter extends CustomPainter {
     final double bottomY = size.height - _markerRadius - 2.0;
     final double availableHeight = bottomY - topY;
     final double laneRankRange = maxLaneRank - minLaneRank;
+    // [修正] 改善Phase10 縦も横と同じ縮尺(1レーン=1m)にする。
+    // 全馬が収まらない場合に間隔を圧縮するフォールバックは従来どおり残す (v.2026.9.18+26091802)
+    // [修正] 改善Phase11 内外方向は実寸のlateralExaggeration倍で描く (v.2026.9.18+26091802)
+    final double laneSpacingY = scaleMeters * metersPerLane * lateralExaggeration;
     final double effectiveSpacingY =
-        (laneRankRange > 0 && laneRankRange * _laneSpacingY > availableHeight)
+        (laneRankRange > 0 && laneRankRange * laneSpacingY > availableHeight)
             ? availableHeight / laneRankRange
-            : _laneSpacingY;
+            : laneSpacingY;
 
     // 全馬のscreenXを先行計算
     final screenXByHorse = <String, double>{};
     for (final f in frames) {
-      screenXByHorse[f.horseNumber] = size.width / 2 +
-          dirSign * (f.distanceFromGoal - anchorDist) * scaleMeters;
+      screenXByHorse[f.horseNumber] =
+          anchorX + dirSign * (f.distanceFromGoal - anchorDist) * scaleMeters;
     }
 
     if (spread < 2.0) {
