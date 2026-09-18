@@ -115,8 +115,11 @@ class RaceAnalysisBundleLoader {
     final Map<String, TrackConditionRecord> trackConditionMap = {};
     for (final race in pastRaces) {
       if (race.raceId.length >= 10) {
-        final prefix10 = race.raceId.substring(0, 10);
-        final tc = await _tcRepo.getLatestTrackConditionByPrefix(prefix10);
+        // [修正] 先頭10桁一致ではなく競馬場コード＋開催日で照合 (v.2026.9.19+26091901)
+        final tc = await _tcRepo.getTrackConditionForRace(
+          raceId: race.raceId,
+          raceDate: race.raceDate,
+        );
         queryCount++;
         if (tc != null) trackConditionMap[race.raceId] = tc;
       }
@@ -167,8 +170,11 @@ class RaceAnalysisBundleLoader {
       for (final rec in records) {
         if (rec.raceId.length >= 10 &&
             !horsePastTrackConditions.containsKey(rec.raceId)) {
-          final prefix10 = rec.raceId.substring(0, 10);
-          final tc = await _tcRepo.getLatestTrackConditionByPrefix(prefix10);
+          // [修正] 先頭10桁一致ではなく競馬場コード＋開催日で照合 (v.2026.9.19+26091901)
+          final tc = await _tcRepo.getTrackConditionForRace(
+            raceId: rec.raceId,
+            raceDate: rec.date,
+          );
           queryCount++;
           if (tc != null) horsePastTrackConditions[rec.raceId] = tc;
         }

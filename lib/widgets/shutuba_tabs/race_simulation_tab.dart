@@ -343,13 +343,15 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
 
     final trackTypeKey = _mapToTrackTypeKey();
 
-    // [追加] 馬場状態補正: prefix10でDBから当日のクッション値・含水率を取得 (v2026.6.25)
+    // [修正] 馬場状態補正: 競馬場コード＋開催日でDBから当日のクッション値・含水率を取得 (v.2026.9.19+26091901)
     final isDirt = trackTypeKey == 'dirt';
     TrackConditionRecord? trackConditionRecord;
     final raceIdStr = widget.predictionRaceData.raceId;
     if (raceIdStr.length >= 10) {
-      trackConditionRecord = await _trackConditionRepo
-          .getLatestTrackConditionByPrefix(raceIdStr.substring(0, 10));
+      trackConditionRecord = await _trackConditionRepo.getTrackConditionForRace(
+        raceId: raceIdStr,
+        raceDate: widget.predictionRaceData.raceDate,
+      );
     }
     final trackSpeedMultiplier = _deriveTrackSpeedMultiplier(
       trackConditionText: widget.predictionRaceData.trackCondition,

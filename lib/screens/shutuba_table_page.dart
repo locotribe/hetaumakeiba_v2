@@ -636,8 +636,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         pastRecords: pastRecords,
       );
       if (horse.bestTimeStats?.sourceRaceId != null && horse.bestTimeStats!.sourceRaceId!.length >= 10) {
-        final prefix10 = horse.bestTimeStats!.sourceRaceId!.substring(0, 10);
-        final trackCondition = await _trackConditionRepo.getLatestTrackConditionByPrefix(prefix10);
+        // [修正] 先頭10桁一致ではなく競馬場コード＋開催日で照合 (v.2026.9.19+26091901)
+        final trackCondition = await _trackConditionRepo.getTrackConditionForRace(
+          raceId: horse.bestTimeStats!.sourceRaceId!,
+          raceDate: horse.bestTimeStats!.date,
+        );
         if (trackCondition != null) {
           final isDirt = horse.bestTimeStats!.venueAndDistance?.contains('ダ') ?? false;
           horse.bestTimeStats = horse.bestTimeStats!.copyWithTrackCondition(
@@ -654,8 +657,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         pastRecords: pastRecords,
       );
       if (horse.bestCourseTimeStats?.sourceRaceId != null && horse.bestCourseTimeStats!.sourceRaceId!.length >= 10) {
-        final prefix10 = horse.bestCourseTimeStats!.sourceRaceId!.substring(0, 10);
-        final trackCondition = await _trackConditionRepo.getLatestTrackConditionByPrefix(prefix10);
+        // [修正] 先頭10桁一致ではなく競馬場コード＋開催日で照合 (v.2026.9.19+26091901)
+        final trackCondition = await _trackConditionRepo.getTrackConditionForRace(
+          raceId: horse.bestCourseTimeStats!.sourceRaceId!,
+          raceDate: horse.bestCourseTimeStats!.date,
+        );
         if (trackCondition != null) {
           final isDirt = horse.bestCourseTimeStats!.venueAndDistance?.contains('ダ') ?? false;
           horse.bestCourseTimeStats = horse.bestCourseTimeStats!.copyWithTrackCondition(
@@ -671,8 +677,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         pastRecords: pastRecords,
       );
       if (horse.fastestAgariStats?.sourceRaceId != null && horse.fastestAgariStats!.sourceRaceId!.length >= 10) {
-        final prefix10 = horse.fastestAgariStats!.sourceRaceId!.substring(0, 10);
-        final trackCondition = await _trackConditionRepo.getLatestTrackConditionByPrefix(prefix10);
+        // [修正] 先頭10桁一致ではなく競馬場コード＋開催日で照合 (v.2026.9.19+26091901)
+        final trackCondition = await _trackConditionRepo.getTrackConditionForRace(
+          raceId: horse.fastestAgariStats!.sourceRaceId!,
+          raceDate: horse.fastestAgariStats!.date,
+        );
         if (trackCondition != null) {
           final isDirt = horse.fastestAgariStats!.venueAndDistance?.contains('ダ') ?? false;
           horse.fastestAgariStats = horse.fastestAgariStats!.copyWithTrackCondition(
@@ -689,8 +698,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         pastRecords: pastRecords,
       );
       if (horse.fastestCourseAgariStats?.sourceRaceId != null && horse.fastestCourseAgariStats!.sourceRaceId!.length >= 10) {
-        final prefix10 = horse.fastestCourseAgariStats!.sourceRaceId!.substring(0, 10);
-        final trackCondition = await _trackConditionRepo.getLatestTrackConditionByPrefix(prefix10);
+        // [修正] 先頭10桁一致ではなく競馬場コード＋開催日で照合 (v.2026.9.19+26091901)
+        final trackCondition = await _trackConditionRepo.getTrackConditionForRace(
+          raceId: horse.fastestCourseAgariStats!.sourceRaceId!,
+          raceDate: horse.fastestCourseAgariStats!.date,
+        );
         if (trackCondition != null) {
           final isDirt = horse.fastestCourseAgariStats!.venueAndDistance?.contains('ダ') ?? false;
           horse.fastestCourseAgariStats = horse.fastestCourseAgariStats!.copyWithTrackCondition(

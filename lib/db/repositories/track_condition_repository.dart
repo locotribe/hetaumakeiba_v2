@@ -6,6 +6,7 @@ import 'package:csv/csv.dart';
 import 'package:hetaumakeiba_v2/db/db_provider.dart';
 import 'package:hetaumakeiba_v2/db/db_constants.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 
 class TrackConditionRepository {
   final DbProvider _dbProvider = DbProvider();
@@ -138,6 +139,36 @@ class TrackConditionRepository {
       where: 'CAST(track_condition_id AS TEXT) LIKE ? AND track_condition_id % 100 != 0',
       whereArgs: ['$prefix10%'],
       // 複数ある場合は一番新しい(IDが大きい)ものを取得
+      orderBy: 'track_condition_id DESC',
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return TrackConditionRecord.fromJson(maps.first);
+    }
+    return null;
+  }
+
+  // [追加] レースの競馬場コード(raceIdの5〜6桁目)と開催日(date列)で当日の馬場状態レコードを取得する。
+  // IDの日次(DD)に依存しないため、DDがずれて保存されたレコードや金曜(前日測定)レコードの誤紐付けが起きない。
+  // raceDate は 'YYYY/MM/DD' / 'YYYY年MM月DD日' / 'YYYY年M月D日(曜)' のいずれも可 (v.2026.9.19+26091901)
+  Future<TrackConditionRecord?> getTrackConditionForRace({
+    required String raceId,
+    required String raceDate,
+  }) async {
+    if (raceId.length < 6) return null;
+    final parsed = parseRaceDateForSpeedIndex(raceDate);
+    if (parsed == null) return null;
+
+    final venueCode = raceId.substring(4, 6);
+    final dateStr = '${parsed.year.toString().padLeft(4, '0')}-'
+        '${parsed.month.toString().padLeft(2, '0')}-'
+        '${parsed.day.toString().padLeft(2, '0')}';
+
+    final db = await _dbProvider.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      DbConstants.tableTrackConditions,
+      where: 'date = ? AND SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) = ?',
+      whereArgs: [dateStr, venueCode],
       orderBy: 'track_condition_id DESC',
       limit: 1,
     );

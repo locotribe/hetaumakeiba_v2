@@ -61,9 +61,12 @@ class _VolatilityAnalysisTabState extends State<VolatilityAnalysisTab> {
       if (race != null) pastRaces.add(race);
 
       // レースIDから先頭10桁(プレフィックス)を切り出して当日の馬場状態を検索
-      if (id.length >= 10) {
-        String prefix10 = id.substring(0, 10);
-        final tc = await tcRepo.getLatestTrackConditionByPrefix(prefix10);
+      // [修正] 先頭10桁一致ではなく競馬場コード＋開催日で照合。開催日はレース結果から取るため race が null の場合は照合しない (v.2026.9.19+26091901)
+      if (race != null && id.length >= 10) {
+        final tc = await tcRepo.getTrackConditionForRace(
+          raceId: id,
+          raceDate: race.raceDate,
+        );
         if (tc != null) {
           // UI側から呼び出しやすいように、キーは元のレースIDのままMapに保存する
           _trackConditionMap[id] = tc;

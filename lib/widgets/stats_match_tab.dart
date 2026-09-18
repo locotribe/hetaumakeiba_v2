@@ -248,8 +248,11 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       final Map<String, TrackConditionRecord> trackConditionMap = {};
       for (final race in pastRaces) {
         if (race.raceId.length >= 10) {
-          String prefix10 = race.raceId.substring(0, 10);
-          final tc = await tcRepo.getLatestTrackConditionByPrefix(prefix10);
+          // [修正] 先頭10桁一致ではなく競馬場コード＋開催日で照合 (v.2026.9.19+26091901)
+          final tc = await tcRepo.getTrackConditionForRace(
+            raceId: race.raceId,
+            raceDate: race.raceDate,
+          );
           if (tc != null) trackConditionMap[race.raceId] = tc;
         }
       }
@@ -294,8 +297,11 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       for (final records in currentHorseHistory.values) {
         for (final rec in records) {
           if (rec.raceId.length >= 10 && !horsePastTrackConditions.containsKey(rec.raceId)) {
-            String prefix10 = rec.raceId.substring(0, 10);
-            final tc = await tcRepo.getLatestTrackConditionByPrefix(prefix10);
+            // [修正] 先頭10桁一致ではなく競馬場コード＋開催日で照合 (v.2026.9.19+26091901)
+            final tc = await tcRepo.getTrackConditionForRace(
+              raceId: rec.raceId,
+              raceDate: rec.date,
+            );
             if (tc != null) {
               horsePastTrackConditions[rec.raceId] = tc;
             }
