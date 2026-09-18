@@ -23,19 +23,11 @@ class CloudSyncService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final cloudVersion = data['version'] as int;
-        final lastUpdatedDate = data['last_updated'] as String;
 
         if (cloudVersion > localVersion) {
-          // 【分岐A/B判定】
-          final hasData = await _repository.hasDataForDate(lastUpdatedDate);
-          if (hasData) {
-            // 【分岐A: 欠落なし】 自力でスクレイピング済み。バージョンだけ更新
-            await prefs.setInt('track_condition_csv_version', cloudVersion);
-            return false;
-          } else {
-            // 【分岐B: 欠落あり】 クラウドからのインポートが必要
-            return true;
-          }
+          // [修正] 最新日付がローカルにあっても過去分の補完・修正が含まれうるため、
+          // クラウドのバージョンが新しければ常に取り込み対象とする (v.2026.9.19+26091902)
+          return true;
         }
       }
       return false;
@@ -54,7 +46,8 @@ class CloudSyncService {
         final csvString = utf8.decode(response.bodyBytes);
 
         // インポート実行
-        await _repository.importTrackConditionsFromCsv(csvString);
+        // [修正] 同一日付・同一競馬場はサーバーの行で置き換える方式に変更 (v.2026.9.19+26091902)
+        await _repository.replaceTrackConditionsFromCsv(csvString);
 
         // 成功後にバージョンを更新するために、再度version.jsonを取得
         final versionResponse = await http.get(Uri.parse(CLOUD_VERSION_URL));

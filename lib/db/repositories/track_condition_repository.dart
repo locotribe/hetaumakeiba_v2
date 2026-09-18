@@ -215,4 +215,60 @@ class TrackConditionRepository {
     ));
     return count != null && count > 0;
   }
+
+  // [追加] サーバーCSVを「同一日付・同一競馬場はサーバーを正」として取り込む。
+  // (日付, 競馬場コード)ごとにローカル行を削除してからサーバー行を挿入する。
+  // 削除はキーごとに1回だけ行うため、サーバー側に同一キーが複数行あっても互いを消さない。
+  // サーバーに無い日付のローカル行は残る (v.2026.9.19+26091902)
+  Future<Map<String, int>> replaceTrackConditionsFromCsv(String csvString) async {
+    final db = await _dbProvider.database;
+    final cleanCsv = csvString.replaceAll('\r\n', '\n');
+    final rows = const CsvToListConverter(eol: '\n').convert(cleanCsv);
+    if (rows.length <= 1) return {'written': 0, 'deleted': 0};
+
+    final List<Map<String, dynamic>> records = [];
+    final Set<String> keys = {};
+    for (int i = 1; i < rows.length; i++) {
+      final row = rows[i];
+      if (row.isEmpty || row[0] == null || row[0].toString().trim().isEmpty) continue;
+      final idVal = row[0];
+      final int? trackConditionId = idVal is int ? idVal : int.tryParse(idVal.toString());
+      if (trackConditionId == null) continue;
+      final idStr = trackConditionId.toString();
+      final date = row.length > 1 ? row[1]?.toString() ?? '' : '';
+      if (idStr.length != 12 || date.isEmpty) continue;
+
+      keys.add('$date|${idStr.substring(4, 6)}');
+      records.add({
+        'track_condition_id': trackConditionId,
+        'date': date,
+        'week_day': row.length > 2 ? row[2]?.toString() : null,
+        'cushion_value': row.length > 3 ? double.tryParse(row[3]?.toString() ?? '') : null,
+        'moisture_turf_goal': row.length > 4 ? double.tryParse(row[4]?.toString() ?? '') : null,
+        'moisture_turf_4c': row.length > 5 ? double.tryParse(row[5]?.toString() ?? '') : null,
+        'moisture_dirt_goal': row.length > 6 ? double.tryParse(row[6]?.toString() ?? '') : null,
+        'moisture_dirt_4c': row.length > 7 ? double.tryParse(row[7]?.toString() ?? '') : null,
+      });
+    }
+
+    int deleted = 0;
+    await db.transaction((txn) async {
+      for (final key in keys) {
+        final parts = key.split('|');
+        deleted += await txn.delete(
+          DbConstants.tableTrackConditions,
+          where: 'date = ? AND SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) = ?',
+          whereArgs: [parts[0], parts[1]],
+        );
+      }
+      final batch = txn.batch();
+      for (final r in records) {
+        batch.insert(DbConstants.tableTrackConditions, r,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+    });
+
+    return {'written': records.length, 'deleted': deleted};
+  }
 }
