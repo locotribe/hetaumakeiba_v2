@@ -12,6 +12,22 @@ class CloudSyncService {
 
   final TrackConditionRepository _repository = TrackConditionRepository();
 
+  // [追加] 同期要否の判定本体。テストから直接呼べるよう純粋な関数として切り出す。
+  // version.json に rows（サーバーの全件数）があれば件数差で判定し、無い場合は従来のバージョン比較に
+  // フォールバックする (v.2026.9.21+26092101)
+  static bool isSyncRequired(
+      Map<String, dynamic> data, int localRows, int localVersion) {
+    final cloudRows = data['rows'];
+    if (cloudRows is int) {
+      return cloudRows > localRows;
+    }
+    final cloudVersion = data['version'];
+    if (cloudVersion is int) {
+      return cloudVersion > localVersion;
+    }
+    return false;
+  }
+
   /// クラウドのバージョン情報を取得し、同期が必要か判定する
   /// 戻り値: 同期（CSVインポート）が必要ならtrue、不要ならfalse
   Future<bool> checkSyncRequired() async {
@@ -21,14 +37,11 @@ class CloudSyncService {
 
       final response = await http.get(Uri.parse(CLOUD_VERSION_URL));
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final cloudVersion = data['version'] as int;
-
-        if (cloudVersion > localVersion) {
-          // [修正] 最新日付がローカルにあっても過去分の補完・修正が含まれうるため、
-          // クラウドのバージョンが新しければ常に取り込み対象とする (v.2026.9.19+26091902)
-          return true;
-        }
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        // [修正] サーバーの件数がローカルより多いときだけ同期対象とする。
+        // アプリが当日分を先に取得している場合（ローカルのほうが多い）は対象外 (v.2026.9.21+26092101)
+        final localRows = await _repository.countAll();
+        return isSyncRequired(data, localRows, localVersion);
       }
       return false;
     } catch (e) {

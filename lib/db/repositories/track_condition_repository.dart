@@ -216,6 +216,16 @@ class TrackConditionRepository {
     return count != null && count > 0;
   }
 
+  // [追加] サーバーとの件数差で同期要否を判定するため、馬場状態レコードの総数を返す (v.2026.9.21+26092101)
+  Future<int> countAll() async {
+    final db = await _dbProvider.database;
+    final count = Sqflite.firstIntValue(await db.query(
+      DbConstants.tableTrackConditions,
+      columns: ['COUNT(*)'],
+    ));
+    return count ?? 0;
+  }
+
   // [追加] サーバーCSVを「同一日付・同一競馬場はサーバーを正」として取り込む。
   // (日付, 競馬場コード)ごとにローカル行を削除してからサーバー行を挿入する。
   // 削除はキーごとに1回だけ行うため、サーバー側に同一キーが複数行あっても互いを消さない。
