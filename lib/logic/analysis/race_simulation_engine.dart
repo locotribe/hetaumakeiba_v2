@@ -929,6 +929,8 @@ class RaceSimulationEngine {
         legStyleProfile: h.legStyleProfile,
         previousHorseWeight: h.previousHorseWeight,
         previousJockey: h.previousJockey,
+        // [追加] 馬データ再生成時に前走騎手IDを引き継ぐ (v.2026.9.21+26092102)
+        previousJockeyId: h.previousJockeyId,
         ownerName: h.ownerName,
         ownerId: h.ownerId,
         ownerImageLocalPath: h.ownerImageLocalPath,

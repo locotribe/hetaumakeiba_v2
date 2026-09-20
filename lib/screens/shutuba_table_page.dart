@@ -267,6 +267,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
             legStyleProfile: horse.legStyleProfile,
             previousHorseWeight: horse.previousHorseWeight,
             previousJockey: horse.previousJockey,
+            // [追加] 再構築で前走騎手IDが失われると乗り替わり判定が名前比較に戻るため引き継ぐ (v.2026.9.21+26092102)
+            previousJockeyId: horse.previousJockeyId,
             ownerName: (profile.ownerName.isNotEmpty) ? profile.ownerName : horse.ownerName,
             ownerId: (profile.ownerId.isNotEmpty) ? profile.ownerId : horse.ownerId,
             ownerImageLocalPath: (profile.ownerImageLocalPath.isNotEmpty) ? profile.ownerImageLocalPath : horse.ownerImageLocalPath,
@@ -600,6 +602,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       if (pastRecords.isNotEmpty) {
         final previousRecord = pastRecords.first;
         horse.previousJockey = previousRecord.jockey;
+        // [追加] 乗り替わり判定をIDで行うため、前走騎手IDも保持する (v.2026.9.21+26092102)
+        horse.previousJockeyId = previousRecord.jockeyId;
         horse.previousHorseWeight = previousRecord.horseWeight;
 
         final previousRaceResult = pastRaceResults[previousRecord.raceId];

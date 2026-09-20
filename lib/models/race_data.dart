@@ -243,6 +243,8 @@ class PredictionHorseDetail {
   LegStyleProfile? legStyleProfile;
   String? previousHorseWeight;
   String? previousJockey;
+  // [追加] 乗り替わり判定を騎手名の表記揺れに影響されないIDベースにするため、前走騎手IDを保持する (v.2026.9.21+26092102)
+  String? previousJockeyId;
 
   JockeyComboStats? jockeyComboStats;
 
@@ -294,6 +296,7 @@ class PredictionHorseDetail {
     this.legStyleProfile,
     this.previousHorseWeight,
     this.previousJockey,
+    this.previousJockeyId,
     this.ownerName,
     this.ownerId,
     this.ownerImageLocalPath,
@@ -362,6 +365,7 @@ class PredictionHorseDetail {
       'legStyleProfile': legStyleProfile?.toJson(),
       'previousHorseWeight': previousHorseWeight,
       'previousJockey': previousJockey,
+      'previousJockeyId': previousJockeyId,
       'bestTimeStats': bestTimeStats?.toMap(),
       'fastestAgariStats': fastestAgariStats?.toMap(),
       // ▼▼ 新規追加 ▼▼
@@ -428,6 +432,7 @@ class PredictionHorseDetail {
           : null,
       previousHorseWeight: json['previousHorseWeight'] as String?,
       previousJockey: json['previousJockey'] as String?,
+      previousJockeyId: json['previousJockeyId'] as String?,
       bestTimeStats: json['bestTimeStats'] != null
           ? BestTimeStats.fromMap(json['bestTimeStats'] as Map<String, dynamic>)
           : null,

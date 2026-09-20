@@ -13,8 +13,36 @@ class JockeyProfileCell extends StatelessWidget {
     required this.owner,
   }) : super(key: key);
 
+  // [追加] 乗り替わり判定。騎手名は出馬表ページ(race.netkeiba)と馬成績ページ(db.netkeiba)で
+  // 表記が揺れる(「Ｍデムーロ」⇔「M.デム」等)ため、騎手IDが両方そろっているときはIDで比較する。
+  // IDが欠けている場合(旧キャッシュ・ID取得失敗)のみ従来の名前比較にフォールバックする
+  // (v.2026.9.21+26092102)
+  static bool isJockeyChanged({
+    required String currentJockeyId,
+    required String currentJockeyName,
+    String? previousJockeyId,
+    String? previousJockeyName,
+  }) {
+    if (currentJockeyId.isNotEmpty &&
+        previousJockeyId != null &&
+        previousJockeyId.isNotEmpty) {
+      return currentJockeyId != previousJockeyId;
+    }
+    if (previousJockeyName == null || previousJockeyName.isEmpty) {
+      return false;
+    }
+    return currentJockeyName != previousJockeyName;
+  }
+
   @override
   Widget build(BuildContext context) {
+    // [修正] 乗り替わり判定を騎手名の文字列比較から騎手IDの比較へ変更 (v.2026.9.21+26092102)
+    final bool jockeyChanged = isJockeyChanged(
+      currentJockeyId: horse.jockeyId,
+      currentJockeyName: horse.jockey,
+      previousJockeyId: horse.previousJockeyId,
+      previousJockeyName: horse.previousJockey,
+    );
     return Container(
       width: double.infinity,
       alignment: Alignment.center,
@@ -35,10 +63,10 @@ class JockeyProfileCell extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '${(horse.previousJockey != null && horse.jockey != horse.previousJockey) ? '替 ' : ''}${horse.jockey}',
+            '${jockeyChanged ? '替 ' : ''}${horse.jockey}',
             style: TextStyle(
               fontSize: 10,
-              color: (horse.previousJockey != null && horse.jockey != horse.previousJockey) ? Colors.orange.shade800 : Colors.black87,
+              color: jockeyChanged ? Colors.orange.shade800 : Colors.black87,
               fontWeight: FontWeight.bold,
             ),
             overflow: TextOverflow.ellipsis,
