@@ -1130,8 +1130,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     double determineMinWidth() {
       if (columns.length == 7) {
-        // [修正] 出走馬タブの馬情報列を固定幅145にしたため、列幅の合計に合わせて550→535 (v.2026.9.22+26092206)
-        return 535;
+        // [修正] 馬情報列145→160、騎手列70→60に変更したため、列幅の合計に合わせて535→540 (v.2026.9.22+26092207)
+        return 540;
       }
       return 2000;
     }

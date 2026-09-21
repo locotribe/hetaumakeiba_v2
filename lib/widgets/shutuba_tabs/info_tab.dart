@@ -23,6 +23,8 @@ class MarkAndGateCell extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: double.infinity,
+      // [修正] 枠色の背景が行の区切り線を覆って見えなくなっていたため、下端を1px空ける (v.2026.9.22+26092207)
+      margin: const EdgeInsets.only(bottom: 1),
       color: bgColor,
       child: Column(
         children: [
@@ -113,35 +115,40 @@ class OddsCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(
-                text: '${horse.popularity ?? '--'}',
-                style: const TextStyle(fontSize: 20), // ここだけサイズ15
-              ),
-              const TextSpan(
-                text: '\n人気',
-                style: TextStyle(fontSize: 10), // ここはサイズ10
-              ),
-            ],
+    // [修正] 人気20→26、オッズ10→12に拡大。列幅40に収まらない場合のみ縮小する (v.2026.9.22+26092207)
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerRight,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '${horse.popularity ?? '--'}',
+                  style: const TextStyle(fontSize: 26),
+                ),
+                const TextSpan(
+                  text: '\n人気',
+                  style: TextStyle(fontSize: 10),
+                ),
+              ],
+            ),
+            textAlign: TextAlign.right,
           ),
-          textAlign: TextAlign.right, // 親が右寄せ(CrossAxisAlignment.end)なので、文字自体も右寄せにしておくと綺麗です
-        ),
-        const SizedBox(height: 8),
-        Text(
-          horse.odds?.toString() ?? '--',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            color: (horse.odds != null && horse.odds! <= 9.9) ? Colors.red : Colors.black87,
+          const SizedBox(height: 8),
+          Text(
+            horse.odds?.toString() ?? '--',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: (horse.odds != null && horse.odds! <= 9.9) ? Colors.red : Colors.black87,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

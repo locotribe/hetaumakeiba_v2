@@ -87,7 +87,8 @@ class StartersTabWidget extends StatelessWidget {
               child: Text('騎手\n斤量', textAlign: TextAlign.center),
             ),
           ),
-          fixedWidth: 70,
+          // [修正] 馬情報列を広げる分、騎手列を70→60に縮小（中身の文字は大きくする） (v.2026.9.22+26092207)
+          fixedWidth: 60,
         ),
         const DataColumn2(
           label: Center(
@@ -144,8 +145,8 @@ class StartersTabWidget extends StatelessWidget {
               ],
             ),
           ),
-          // [修正] 馬情報列を可変幅から固定幅145に変更（スイッチ廃止で見出しの幅が減ったため） (v.2026.9.22+26092206)
-          fixedWidth: 145,
+          // [修正] 馬名9文字を文字の大きさそのままで表示するため、馬情報列を145→160に拡大 (v.2026.9.22+26092207)
+          fixedWidth: 160,
         ),
         DataColumn2(
           label: InkWell(
@@ -234,6 +235,9 @@ class StartersTabWidget extends StatelessWidget {
             moisture4c: currentBestTime?.moisture4c,
             venueAndDistance: currentBestTime?.venueAndDistance,
             textColor: bestTimeColor,
+            // [追加] 時計を出したレースの名前と日付を上段に表示 (v.2026.9.22+26092207)
+            raceName: currentBestTime?.raceName,
+            date: currentBestTime?.date,
           )),
           DataCell(TrackStatsCell(
             formattedValue: currentAgari?.formattedAgari,
@@ -243,6 +247,9 @@ class StartersTabWidget extends StatelessWidget {
             moisture4c: currentAgari?.moisture4c,
             venueAndDistance: currentAgari?.venueAndDistance,
             textColor: agariColor,
+            // [追加] 上がりを出したレースの名前と日付を上段に表示 (v.2026.9.22+26092207)
+            raceName: currentAgari?.raceName,
+            date: currentAgari?.date,
           )),
         ];
       },
@@ -266,57 +273,65 @@ class HorseInfoCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // [修正] 並び順を「性齢・外/地 → 父 → 馬名・ブリンカー → 母 → 母父 → 馬体重 → 脚質」に変更。
+    // 馬名は文字の大きさ14のまま、端末の文字サイズ設定で収まらない場合のみ縮小して「…」で切らない (v.2026.9.22+26092207)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text('父: $father', style: const TextStyle(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
+        // 1行目: 性齢・外/地
         Row(
           children: [
-            Text('${horse.sexAndAge} ', style: const TextStyle(fontSize: 10)),
-            // ▼ [追加] 競馬新聞ページのマーク（外/地）を馬名の頭に表示 (v.2026.7.27+26072708)
+            Text(horse.sexAndAge, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
             if (horse.isMaruGai) _buildNewspaperMarkChip('外'),
             if (horse.isMaruChi) _buildNewspaperMarkChip('地'),
-            // ▲ [追加]
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      horse.horseName,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        decoration: horse.isScratched ? TextDecoration.lineThrough : null,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  // ▼ [追加] 競馬新聞ページのマーク（ブリンカー）を馬名の末尾に表示。初装着のみ赤背景 (v.2026.7.27+26072708)
-                  if (horse.isBlinker) _buildNewspaperMarkChip('B', isRed: horse.isFirstBlinker),
-                  // ▲ [追加]
-                ],
-              ),
-            ),
           ],
         ),
-        // [修正] 行の高さが増えたため、母父を別の行に分けて列幅を詰める (v.2026.9.22+26092206)
+        // 2行目: 父
+        Text('父: $father', style: const TextStyle(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
+        // 3行目: 馬名・ブリンカー（初装着のみ赤背景）
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                horse.horseName,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  decoration: horse.isScratched ? TextDecoration.lineThrough : null,
+                ),
+              ),
+              if (horse.isBlinker) _buildNewspaperMarkChip('B', isRed: horse.isFirstBlinker),
+            ],
+          ),
+        ),
+        // 4行目・5行目: 母・母父
         Text('母: $mother', style: const TextStyle(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
         Text('母父: $mf', style: const TextStyle(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
-        Builder(
-            builder: (context) {
-              final hw = horse.horseWeight ?? '';
-              if (hw.contains('(')) {
-                // 増減カッコが含まれている＝レース結果から取得した当日馬体重
-                return Text('馬体重: (当日: $hw)', style: const TextStyle(fontSize: 10));
-              } else {
-                // それ以外＝通常の出馬表表示
-                return Text('馬体重: ${hw.isEmpty ? '--' : hw} (前走: ${horse.previousHorseWeight ?? '--'})', style: const TextStyle(fontSize: 10));
+        // 6行目: 馬体重（前走の増減が2桁でも収まるよう、収まらない場合のみ縮小）
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Builder(
+              builder: (context) {
+                final hw = horse.horseWeight ?? '';
+                if (hw.contains('(')) {
+                  // 増減カッコが含まれている＝レース結果から取得した当日馬体重
+                  return Text('馬体重: (当日: $hw)', style: const TextStyle(fontSize: 10));
+                } else {
+                  // それ以外＝通常の出馬表表示
+                  return Text('馬体重: ${hw.isEmpty ? '--' : hw} (前走: ${horse.previousHorseWeight ?? '--'})', style: const TextStyle(fontSize: 10));
+                }
               }
-            }
+          ),
         ),
         const SizedBox(height: 2),
+        // 7行目: 脚質
         LegStyleIndicator(legStyleProfile: horse.legStyleProfile),
       ],
     );
