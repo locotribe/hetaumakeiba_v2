@@ -115,24 +115,37 @@ class StartersTabWidget extends StatelessWidget {
                     height: 50, // ← 変更: DataTable2の headingRowHeight と同じ高さに固定
                     alignment: Alignment.center,
                     padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('同コース', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        Switch(
-                          value: isCourseOnlyMode,
-                          onChanged: onCourseModeChanged,
-                          activeColor: Colors.amber,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    // [修正] スイッチを廃止し「同ｺｰｽ」の文字自体をタップで切り替わるボタンにする（オン: 黄色 / オフ: 灰色枠）。
+                    // 見出し全体の並べ替えより内側のボタンが優先して反応する (v.2026.9.22+26092206)
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onCourseModeChanged(!isCourseOnlyMode),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isCourseOnlyMode ? Colors.amber : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isCourseOnlyMode ? Colors.amber.shade700 : Colors.grey.shade400,
+                          ),
                         ),
-                      ],
+                        child: Text(
+                          '同ｺｰｽ',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isCourseOnlyMode ? Colors.black87 : Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          size: ColumnSize.L,
+          // [修正] 馬情報列を可変幅から固定幅145に変更（スイッチ廃止で見出しの幅が減ったため） (v.2026.9.22+26092206)
+          fixedWidth: 145,
         ),
         DataColumn2(
           label: InkWell(
@@ -287,7 +300,9 @@ class HorseInfoCell extends StatelessWidget {
             ),
           ],
         ),
-        Text('母: $mother (母父: $mf)', style: const TextStyle(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
+        // [修正] 行の高さが増えたため、母父を別の行に分けて列幅を詰める (v.2026.9.22+26092206)
+        Text('母: $mother', style: const TextStyle(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
+        Text('母父: $mf', style: const TextStyle(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
         Builder(
             builder: (context) {

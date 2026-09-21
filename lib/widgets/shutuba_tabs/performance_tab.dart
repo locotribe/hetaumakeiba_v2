@@ -24,6 +24,14 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/info_tab.dart';
 /// 表示する過去走の数
 const int _kPastRaceCount = 5;
 
+// [追加] 出馬表UI調整: 列幅の定数 (v.2026.9.22+26092206)
+/// 縦書きの馬名列の幅
+const double _kNameColumnWidth = 28;
+/// 間隔/距離列の幅（見出しを2行にして70→46）
+const double _kIntervalColumnWidth = 46;
+/// 過去走カード1枚あたりの目安幅（最小幅の計算用。従来の表示幅と同程度）
+const double _kPastCardWidth = 270;
+
 class _PerformanceData {
   final List<HorseRaceRecord> records;
   final Map<String, RaceResult> raceResults;
@@ -37,10 +45,13 @@ class PerformanceTabWidget extends StatelessWidget {
   final List<PredictionHorseDetail> horses;
   final Function(SortableColumn) onSort;
   final Widget Function(PredictionHorseDetail) buildMarkDropdown;
+  // [修正] 左2列の固定と最小幅の指定のため、共通の表生成関数に追加された任意引数を受け取れる型にする (v.2026.9.22+26092206)
   final Widget Function({
   required List<DataColumn2> columns,
   required List<PredictionHorseDetail> horses,
   required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
+  int fixedLeftColumns,
+  double? minWidth,
   }) buildDataTableForTab;
 
   final String? highlightedRaceId;
@@ -70,28 +81,56 @@ class PerformanceTabWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // [修正] 出馬表UI調整: 馬名を縦書きの細い列にし、印・枠と馬名の左2列を固定。
+    // 間隔/距離列は見出しを2行にして幅を縮小。取消馬は行全体をグレーアウト (v.2026.9.22+26092206)
+    const double fixedColumnsWidth = 40 + _kNameColumnWidth + _kIntervalColumnWidth * _kPastRaceCount;
+    const int columnCount = 2 + _kPastRaceCount * 2;
+    const double tableMinWidth =
+        fixedColumnsWidth + _kPastCardWidth * _kPastRaceCount + 6.0 * (columnCount - 1) + 4;
     return buildDataTableForTab(
+      fixedLeftColumns: 2,
+      minWidth: tableMinWidth,
       columns: [
         DataColumn2(label: const Text('印\n枠'), fixedWidth: 40, onSort: (i, asc) => onSort(SortableColumn.horseNumber)),
-        DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => onSort(SortableColumn.horseName)),
+        DataColumn2(
+          label: const Text('馬\n名', textAlign: TextAlign.center),
+          fixedWidth: _kNameColumnWidth,
+          onSort: (i, asc) => onSort(SortableColumn.horseName),
+        ),
         for (int i = 0; i < _kPastRaceCount; i++) ...[
-          const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
+          const DataColumn2(
+            label: Text('間隔\n距離', textAlign: TextAlign.center),
+            fixedWidth: _kIntervalColumnWidth,
+          ),
           DataColumn2(label: Text(_pastRaceLabel(i))),
         ],
       ],
       horses: horses,
-      cellBuilder: (horse) => [
-        DataCell(MarkAndGateCell(horse: horse, buildMarkDropdown: buildMarkDropdown)),
-        DataCell(
-          Text(
-            horse.horseName,
-            style: TextStyle(
-              decoration: horse.isScratched ? TextDecoration.lineThrough : null,
-            ),
-          ),
-        ),
-        ..._buildPerformanceCells(horse.horseId),
-      ],
+      cellBuilder: (horse) {
+        final cells = <DataCell>[
+          DataCell(MarkAndGateCell(horse: horse, buildMarkDropdown: buildMarkDropdown)),
+          DataCell(_VerticalHorseName(name: horse.horseName)),
+          ..._buildPerformanceCells(horse.horseId),
+        ];
+        if (!horse.isScratched) return cells;
+        return cells.map((cell) => DataCell(_grayOut(cell.child))).toList();
+      },
+    );
+  }
+
+  /// 取消馬の行を白黒・半透明にする
+  static Widget _grayOut(Widget child) {
+    return Opacity(
+      opacity: 0.45,
+      child: ColorFiltered(
+        colorFilter: const ColorFilter.matrix(<double>[
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0, 0, 0, 1, 0,
+        ]),
+        child: child,
+      ),
     );
   }
 
@@ -122,7 +161,7 @@ class PerformanceTabWidget extends StatelessWidget {
             final distanceChange = RaceIntervalAnalyzer.formatDistanceChange(currentRace.raceDetails1 ?? '', previousRace.distance);
             return _buildIntervalCell(interval, distanceChange);
           }
-          return const SizedBox(width: 70);
+          return const SizedBox(width: _kIntervalColumnWidth);
         },
       ),
     ));
@@ -162,7 +201,7 @@ class PerformanceTabWidget extends StatelessWidget {
                 final distanceChange = RaceIntervalAnalyzer.formatDistanceChange(current.distance, previous.distance);
                 return _buildIntervalCell(interval, distanceChange);
               }
-              return const SizedBox(width: 70);
+              return const SizedBox(width: _kIntervalColumnWidth);
             },
           ),
         ));
@@ -178,14 +217,18 @@ class PerformanceTabWidget extends StatelessWidget {
       case '短縮': distanceColor = Colors.red; break;
       default: distanceColor = Colors.black87;
     }
+    // [修正] 列幅を70→46に縮小。長い表記（例: 12ヶ月）ははみ出さないよう自動縮小する (v.2026.9.22+26092206)
     return SizedBox(
-      width: 70,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(interval, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-          Text(distanceChange, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: distanceColor)),
-        ],
+      width: _kIntervalColumnWidth,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(interval, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            Text(distanceChange, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: distanceColor)),
+          ],
+        ),
       ),
     );
   }
@@ -595,6 +638,44 @@ class PerformanceTabWidget extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// [追加] 出馬表UI調整: 馬名を1文字ずつ縦に並べる縦書き表示。
+// 文字の大きさはセルの高さ÷文字数で自動調整（上限16・下限9）。長音「ー」等は縦書き用に90度回転する (v.2026.9.22+26092206)
+class _VerticalHorseName extends StatelessWidget {
+  final String name;
+
+  const _VerticalHorseName({required this.name});
+
+  static const Set<String> _rotateChars = {'ー', '－', '-', '―', '〜', '～'};
+
+  @override
+  Widget build(BuildContext context) {
+    final chars = name.characters.toList();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double available =
+            constraints.maxHeight.isFinite ? constraints.maxHeight - 8 : 130;
+        final int count = chars.isEmpty ? 1 : chars.length;
+        final double fontSize = (available / count / 1.15).clamp(9.0, 16.0);
+        return Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: chars.map((ch) {
+                final text = Text(
+                  ch,
+                  style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, height: 1.1),
+                );
+                return _rotateChars.contains(ch) ? RotatedBox(quarterTurns: 1, child: text) : text;
+              }).toList(),
+            ),
+          ),
+        );
+      },
     );
   }
 }

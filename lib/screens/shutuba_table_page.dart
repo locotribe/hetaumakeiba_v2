@@ -1108,6 +1108,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     required List<DataColumn2> columns,
     required List<PredictionHorseDetail> horses,
     required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
+    // [追加] 左側の固定列数と最小幅の上書き。未指定のタブは従来どおり（固定なし・従来の最小幅） (v.2026.9.22+26092206)
+    int fixedLeftColumns = 0,
+    double? minWidth,
   }) {
     int? getSortColumnIndex() {
       for (int i = 0; i < columns.length; i++) {
@@ -1127,15 +1130,18 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     double determineMinWidth() {
       if (columns.length == 7) {
-        return 550;
+        // [修正] 出走馬タブの馬情報列を固定幅145にしたため、列幅の合計に合わせて550→535 (v.2026.9.22+26092206)
+        return 535;
       }
       return 2000;
     }
 
     return DataTable2(
       key: ValueKey('${_predictionRaceData.hashCode}_$_tableUpdateKey'),
-      minWidth: determineMinWidth(),
+      // [修正] 最小幅の上書きと左固定列に対応 (v.2026.9.22+26092206)
+      minWidth: minWidth ?? determineMinWidth(),
       fixedTopRows: 1,
+      fixedLeftColumns: fixedLeftColumns,
       sortColumnIndex: getSortColumnIndex(),
       sortAscending: _isAscending,
       columnSpacing: 6.0,
