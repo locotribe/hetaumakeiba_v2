@@ -109,13 +109,31 @@ class PerformanceTabWidget extends StatelessWidget {
       cellBuilder: (horse) {
         final cells = <DataCell>[
           DataCell(MarkAndGateCell(horse: horse, buildMarkDropdown: buildMarkDropdown)),
-          DataCell(_VerticalHorseName(name: horse.horseName)),
+          // [修正] 馬名セルの背景を、出走馬タブの所属列と同じ所属色（美浦=薄い青 / 栗東=薄い赤 等）にする (v.2026.9.22+26092207)
+          DataCell(_VerticalHorseName(
+            name: horse.horseName,
+            backgroundColor: _getAffiliationColor(horse.trainerAffiliation),
+          )),
           ..._buildPerformanceCells(horse.horseId),
         ];
         if (!horse.isScratched) return cells;
         return cells.map((cell) => DataCell(_grayOut(cell.child))).toList();
       },
     );
+  }
+
+  // [追加] 所属の色分け。出走馬タブ（starters_tab.dart）の _getAffiliationColor と同じ内容 (v.2026.9.22+26092207)
+  static Color _getAffiliationColor(String affiliation) {
+    if (affiliation.contains('美') || affiliation.contains('美浦')) {
+      return Colors.lightBlue.shade50;
+    } else if (affiliation.contains('栗') || affiliation.contains('栗東')) {
+      return Colors.pink.shade50;
+    } else if (affiliation.contains('地') || affiliation.contains('地方')) {
+      return Colors.orange.shade50;
+    } else if (affiliation.contains('外') || affiliation.contains('海外')) {
+      return Colors.green.shade50;
+    }
+    return Colors.transparent;
   }
 
   /// 取消馬の行を白黒・半透明にする
@@ -646,8 +664,10 @@ class PerformanceTabWidget extends StatelessWidget {
 // 文字の大きさはセルの高さ÷文字数で自動調整（上限16・下限9）。長音「ー」等は縦書き用に90度回転する (v.2026.9.22+26092206)
 class _VerticalHorseName extends StatelessWidget {
   final String name;
+  // [追加] セルの背景色（所属色）。未指定なら背景なし (v.2026.9.22+26092207)
+  final Color backgroundColor;
 
-  const _VerticalHorseName({required this.name});
+  const _VerticalHorseName({required this.name, this.backgroundColor = Colors.transparent});
 
   static const Set<String> _rotateChars = {'ー', '－', '-', '―', '〜', '～'};
 
@@ -660,18 +680,25 @@ class _VerticalHorseName extends StatelessWidget {
             constraints.maxHeight.isFinite ? constraints.maxHeight - 8 : 130;
         final int count = chars.isEmpty ? 1 : chars.length;
         final double fontSize = (available / count / 1.15).clamp(9.0, 16.0);
-        return Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: chars.map((ch) {
-                final text = Text(
-                  ch,
-                  style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, height: 1.1),
-                );
-                return _rotateChars.contains(ch) ? RotatedBox(quarterTurns: 1, child: text) : text;
-              }).toList(),
+        // [修正] 所属色の背景を付ける。背景が行の区切り線を覆わないよう、下端を1px空ける (v.2026.9.22+26092207)
+        return Container(
+          width: double.infinity,
+          height: double.infinity,
+          margin: const EdgeInsets.only(bottom: 1),
+          color: backgroundColor,
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: chars.map((ch) {
+                  final text = Text(
+                    ch,
+                    style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, height: 1.1),
+                  );
+                  return _rotateChars.contains(ch) ? RotatedBox(quarterTurns: 1, child: text) : text;
+                }).toList(),
+              ),
             ),
           ),
         );
