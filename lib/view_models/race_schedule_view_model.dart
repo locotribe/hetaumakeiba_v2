@@ -8,7 +8,6 @@ import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/race_schedule_scraper_service.dart';
 import 'package:intl/intl.dart';
 
-// [追加] race_schedule_page.dartの状態とロジックを分離するためのViewModel (v.13.41.0)
 /// 開催スケジュール画面のUIロジックとビジネスロジックを分離するためのViewModel
 class RaceScheduleViewModel extends ChangeNotifier {
   final RaceScheduleScraperService _scraperService = RaceScheduleScraperService();
@@ -28,10 +27,8 @@ class RaceScheduleViewModel extends ChangeNotifier {
   final Set<String> loadingTabs = {};
   final Map<String, bool> raceStatusMap = {};
 
-  // [追加] _setupTabsで算出したTabControllerの初期選択indexをView側へ伝えるためのフィールド (v.13.41.0)
   int initialTabIndex = 0;
 
-  // [追加] タブ個別のデータ取得失敗時にViewからSnackBar表示するためのメッセージ (v.13.41.0)
   String? tabErrorMessage;
 
   @override
@@ -40,7 +37,6 @@ class RaceScheduleViewModel extends ChangeNotifier {
     super.dispose();
   }
 
-  // [追加] tabErrorMessage表示後にViewからクリアするためのメソッド（再描画は不要なのでnotifyしない） (v.13.41.0)
   void clearTabError() {
     tabErrorMessage = null;
   }
@@ -85,13 +81,19 @@ class RaceScheduleViewModel extends ChangeNotifier {
     raceSchedules.clear();
     notifyListeners();
 
+    // [修正] 週送り時に表示したい日付と週キャッシュのキーを、_setupTabsで上書きされる前に確保する (v.2026.9.22+26092209)
+    final DateTime? focusDate = isInitial ? null : currentDate;
+    final String? requestedWeekKey = (!isInitial && weekDates.isNotEmpty)
+        ? DateFormat('yyyyMMdd').format(weekDates.first)
+        : null;
+
     try {
-      if (!isInitial && weekDates.isNotEmpty) {
-        final weekKey = DateFormat('yyyyMMdd').format(weekDates.first);
-        final cachedDates = await _raceScheduleRepository.getWeekCache(weekKey);
+      if (requestedWeekKey != null) {
+        final cachedDates =
+            await _raceScheduleRepository.getWeekCache(requestedWeekKey);
 
         if (cachedDates != null && cachedDates.isNotEmpty) {
-          _setupTabs(cachedDates);
+          _setupTabs(cachedDates, focusDate: focusDate);
           isDataLoaded = true;
           isLoading = false;
           notifyListeners();
@@ -115,10 +117,14 @@ class RaceScheduleViewModel extends ChangeNotifier {
         return;
       }
 
-      _setupTabs(dates);
+      _setupTabs(dates, focusDate: focusDate);
 
-      if (weekDates.isNotEmpty) {
-        final weekKey = DateFormat('yyyyMMdd').format(weekDates.first);
+      // [修正] 週送り時は表示を要求した週のキーで保存する（初期表示時は従来どおり最新週のキー） (v.2026.9.22+26092209)
+      final String? weekKey = requestedWeekKey ??
+          (weekDates.isNotEmpty
+              ? DateFormat('yyyyMMdd').format(weekDates.first)
+              : null);
+      if (weekKey != null) {
         await _raceScheduleRepository.insertOrUpdateWeekCache(weekKey, dates);
       }
 
@@ -145,8 +151,8 @@ class RaceScheduleViewModel extends ChangeNotifier {
     }
   }
 
-  // [修正] TabController自体はView側で生成するため、availableDatesとinitialTabIndexの算出のみ行う (v.13.41.0)
-  void _setupTabs(List<String> yyyymmddStrings) {
+  // [修正] focusDateを受け取り、週送り時は表示中の週を最新週で上書きしないようにする (v.2026.9.22+26092209)
+  void _setupTabs(List<String> yyyymmddStrings, {DateTime? focusDate}) {
     if (yyyymmddStrings.isEmpty) {
       return;
     }
@@ -175,7 +181,7 @@ class RaceScheduleViewModel extends ChangeNotifier {
     availableDates =
         parsedDates.map((d) => DateFormat('yyyy-MM-dd').format(d)).toList();
 
-    if (parsedDates.isNotEmpty) {
+    if (focusDate == null && parsedDates.isNotEmpty) {
       final lastDate = parsedDates.last;
       final int daysToAdd = DateTime.sunday - lastDate.weekday;
       final DateTime targetSunday = lastDate.add(Duration(days: daysToAdd));
@@ -189,6 +195,37 @@ class RaceScheduleViewModel extends ChangeNotifier {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     int initialIndex = -1;
+
+    // [追加] 週送り時、表示中の週に今日が含まれなければ、その週の開催日（なければ最も近い日）を初期タブにする (v.2026.9.22+26092209)
+    if (focusDate != null) {
+      final focusDay = DateTime(focusDate.year, focusDate.month, focusDate.day);
+      final weekStart =
+          focusDay.subtract(Duration(days: focusDay.weekday - DateTime.monday));
+      final weekEnd = weekStart.add(const Duration(days: 6));
+      final bool isTodayInWeek =
+          !today.isBefore(weekStart) && !today.isAfter(weekEnd);
+
+      if (!isTodayInWeek) {
+        int bestIndex = -1;
+        int bestDiff = 1 << 30;
+        for (int i = 0; i < parsedDates.length; i++) {
+          final date = parsedDates[i];
+          if (!date.isBefore(weekStart) && !date.isAfter(weekEnd)) {
+            bestIndex = i;
+            break;
+          }
+          final diff = date.isBefore(weekStart)
+              ? weekStart.difference(date).inDays
+              : date.difference(weekEnd).inDays;
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestIndex = i;
+          }
+        }
+        initialTabIndex = bestIndex < 0 ? 0 : bestIndex;
+        return;
+      }
+    }
 
     for (int i = 0; i < availableDates.length; i++) {
       final date = DateFormat('yyyy-MM-dd').parse(availableDates[i]);
@@ -206,7 +243,6 @@ class RaceScheduleViewModel extends ChangeNotifier {
     initialTabIndex = initialIndex;
   }
 
-  // [追加] タブ選択時、未取得の日付であればデータ取得を行う（旧_handleTabSelectionの判定部分） (v.13.41.0)
   void ensureDataForDate(String dateStr) {
     if (!raceSchedules.containsKey(dateStr)) {
       fetchDataForDate(dateStr);
