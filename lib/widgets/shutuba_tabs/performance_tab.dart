@@ -252,17 +252,36 @@ class PerformanceTabWidget extends StatelessWidget {
   }
 
   Widget _buildCornerText(List<PastRaceCorner> corners, Color textColor, bool isHighlighted) {
-    if (corners.isEmpty) return const SizedBox.shrink();
+    // [修正] 通過しないコーナー（位置が '-'）は位置を表示せず、注記があれば注記だけを残す。
+    // 区切りの '-' と混ざって '----4-4' のように読みにくかったため (v.2026.9.22+26092204)
+    final noPosition = RegExp(r'^[-－\s]*$');
+    final visible = corners
+        .where((c) => !(noPosition.hasMatch(c.position) && c.note.isEmpty))
+        .toList();
+    if (visible.isEmpty) return const SizedBox.shrink();
     final noteColor = isHighlighted ? Colors.yellowAccent : Colors.red.shade700;
     final spans = <InlineSpan>[];
-    for (int i = 0; i < corners.length; i++) {
-      if (i > 0) spans.add(TextSpan(text: '-', style: TextStyle(color: textColor)));
-      spans.add(TextSpan(text: corners[i].position, style: TextStyle(color: textColor)));
-      if (corners[i].note.isNotEmpty) {
+    bool needsSeparator = false;
+    for (final corner in visible) {
+      final hasPosition = !noPosition.hasMatch(corner.position);
+      if (hasPosition) {
+        if (needsSeparator) spans.add(TextSpan(text: '-', style: TextStyle(color: textColor)));
+        spans.add(TextSpan(text: corner.position, style: TextStyle(color: textColor)));
+        if (corner.note.isNotEmpty) {
+          spans.add(TextSpan(
+            text: corner.note,
+            style: TextStyle(color: noteColor, fontWeight: FontWeight.bold),
+          ));
+        }
+        needsSeparator = true;
+      } else {
+        // 位置の無いコーナーの注記（例: 出遅れ '出'）は、次の位置の前に空白を空けて表示する
+        if (needsSeparator) spans.add(TextSpan(text: ' ', style: TextStyle(color: textColor)));
         spans.add(TextSpan(
-          text: corners[i].note,
+          text: '${corner.note} ',
           style: TextStyle(color: noteColor, fontWeight: FontWeight.bold),
         ));
+        needsSeparator = false;
       }
     }
     return Text.rich(

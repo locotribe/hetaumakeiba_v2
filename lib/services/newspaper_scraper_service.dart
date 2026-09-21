@@ -64,6 +64,15 @@ class NewspaperScraperService {
           // [追加] 成績タブ拡充: 同じページの過去5走欄を読み取り、過去走の追加情報として保存する。
           // 失敗してもマーク取得には影響させない（ベストエフォート） (v.2026.9.22+26092202)
           try {
+            // [追加] 過去走欄（li.Past）が描画されるまで最大5秒待つ。新馬戦など過去走が無い場合は待機後そのまま進む (v.2026.9.22+26092204)
+            for (int i = 0; i < 10; i++) {
+              final c = await controller.evaluateJavascript(
+                  source: "document.querySelectorAll('dd.Past_Wrapper li.Past').length");
+              final pastCount = (c is int) ? c : int.tryParse('$c') ?? 0;
+              if (pastCount > 0) break;
+              await Future.delayed(const Duration(milliseconds: 500));
+              if (completer.isCompleted) return;
+            }
             final pastResult =
             await controller.evaluateJavascript(source: _getPastRacesJs());
             final extras = _parsePastRaces(pastResult);
