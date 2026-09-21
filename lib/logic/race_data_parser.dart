@@ -88,7 +88,9 @@ class RaceDataParser {
     if (distance == null) return 'ミドル';
 
     // ラップタイムを数値のリストに変換
+    // [修正] lapTimesには「ラップ:」行と累計タイムの「ペース:」行が混在しており、両方を合算していたため「ラップ:」行のみを対象にする (v.2026.9.22+26092201)
     final lapTimes = raceResult.lapTimes
+        .where((lapStr) => lapStr.trim().startsWith('ラップ'))
         .expand((lapStr) => lapStr.split(':').last.trim().split('-'))
         .map((s) => double.tryParse(s.trim()))
         .where((d) => d != null)
@@ -122,6 +124,59 @@ class RaceDataParser {
     if (difference <= -1.0) return 'スロー';
     return 'ミドル';
   }
+  // [追加] 成績タブ拡充: レース全体の前後半3F・ペース記号・上がり順位の補助関数 (v.2026.9.22+26092201)
+  /// RaceResult.lapTimes の「ペース:」行末尾の括弧（例: "(35.6-34.2)"）から
+  /// レース全体の前半3F・後半3Fを取り出す。括弧が無ければ null を返す。
+  static ({double first3f, double last3f})? extractRaceFirstLast3F(RaceResult raceResult) {
+    for (final lapStr in raceResult.lapTimes) {
+      final trimmed = lapStr.trim();
+      if (!trimmed.startsWith('ペース')) continue;
+      final match = RegExp(r'\(\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*\)').firstMatch(trimmed);
+      if (match == null) continue;
+      final first = double.tryParse(match.group(1)!);
+      final last = double.tryParse(match.group(2)!);
+      if (first != null && last != null) {
+        return (first3f: first, last3f: last);
+      }
+    }
+    return null;
+  }
+
+  /// HorseRaceRecord.pace（例: "35.0-34.5"）をレース全体の前半3F・後半3Fに分解する。
+  /// 障害戦など3Fとして不自然な値（45秒以上）は null を返す。
+  static ({double first3f, double last3f})? parseRecordPace(String pace) {
+    final match = RegExp(r'^\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*$').firstMatch(pace);
+    if (match == null) return null;
+    final first = double.tryParse(match.group(1)!);
+    final last = double.tryParse(match.group(2)!);
+    if (first == null || last == null) return null;
+    if (first >= 45.0 || last >= 45.0) return null;
+    return (first3f: first, last3f: last);
+  }
+
+  /// 前半3F・後半3Fからペース記号（'H' / 'M' / 'S'）を返す。
+  /// 判定基準は calculatePace() と同じ（後半-前半 が +1.0秒以上でハイ、-1.0秒以下でスロー）。
+  static String paceMarkFromFirstLast3F(double first3f, double last3f) {
+    final difference = last3f - first3f;
+    if (difference >= 1.0) return 'H';
+    if (difference <= -1.0) return 'S';
+    return 'M';
+  }
+
+  /// レース結果の全頭の上がり3Fから、指定馬の上がり順位（1始まり）を返す。算出できない場合は null。
+  static int? computeAgariRank(RaceResult raceResult, String horseId) {
+    final targets = raceResult.horseResults.where((h) => h.horseId == horseId);
+    if (targets.isEmpty) return null;
+    final myAgari = double.tryParse(targets.first.agari.trim());
+    if (myAgari == null) return null;
+    int fasterCount = 0;
+    for (final h in raceResult.horseResults) {
+      final agari = double.tryParse(h.agari.trim());
+      if (agari != null && agari < myAgari) fasterCount++;
+    }
+    return fasterCount + 1;
+  }
+
   static String getSimpleLegStyle(String cornerPassage, String numberOfHorsesStr) {
     final horseCount = int.tryParse(numberOfHorsesStr);
     if (horseCount == null || horseCount == 0) return '不明';

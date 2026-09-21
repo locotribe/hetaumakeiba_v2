@@ -2,8 +2,8 @@
 
 class DbConstants {
   static const String dbName = 'hetaumakeiba_v2.db';
-  // [修正] 15 -> 16に更新 (v.2026.9.5+26090501)
-  static const int dbVersion = 16;
+  // [修正] 16 -> 17に更新（horse_past_race_extras 新設） (v.2026.9.22+26092201)
+  static const int dbVersion = 17;
 
   // --- Tables ---
   static const String tableQrData = 'qr_data';
@@ -33,6 +33,8 @@ class DbConstants {
   static const String tableHorseSpeedIndex = 'horse_speed_index';
   // [追加] Phase 4-A: レース準備状況保存用テーブル (v.2026.9.5+26090501)
   static const String tableRacePreparationStatus = 'race_preparation_status';
+  // [追加] 成績タブ拡充: 過去走ごとの追加情報テーブル (v.2026.9.22+26092201)
+  static const String tableHorsePastRaceExtras = 'horse_past_race_extras';
 
   // --- Common Columns ---
   static const String colId = 'id';

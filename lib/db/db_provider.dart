@@ -346,6 +346,31 @@ class DbProvider {
         PRIMARY KEY (race_id, step)
       )
     ''');
+
+    // [追加] 成績タブ拡充: 過去走ごとの追加情報テーブル作成 (v.2026.9.22+26092201)
+    await db.execute('''
+      CREATE TABLE ${DbConstants.tableHorsePastRaceExtras}(
+        horse_id              TEXT NOT NULL,
+        race_id               TEXT NOT NULL,
+        race_condition        TEXT,
+        course_section        TEXT,
+        pace_mark             TEXT,
+        corners_json          TEXT,
+        agari_rank            INTEGER,
+        is_record             INTEGER,
+        is_blinker            INTEGER,
+        winner_horse_id       TEXT,
+        individual_first_3f   REAL,
+        short_comment         TEXT,
+        time_index            INTEGER,
+        track_index           INTEGER,
+        remark                TEXT,
+        newspaper_fetched_at  TEXT,
+        horse_page_fetched_at TEXT,
+        horse_page_premium    INTEGER,
+        PRIMARY KEY (horse_id, race_id)
+      )
+    ''');
   }
 
   // [修正] マイグレーション失敗時にエラーを握りつぶさず、rethrowで上位へ伝播させるよう全catchブロックを修正 (v.13.40.3)
@@ -587,6 +612,37 @@ class DbProvider {
         ''');
       } catch (e) {
         debugPrint('Migration error (v15->v16): $e');
+        rethrow;
+      }
+    }
+    // [追加] 成績タブ拡充: horse_past_race_extras テーブル新設 (v.2026.9.22+26092201)
+    if (oldVersion < 17) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS ${DbConstants.tableHorsePastRaceExtras}(
+            horse_id              TEXT NOT NULL,
+            race_id               TEXT NOT NULL,
+            race_condition        TEXT,
+            course_section        TEXT,
+            pace_mark             TEXT,
+            corners_json          TEXT,
+            agari_rank            INTEGER,
+            is_record             INTEGER,
+            is_blinker            INTEGER,
+            winner_horse_id       TEXT,
+            individual_first_3f   REAL,
+            short_comment         TEXT,
+            time_index            INTEGER,
+            track_index           INTEGER,
+            remark                TEXT,
+            newspaper_fetched_at  TEXT,
+            horse_page_fetched_at TEXT,
+            horse_page_premium    INTEGER,
+            PRIMARY KEY (horse_id, race_id)
+          )
+        ''');
+      } catch (e) {
+        debugPrint('Migration error (v16->v17): $e');
         rethrow;
       }
     }
