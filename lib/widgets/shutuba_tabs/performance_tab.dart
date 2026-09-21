@@ -2,13 +2,14 @@
 
 import 'package:data_table_2/data_table_2.dart';
 import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_past_race_extra_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
-// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
 import 'package:hetaumakeiba_v2/services/user_session.dart';
+import 'package:hetaumakeiba_v2/models/horse_past_race_extra_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
@@ -17,11 +18,18 @@ import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/info_tab.dart';
 
+// [修正] 成績タブ拡充: 過去走カードに条件・コース区分・ペース・前後半3F・通過順注記・上がり順位・
+// 勝ち馬・タイム指数・備考などを追加し7行表示にした。表示方法（ハイライト・左端の色帯・着順背景）は従来どおり (v.2026.9.22+26092203)
+
+/// 表示する過去走の数
+const int _kPastRaceCount = 5;
+
 class _PerformanceData {
   final List<HorseRaceRecord> records;
   final Map<String, RaceResult> raceResults;
+  final Map<String, HorsePastRaceExtra> extras;
 
-  _PerformanceData(this.records, this.raceResults);
+  _PerformanceData(this.records, this.raceResults, this.extras);
 }
 
 class PerformanceTabWidget extends StatelessWidget {
@@ -41,6 +49,7 @@ class PerformanceTabWidget extends StatelessWidget {
   final HorseRepository _horseRepo = HorseRepository();
   final RaceRepository _raceRepo = RaceRepository();
   final UserRepository _userRepo = UserRepository();
+  final HorsePastRaceExtraRepository _extraRepo = HorsePastRaceExtraRepository();
 
   PerformanceTabWidget({
     Key? key,
@@ -53,22 +62,22 @@ class PerformanceTabWidget extends StatelessWidget {
     required this.onRaceHighlightChanged,
   }) : super(key: key);
 
+  static String _pastRaceLabel(int index) {
+    if (index == 0) return '前走';
+    if (index == 1) return '前々走';
+    return '${index + 1}走前';
+  }
+
   @override
   Widget build(BuildContext context) {
     return buildDataTableForTab(
       columns: [
         DataColumn2(label: const Text('印\n枠'), fixedWidth: 40, onSort: (i, asc) => onSort(SortableColumn.horseNumber)),
         DataColumn2(label: const Text('馬名'), fixedWidth: 150, onSort: (i, asc) => onSort(SortableColumn.horseName)),
-        const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
-        const DataColumn2(label: SizedBox(width: 120, child: Text('前走'))),
-        const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
-        const DataColumn2(label: SizedBox(width: 120, child: Text('前々走'))),
-        const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
-        const DataColumn2(label: SizedBox(width: 120, child: Text('3走前'))),
-        const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
-        const DataColumn2(label: SizedBox(width: 120, child: Text('4走前'))),
-        const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
-        const DataColumn2(label: SizedBox(width: 120, child: Text('5走前'))),
+        for (int i = 0; i < _kPastRaceCount; i++) ...[
+          const DataColumn2(label: Text('間隔/距離'), fixedWidth: 70),
+          DataColumn2(label: Text(_pastRaceLabel(i))),
+        ],
       ],
       horses: horses,
       cellBuilder: (horse) => [
@@ -91,7 +100,13 @@ class PerformanceTabWidget extends StatelessWidget {
       final records = await _horseRepo.getHorsePerformanceRecords(horseId);
       final raceIds = records.map((r) => r.raceId).where((id) => id.isNotEmpty).toSet().toList();
       final raceResults = await _raceRepo.getMultipleRaceResults(raceIds);
-      return _PerformanceData(records, raceResults);
+      final displayRaceIds = records
+          .take(_kPastRaceCount)
+          .map((r) => r.raceId)
+          .where((id) => id.isNotEmpty)
+          .toList();
+      final extras = await _extraRepo.getForHorse(horseId, displayRaceIds);
+      return _PerformanceData(records, raceResults, extras);
     });
 
     final List<DataCell> cells = [];
@@ -112,7 +127,7 @@ class PerformanceTabWidget extends StatelessWidget {
       ),
     ));
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < _kPastRaceCount; i++) {
       cells.add(DataCell(
         FutureBuilder<_PerformanceData>(
           future: futurePerformanceData,
@@ -127,14 +142,15 @@ class PerformanceTabWidget extends StatelessWidget {
                 } catch (e) {
                 }
               }
-              return _buildPastRaceDetailCard(record, horseResultInRace);
+              final extra = snapshot.data!.extras[record.raceId];
+              return _buildPastRaceDetailCard(record, raceResult, horseResultInRace, extra);
             }
             return const SizedBox(width: 250);
           },
         ),
       ));
 
-      if (i < 4) {
+      if (i < _kPastRaceCount - 1) {
         cells.add(DataCell(
           FutureBuilder<_PerformanceData>(
             future: futurePerformanceData,
@@ -174,9 +190,170 @@ class PerformanceTabWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildPastRaceDetailCard(HorseRaceRecord record, HorseResult? horseResult) {
+  /// 'YYYY/MM/DD' 形式の日付を 'MM/DD' に整形する。解析できなければそのまま返す。
+  static String _formatShortDate(String date) {
+    final match = RegExp(r'^\d{4}[/\-.](\d{1,2})[/\-.](\d{1,2})').firstMatch(date);
+    if (match == null) return date;
+    return '${match.group(1)!.padLeft(2, '0')}/${match.group(2)!.padLeft(2, '0')}';
+  }
+
+  /// 回り・コース区分。新聞ページの値（例: '右B'）を優先し、無ければレース結果のコース情報から回りだけを返す。
+  static String _resolveCourseLabel(RaceResult? raceResult, HorsePastRaceExtra? extra) {
+    final fromExtra = extra?.courseSection;
+    if (fromExtra != null && fromExtra.isNotEmpty) return fromExtra;
+    if (raceResult != null) {
+      final dbMatch = RegExp(r'(芝|ダ|障)\s*(右|左|直線|直)').firstMatch(raceResult.raceInfo);
+      if (dbMatch != null) return dbMatch.group(2)!;
+      final raceMatch = RegExp(r'\(\s*(右|左|直線|直)').firstMatch(raceResult.raceInfo);
+      if (raceMatch != null) return raceMatch.group(1)!;
+    }
+    return '';
+  }
+
+  /// レース全体の前後半3F。レース結果の「ペース:」行を優先し、無ければ戦績の pace 列を使う。
+  static ({double first3f, double last3f})? _resolveFirstLast3F(HorseRaceRecord record, RaceResult? raceResult) {
+    if (raceResult != null) {
+      final fromResult = RaceDataParser.extractRaceFirstLast3F(raceResult);
+      if (fromResult != null) return fromResult;
+    }
+    return RaceDataParser.parseRecordPace(record.pace);
+  }
+
+  /// 通過順。新聞ページの注記付きの値を優先し、無ければ戦績の通過順を使う。
+  static List<PastRaceCorner> _resolveCorners(HorseRaceRecord record, HorsePastRaceExtra? extra) {
+    final fromExtra = extra?.corners;
+    if (fromExtra != null && fromExtra.isNotEmpty) return fromExtra;
+    if (record.cornerPassage.isEmpty) return const [];
+    return record.cornerPassage
+        .split('-')
+        .map((p) => PastRaceCorner(position: p.trim(), note: ''))
+        .where((c) => c.position.isNotEmpty)
+        .toList();
+  }
+
+  Widget _buildBlinkerBadge(bool isHighlighted) {
+    return Container(
+      width: 13,
+      height: 13,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: isHighlighted ? Colors.white : Colors.black87,
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        'B',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: isHighlighted ? Colors.black87 : Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCornerText(List<PastRaceCorner> corners, Color textColor, bool isHighlighted) {
+    if (corners.isEmpty) return const SizedBox.shrink();
+    final noteColor = isHighlighted ? Colors.yellowAccent : Colors.red.shade700;
+    final spans = <InlineSpan>[];
+    for (int i = 0; i < corners.length; i++) {
+      if (i > 0) spans.add(TextSpan(text: '-', style: TextStyle(color: textColor)));
+      spans.add(TextSpan(text: corners[i].position, style: TextStyle(color: textColor)));
+      if (corners[i].note.isNotEmpty) {
+        spans.add(TextSpan(
+          text: corners[i].note,
+          style: TextStyle(color: noteColor, fontWeight: FontWeight.bold),
+        ));
+      }
+    }
+    return Text.rich(
+      TextSpan(children: spans, style: const TextStyle(fontSize: 11)),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  Widget _buildAgariText(String agari, int? agariRank, Color textColor, bool isHighlighted) {
+    if (agari.isEmpty) return const SizedBox.shrink();
+    Color? background;
+    if (!isHighlighted && agariRank != null) {
+      if (agariRank == 1) background = Colors.red.shade100;
+      if (agariRank == 2) background = Colors.blue.shade100;
+      if (agariRank == 3) background = Colors.yellow.shade200;
+    }
+    final rankText = agariRank != null ? '($agariRank)' : '';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      color: background,
+      child: Text(
+        '上$agari$rankText',
+        maxLines: 1,
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor),
+      ),
+    );
+  }
+
+  Widget _buildPaceText(
+      String? paceMark,
+      ({double first3f, double last3f})? firstLast3f,
+      double? individualFirst3f,
+      Color textColor,
+      bool isHighlighted,
+      ) {
+    final spans = <InlineSpan>[];
+    if (paceMark != null && paceMark.isNotEmpty) {
+      Color markColor = textColor;
+      if (!isHighlighted) {
+        if (paceMark == 'H') markColor = Colors.red.shade700;
+        if (paceMark == 'S') markColor = Colors.blue.shade700;
+      }
+      spans.add(TextSpan(text: '$paceMark ', style: TextStyle(color: markColor, fontWeight: FontWeight.bold)));
+    }
+    if (firstLast3f != null) {
+      spans.add(TextSpan(
+        text: '${firstLast3f.first3f.toStringAsFixed(1)}-${firstLast3f.last3f.toStringAsFixed(1)}',
+        style: TextStyle(color: textColor),
+      ));
+    }
+    if (individualFirst3f != null) {
+      spans.add(TextSpan(
+        text: ' 前${individualFirst3f.toStringAsFixed(1)}',
+        style: TextStyle(color: textColor),
+      ));
+    }
+    if (spans.isEmpty) return const SizedBox.shrink();
+    return Text.rich(
+      TextSpan(children: spans, style: const TextStyle(fontSize: 11)),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  /// 右ブロックの1行（左: 伸縮して省略記号 / 右: 最大幅120で右寄せ）
+  Widget _buildLine(Widget left, Widget? right) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(child: left),
+        if (right != null) ...[
+          const SizedBox(width: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: right,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPastRaceDetailCard(
+      HorseRaceRecord record,
+      RaceResult? raceResult,
+      HorseResult? horseResult,
+      HorsePastRaceExtra? extra,
+      ) {
     final isHighlighted = record.raceId.isNotEmpty && record.raceId == highlightedRaceId;
     final textColor = isHighlighted ? Colors.white : Colors.black87;
+    final subTextColor = isHighlighted ? Colors.white70 : Colors.black54;
     final rankInt = int.tryParse(record.rank);
     Color backgroundColor = Colors.transparent;
     if (isHighlighted) {
@@ -205,6 +382,44 @@ class PerformanceTabWidget extends StatelessWidget {
       displayMargin = stringMargin;
     }
 
+    // --- 追加情報（データ源の優先順位は設計書 §4-2） ---
+    final raceNameLabel = record.raceName
+        .replaceAll(RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false), '')
+        .trim();
+    final venueLabel = record.venue.replaceAll(RegExp(r'\d'), '');
+    final raceNumberLabel = record.raceNumber.isNotEmpty ? '${record.raceNumber}R' : '';
+    final headerLabel = [_formatShortDate(record.date), venueLabel, raceNumberLabel]
+        .where((s) => s.isNotEmpty)
+        .join(' ');
+    final conditionLabel = extra?.raceCondition ?? '';
+    final frameLabel = record.frameNumber.isNotEmpty ? '(${record.frameNumber}枠)' : '';
+    final courseLabel = _resolveCourseLabel(raceResult, extra);
+    final courseLine = [record.distance, courseLabel, record.trackCondition, record.weather]
+        .where((s) => s.isNotEmpty)
+        .join(' ');
+    final firstLast3f = _resolveFirstLast3F(record, raceResult);
+    final paceMark = extra?.paceMark ??
+        (firstLast3f != null
+            ? RaceDataParser.paceMarkFromFirstLast3F(firstLast3f.first3f, firstLast3f.last3f)
+            : null);
+    final agariRank = extra?.agariRank ??
+        (raceResult != null ? RaceDataParser.computeAgariRank(raceResult, record.horseId) : null);
+    final corners = _resolveCorners(record, extra);
+    final isRecord = extra?.isRecord == true;
+    final isBlinker = extra?.isBlinker == true;
+    final winnerLabel = record.winnerOrSecondHorse.isEmpty
+        ? ''
+        : '${record.rank == '1' ? '2着' : '勝'} ${record.winnerOrSecondHorse}';
+    final commentLabel = [extra?.remark, extra?.shortComment]
+        .whereType<String>()
+        .where((s) => s.isNotEmpty)
+        .join(' ');
+    final timeColor = (isRecord && !isHighlighted) ? Colors.red.shade700 : textColor;
+    final commentColor = isHighlighted ? Colors.white : Colors.deepOrange.shade700;
+
+    const double fontSize = 11;
+    const double smallFontSize = 10;
+
     return GestureDetector(
       onTap: () {
         if (record.raceId.isNotEmpty) {
@@ -212,7 +427,7 @@ class PerformanceTabWidget extends StatelessWidget {
         }
       },
       child: Container(
-        width: 270,
+        width: double.infinity,
         decoration: BoxDecoration(
           border: Border(left: BorderSide(color: gradeColor, width: 5.0)),
         ),
@@ -220,7 +435,7 @@ class PerformanceTabWidget extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              width: 50,
+              width: 52,
               decoration: BoxDecoration(
                 color: backgroundColor,
                 border: Border(right: BorderSide(color: Colors.grey.shade300)),
@@ -232,7 +447,6 @@ class PerformanceTabWidget extends StatelessWidget {
                     alignment: Alignment.center,
                     children: [
                       FutureBuilder<UserMark?>(
-                        // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
                         future: _userRepo.getUserMark(UserSession().localUserId!, record.raceId, record.horseId),
                         builder: (context, snapshot) {
                           if (snapshot.hasData && snapshot.data?.mark != null) {
@@ -266,6 +480,12 @@ class PerformanceTabWidget extends StatelessWidget {
                             '${record.popularity}人気',
                             style: TextStyle(fontSize: 11, color: textColor),
                           ),
+                          if (record.odds.isNotEmpty)
+                            Text(
+                              '単${record.odds}',
+                              maxLines: 1,
+                              style: TextStyle(fontSize: 10, color: textColor),
+                            ),
                           Text(
                             legStyle,
                             style: TextStyle(fontSize: 11, color: textColor),
@@ -281,30 +501,72 @@ class PerformanceTabWidget extends StatelessWidget {
               child: Container(
                 color: backgroundColor,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8.0, 4.0, 4.0, 4.0),
+                  padding: const EdgeInsets.fromLTRB(6.0, 3.0, 4.0, 3.0),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(child: Text('${record.venue.replaceAll(RegExp(r'\d'), '')} ${record.weather}/${record.trackCondition}/${record.numberOfHorses}頭', style: TextStyle(fontSize: 11, color: textColor), overflow: TextOverflow.ellipsis)),
-                          Text(record.time, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor)),
-                        ],
+                      // 1行目: 日付・開催・R / 条件
+                      _buildLine(
+                        Text(headerLabel, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: textColor)),
+                        conditionLabel.isNotEmpty
+                            ? Text(conditionLabel, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: smallFontSize, color: subTextColor))
+                            : null,
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(child: Text('${record.raceName.replaceAll(RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false), '').trim()}/${record.distance}', style: TextStyle(fontSize: 11, color: textColor), overflow: TextOverflow.ellipsis)),
-                          Text(record.agari, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor)),
-                        ],
+                      // 2行目: レース名 / 頭数・馬番・枠
+                      _buildLine(
+                        Text(raceNameLabel, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: textColor)),
+                        Text('${record.numberOfHorses}頭 ${record.horseNumber}番$frameLabel', maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: smallFontSize, color: textColor)),
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(child: Text('${record.horseNumber}番 ${record.horseWeight} ${record.jockey}(${record.carriedWeight})', style: TextStyle(fontSize: 11, color: textColor), overflow: TextOverflow.ellipsis)),
-                          Text(displayMargin, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor)),
-                        ],
+                      // 3行目: 距離・回り/コース区分・馬場・天気 / タイム（レコードは赤字＋R）
+                      _buildLine(
+                        Text(courseLine, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: fontSize, color: textColor)),
+                        Text(isRecord ? '${record.time} R' : record.time, maxLines: 1,
+                            style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: timeColor)),
+                      ),
+                      // 4行目: 騎手(斤量)・馬体重・ブリンカー / 着差
+                      _buildLine(
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text('${record.jockey}(${record.carriedWeight}) ${record.horseWeight}', maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: fontSize, color: textColor)),
+                            ),
+                            if (isBlinker) ...[
+                              const SizedBox(width: 3),
+                              _buildBlinkerBadge(isHighlighted),
+                            ],
+                          ],
+                        ),
+                        Text(displayMargin, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: textColor)),
+                      ),
+                      // 5行目: 通過順（注記は赤字） / 上がり3F（順位1〜3位は背景色）
+                      _buildLine(
+                        _buildCornerText(corners, textColor, isHighlighted),
+                        _buildAgariText(record.agari, agariRank, textColor, isHighlighted),
+                      ),
+                      // 6行目: ペース記号・レース前後半3F・個別前半3F / タイム指数
+                      _buildLine(
+                        _buildPaceText(paceMark, firstLast3f, extra?.individualFirst3f, textColor, isHighlighted),
+                        extra?.timeIndex != null
+                            ? Text('指数${extra!.timeIndex}', maxLines: 1,
+                                style: TextStyle(fontSize: smallFontSize, fontWeight: FontWeight.bold, color: textColor))
+                            : null,
+                      ),
+                      // 7行目: 勝ち馬(2着馬) / 備考・短評
+                      _buildLine(
+                        Text(winnerLabel, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: smallFontSize, color: subTextColor)),
+                        commentLabel.isNotEmpty
+                            ? Text(commentLabel, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: smallFontSize, fontWeight: FontWeight.bold, color: commentColor))
+                            : null,
                       ),
                     ],
                   ),

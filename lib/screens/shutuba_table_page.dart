@@ -1141,7 +1141,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       columnSpacing: 6.0,
       horizontalMargin: 2,
       headingRowHeight: 50,
-      dataRowHeight: 100,
+      // [修正] 成績タブの過去走カードを7行表示にするため、全タブ共通の行高を100→140に変更 (v.2026.9.22+26092203)
+      dataRowHeight: 140,
       headingTextStyle: const TextStyle(
         fontSize: 11.0,
         fontWeight: FontWeight.bold,
