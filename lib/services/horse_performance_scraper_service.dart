@@ -6,6 +6,11 @@ import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
+// [追加] 成績タブ拡充: ログイン Cookie 付与とタイム指数等の保存 (v.2026.9.22+26092205)
+import 'package:flutter/foundation.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_past_race_extra_repository.dart';
+import 'package:hetaumakeiba_v2/models/horse_past_race_extra_model.dart';
+import 'package:hetaumakeiba_v2/services/netkeiba_session_service.dart';
 
 class HorsePerformanceScraperService {
   static const Map<String, String> _headers = {
@@ -19,12 +24,22 @@ class HorsePerformanceScraperService {
   static Future<List<HorseRaceRecord>> scrapeHorsePerformance(String horseId) async {
     try {
       final url = generateNetkeibaHorseUrl(horseId: horseId);
-      final response = await http.get(Uri.parse(url), headers: _headers);
+      // [修正] 成績タブ拡充: netkeiba ログイン中はアプリ内 WebView の Cookie を付与する (v.2026.9.22+26092205)
+      final requestHeaders = Map<String, String>.from(_headers);
+      final cookieHeader = await NetkeibaSessionService.getCookieHeader(url);
+      final bool isLoggedIn = cookieHeader != null;
+      if (cookieHeader != null) {
+        requestHeaders['Cookie'] = cookieHeader;
+      }
+      final response = await http.get(Uri.parse(url), headers: requestHeaders);
 
       if (response.statusCode == 200) {
         final document = html.parse(await CharsetConverter.decode('euc-jp', response.bodyBytes));
         final rows = document.querySelectorAll('.db_h_race_results tbody tr');
         final List<HorseRaceRecord> records = [];
+        // [追加] 成績タブ拡充: 馬場指数・タイム指数・備考の保存用 (v.2026.9.22+26092205)
+        final List<HorsePastRaceExtra> extras = [];
+        final fetchedAt = DateTime.now().toIso8601String();
 
         for (var row in rows) {
           final cells = row.querySelectorAll('td');
@@ -80,6 +95,27 @@ class HorsePerformanceScraperService {
             winnerOrSecondHorse: winnerOrSecondHorse,
             prizeMoney: prizeMoney,
           ));
+          // [追加] 成績タブ拡充: 33列レイアウト時のみ、列17=馬場指数・列20=タイム指数・列30=備考を保持する。
+          // 未ログイン時は最新走以外が '**' となり null として扱う (v.2026.9.22+26092205)
+          if (isPremiumLayout && raceId.isNotEmpty) {
+            extras.add(HorsePastRaceExtra(
+              horseId: horseId,
+              raceId: raceId,
+              trackIndex: int.tryParse(cells[17].text.trim()),
+              timeIndex: int.tryParse(cells[20].text.trim()),
+              remark: HorsePastRaceExtra.normalizeScrapedText(cells[30].text),
+              horsePageFetchedAt: fetchedAt,
+              horsePagePremium: isLoggedIn,
+            ));
+          }
+        }
+        // [追加] 成績タブ拡充: 追加情報をマージ保存（失敗しても戦績の戻り値には影響させない） (v.2026.9.22+26092205)
+        if (extras.isNotEmpty) {
+          try {
+            await HorsePastRaceExtraRepository().upsertMerge(extras);
+          } catch (e) {
+            debugPrint('HorsePerformanceScraperService: extras save failed for $horseId: $e');
+          }
         }
         return records;
       } else {

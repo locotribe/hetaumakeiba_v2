@@ -9,6 +9,8 @@ import 'package:hetaumakeiba_v2/screens/debug/speed_index_backtest_page.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/user_model.dart';
 import 'package:hetaumakeiba_v2/services/local_auth_service.dart';
+// [追加] 成績タブ拡充: netkeiba 会員ログイン欄 (v.2026.9.22+26092205)
+import 'package:hetaumakeiba_v2/screens/netkeiba_login_page.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -396,6 +398,12 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
                     style: TextStyle(color: Colors.red),
                   ),
                 ),
+              // [追加] 成績タブ拡充: netkeiba 会員ログイン欄（有料会員データ取得用） (v.2026.9.22+26092205)
+              const Divider(height: 48),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: NetkeibaLoginSection(),
+              ),
               // [追加] フェーズ6 スピード指数バックテスト・ハーネスへの導線。
               // 開発ビルド専用(kDebugMode)で、通常UIには一切露出しない (v.2026.9.4)
               if (kDebugMode) ...[

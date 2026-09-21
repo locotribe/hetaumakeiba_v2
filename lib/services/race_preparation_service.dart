@@ -20,6 +20,10 @@ import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/training_data_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
+// [追加] 成績タブ拡充: ログイン中のタイム指数取り直し判定用 (v.2026.9.22+26092205)
+import 'package:hetaumakeiba_v2/db/repositories/horse_past_race_extra_repository.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/services/netkeiba_session_service.dart';
 
 /// 1ステップ分の実処理。戻り値は取得できた件数(itemCount)。
 /// テストではネットワークを伴わない差し替え実装を注入する。
@@ -266,6 +270,24 @@ class RacePreparationService {
 
   // race_page.dartの_fetchAndSaveRaceResult()と同じ冪等パターン:
   // 既に成績がある馬はforce時以外スクレイプしない (v.2026.9.5+26090502)
+  // [追加] 成績タブ拡充: 取り直し判定。ログインしていなければ常に false (v.2026.9.22+26092205)
+  Future<bool> _needsPremiumRefresh(String horseId, List<HorseRaceRecord> records) async {
+    try {
+      if (!await NetkeibaSessionService.isLoggedIn()) return false;
+      final raceIds = records
+          .take(5)
+          .map((r) => r.raceId)
+          .where((id) => id.isNotEmpty)
+          .toList();
+      if (raceIds.isEmpty) return false;
+      final extras = await HorsePastRaceExtraRepository().getForHorse(horseId, raceIds);
+      return raceIds.any((id) => extras[id]?.horsePagePremium != true);
+    } catch (e) {
+      debugPrint('RacePreparationService: _needsPremiumRefresh failed for $horseId: $e');
+      return false;
+    }
+  }
+
   Future<int> _defaultHorsePerformance({
     required String raceId,
     required String raceDate,
@@ -275,7 +297,11 @@ class RacePreparationService {
     int total = 0;
     for (final horseId in horseIds) {
       final existing = await _horseRepository.getHorsePerformanceRecords(horseId);
-      if (force || existing.isEmpty) {
+      // [修正] 成績タブ拡充: ログイン中で、表示対象の直近5走に「ログイン状態で取得した競走馬ページの情報」が
+      // 無い馬だけ、競走馬ページを1回取り直す（タイム指数・備考の取得用） (v.2026.9.22+26092205)
+      final needsPremiumRefresh =
+          !force && existing.isNotEmpty && await _needsPremiumRefresh(horseId, existing);
+      if (force || existing.isEmpty || needsPremiumRefresh) {
         try {
           final scraped =
               await HorsePerformanceScraperService.scrapeHorsePerformance(horseId);
