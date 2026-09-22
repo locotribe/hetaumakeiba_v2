@@ -1,12 +1,20 @@
 // lib/widgets/shutuba_tabs/training_tab.dart
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
-import 'package:hetaumakeiba_v2/models/training_time_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_preparation_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
+// [追加] 調教タブ改修Step5: netkeiba 調教・過去成績・表示用データ (v.2026.9.23+26092302)
+import 'package:hetaumakeiba_v2/db/repositories/netkeiba_training_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+import 'package:hetaumakeiba_v2/logic/training_merge.dart';
+import 'package:hetaumakeiba_v2/logic/training_display.dart';
+import 'package:hetaumakeiba_v2/services/netkeiba_session_service.dart';
+import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 import 'package:hetaumakeiba_v2/services/training_data_service.dart';
 // [追加] 調教タブ改修Step3: netkeiba の最終追切・厩舎コメント (v.2026.9.22+26092212)
 import 'package:hetaumakeiba_v2/services/netkeiba_training_service.dart';
@@ -14,6 +22,8 @@ import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 // [追加] 調教タブ改修Step1: レース日での絞り込みとラップ計算の共通関数 (v.2026.9.22+26092210)
 import 'package:hetaumakeiba_v2/utils/training_date_utils.dart';
 
+// [修正] 調教タブ改修Step5: netkeiba 調教（評価・短評・併せ馬・厩舎コメント）を加えて表示を作り直し。
+// 「最終追い切り」（1頭1枚）と「中間追い切り含む」（レースごとのまとまり）を切り替える (v.2026.9.23+26092302)
 class TrainingTabWidget extends StatefulWidget {
   final String raceId;
   final String raceDate;
@@ -35,34 +45,76 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
   final TrainingDataService _service = TrainingDataService();
   // [追加] Phase 4-C: 調教データの取得状態(未取得/取得中/取得済み0件等)の表示に使う (v.2026.9.5+26090503)
   final RacePreparationRepository _preparationRepository = RacePreparationRepository();
-  Map<String, List<TrainingTimeModel>> _trainingData = {};
+  // [追加] 調教タブ改修Step5: netkeiba 調教と過去成績（レースごとのまとまり用） (v.2026.9.23+26092302)
+  final NetkeibaTrainingRepository _netkeibaRepository = NetkeibaTrainingRepository();
+  final HorseRepository _horseRepository = HorseRepository();
+
+  Map<String, List<MergedTrainingEntry>> _entries = {};
+  Map<String, NetkeibaTrainingReview> _raceReviews = {};
+  Map<String, Map<String, NetkeibaTrainingReview>> _horseReviews = {};
+  Map<String, List<HorseRaceRecord>> _pastRaces = {};
+  final Set<String> _loadingHorseIds = {};
+  bool _showAll = false;
+  bool _isLoggedIn = false;
   RacePreparationStatus? _preparationStatus;
   bool _isLoading = true;
+
+  static const Color _tokeiColor1 = Color(0xFFFC855C);
+  static const Color _tokeiColor2 = Color(0xFFFDF2C1);
+  static const Color _rankBColor = Color(0xFF007EFF);
+  static const double _gateBarWidth = 26;
 
   @override
   void initState() {
     super.initState();
-    _loadTrainingData();
+    _loadTrainingData().then((_) => _autoFetchRaceTrainingIfNeeded());
   }
 
-  Future<void> _loadTrainingData() async {
-    setState(() { _isLoading = true; });
-    Map<String, List<TrainingTimeModel>> newData = {};
-    for (var horse in widget.horses) {
-      final records = await _repository.getTrainingTimesForHorse(horse.horseId);
-      // [修正] 調教タブ改修Step1: レース当日以降の調教を除外する (v.2026.9.22+26092210)
-      newData[horse.horseId] = filterTrainingBeforeRace(records, widget.raceDate);
+  String get _raceYmd => toYyyymmdd(widget.raceDate) ?? '';
+
+  Future<void> _loadTrainingData({bool showSpinner = true}) async {
+    if (showSpinner) {
+      setState(() { _isLoading = true; });
     }
+    final raceYmd = _raceYmd;
+    final entries = <String, List<MergedTrainingEntry>>{};
+    final horseReviews = <String, Map<String, NetkeibaTrainingReview>>{};
+    final pastRaces = <String, List<HorseRaceRecord>>{};
+    for (final horse in widget.horses) {
+      // [修正] 調教タブ改修Step1: レース当日以降の調教を除外する (v.2026.9.22+26092210)
+      final pakara = filterTrainingBeforeRace(
+          await _repository.getTrainingTimesForHorse(horse.horseId),
+          widget.raceDate);
+      var netkeiba =
+          await _netkeibaRepository.getSessionsForHorse(horse.horseId);
+      if (raceYmd.isNotEmpty) {
+        netkeiba = netkeiba
+            .where((s) => s.trainingDate.compareTo(raceYmd) < 0)
+            .toList();
+      }
+      entries[horse.horseId] = mergeTrainingSources(pakara, netkeiba);
+      final reviews =
+          await _netkeibaRepository.getReviewsForHorse(horse.horseId);
+      horseReviews[horse.horseId] = {for (final r in reviews) r.raceId: r};
+      pastRaces[horse.horseId] =
+          await _horseRepository.getHorsePerformanceRecords(horse.horseId);
+    }
+    final raceReviews =
+        await _netkeibaRepository.getReviewsForRace(widget.raceId);
     // [追加] Phase 4-C: 調教データの取得状態を読み、見出し文言に反映する (v.2026.9.5+26090503)
     final preparationStatus = await _preparationRepository.getStep(
         widget.raceId, PreparationStep.training);
-    if (mounted) {
-      setState(() {
-        _trainingData = newData;
-        _preparationStatus = preparationStatus;
-        _isLoading = false;
-      });
-    }
+    final isLoggedIn = await NetkeibaSessionService.isLoggedIn();
+    if (!mounted) return;
+    setState(() {
+      _entries = entries;
+      _raceReviews = raceReviews;
+      _horseReviews = horseReviews;
+      _pastRaces = pastRaces;
+      _preparationStatus = preparationStatus;
+      _isLoggedIn = isLoggedIn;
+      _isLoading = false;
+    });
   }
 
   // [追加] Phase 4-C: 準備状態に応じた調教データの見出し文言を返す (v.2026.9.5+26090503)
@@ -137,8 +189,8 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
     }, key: 'training:${widget.raceId}');
   }
 
-  // [追加] 調教タブ改修Step4: 馬のカードを開いたとき、競走馬調教ページが未取得・古ければ取得する
-  // （ログイン中のみ。表示への反映は Step 5） (v.2026.9.23+26092301)
+  // [追加] 調教タブ改修Step4: 馬のカードを開いたとき、競走馬調教ページが未取得・古ければ取得する (v.2026.9.23+26092301)
+  // [修正] 調教タブ改修Step5: 取得中の表示と、取得後の再読み込み（スピナーなし）を追加 (v.2026.9.23+26092302)
   void _fetchHorseTrainingIfNeeded(String horseId) {
     ScrapingManager().addRequest('競走馬の調教取得', () async {
       final service = NetkeibaTrainingService();
@@ -146,95 +198,426 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
           raceId: widget.raceId)) {
         return;
       }
-      await service.fetchAndSaveHorseTraining(horseId);
+      if (mounted) setState(() => _loadingHorseIds.add(horseId));
+      final result = await service.fetchAndSaveHorseTraining(horseId);
+      if (!mounted) return;
+      setState(() => _loadingHorseIds.remove(horseId));
+      if (result != null) await _loadTrainingData(showSpinner: false);
     }, key: 'training_nk_horse:$horseId');
   }
 
-  // YYYYMMDD -> YYYY年M月D日(曜) に変換
-  String _formatDateJP(String yyyymmdd) {
-    if (yyyymmdd.length != 8) return yyyymmdd;
-    try {
-      final date = DateTime.parse(yyyymmdd);
-      final weekdays = ['月', '火', '水', '木', '金', '土', '日'];
-      final weekdayStr = weekdays[date.weekday - 1];
-      return DateFormat('yyyy年M月d日').format(date) + '($weekdayStr)';
-    } catch (e) {
-      return yyyymmdd;
+  // [追加] 調教タブ改修Step5: レース日まで0〜7日で、このレースの最終追切の評価が未取得なら自動取得する。
+  // 追切の公開（水・木曜）より前にレース準備が済んだレースのため。同じレースで6時間に1回まで (v.2026.9.23+26092302)
+  Future<void> _autoFetchRaceTrainingIfNeeded() async {
+    if (!mounted || !_isLoggedIn) return;
+    final raceDay = DateTime.tryParse(_raceYmd);
+    if (raceDay == null) return;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final days = raceDay.difference(today).inDays;
+    if (days < 0 || days > 7) return;
+    final hasOikiri =
+        _raceReviews.values.any((r) => r.rank != null || r.critic != null);
+    if (hasOikiri) return;
+    final prefs = await SharedPreferences.getInstance();
+    final prefKey = 'nk_oikiri_auto_${widget.raceId}';
+    final last = DateTime.tryParse(prefs.getString(prefKey) ?? '');
+    if (last != null && now.difference(last) < const Duration(hours: 6)) {
+      return;
+    }
+    await prefs.setString(prefKey, now.toIso8601String());
+    final horseIds = widget.horses.map((h) => h.horseId).toList();
+    ScrapingManager().addRequest('最終追切の取得', () async {
+      await NetkeibaTrainingService().fetchAndSaveRaceTraining(
+        raceId: widget.raceId,
+        horseIds: horseIds,
+      );
+      if (mounted) await _loadTrainingData(showSpinner: false);
+    }, key: 'training_nk_race:${widget.raceId}');
+  }
+
+  // [削除] 調教タブ改修Step5: 旧表示の _formatDateJP / _formatTimeJP / _buildTimeAndLapRow は
+  // 表示用データ（logic/training_display.dart）と以下の新しい部品に置き換えた (v.2026.9.23+26092302)
+
+  Color? _cellColor(int color) {
+    if (color == 1) return _tokeiColor1;
+    if (color == 2) return _tokeiColor2;
+    return null;
+  }
+
+  Color _rankColor(String rank) {
+    switch (rank) {
+      case 'A':
+        return Colors.red;
+      case 'B':
+        return _rankBColor;
+      case 'C':
+        return Colors.black87;
+      default:
+        return Colors.grey;
     }
   }
 
-  // HHmm -> HH時mm分 に変換
-  String _formatTimeJP(String hhmm) {
-    if (hhmm.length != 4) return hhmm;
-    return '${hhmm.substring(0, 2)}時${hhmm.substring(2, 4)}分';
+  /// 厩舎コメントの評価アイコン番号 → 印（判明分のみ）
+  String? _stableMarkLabel(String? code) {
+    if (code == '02') return '○';
+    return null;
   }
 
-  // タイム表示とラップ計算・色付け用のウィジェット
-  Widget _buildTimeAndLapRow(TrainingTimeModel r) {
-    // データがあるハロンだけを抽出
-    List<Map<String, dynamic>> furlongs = [];
-    if (r.f6 != null) furlongs.add({'label': '6F', 'time': r.f6!});
-    if (r.f5 != null) furlongs.add({'label': '5F', 'time': r.f5!});
-    if (r.f4 != null) furlongs.add({'label': '4F', 'time': r.f4!});
-    if (r.f3 != null) furlongs.add({'label': '3F', 'time': r.f3!});
-    if (r.f2 != null) furlongs.add({'label': '2F', 'time': r.f2!});
-    if (r.f1 != null) furlongs.add({'label': '1F', 'time': r.f1!});
+  /// 左端の枠色の帯と馬番（枠順確定前・馬番0は灰色）
+  Widget _buildGateBar(PredictionHorseDetail horse) {
+    final hasGate = horse.gateNumber > 0 && horse.horseNumber > 0;
+    final background =
+        hasGate ? horse.gateNumber.gateBackgroundColor : Colors.grey.shade400;
+    final foreground =
+        hasGate ? horse.gateNumber.gateTextColor : Colors.white;
+    return Container(
+      decoration: BoxDecoration(
+        color: background,
+        border: Border(right: BorderSide(color: Colors.grey.shade300)),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        horse.horseNumber > 0 ? '${horse.horseNumber}' : '-',
+        style: TextStyle(
+            color: foreground, fontWeight: FontWeight.bold, fontSize: 14),
+      ),
+    );
+  }
 
-    if (furlongs.isEmpty) return const Text('タイムデータなし');
+  Widget _buildHorseName(PredictionHorseDetail horse) {
+    return Text(
+      horse.horseName,
+      style: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.bold,
+        decoration: horse.isScratched ? TextDecoration.lineThrough : null,
+        color: horse.isScratched ? Colors.grey : null,
+      ),
+    );
+  }
 
-    // [修正] 調教タブ改修Step1: 2F→1F区間が消えて列がずれていたため、共通関数で
-    // 「各列の下にその列から始まる1Fのラップ（最後は1Fそのもの）」を出す (v.2026.9.22+26092210)
-    final List<double> laps = calcTrainingLaps(
-        furlongs.map((f) => f['time'] as double).toList());
+  Widget _buildShortReview(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text(text,
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade800)),
+    );
+  }
 
-    // ラップ色の判定（最後の1Fが、その前のラップより速いか遅いか）
-    Color lastLapColor = Colors.black87;
-    if (laps.length >= 2) {
-      if (laps.last < laps[laps.length - 2]) {
-        lastLapColor = Colors.red; // 加速ラップ
-      } else if (laps.last > laps[laps.length - 2]) {
-        lastLapColor = Colors.blue; // 減速ラップ
-      }
-    }
+  Widget _buildStableComment(NetkeibaTrainingReview review) {
+    final mark = _stableMarkLabel(review.stableMark);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text.rich(
+        TextSpan(
+          style: const TextStyle(fontSize: 12, color: Colors.black87),
+          children: [
+            TextSpan(
+              text: '厩舎 ',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.green.shade800),
+            ),
+            if (mark != null)
+              TextSpan(
+                  text: '$mark ',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+            TextSpan(text: review.stableComment ?? ''),
+            if (review.stableSpeaker != null)
+              TextSpan(
+                text: '〈${review.stableSpeaker}〉',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
+  /// 調教1本（見出し行＋時計5マス＋脚色(位置)＋併せ馬）
+  Widget _buildSessionBlock(TrainingRowView row) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ヘッダー (ハロン)
-        Row(
-          children: furlongs.map((f) => SizedBox(
-              width: 45,
-              child: Text(f['label'], textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey))
-          )).toList(),
+        Container(
+          color: Colors.grey.shade200,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(row.headerLabel,
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.black87)),
+              ),
+              if (row.isBestTime)
+                Container(
+                  margin: const EdgeInsets.only(right: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.orange.shade700),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text('一番時計',
+                      style: TextStyle(
+                          fontSize: 10, color: Colors.orange.shade800)),
+                ),
+              if (row.critic != null)
+                Text(row.critic!,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.bold)),
+              if (row.rank != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Text(
+                    row.rank!,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: _rankColor(row.rank!),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
-        // 全体時計
-        Row(
-          children: furlongs.map((f) => SizedBox(
-              width: 45,
-              child: Text(f['time'].toStringAsFixed(1), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold))
-          )).toList(),
-        ),
-        // ラップタイム
-        Row(
-          children: List.generate(furlongs.length, (i) {
-            final isLast = i == furlongs.length - 1;
-            // [修正] 調教タブ改修Step1: ラップは全列に値がある (v.2026.9.22+26092210)
-            final lapText = '(${laps[i].toStringAsFixed(1)})';
-            return SizedBox(
-              width: 45,
-              child: Text(
-                lapText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isLast ? lastLapColor : Colors.grey[700],
-                  fontWeight: isLast ? FontWeight.bold : FontWeight.normal,
+        _buildTimeGrid(row),
+        for (final partner in row.partners)
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(partner.fullText,
+                style: TextStyle(fontSize: 12, color: Colors.blue.shade800)),
+          ),
+      ],
+    );
+  }
+
+  /// 時計5マス（累計＋ラップ、netkeiba の色）と脚色(位置)。最後の1Fのラップは加速=赤・減速=青
+  Widget _buildTimeGrid(TrainingRowView row) {
+    final borderColor = Colors.grey.shade300;
+    final lastLapIndex = row.cells.lastIndexWhere((c) => c.lap != null);
+    final trend = row.lastLapTrend;
+    final trendColor = trend < 0
+        ? Colors.red
+        : (trend > 0 ? Colors.blue : Colors.grey.shade700);
+    return Container(
+      decoration: BoxDecoration(border: Border.all(color: borderColor)),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (int i = 0; i < row.cells.length; i++)
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _cellColor(row.cells[i].color),
+                    border: Border(right: BorderSide(color: borderColor)),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        row.cells[i].time?.toStringAsFixed(1) ?? '-',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        row.cells[i].lap != null
+                            ? '(${row.cells[i].lap!.toStringAsFixed(1)})'
+                            : '',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: i == lastLapIndex
+                              ? trendColor
+                              : Colors.grey.shade700,
+                          fontWeight: i == lastLapIndex
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            );
-          }),
+            SizedBox(
+              width: 56,
+              child: Center(
+                child: Text(row.loadLabel ?? '',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12)),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  /// 最終追い切り（1頭1枚）
+  Widget _buildFinalCard(PredictionHorseDetail horse) {
+    final entries = _entries[horse.horseId] ?? const <MergedTrainingEntry>[];
+    final finalEntry = pickFinalEntry(entries, widget.raceId);
+    final review = _raceReviews[horse.horseId];
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(_gateBarWidth + 8, 8, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHorseName(horse),
+                if (review?.shortReview != null)
+                  _buildShortReview(review!.shortReview!),
+                const SizedBox(height: 6),
+                if (finalEntry == null)
+                  Text('調教データなし',
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600))
+                else
+                  _buildSessionBlock(buildTrainingRowView(finalEntry)),
+                if (review?.stableComment != null)
+                  _buildStableComment(review!),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: _gateBarWidth,
+            child: _buildGateBar(horse),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 中間追い切り含む（馬ごとの折りたたみ、レースごとのまとまり）
+  Widget _buildAllCard(PredictionHorseDetail horse) {
+    final entries = _entries[horse.horseId] ?? const <MergedTrainingEntry>[];
+    final finalEntry = pickFinalEntry(entries, widget.raceId);
+    final finalRow =
+        finalEntry == null ? null : buildTrainingRowView(finalEntry);
+    final review = _raceReviews[horse.horseId];
+    final groups = groupTrainingByRace(
+      entries: entries,
+      pastRaces: _pastRaces[horse.horseId] ?? const <HorseRaceRecord>[],
+      currentRaceId: widget.raceId,
+      currentRaceYmd: _raceYmd,
+    );
+    final isFetching = _loadingHorseIds.contains(horse.horseId);
+    final summary = finalRow == null
+        ? '調教データなし'
+        : [finalRow.dateLabel, finalRow.courseLabel, finalRow.critic, finalRow.rank]
+            .whereType<String>()
+            .join(' ');
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: _gateBarWidth),
+            child: ExpansionTile(
+              key: PageStorageKey<String>('training_all_${horse.horseId}'),
+              // [追加] 調教タブ改修Step4: 開いたときに競走馬調教ページを取得（必要なときだけ） (v.2026.9.23+26092301)
+              onExpansionChanged: (expanded) {
+                if (expanded) _fetchHorseTrainingIfNeeded(horse.horseId);
+              },
+              title: _buildHorseName(horse),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (review?.shortReview != null)
+                    _buildShortReview(review!.shortReview!),
+                  Text('最終: $summary',
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.black87)),
+                ],
+              ),
+              childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (isFetching) const LinearProgressIndicator(minHeight: 2),
+                if (groups.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Text('調教データなし',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600)),
+                  )
+                else
+                  ...groups.map((group) => _buildRaceGroup(horse, group)),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: _gateBarWidth,
+            child: _buildGateBar(horse),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// レースごとのまとまり（見出し・着順・短評・調教）
+  Widget _buildRaceGroup(PredictionHorseDetail horse, TrainingRaceGroup group) {
+    NetkeibaTrainingReview? review;
+    if (group.isCurrent) {
+      review = _raceReviews[horse.horseId];
+    }
+    final raceId = group.raceId;
+    if (review == null && raceId != null) {
+      review = _horseReviews[horse.horseId]?[raceId];
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            color: group.isCurrent
+                ? Colors.green.shade100
+                : Colors.blueGrey.shade50,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(group.title,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.bold)),
+                ),
+                if (group.result != null)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade200,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(group.result!,
+                        style: const TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+          ),
+          if (review?.shortReview != null)
+            _buildShortReview(review!.shortReview!),
+          for (final entry in group.entries)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: _buildSessionBlock(buildTrainingRowView(entry)),
+            ),
+        ],
+      ),
     );
   }
 
@@ -247,9 +630,12 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Text(_trainingStatusLabel(), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Text(_trainingStatusLabel(),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ),
               ),
               OutlinedButton.icon(
                 onPressed: _fetchFromApi,
@@ -263,73 +649,47 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+          child: Row(
+            children: [
+              ToggleButtons(
+                isSelected: [!_showAll, _showAll],
+                onPressed: (index) => setState(() => _showAll = index == 1),
+                borderRadius: BorderRadius.circular(6),
+                constraints:
+                    const BoxConstraints(minHeight: 32, minWidth: 110),
+                children: const [
+                  Text('最終追い切り', style: TextStyle(fontSize: 12)),
+                  Text('中間追い切り含む', style: TextStyle(fontSize: 12)),
+                ],
+              ),
+              if (!_isLoggedIn)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      '※netkeiba未ログインのため評価・コメントは表示されません',
+                      maxLines: 2,
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : ListView.builder(
-            itemCount: widget.horses.length,
-            itemBuilder: (context, index) {
-              final horse = widget.horses[index];
-              final records = _trainingData[horse.horseId] ?? [];
-
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: ExpansionTile(
-                  // [追加] 調教タブ改修Step4: 開いたときに競走馬調教ページを取得（必要なときだけ） (v.2026.9.23+26092301)
-                  onExpansionChanged: (expanded) {
-                    if (expanded) _fetchHorseTrainingIfNeeded(horse.horseId);
+                  itemCount: widget.horses.length,
+                  itemBuilder: (context, index) {
+                    final horse = widget.horses[index];
+                    return _showAll
+                        ? _buildAllCard(horse)
+                        : _buildFinalCard(horse);
                   },
-                  title: Text(
-                    '${horse.horseNumber}番 ${horse.horseName}',
-                    style: TextStyle(
-                      decoration: horse.isScratched ? TextDecoration.lineThrough : null,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  // サブタイトル（最新の日付・場所）
-                  subtitle: Text(
-                    records.isNotEmpty
-                        ? '最新: ${_formatDateJP(records.first.trainingDate)} (${records.first.trackType} / ${records.first.location})'
-                        : '調教データなし',
-                    style: TextStyle(color: records.isNotEmpty ? Colors.black87 : Colors.grey, fontSize: 13),
-                  ),
-                  children: records.map((r) {
-                    return Container(
-                      decoration: BoxDecoration(
-                        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                      ),
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 日付・時間・場所
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('${_formatDateJP(r.trainingDate)}  ${_formatTimeJP(r.trainingTime)}',
-                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: r.trackType == 'ウッド' ? Colors.green.shade100 : Colors.orange.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text('${r.trackType} / ${r.location}',
-                                    style: TextStyle(fontSize: 12, color: r.trackType == 'ウッド' ? Colors.green.shade800 : Colors.orange.shade800)),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          // タイム・ラップ表示
-                          _buildTimeAndLapRow(r),
-                        ],
-                      ),
-                    );
-                  }).toList(),
                 ),
-              );
-            },
-          ),
         ),
       ],
     );
