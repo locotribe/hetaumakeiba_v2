@@ -19,6 +19,8 @@ import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/training_data_service.dart';
+// [追加] 調教タブ改修Step3: netkeiba の最終追切・厩舎コメント (v.2026.9.22+26092212)
+import 'package:hetaumakeiba_v2/services/netkeiba_training_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 // [追加] 成績タブ拡充: ログイン中のタイム指数取り直し判定用 (v.2026.9.22+26092205)
 import 'package:hetaumakeiba_v2/db/repositories/horse_past_race_extra_repository.dart';
@@ -370,6 +372,17 @@ class RacePreparationService {
       raceDate: formattedDate,
       horseIds: horseIds,
     );
+
+    // [追加] 調教タブ改修Step3: netkeiba の最終追切・厩舎コメントを取得（ログイン中のみ）。
+    // 失敗しても pakara の結果（このステップの件数）には影響させない (v.2026.9.22+26092212)
+    try {
+      await NetkeibaTrainingService().fetchAndSaveRaceTraining(
+        raceId: raceId,
+        horseIds: horseIds,
+      );
+    } catch (e) {
+      debugPrint('RacePreparationService: netkeiba 調教の取得に失敗: $e');
+    }
 
     int total = 0;
     for (final horseId in horseIds) {

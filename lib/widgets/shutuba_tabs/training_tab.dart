@@ -8,6 +8,8 @@ import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_preparation_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 import 'package:hetaumakeiba_v2/services/training_data_service.dart';
+// [追加] 調教タブ改修Step3: netkeiba の最終追切・厩舎コメント (v.2026.9.22+26092212)
+import 'package:hetaumakeiba_v2/services/netkeiba_training_service.dart';
 import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 // [追加] 調教タブ改修Step1: レース日での絞り込みとラップ計算の共通関数 (v.2026.9.22+26092210)
 import 'package:hetaumakeiba_v2/utils/training_date_utils.dart';
@@ -110,6 +112,15 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
         raceDate: formattedDate,
         horseIds: horseIds,
       );
+      // [追加] 調教タブ改修Step3: netkeiba の最終追切・厩舎コメントも取得（ログイン中のみ） (v.2026.9.22+26092212)
+      try {
+        await NetkeibaTrainingService().fetchAndSaveRaceTraining(
+          raceId: widget.raceId,
+          horseIds: horseIds,
+        );
+      } catch (e) {
+        debugPrint('TrainingTab: netkeiba 調教の取得に失敗: $e');
+      }
       if (mounted) {
         await _loadTrainingData();
       }
