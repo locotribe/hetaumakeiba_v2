@@ -1010,9 +1010,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                               onMarkChanged: (mark) => _handleMarkChanged(horse, mark),
                             ),
                             buildDataTableForTab: _buildDataTableForTab,
-                            reloadData: () {
-                              _loadShutubaData(refresh: true);
-                            },
+                            // [修正] 馬詳細タブStep2: メモ保存後に出馬表を丸ごと取り直さず、メモだけ画面に反映する。
+                            // 個別ラップの取得は出馬表を開いたとき（_loadShutubaData）のまま (v.2026.9.23+26092307)
+                            onMemoSaved: _onMemoSaved,
+                            reloadMemos: _reloadMemosOnly,
                           ),
                           TrainingTabWidget(
                             raceId: widget.raceId,
@@ -1112,6 +1113,33 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       setState(() => horse.userMark = newMark);
       _updateMarkAndSaveInBackground(newMark);
     }
+  }
+
+  // [追加] 馬詳細タブStep2: 1頭のメモを保存したとき、その馬のメモだけ差し替えて描き直す。
+  // 出馬表の取り直し（通信・プロフィール補完・レース準備・個別ラップ取得）は行わない (v.2026.9.23+26092307)
+  void _onMemoSaved(PredictionHorseDetail horse, HorseMemo memo) {
+    if (!mounted) return;
+    setState(() {
+      horse.userMemo = memo;
+    });
+  }
+
+  // [追加] 馬詳細タブStep2: 一括編集・インポートの後、このレースのメモだけDBから読み直して描き直す (v.2026.9.23+26092307)
+  Future<void> _reloadMemosOnly() async {
+    final userId = UserSession().localUserId;
+    final raceData = _predictionRaceData;
+    if (userId == null || raceData == null) return;
+    final memos = await _horseRepo.getMemosForRace(userId, widget.raceId);
+    final memosMap = {for (final memo in memos) memo.horseId: memo};
+    if (!mounted) return;
+    setState(() {
+      for (final horse in raceData.horses) {
+        final memo = memosMap[horse.horseId];
+        if (memo != null) {
+          horse.userMemo = memo;
+        }
+      }
+    });
   }
 
   /// 各タブのDataTableを生成するための共通ラッパー

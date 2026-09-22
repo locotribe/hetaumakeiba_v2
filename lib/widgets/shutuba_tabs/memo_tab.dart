@@ -1,37 +1,14 @@
 // lib/widgets/shutuba_tabs/memo_tab.dart
 
-import 'dart:io';
-
-import 'package:csv/csv.dart';
 import 'package:data_table_2/data_table_2.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
-// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
-import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_memo_edit_page.dart';
 import 'package:hetaumakeiba_v2/screens/shutuba_table_page.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/info_tab.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-
-class _PastMemoDetail {
-  final String raceName;
-  final String date;
-  final String rank; // "1着", "取消" など
-  final String predictionMemo;
-  final String reviewMemo;
-
-  _PastMemoDetail({
-    required this.raceName,
-    required this.date,
-    required this.rank,
-    required this.predictionMemo,
-    required this.reviewMemo,
-  });
-}
+// [修正] 馬詳細タブStep2: メモ入力ダイアログ・過去メモ・CSV入出力を共通ファイルに移した。見た目は変更なし (v.2026.9.23+26092307)
+import 'package:hetaumakeiba_v2/widgets/memo/horse_memo_parts.dart';
 
 class MemoTabWidget extends StatefulWidget {
   final String raceId;
@@ -44,7 +21,10 @@ class MemoTabWidget extends StatefulWidget {
   required List<PredictionHorseDetail> horses,
   required List<DataCell> Function(PredictionHorseDetail horse) cellBuilder,
   }) buildDataTableForTab;
-  final VoidCallback reloadData;
+  // [修正] 馬詳細タブStep2: 保存後に出馬表を丸ごと取り直す reloadData をやめ、
+  // 1頭の保存は onMemoSaved、一括編集・インポートは reloadMemos（メモだけ読み直す）にした (v.2026.9.23+26092307)
+  final void Function(PredictionHorseDetail horse, HorseMemo memo) onMemoSaved;
+  final Future<void> Function() reloadMemos;
 
   const MemoTabWidget({
     Key? key,
@@ -54,7 +34,8 @@ class MemoTabWidget extends StatefulWidget {
     required this.onSort,
     required this.buildMarkDropdown,
     required this.buildDataTableForTab,
-    required this.reloadData,
+    required this.onMemoSaved,
+    required this.reloadMemos,
   }) : super(key: key);
 
   @override
@@ -62,216 +43,22 @@ class MemoTabWidget extends StatefulWidget {
 }
 
 class _MemoTabWidgetState extends State<MemoTabWidget> {
-  final HorseRepository _horseRepo = HorseRepository();
-
-  Future<void> _showMemoDialog(PredictionHorseDetail horse) async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
-    final userId = UserSession().localUserId;
-    if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ログインが必要です。')),
-      );
-      return;
-    }
-
-    final memoController = TextEditingController(text: horse.userMemo?.predictionMemo);
-    final formKey = GlobalKey<FormState>();
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('${horse.horseName} - 予想メモ'),
-          content: Form(
-            key: formKey,
-            child: TextFormField(
-              controller: memoController,
-              autofocus: true,
-              maxLines: null,
-              decoration: const InputDecoration(
-                hintText: 'ここにメモを入力...',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('キャンセル'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (formKey.currentState!.validate()) {
-                  final newMemo = HorseMemo(
-                    id: horse.userMemo?.id,
-                    userId: userId,
-                    raceId: widget.raceId,
-                    horseId: horse.horseId,
-                    predictionMemo: memoController.text,
-                    reviewMemo: horse.userMemo?.reviewMemo,
-                    odds: horse.userMemo?.odds,
-                    popularity: horse.userMemo?.popularity,
-                    timestamp: DateTime.now(),
-                  );
-                  await _horseRepo.insertOrUpdateHorseMemo(newMemo);
-                  if (mounted) {
-                    Navigator.of(context).pop();
-                    widget.reloadData();
-                  }
-                }
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        );
-      },
+  Future<void> _editMemo(PredictionHorseDetail horse) async {
+    final memo = await showPredictionMemoDialog(
+      context,
+      horse: horse,
+      raceId: widget.raceId,
     );
-  }
-
-  Future<void> _exportMemosAsCsv(PredictionRaceData raceData) async {
-    final List<List<dynamic>> rows = [];
-    rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'predictionMemo', 'reviewMemo']);
-
-    for (final horse in raceData.horses) {
-      rows.add([
-        widget.raceId,
-        horse.horseId,
-        horse.horseNumber,
-        horse.horseName,
-        horse.userMemo?.predictionMemo ?? '',
-        horse.userMemo?.reviewMemo ?? '',
-      ]);
-    }
-
-    final String csv = const ListToCsvConverter().convert(rows);
-
-    final directory = await getTemporaryDirectory();
-    final path = '${directory.path}/${widget.raceId}_memos.csv';
-    final file = File(path);
-    await file.writeAsString(csv);
-
-    await Share.shareXFiles([XFile(path)], text: '${raceData.raceName} のメモ');
-  }
-
-  Future<void> _importMemosFromCsv() async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
-    final userId = UserSession().localUserId;
-    if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ログインが必要です。')),
-      );
-      return;
-    }
-
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
-
-      if (result == null || result.files.single.path == null) {
-        return;
-      }
-
-      final filePath = result.files.single.path!;
-      final file = File(filePath);
-      final csvString = await file.readAsString();
-
-      final List<List<dynamic>> rows = const CsvToListConverter().convert(csvString);
-
-      if (rows.length < 2) {
-        throw Exception('CSVファイルにデータがありません。');
-      }
-      final header = rows.first;
-      if (header.join(',') != 'raceId,horseId,horseNumber,horseName,predictionMemo,reviewMemo') {
-        throw Exception('CSVファイルのヘッダー形式が正しくありません。');
-      }
-
-      final List<HorseMemo> memosToUpdate = [];
-      for (int i = 1; i < rows.length; i++) {
-        final row = rows[i];
-        final csvRaceId = row[0].toString();
-
-        if (csvRaceId != widget.raceId) {
-          throw Exception('CSVファイルのレースIDが、現在表示しているレースと一致しません。');
-        }
-
-        memosToUpdate.add(HorseMemo(
-          userId: userId,
-          raceId: csvRaceId,
-          horseId: row[1].toString(),
-          predictionMemo: row[4].toString(),
-          reviewMemo: row[5].toString(),
-          timestamp: DateTime.now(),
-        ));
-      }
-
-      await _horseRepo.insertOrUpdateMultipleMemos(memosToUpdate);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${memosToUpdate.length}件のメモをインポートしました。')),
-        );
-        widget.reloadData();
-      }
-
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('インポートエラー: ${e.toString()}')),
-        );
-      }
+    if (memo != null && mounted) {
+      widget.onMemoSaved(horse, memo);
     }
   }
 
-  Future<List<_PastMemoDetail>> _fetchPastMemoDetails(String horseId) async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
-    final userId = UserSession().localUserId;
-    if (userId == null) return [];
-
-    final records = await _horseRepo.getHorsePerformanceRecords(horseId);
-
-    final targetRecords = records
-        .where((r) => r.raceId.isNotEmpty && r.raceId != widget.raceId)
-        .take(5)
-        .toList();
-
-    if (targetRecords.isEmpty) return [];
-
-    final raceIds = targetRecords.map((r) => r.raceId).toList();
-
-    final memos = await _horseRepo.getMemosForHorseByRaceIds(userId, horseId, raceIds);
-
-    final memosMap = {for (var m in memos) m.raceId: m};
-
-    final List<_PastMemoDetail> details = [];
-
-    for (final record in targetRecords) {
-      final memo = memosMap[record.raceId];
-
-      if (memo != null &&
-          ((memo.predictionMemo != null && memo.predictionMemo!.isNotEmpty) ||
-              (memo.reviewMemo != null && memo.reviewMemo!.isNotEmpty))) {
-
-        String date = record.date.replaceAll('-', '/').replaceAll('年', '/').replaceAll('月', '/').replaceAll('日', '');
-        if (date.startsWith('20')) {
-          date = date.substring(2);
-        }
-
-        final rankInt = int.tryParse(record.rank);
-        String rankText = rankInt != null ? '${rankInt}着' : (record.rank.isNotEmpty ? record.rank : '他');
-
-        details.add(_PastMemoDetail(
-          raceName: record.raceName,
-          date: date,
-          rank: rankText,
-          predictionMemo: memo.predictionMemo ?? '',
-          reviewMemo: memo.reviewMemo ?? '',
-        ));
-      }
+  Future<void> _importMemos() async {
+    final count = await importMemosFromCsv(context, raceId: widget.raceId);
+    if (count != null && mounted) {
+      await widget.reloadMemos();
     }
-
-    return details;
   }
 
   Widget _buildMemoCell(PredictionHorseDetail horse) {
@@ -284,7 +71,7 @@ class _MemoTabWidgetState extends State<MemoTabWidget> {
             color: hasMemo ? Colors.blueAccent : Colors.grey,
             size: 20,
           ),
-          onPressed: horse.isScratched ? null : () => _showMemoDialog(horse),
+          onPressed: horse.isScratched ? null : () => _editMemo(horse),
         ),
         Expanded(
           child: Text(
@@ -319,8 +106,8 @@ class _MemoTabWidgetState extends State<MemoTabWidget> {
                       ),
                     ),
                   );
-                  if (result == true) {
-                    widget.reloadData();
+                  if (result == true && mounted) {
+                    await widget.reloadMemos();
                   }
                 },
                 style: OutlinedButton.styleFrom(
@@ -332,7 +119,7 @@ class _MemoTabWidgetState extends State<MemoTabWidget> {
               OutlinedButton.icon(
                 icon: const Icon(Icons.file_download, size: 16),
                 label: const Text('インポート'),
-                onPressed: _importMemosFromCsv,
+                onPressed: _importMemos,
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   visualDensity: VisualDensity.compact,
@@ -343,7 +130,10 @@ class _MemoTabWidgetState extends State<MemoTabWidget> {
                 icon: const Icon(Icons.ios_share, size: 16),
                 label: const Text('エクスポート'),
                 onPressed: () {
-                  _exportMemosAsCsv(widget.predictionRaceData);
+                  exportMemosAsCsv(
+                    raceId: widget.raceId,
+                    raceData: widget.predictionRaceData,
+                  );
                 },
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -374,8 +164,11 @@ class _MemoTabWidgetState extends State<MemoTabWidget> {
               ),
               DataCell(_buildMemoCell(horse)),
               DataCell(
-                FutureBuilder<List<_PastMemoDetail>>(
-                  future: _fetchPastMemoDetails(horse.horseId),
+                FutureBuilder<List<PastMemoDetail>>(
+                  future: fetchPastMemoDetails(
+                    horseId: horse.horseId,
+                    currentRaceId: widget.raceId,
+                  ),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const SizedBox(
@@ -390,50 +183,7 @@ class _MemoTabWidgetState extends State<MemoTabWidget> {
 
                     return SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: snapshot.data!.map((detail) {
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              border: Border.all(color: Colors.grey.shade300),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${detail.date} ${detail.raceName} (${detail.rank})',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                                ),
-                                const SizedBox(height: 2),
-                                if (detail.predictionMemo.isNotEmpty)
-                                  RichText(
-                                    text: TextSpan(
-                                      style: DefaultTextStyle.of(context).style.copyWith(fontSize: 11),
-                                      children: [
-                                        const TextSpan(text: '[予] ', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-                                        TextSpan(text: detail.predictionMemo),
-                                      ],
-                                    ),
-                                  ),
-                                if (detail.reviewMemo.isNotEmpty)
-                                  RichText(
-                                    text: TextSpan(
-                                      style: DefaultTextStyle.of(context).style.copyWith(fontSize: 11),
-                                      children: [
-                                        const TextSpan(text: '[顧] ', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-                                        TextSpan(text: detail.reviewMemo),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
+                      child: PastMemoList(details: snapshot.data!),
                     );
                   },
                 ),
