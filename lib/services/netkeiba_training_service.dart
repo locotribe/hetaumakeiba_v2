@@ -4,6 +4,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+// [追加] 調教タブ改修Step4: 競走馬調教ページ（EUC-JP）と取得日時の記録 (v.2026.9.23+26092301)
+import 'package:charset_converter/charset_converter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/db/repositories/netkeiba_training_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 import 'package:hetaumakeiba_v2/logic/netkeiba_training_parser.dart';
@@ -48,6 +51,13 @@ class NetkeibaTrainingService {
 
   static String commentUrl(String raceId) =>
       'https://race.netkeiba.com/race/comment.html?race_id=$raceId';
+
+  // [追加] 調教タブ改修Step4: 競走馬調教ページ（1ページ目＝直近9レース分） (v.2026.9.23+26092301)
+  static String horseTrainingUrl(String horseId) =>
+      'https://db.netkeiba.com/horse/training.html?id=$horseId';
+
+  static String _fetchedPrefKey(String horseId) =>
+      'nk_horse_training_fetched_$horseId';
 
   /// ログイン中なら、指定レースの最終追切と厩舎コメントを取得して保存する。
   /// 未ログインなら何もしない（先頭3頭だけの中途半端なデータを保存しないため）。
@@ -110,6 +120,87 @@ class NetkeibaTrainingService {
       sessionCount: sessionCount,
       commentCount: commentCount,
     );
+  }
+
+  // [追加] 調教タブ改修Step4: 競走馬調教ページ（C）の取得・保存 (v.2026.9.23+26092301)
+  /// ログイン中なら、指定馬の競走馬調教ページ（1ページ目）を取得して保存する。
+  /// 失敗・未ログイン時は null（エラーは投げない）。
+  Future<NetkeibaHorseTrainingParseResult?> fetchAndSaveHorseTraining(
+      String horseId) async {
+    if (!await NetkeibaSessionService.isLoggedIn()) return null;
+    final url = horseTrainingUrl(horseId);
+    try {
+      final cookie = await NetkeibaSessionService.getCookieHeader(url);
+      if (cookie == null) {
+        debugPrint('NetkeibaTrainingService: Cookie が無いため取得しません ($url)');
+        return null;
+      }
+      final headers = Map<String, String>.from(_headers);
+      headers['Cookie'] = cookie;
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        debugPrint('NetkeibaTrainingService: HTTP ${response.statusCode} ($url)');
+        return null;
+      }
+      final html = await CharsetConverter.decode('euc-jp', response.bodyBytes);
+      final fetchedAt = DateTime.now().toIso8601String();
+      final result = NetkeibaTrainingParser.parseHorseTraining(html, horseId,
+          fetchedAt: fetchedAt);
+      await _repository.upsertReviewsMerge(result.reviews);
+      await _repository.upsertSessionsMerge(result.sessions);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_fetchedPrefKey(horseId), fetchedAt);
+      debugPrint('NetkeibaTrainingService: horse=$horseId レース ${result.races.length}件 / 調教 ${result.sessions.length}本 / 短評 ${result.reviews.length}件');
+      return result;
+    } catch (e) {
+      debugPrint('NetkeibaTrainingService: 競走馬調教ページの取得に失敗 (horse=$horseId): $e');
+      return null;
+    }
+  }
+
+  /// 競走馬調教ページを取り直す必要があるか（設計書 2章・指示書 Step 4 冒頭の判定）。
+  Future<bool> needsHorseTrainingFetch(String horseId,
+      {required String raceId}) async {
+    if (!await NetkeibaSessionService.isLoggedIn()) return false;
+    final prefs = await SharedPreferences.getInstance();
+    final lastText = prefs.getString(_fetchedPrefKey(horseId));
+    final last = lastText == null ? null : DateTime.tryParse(lastText);
+    if (last == null) return true;
+    final age = DateTime.now().difference(last);
+    if (age >= const Duration(hours: 12)) return true;
+    final sessions = await _repository.getSessionsForHorse(horseId);
+    final hasCurrentRace = sessions.any((s) =>
+        s.raceId == raceId &&
+        s.source == NetkeibaTrainingParser.sourceHorsePage);
+    return !hasCurrentRace && age >= const Duration(hours: 1);
+  }
+
+  /// 複数馬の競走馬調教ページを順に取得する（1頭ごとに間隔を空ける）。
+  /// [force] が true なら判定なしで全頭取り直す（取得ボタン用）。
+  Future<void> fetchAndSaveHorseTrainings({
+    required List<String> horseIds,
+    required String raceId,
+    bool force = false,
+  }) async {
+    if (!await NetkeibaSessionService.isLoggedIn()) return;
+    int fetched = 0;
+    for (final horseId in horseIds) {
+      if (!force &&
+          !await needsHorseTrainingFetch(horseId, raceId: raceId)) {
+        continue;
+      }
+      final result = await fetchAndSaveHorseTraining(horseId);
+      if (result != null) fetched++;
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+    debugPrint('NetkeibaTrainingService: 競走馬調教ページ $fetched/${horseIds.length}頭 取得 (race=$raceId)');
+    try {
+      await _logMatchStats(horseIds);
+    } catch (e) {
+      debugPrint('NetkeibaTrainingService: 突き合わせログの出力に失敗: $e');
+    }
   }
 
   /// Cookie 付きで取得し、UTF-8 の文字列で返す。失敗時は null。

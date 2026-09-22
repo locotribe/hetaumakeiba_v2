@@ -121,10 +121,33 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
       } catch (e) {
         debugPrint('TrainingTab: netkeiba 調教の取得に失敗: $e');
       }
+      // [追加] 調教タブ改修Step4: 全頭の競走馬調教ページを取り直す（ログイン中のみ） (v.2026.9.23+26092301)
+      try {
+        await NetkeibaTrainingService().fetchAndSaveHorseTrainings(
+          horseIds: horseIds,
+          raceId: widget.raceId,
+          force: true,
+        );
+      } catch (e) {
+        debugPrint('TrainingTab: 競走馬調教ページの取得に失敗: $e');
+      }
       if (mounted) {
         await _loadTrainingData();
       }
     }, key: 'training:${widget.raceId}');
+  }
+
+  // [追加] 調教タブ改修Step4: 馬のカードを開いたとき、競走馬調教ページが未取得・古ければ取得する
+  // （ログイン中のみ。表示への反映は Step 5） (v.2026.9.23+26092301)
+  void _fetchHorseTrainingIfNeeded(String horseId) {
+    ScrapingManager().addRequest('競走馬の調教取得', () async {
+      final service = NetkeibaTrainingService();
+      if (!await service.needsHorseTrainingFetch(horseId,
+          raceId: widget.raceId)) {
+        return;
+      }
+      await service.fetchAndSaveHorseTraining(horseId);
+    }, key: 'training_nk_horse:$horseId');
   }
 
   // YYYYMMDD -> YYYY年M月D日(曜) に変換
@@ -252,6 +275,10 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: ExpansionTile(
+                  // [追加] 調教タブ改修Step4: 開いたときに競走馬調教ページを取得（必要なときだけ） (v.2026.9.23+26092301)
+                  onExpansionChanged: (expanded) {
+                    if (expanded) _fetchHorseTrainingIfNeeded(horse.horseId);
+                  },
                   title: Text(
                     '${horse.horseNumber}番 ${horse.horseName}',
                     style: TextStyle(
