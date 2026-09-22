@@ -40,10 +40,10 @@ import 'package:hetaumakeiba_v2/services/race_preparation_service.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/memo_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/performance_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/starters_tab.dart';
-import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/training_tab.dart';
+// [修正] 馬詳細タブStep3: メモタブ・調教タブを廃止し、馬詳細タブにまとめた (v.2026.9.23+26092308)
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/horse_detail_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/user_mark_dropdown.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_info_tab.dart'; // ▼ 追加
@@ -118,7 +118,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    // [修正] 馬詳細タブStep3: タブを6→5（メモ・調教を馬詳細にまとめた） (v.2026.9.23+26092308)
+    _tabController = TabController(length: 5, vsync: this);
     _loadShutubaData();
 
     // [追加] Phase 4-D: horsePerformance/pastRaceResultsの完了を受けて、
@@ -820,13 +821,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                       child: ThemedTabBar(
                         controller: _tabController,
                         isScrollable: true,
+                        // [修正] 馬詳細タブStep3: 「出走馬」→「馬柱」、メモ・調教を「馬詳細」にまとめた (v.2026.9.23+26092308)
                         tabs: const [
                           Tab(text: 'レース情報'),
                           Tab(text: '展開シミュ'),
-                          Tab(text: '出走馬'),
+                          Tab(text: '馬柱'),
                           Tab(text: '成績'),
-                          Tab(text: 'メモ'),
-                          Tab(text: '調教'),
+                          Tab(text: '馬詳細'),
                         ],
                       ),
                     ),
@@ -918,6 +919,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
                       return TabBarView(
                         controller: _tabController,
+                        // [追加] 馬詳細タブStep3: タブの移動はタップのみ（馬詳細の左右スワイプは馬の切り替えに使う） (v.2026.9.23+26092308)
+                        physics: const NeverScrollableScrollPhysics(),
                         children: [
                           RaceInfoTabWidget(
                             predictionRaceData: _predictionRaceData!,
@@ -998,27 +1001,21 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                               });
                             },
                           ),
-                          MemoTabWidget(
+                          // [修正] 馬詳細タブStep3: メモタブ・調教タブを馬詳細タブにまとめた。
+                          // メモ保存後はメモだけ画面に反映（Step2 のまま）、個別ラップの取得は _loadShutubaData のまま (v.2026.9.23+26092308)
+                          HorseDetailTabWidget(
                             raceId: widget.raceId,
                             predictionRaceData: _predictionRaceData!,
                             horses: sortedHorses,
-                            onSort: _onSort,
                             buildMarkDropdown: (horse) => UserMarkDropdown(
+                              key: ValueKey('detail_${horse.horseId}_${horse.userMark?.mark}'),
                               horse: horse,
                               raceId: widget.raceId,
-                              textColor: horse.gateNumber > 0 ? horse.gateNumber.gateTextColor : Colors.black87,
+                              textColor: Colors.black87,
                               onMarkChanged: (mark) => _handleMarkChanged(horse, mark),
                             ),
-                            buildDataTableForTab: _buildDataTableForTab,
-                            // [修正] 馬詳細タブStep2: メモ保存後に出馬表を丸ごと取り直さず、メモだけ画面に反映する。
-                            // 個別ラップの取得は出馬表を開いたとき（_loadShutubaData）のまま (v.2026.9.23+26092307)
                             onMemoSaved: _onMemoSaved,
                             reloadMemos: _reloadMemosOnly,
-                          ),
-                          TrainingTabWidget(
-                            raceId: widget.raceId,
-                            raceDate: _predictionRaceData!.raceDate,
-                            horses: sortedHorses,
                           ),
                         ],
                       );

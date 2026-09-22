@@ -343,6 +343,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
           children: [
             TabBarView(
               controller: _tabController,
+              // [追加] 馬詳細タブStep3: 結果取得中もタブの移動はタップのみ（ほかの状態と同じ） (v.2026.9.23+26092308)
+              physics: const NeverScrollableScrollPhysics(),
               children: [
                 // [修正] 親タブの並び替えに合わせてプレースホルダの順序も変更 (v.2026.9.5+26090506)
                 ShutubaTablePage(raceId: widget.raceId),
