@@ -15,10 +15,14 @@ import 'package:hetaumakeiba_v2/widgets/horse_detail/pedigree_section.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/training_section.dart';
 import 'package:hetaumakeiba_v2/widgets/memo/horse_memo_parts.dart';
 
-// [追加] 馬詳細タブStep3: 出馬表の「馬詳細」タブ。馬番順・1頭1ページで、左右スワイプ／◀▶／馬番チップで馬を切り替える。
-// 項目は基本情報・血統・調教・メモ（旧メモタブ・旧調教タブをまとめた。設計書 3-2） (v.2026.9.23+26092308)
+// [追加] 馬詳細タブStep3: 出馬表の「馬詳細」タブ。馬番順・1頭1ページで、左右スワイプ／◀▶／馬番チップで馬を切り替える (v.2026.9.23+26092308)
+// [修正] 馬詳細タブStep4: チップの左端に「全」（全頭の最終追い切り一覧。PageView の1ページ目、開いたときの初期表示）を追加。
+// 項目の開閉行をやめ、見出しの下の4つのボタン（情報・血統／最終追切／中間追切／メモ）で表示を切り替える (v.2026.9.23+26092309)
 
 enum _HorseDetailMenuAction { fetchTraining, bulkEditMemos, importMemos, exportMemos }
+
+/// 馬のページに表示する内容（ボタンで切り替え、馬を変えても保つ）
+enum _HorseDetailView { info, finalTraining, interimTraining, memo }
 
 class HorseDetailTabWidget extends StatefulWidget {
   final String raceId;
@@ -47,23 +51,20 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   static const double _chipWidth = 36;
   static const double _chipSpacing = 4;
   static const double _chipListPadding = 8;
+  static const double _viewButtonHeight = 30;
 
   final HorseRepository _horseRepo = HorseRepository();
   final PageController _pageController = PageController();
   final ScrollController _chipScrollController = ScrollController();
   late List<PredictionHorseDetail> _horses;
   late final RaceTrainingViewModel _trainingViewModel;
-  int _currentIndex = 0;
-  String? _currentHorseId;
-  HorseDetailTrainingMode _trainingMode = HorseDetailTrainingMode.finalOnly;
 
-  /// 4項目の開閉（馬を切り替えても保つ）
-  final Map<String, bool> _expanded = {
-    'basic': true,
-    'pedigree': true,
-    'training': true,
-    'memo': true,
-  };
+  /// 表示中のページ（0 = 全頭一覧、1 以降 = _horses[page - 1]）
+  int _currentPage = 0;
+
+  /// 表示中の馬（全頭一覧のときは null）
+  String? _currentHorseId;
+  _HorseDetailView _view = _HorseDetailView.finalTraining;
 
   /// ページを表示したときに1頭1回だけ読む（通信なし）
   final Map<String, Future<HorseProfile?>> _profileFutures = {};
@@ -76,7 +77,6 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   void initState() {
     super.initState();
     _horses = orderHorsesForDetail(widget.horses);
-    _currentHorseId = _horses.isNotEmpty ? _horses.first.horseId : null;
     _trainingViewModel = RaceTrainingViewModel(
       raceId: widget.raceId,
       raceDate: widget.predictionRaceData.raceDate,
@@ -92,20 +92,21 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     super.didUpdateWidget(oldWidget);
     _horses = orderHorsesForDetail(widget.horses);
     _trainingViewModel.horses = _horses;
-    if (_horses.isEmpty) {
-      _currentIndex = 0;
-      _currentHorseId = null;
-      return;
+    // 親の再描画で馬のリストが作り直されても、表示中の馬（または全頭一覧）を保つ
+    int page = 0;
+    if (_currentHorseId != null) {
+      final index = _horses.indexWhere((h) => h.horseId == _currentHorseId);
+      if (index >= 0) {
+        page = index + 1;
+      } else {
+        _currentHorseId = null;
+      }
     }
-    // 親の再描画で馬のリストが作り直されても、表示中の馬を保つ
-    var index = _horses.indexWhere((h) => h.horseId == _currentHorseId);
-    if (index < 0) index = 0;
-    _currentHorseId = _horses[index].horseId;
-    if (index != _currentIndex) {
-      _currentIndex = index;
+    if (page != _currentPage) {
+      _currentPage = page;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _pageController.hasClients) {
-          _pageController.jumpToPage(_currentIndex);
+          _pageController.jumpToPage(_currentPage);
         }
       });
     }
@@ -118,6 +119,11 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     _chipScrollController.dispose();
     super.dispose();
   }
+
+  PredictionHorseDetail? get _currentHorse =>
+      _currentPage > 0 && _currentPage <= _horses.length
+          ? _horses[_currentPage - 1]
+          : null;
 
   Future<HorseProfile?> _profileFor(String horseId) {
     return _profileFutures.putIfAbsent(
@@ -133,36 +139,36 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
             ));
   }
 
-  void _goTo(int index, {bool animate = true}) {
-    if (index < 0 || index >= _horses.length) return;
+  void _goToPage(int page, {bool animate = true}) {
+    if (page < 0 || page > _horses.length) return;
     if (!_pageController.hasClients) return;
-    if (animate && (index - _currentIndex).abs() == 1) {
-      _pageController.animateToPage(index,
+    if (animate && (page - _currentPage).abs() == 1) {
+      _pageController.animateToPage(page,
           duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
     } else {
-      _pageController.jumpToPage(index);
+      _pageController.jumpToPage(page);
     }
   }
 
-  void _onPageChanged(int index) {
-    if (index < 0 || index >= _horses.length) return;
-    final horse = _horses[index];
+  void _onPageChanged(int page) {
+    if (page < 0 || page > _horses.length) return;
     setState(() {
-      _currentIndex = index;
-      _currentHorseId = horse.horseId;
+      _currentPage = page;
+      _currentHorseId = page == 0 ? null : _horses[page - 1].horseId;
     });
-    _scrollChipIntoView(index);
-    // 「中間追い切り含む」の表示中は、その馬のページを表示したときに競走馬調教ページを取得（必要なときだけ）
-    if (_trainingMode == HorseDetailTrainingMode.withInterim) {
-      _trainingViewModel.fetchHorseTrainingIfNeeded(horse.horseId);
+    _scrollChipIntoView(page);
+    // 「中間追切」を選んでいるときは、その馬のページを表示したときに競走馬調教ページを取得（必要なときだけ）
+    final horseId = _currentHorseId;
+    if (horseId != null && _view == _HorseDetailView.interimTraining) {
+      _trainingViewModel.fetchHorseTrainingIfNeeded(horseId);
     }
   }
 
-  void _scrollChipIntoView(int index) {
+  void _scrollChipIntoView(int page) {
     if (!_chipScrollController.hasClients) return;
     final position = _chipScrollController.position;
     final target = _chipListPadding +
-        index * (_chipWidth + _chipSpacing) -
+        page * (_chipWidth + _chipSpacing) -
         (position.viewportDimension - _chipWidth) / 2;
     _chipScrollController.animateTo(
       target.clamp(0.0, position.maxScrollExtent).toDouble(),
@@ -171,20 +177,20 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     );
   }
 
-  void _onTrainingModeChanged(HorseDetailTrainingMode mode) {
-    setState(() => _trainingMode = mode);
+  void _onViewChanged(_HorseDetailView view) {
+    setState(() => _view = view);
     final horseId = _currentHorseId;
-    if (mode == HorseDetailTrainingMode.withInterim && horseId != null) {
+    if (view == _HorseDetailView.interimTraining && horseId != null) {
       _trainingViewModel.fetchHorseTrainingIfNeeded(horseId);
     }
   }
 
-  /// 全頭一覧でカードをタップしたとき: その馬のページへ移り、切替を「最終追い切り」に戻す
+  /// 全頭一覧でカードをタップしたとき: その馬のページへ移り、表示を「最終追切」にする
   void _selectHorseFromList(PredictionHorseDetail horse) {
     final index = _horses.indexWhere((h) => h.horseId == horse.horseId);
     if (index < 0) return;
-    setState(() => _trainingMode = HorseDetailTrainingMode.finalOnly);
-    _goTo(index, animate: false);
+    setState(() => _view = _HorseDetailView.finalTraining);
+    _goToPage(index + 1, animate: false);
   }
 
   Future<void> _editMemo(PredictionHorseDetail horse) async {
@@ -232,12 +238,41 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     }
   }
 
-  Widget _buildChip(int index) {
-    final horse = _horses[index];
-    final hasGate = horse.gateNumber > 0;
-    final isSelected = index == _currentIndex;
+  /// 「全」チップ
+  Widget _buildAllChip() {
+    final isSelected = _currentPage == 0;
     return GestureDetector(
-      onTap: () => _goTo(index, animate: false),
+      onTap: () => _goToPage(0, animate: false),
+      child: Container(
+        width: _chipWidth,
+        margin: const EdgeInsets.only(right: _chipSpacing),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.green.shade800,
+          border: Border.all(
+            color: isSelected ? Colors.red : Colors.grey.shade500,
+            width: isSelected ? 3 : 1,
+          ),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: const Text(
+          '全',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHorseChip(int horseIndex) {
+    final horse = _horses[horseIndex];
+    final hasGate = horse.gateNumber > 0;
+    final isSelected = _currentPage == horseIndex + 1;
+    return GestureDetector(
+      onTap: () => _goToPage(horseIndex + 1, animate: false),
       child: Opacity(
         opacity: horse.isScratched ? 0.4 : 1.0,
         child: Container(
@@ -281,8 +316,10 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
                 scrollDirection: Axis.horizontal,
                 padding:
                     const EdgeInsets.symmetric(horizontal: _chipListPadding),
-                itemCount: _horses.length,
-                itemBuilder: (context, index) => _buildChip(index),
+                itemCount: _horses.length + 1,
+                itemBuilder: (context, index) => index == 0
+                    ? _buildAllChip()
+                    : _buildHorseChip(index - 1),
               ),
             ),
           ),
@@ -335,17 +372,14 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     final subLine = '${horse.jockey} ${horse.carriedWeight.toStringAsFixed(1)}'
         '  ${horse.popularity ?? '--'}人気 ${horse.odds?.toString() ?? '--'}倍';
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      color: Colors.white,
       child: Row(
         children: [
+          // 1番の馬の ◀ は全頭一覧へ戻る
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed:
-                _currentIndex > 0 ? () => _goTo(_currentIndex - 1) : null,
+            onPressed: () => _goToPage(_currentPage - 1),
           ),
           Container(
             width: 28,
@@ -422,8 +456,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            onPressed: _currentIndex < _horses.length - 1
-                ? () => _goTo(_currentIndex + 1)
+            onPressed: _currentPage < _horses.length
+                ? () => _goToPage(_currentPage + 1)
                 : null,
           ),
         ],
@@ -431,84 +465,139 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     );
   }
 
-  /// 見出しのタップで開閉する項目（開閉状態は _expanded で全ページ共通）
-  Widget _buildSection(String key, String title, Widget Function() childBuilder) {
-    final isExpanded = _expanded[key] ?? true;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: () => setState(() => _expanded[key] = !isExpanded),
-          child: Container(
-            color: Colors.grey.shade200,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(title,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.bold)),
+  /// 表示を切り替える4つのボタン（同じ幅で1行）
+  Widget _buildViewButtons() {
+    const labels = {
+      _HorseDetailView.info: '情報・血統',
+      _HorseDetailView.finalTraining: '最終追切',
+      _HorseDetailView.interimTraining: '中間追切',
+      _HorseDetailView.memo: 'メモ',
+    };
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+      child: Row(
+        children: [
+          for (final view in _HorseDetailView.values)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: InkWell(
+                  onTap: () => _onViewChanged(view),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    height: _viewButtonHeight,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _view == view
+                          ? Colors.green.shade100
+                          : Colors.white,
+                      border: Border.all(
+                        color: _view == view
+                            ? Colors.green.shade700
+                            : Colors.grey.shade400,
+                      ),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        labels[view]!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: _view == view
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: _view == view
+                              ? Colors.green.shade900
+                              : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-                Icon(isExpanded ? Icons.expand_less : Icons.expand_more,
-                    size: 20),
-              ],
+              ),
             ),
-          ),
-        ),
-        if (isExpanded)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
-            child: childBuilder(),
-          ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: Text(text,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildInfoView(PredictionHorseDetail horse) {
+    return FutureBuilder<HorseProfile?>(
+      future: _profileFor(horse.horseId),
+      builder: (context, snapshot) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _sectionLabel('基本情報'),
+          BasicInfoSection(horse: horse, profile: snapshot.data),
+          const SizedBox(height: 12),
+          _sectionLabel('血統'),
+          PedigreeSection(horse: horse, profile: snapshot.data),
+        ],
+      ),
     );
   }
 
   Widget _buildHorsePage(PredictionHorseDetail horse) {
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 24),
-      children: [
-        _buildSection(
-          'basic',
-          '基本情報',
-          () => FutureBuilder<HorseProfile?>(
-            future: _profileFor(horse.horseId),
-            builder: (context, snapshot) =>
-                BasicInfoSection(horse: horse, profile: snapshot.data),
-          ),
-        ),
-        _buildSection(
-          'pedigree',
-          '血統',
-          () => FutureBuilder<HorseProfile?>(
-            future: _profileFor(horse.horseId),
-            builder: (context, snapshot) =>
-                PedigreeSection(horse: horse, profile: snapshot.data),
-          ),
-        ),
-        _buildSection(
-          'training',
-          '調教',
-          () => AnimatedBuilder(
-            animation: _trainingViewModel,
-            builder: (context, _) => TrainingSection(
-              horse: horse,
-              allHorses: _horses,
-              viewModel: _trainingViewModel,
-              raceId: widget.raceId,
-              mode: _trainingMode,
-              onModeChanged: _onTrainingModeChanged,
-              onSelectHorse: _selectHorseFromList,
-            ),
-          ),
-        ),
-        _buildSection(
-          'memo',
-          'メモ',
-          () => MemoSection(
+    late final Widget content;
+    switch (_view) {
+      case _HorseDetailView.info:
+        content = _buildInfoView(horse);
+        break;
+      case _HorseDetailView.finalTraining:
+        content = AnimatedBuilder(
+          animation: _trainingViewModel,
+          builder: (context, _) => TrainingFinalView(
             horse: horse,
-            pastMemosFuture: _pastMemosFor(horse.horseId),
-            onEdit: () => _editMemo(horse),
+            viewModel: _trainingViewModel,
+            raceId: widget.raceId,
+          ),
+        );
+        break;
+      case _HorseDetailView.interimTraining:
+        content = AnimatedBuilder(
+          animation: _trainingViewModel,
+          builder: (context, _) => TrainingInterimView(
+            horse: horse,
+            viewModel: _trainingViewModel,
+            raceId: widget.raceId,
+          ),
+        );
+        break;
+      case _HorseDetailView.memo:
+        content = MemoSection(
+          horse: horse,
+          pastMemosFuture: _pastMemosFor(horse.horseId),
+          onEdit: () => _editMemo(horse),
+        );
+        break;
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
+      children: [content],
+    );
+  }
+
+  Widget _buildAllHorsesPage() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
+      children: [
+        AnimatedBuilder(
+          animation: _trainingViewModel,
+          builder: (context, _) => TrainingAllHorsesView(
+            horses: _horses,
+            viewModel: _trainingViewModel,
+            raceId: widget.raceId,
+            onSelectHorse: _selectHorseFromList,
           ),
         ),
       ],
@@ -521,17 +610,23 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     if (_horses.isEmpty) {
       return const Center(child: Text('出走馬がありません'));
     }
-    final currentHorse = _horses[_currentIndex];
+    final currentHorse = _currentHorse;
     return Column(
       children: [
         _buildChipBar(),
-        _buildHeader(currentHorse),
+        if (currentHorse != null) ...[
+          _buildHeader(currentHorse),
+          _buildViewButtons(),
+        ],
+        Container(height: 1, color: Colors.grey.shade300),
         Expanded(
           child: PageView.builder(
             controller: _pageController,
-            itemCount: _horses.length,
+            itemCount: _horses.length + 1,
             onPageChanged: _onPageChanged,
-            itemBuilder: (context, index) => _buildHorsePage(_horses[index]),
+            itemBuilder: (context, page) => page == 0
+                ? _buildAllHorsesPage()
+                : _buildHorsePage(_horses[page - 1]),
           ),
         ),
       ],
