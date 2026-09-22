@@ -6,17 +6,30 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+// [追加] 調教タブ改修Step6: netkeiba の調教・突き合わせ・表示用データ・レース画面へのリンク (v.2026.9.23+26092303)
+import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
+import 'package:hetaumakeiba_v2/logic/training_merge.dart';
+import 'package:hetaumakeiba_v2/logic/training_display.dart';
+import 'package:hetaumakeiba_v2/utils/training_course_utils.dart';
+import 'package:hetaumakeiba_v2/screens/race_page.dart';
 
 class TrainingTimeChartTab extends StatefulWidget {
   final List<PredictionHorseDetail> horses;
   final Map<String, List<TrainingTimeModel>> trainingDataMap;
   final Map<String, List<HorseRaceRecord>> pastRecordsMap;
+  // [追加] 調教タブ改修Step6: netkeiba の調教（レース日より前）と今回のレース (v.2026.9.23+26092303)
+  final Map<String, List<NetkeibaTrainingSession>> netkeibaTrainingMap;
+  final String raceName;
+  final String raceDate;
 
   const TrainingTimeChartTab({
     super.key,
     required this.horses,
     required this.trainingDataMap,
     required this.pastRecordsMap,
+    this.netkeibaTrainingMap = const {},
+    this.raceName = '',
+    this.raceDate = '',
   });
 
   @override
@@ -25,6 +38,9 @@ class TrainingTimeChartTab extends StatefulWidget {
 
 class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with SingleTickerProviderStateMixin {
   final Set<String> _selectedHorseIds = {};
+  // [追加] 調教タブ改修Step6: 下部一覧の展開状態（最新の1本は初期展開のため、閉じたものを別に持つ） (v.2026.9.23+26092303)
+  final Set<String> _expandedKeys = {};
+  final Set<String> _collapsedKeys = {};
   String _selectedPeriod = '3ヶ月';
 
   late AnimationController _animationController;
@@ -455,14 +471,18 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
       rittoWood[horse.horseId]!.sort((a, b) => a.x.compareTo(b.x));
     }
 
-    List<double> calcYBounds(List<Map<String, List<FlSpot>>> maps, double baseLine) {
+    // [修正] 調教タブ改修Step6: 基準より slowCap 秒以上遅い軽めの時計は縦軸の範囲計算から除く。
+    // 範囲外の点はグラフの枠で切り取る（LineChartData の clipData） (v.2026.9.23+26092303)
+    List<double> calcYBounds(List<Map<String, List<FlSpot>>> maps, double baseLine, double slowCap) {
       double minVal = 0;
       double maxVal = -200;
       bool hasData = false;
+      final double slowest = -(baseLine + slowCap);
 
       for (var map in maps) {
         for (var list in map.values) {
           for (var spot in list) {
+            if (spot.y < slowest) continue;
             hasData = true;
             minVal = math.min(minVal, spot.y);
             maxVal = math.max(maxVal, spot.y);
@@ -477,8 +497,8 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
       return [minVal - pad, maxVal + pad];
     }
 
-    final hanroBounds = calcYBounds([mihoHanro, rittoHanro], math.min(CHART_MIHO_HANRO, CHART_RITTO_HANRO));
-    final woodBounds = calcYBounds([mihoWood, rittoWood], math.min(CHART_MIHO_WOOD, CHART_RITTO_WOOD));
+    final hanroBounds = calcYBounds([mihoHanro, rittoHanro], math.min(CHART_MIHO_HANRO, CHART_RITTO_HANRO), 15.0);
+    final woodBounds = calcYBounds([mihoWood, rittoWood], math.min(CHART_MIHO_WOOD, CHART_RITTO_WOOD), 20.0);
 
     return Column(
       children: [
@@ -507,7 +527,8 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
             ),
           ),
         ),
-        _buildBottomDetailPanel(filteredTraining),
+        // [修正] 調教タブ改修Step6: 出走レースと期間の起点も渡す (v.2026.9.23+26092303)
+        _buildBottomDetailPanel(filteredTraining, filteredRaces, cutoffDate),
       ],
     );
   }
@@ -570,6 +591,8 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
             child: LineChart(
               LineChartData(
                 minX: 0, maxX: maxX, minY: minY, maxY: maxY,
+                // [追加] 調教タブ改修Step6: 縦軸の範囲外（軽めの遅い時計）の点を枠で切り取る (v.2026.9.23+26092303)
+                clipData: const FlClipData.all(),
                 lineBarsData: lineBars,
                 extraLinesData: ExtraLinesData(
                   horizontalLines: [
@@ -676,7 +699,9 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
     );
   }
 
-  Widget _buildLatestTrainingCard(TrainingTimeModel t, Color horseColor) {
+  // [修正] 調教タブ改修Step6: 旧「直近の追い切り (最新データ)」カードを、どの調教でも使える展開内容にした。
+  // 独自評価（全体・基準差・意図バッジ・鬼脚・全ラップ）＋ netkeiba の評価。基準差と意図バッジは坂路・ウッドのみ (v.2026.9.23+26092303)
+  Widget _buildTrainingDetail(TrainingTimeModel t, TrainingRowView view, bool comparable, Color horseColor) {
     List<double> cumulatives = _getCumulatives(t);
     String totalStr = cumulatives.isNotEmpty ? cumulatives.first.toStringAsFixed(1) : '-';
     DateTime d = _parseDate(t.trainingDate);
@@ -684,21 +709,27 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
 
     String diffText = '';
     Color diffColor = Colors.white70;
-    double? dynamicBase = _getDynamicBaseTime(t, cumulatives);
+    double? dynamicBase = comparable ? _getDynamicBaseTime(t, cumulatives) : null;
 
     if (dynamicBase != null && cumulatives.isNotEmpty) {
       double diff = cumulatives.first - dynamicBase;
       String sign = diff > 0 ? '+' : '';
       diffText = '(基準差: $sign${diff.toStringAsFixed(1)}秒)';
       diffColor = diff < 0 ? Colors.redAccent.shade200 : (diff > 0 ? Colors.lightBlueAccent.shade200 : Colors.white70);
-    } else if (cumulatives.isNotEmpty) {
-      diffText = '';
     }
+
+    final headerText = [
+      '${d.month}/${d.day}($weekday)',
+      view.timeLabel,
+      view.courseLabel,
+      view.trackCondition,
+      view.rider,
+    ].whereType<String>().where((s) => s.isNotEmpty).join(' ');
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      margin: const EdgeInsets.only(top: 6, bottom: 12),
+      margin: const EdgeInsets.only(top: 4, bottom: 8),
       decoration: BoxDecoration(
           color: horseColor.withOpacity(0.05),
           border: Border.all(color: horseColor.withOpacity(0.3)),
@@ -708,14 +739,9 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.flash_on, color: horseColor, size: 14),
-                  const SizedBox(width: 4),
-                  Text('直近の追い切り (最新データ)', style: TextStyle(color: horseColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                ],
+              Expanded(
+                child: Text(headerText, style: TextStyle(color: horseColor, fontSize: 11, fontWeight: FontWeight.bold)),
               ),
               RichText(
                 text: TextSpan(
@@ -729,22 +755,85 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text('${d.month}/${d.day}($weekday)  ${t.location}${t.trackType}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
-              const SizedBox(width: 8),
-              _buildIntentBadge(t, cumulatives),
-            ],
-          ),
+          if (comparable) ...[
+            const SizedBox(height: 6),
+            _buildIntentBadge(t, cumulatives),
+          ],
           const SizedBox(height: 6),
           _buildFullLapInfoWidget(t),
+          if (view.rank != null || view.critic != null || view.loadLabel != null || view.isBestTime) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (view.rank != null)
+                  Text('評価 ${view.rank}', style: TextStyle(color: _rankColorDark(view.rank), fontSize: 12, fontWeight: FontWeight.bold)),
+                if (view.critic != null)
+                  Text(view.critic!, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                if (view.loadLabel != null)
+                  Text(view.loadLabel!, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                if (view.isBestTime)
+                  const Text('一番時計', style: TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ],
+          for (final partner in view.partners)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('併せ: ${partner.fullText}', style: TextStyle(color: Colors.lightBlueAccent.shade100, fontSize: 11)),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildBottomDetailPanel(Map<String, List<TrainingTimeModel>> filteredTraining) {
+  // [追加] 調教タブ改修Step6: netkeiba の評価の色（黒背景用） (v.2026.9.23+26092303)
+  Color _rankColorDark(String? rank) {
+    switch (rank) {
+      case 'A':
+        return Colors.redAccent;
+      case 'B':
+        return Colors.lightBlueAccent;
+      case 'C':
+        return Colors.white70;
+      default:
+        return Colors.white38;
+    }
+  }
+
+  // [追加] 調教タブ改修Step6: netkeiba だけにある調教（pakara に無い行）を、独自評価の計算用の形にする (v.2026.9.23+26092303)
+  TrainingTimeModel _toTrainingModel(MergedTrainingEntry entry) {
+    final pakara = entry.pakara;
+    if (pakara != null) return pakara;
+    final nk = entry.netkeiba!;
+    final info = classifyTrainingCourse(nk.courseRaw);
+    final furlongs = slotsToFurlongs(nk.courseRaw, nk.slots);
+    return TrainingTimeModel(
+      horseId: nk.horseId,
+      trainingDate: nk.trainingDate,
+      trainingTime: nk.trainingTime ?? '',
+      trackType: info.pakaraTrackType ?? nk.courseRaw,
+      location: info.location.isEmpty ? nk.courseRaw : info.location,
+      f6: furlongs[6],
+      f5: furlongs[5],
+      f4: furlongs[4],
+      f3: furlongs[3],
+      f2: furlongs[2],
+      f1: furlongs[1],
+    );
+  }
+
+  // [追加] 調教タブ改修Step6: 基準の時計があるコース（坂路・ウッド）か (v.2026.9.23+26092303)
+  bool _isComparableCourse(TrainingTimeModel t) => t.trackType == '坂路' || t.trackType == 'ウッド';
+
+  // [修正] 調教タブ改修Step6: 下部パネルを「期間内の全調教＋出走レースの行」を日付の新しい順に並べた一覧にし、
+  // 調教の行はタップで展開（最新の1本は初期状態で展開）、レースの行はタップでそのレースを開く (v.2026.9.23+26092303)
+  Widget _buildBottomDetailPanel(
+      Map<String, List<TrainingTimeModel>> filteredTraining,
+      Map<String, List<HorseRaceRecord>> filteredRaces,
+      DateTime? cutoffDate) {
     if (_selectedHorseIds.isEmpty) return const SizedBox.shrink();
 
     return Expanded(
@@ -761,10 +850,14 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
             children: _selectedHorseIds.map((horseId) {
               final horseName = widget.horses.firstWhere((h) => h.horseId == horseId).horseName;
               final horseColor = _getHorseColor(horseId);
-              final myTraining = filteredTraining[horseId] ?? [];
-
-              var sorted = List<TrainingTimeModel>.from(myTraining)..sort((a, b) => _parseDate(b.trainingDate).compareTo(_parseDate(a.trainingDate)));
-              var recent = sorted.take(5).toList();
+              var netkeiba = widget.netkeibaTrainingMap[horseId] ?? const <NetkeibaTrainingSession>[];
+              if (cutoffDate != null) {
+                netkeiba = netkeiba.where((s) => _parseDate(s.trainingDate).isAfter(cutoffDate)).toList();
+              }
+              final entries = mergeTrainingSources(
+                  filteredTraining[horseId] ?? const <TrainingTimeModel>[], netkeiba);
+              final timeline = buildTrainingTimeline(
+                  entries, filteredRaces[horseId] ?? const <HorseRaceRecord>[]);
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),
@@ -778,68 +871,171 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
                         Text(horseName, style: TextStyle(color: horseColor, fontSize: 15, fontWeight: FontWeight.bold)),
                       ],
                     ),
-                    if (recent.isEmpty)
+                    const SizedBox(height: 6),
+                    if (widget.raceName.isNotEmpty || widget.raceDate.isNotEmpty) _buildCurrentRaceRow(),
+                    if (entries.isEmpty)
                       const Padding(
                         padding: EdgeInsets.only(top: 8.0),
                         child: Text('表示期間内の調教データなし', style: TextStyle(color: Colors.white54, fontSize: 12)),
                       )
                     else ...[
-                      _buildLatestTrainingCard(recent.first, horseColor),
-
-                      if (recent.length > 1) ...[
-                        Row(
-                          children: const [
-                            Expanded(flex: 2, child: Text('日付', style: TextStyle(color: Colors.white54, fontSize: 11))),
-                            Expanded(flex: 2, child: Text('コース', style: TextStyle(color: Colors.white54, fontSize: 11))),
-                            Expanded(flex: 2, child: Text('全体', style: TextStyle(color: Colors.white54, fontSize: 11))),
-                            Expanded(flex: 2, child: Text('基準差', style: TextStyle(color: Colors.white54, fontSize: 11))),
-                            Expanded(flex: 4, child: Text('ラップ (2F→1F)', style: TextStyle(color: Colors.white54, fontSize: 11), textAlign: TextAlign.right)),
-                          ],
-                        ),
-                        const Divider(color: Colors.white24, height: 8),
-                        ...recent.skip(1).map((t) {
-                          List<double> cumulatives = _getCumulatives(t);
-                          String totalStr = cumulatives.isNotEmpty ? cumulatives.first.toStringAsFixed(1) : '-';
-
-                          DateTime d = _parseDate(t.trainingDate);
-                          String weekday = _getWeekday(d);
-
-                          String diffText = '-';
-                          Color diffColor = Colors.white70;
-                          double? dynamicBase = _getDynamicBaseTime(t, cumulatives);
-
-                          if (dynamicBase != null && cumulatives.isNotEmpty) {
-                            double diff = cumulatives.first - dynamicBase;
-                            String sign = diff > 0 ? '+' : '';
-                            diffText = '$sign${diff.toStringAsFixed(1)}';
-                            diffColor = diff < 0 ? Colors.redAccent.shade200 : (diff > 0 ? Colors.lightBlueAccent.shade200 : Colors.white70);
-                          }
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4.0),
-                            child: Row(
-                              children: [
-                                Expanded(flex: 2, child: Text('${d.month}/${d.day}($weekday)', style: const TextStyle(color: Colors.white, fontSize: 11))),
-                                Expanded(flex: 2, child: Text('${t.location}${t.trackType}', style: const TextStyle(color: Colors.white, fontSize: 11))),
-                                Expanded(flex: 2, child: Text(totalStr, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))),
-                                Expanded(flex: 2, child: Text(diffText, style: TextStyle(color: diffColor, fontSize: 11, fontWeight: FontWeight.bold))),
-                                Expanded(flex: 4, child: _buildListLapInfoWidget(t)),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ] else ...[
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8.0, left: 4.0),
-                          child: Text('これ以前の履歴はありません', style: TextStyle(color: Colors.white54, fontSize: 11)),
-                        )
-                      ],
+                      Row(
+                        children: const [
+                          Expanded(flex: 2, child: Text('日付', style: TextStyle(color: Colors.white54, fontSize: 11))),
+                          Expanded(flex: 2, child: Text('コース', style: TextStyle(color: Colors.white54, fontSize: 11))),
+                          Expanded(flex: 2, child: Text('全体', style: TextStyle(color: Colors.white54, fontSize: 11))),
+                          Expanded(flex: 2, child: Text('基準差', style: TextStyle(color: Colors.white54, fontSize: 11))),
+                          Expanded(flex: 4, child: Text('ラップ (2F→1F)', style: TextStyle(color: Colors.white54, fontSize: 11), textAlign: TextAlign.right)),
+                          SizedBox(width: 22, child: Text('評価', style: TextStyle(color: Colors.white54, fontSize: 10), textAlign: TextAlign.right)),
+                          SizedBox(width: 16),
+                        ],
+                      ),
+                      const Divider(color: Colors.white24, height: 8),
+                      ..._buildTimelineRows(horseId, timeline, horseColor),
                     ],
                   ],
                 ),
               );
             }).toList(),
           ),
+        ),
+      ),
+    );
+  }
+
+  // [追加] 調教タブ改修Step6: 一覧の行を作る（最初の調教の行＝最新の1本は初期状態で展開） (v.2026.9.23+26092303)
+  List<Widget> _buildTimelineRows(String horseId, List<TrainingTimelineItem> timeline, Color horseColor) {
+    final rows = <Widget>[];
+    var isFirstTraining = true;
+    for (final item in timeline) {
+      final race = item.race;
+      if (race != null) {
+        rows.add(_buildRaceRow(race));
+        continue;
+      }
+      final entry = item.entry!;
+      final view = buildTrainingRowView(entry);
+      final key = '$horseId|${entry.trainingDate}|${entry.trainingTime ?? ''}|${view.courseLabel}';
+      final isLatest = isFirstTraining;
+      isFirstTraining = false;
+      final expanded = isLatest ? !_collapsedKeys.contains(key) : _expandedKeys.contains(key);
+      rows.add(_buildTrainingRow(entry, view, key, isLatest, expanded, horseColor));
+    }
+    return rows;
+  }
+
+  // [追加] 調教タブ改修Step6: 調教の行（タップで展開） (v.2026.9.23+26092303)
+  Widget _buildTrainingRow(MergedTrainingEntry entry, TrainingRowView view, String key,
+      bool isLatest, bool expanded, Color horseColor) {
+    final t = _toTrainingModel(entry);
+    final comparable = _isComparableCourse(t);
+    final cumulatives = _getCumulatives(t);
+    final totalStr = cumulatives.isNotEmpty ? cumulatives.first.toStringAsFixed(1) : '-';
+    final d = _parseDate(entry.trainingDate);
+
+    String diffText = '-';
+    Color diffColor = Colors.white70;
+    final dynamicBase = comparable ? _getDynamicBaseTime(t, cumulatives) : null;
+    if (dynamicBase != null && cumulatives.isNotEmpty) {
+      final diff = cumulatives.first - dynamicBase;
+      final sign = diff > 0 ? '+' : '';
+      diffText = '$sign${diff.toStringAsFixed(1)}';
+      diffColor = diff < 0 ? Colors.redAccent.shade200 : (diff > 0 ? Colors.lightBlueAccent.shade200 : Colors.white70);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() {
+              final target = isLatest ? _collapsedKeys : _expandedKeys;
+              if (!target.add(key)) target.remove(key);
+            });
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: Row(
+              children: [
+                Expanded(flex: 2, child: Text('${d.month}/${d.day}(${_getWeekday(d)})', style: const TextStyle(color: Colors.white, fontSize: 11))),
+                Expanded(flex: 2, child: Text(view.courseLabel, style: const TextStyle(color: Colors.white, fontSize: 11))),
+                Expanded(flex: 2, child: Text(totalStr, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))),
+                Expanded(flex: 2, child: Text(diffText, style: TextStyle(color: diffColor, fontSize: 11, fontWeight: FontWeight.bold))),
+                Expanded(flex: 4, child: _buildListLapInfoWidget(t)),
+                SizedBox(
+                  width: 22,
+                  child: Text(view.rank ?? '', textAlign: TextAlign.right,
+                      style: TextStyle(color: _rankColorDark(view.rank), fontSize: 13, fontWeight: FontWeight.bold)),
+                ),
+                SizedBox(
+                  width: 16,
+                  child: Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 16, color: Colors.white38),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (expanded) _buildTrainingDetail(t, view, comparable, horseColor),
+        const Divider(color: Colors.white12, height: 1),
+      ],
+    );
+  }
+
+  // [追加] 調教タブ改修Step6: 今回のレースの行（リンクなし） (v.2026.9.23+26092303)
+  Widget _buildCurrentRaceRow() {
+    final label = ['今回', widget.raceDate, widget.raceName].where((s) => s.isNotEmpty).join('  ');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
+      child: Row(
+        children: [
+          const Text('🏇 ', style: TextStyle(fontSize: 12)),
+          Expanded(
+            child: Text(label, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // [追加] 調教タブ改修Step6: 出走したレースの行（タップでそのレースの画面を開く） (v.2026.9.23+26092303)
+  Widget _buildRaceRow(HorseRaceRecord record) {
+    final result = pastRaceResult(record);
+    return InkWell(
+      onTap: record.raceId.isEmpty
+          ? null
+          : () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => RacePage(raceId: record.raceId, raceDate: record.date),
+                ),
+              );
+            },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.amber.withOpacity(0.12),
+          border: const Border(left: BorderSide(color: Colors.amber, width: 3)),
+        ),
+        child: Row(
+          children: [
+            const Text('🏇 ', style: TextStyle(fontSize: 12)),
+            Expanded(
+              child: Text(pastRaceTitle(record), overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
+            if (result != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Text(result, style: const TextStyle(color: Colors.amberAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+            if (record.raceId.isNotEmpty)
+              const Icon(Icons.chevron_right, size: 16, color: Colors.white54),
+          ],
         ),
       ),
     );

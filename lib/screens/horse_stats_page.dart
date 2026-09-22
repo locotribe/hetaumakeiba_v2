@@ -27,6 +27,9 @@ import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 // [追加] 調教タブ改修Step1: レース日より前への絞り込み (v.2026.9.22+26092210)
 import 'package:hetaumakeiba_v2/utils/training_date_utils.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
+// [追加] 調教タブ改修Step6: netkeiba の調教（評価・併せ馬）を調教タイムタブへ渡す (v.2026.9.23+26092303)
+import 'package:hetaumakeiba_v2/db/repositories/netkeiba_training_repository.dart';
+import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -61,6 +64,9 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   final TrainingRepository _trainingRepository = TrainingRepository();
   Map<String, List<TrainingTimeModel>> _trainingDataMap = {};
   Map<String, List<HorseRaceRecord>> _pastRecordsMap = {};
+  // [追加] 調教タブ改修Step6: netkeiba の調教（レース日より前） (v.2026.9.23+26092303)
+  final NetkeibaTrainingRepository _netkeibaTrainingRepository = NetkeibaTrainingRepository();
+  Map<String, List<NetkeibaTrainingSession>> _netkeibaTrainingMap = {};
 
   @override
   void initState() {
@@ -147,10 +153,14 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
       newTrainingDataMap[horse.horseId] = trainingTimes;
     }
 
+    // [追加] 調教タブ改修Step6: netkeiba の調教も読む (v.2026.9.23+26092303)
+    final newNetkeibaTrainingMap = await _loadNetkeibaTrainingBeforeRace();
+    if (!mounted) return;
     setState(() {
       // [修正] 調教タブ改修Step1: レース当日以降の調教・成績を除外する (v.2026.9.22+26092210)
       _trainingDataMap = _trainingBeforeRace(newTrainingDataMap);
       _pastRecordsMap = _recordsBeforeRace(allPerformanceRecords);
+      _netkeibaTrainingMap = newNetkeibaTrainingMap;
     });
   }
 
@@ -175,6 +185,20 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     );
     return map.map((horseId, records) =>
         MapEntry(horseId, filterRecordsBeforeAsOf(records, asOf: asOf)));
+  }
+
+  // [追加] 調教タブ改修Step6: netkeiba の調教を馬ごとに読み、レース日より前だけに絞る (v.2026.9.23+26092303)
+  Future<Map<String, List<NetkeibaTrainingSession>>> _loadNetkeibaTrainingBeforeRace() async {
+    final raceYmd = toYyyymmdd(_raceDateRaw);
+    final result = <String, List<NetkeibaTrainingSession>>{};
+    for (final horse in widget.horses) {
+      var sessions = await _netkeibaTrainingRepository.getSessionsForHorse(horse.horseId);
+      if (raceYmd != null) {
+        sessions = sessions.where((s) => s.trainingDate.compareTo(raceYmd) < 0).toList();
+      }
+      result[horse.horseId] = sessions;
+    }
+    return result;
   }
 
   Future<void> _showConfirmationDialog({bool isRefresh = false}) async {
@@ -326,6 +350,9 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         newTrainingDataMap[horse.horseId] = trainingTimes;
       }
 
+      // [追加] 調教タブ改修Step6: netkeiba の調教も読み直す (v.2026.9.23+26092303)
+      final newNetkeibaTrainingMap = await _loadNetkeibaTrainingBeforeRace();
+
       final cacheToSave = HorseStatsCache(
         raceId: widget.raceId,
         statsMap: newStatsMap,
@@ -341,6 +368,8 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         // [修正] 調教タブ改修Step1: レース当日以降の調教・成績を除外する (v.2026.9.22+26092210)
         _trainingDataMap = _trainingBeforeRace(newTrainingDataMap);
         _pastRecordsMap = _recordsBeforeRace(allPerformanceRecords);
+        // [追加] 調教タブ改修Step6: netkeiba の調教 (v.2026.9.23+26092303)
+        _netkeibaTrainingMap = newNetkeibaTrainingMap;
         _isLoading = false;
       });
     } catch (e) {
@@ -440,6 +469,10 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
           horses: widget.horses,
           trainingDataMap: _trainingDataMap,
           pastRecordsMap: _pastRecordsMap,
+          // [追加] 調教タブ改修Step6: netkeiba の調教と今回のレース (v.2026.9.23+26092303)
+          netkeibaTrainingMap: _netkeibaTrainingMap,
+          raceName: widget.raceName,
+          raceDate: _raceDateRaw,
         ),
         IndividualStatsTab(
           horses: widget.horses,

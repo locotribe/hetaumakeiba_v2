@@ -308,3 +308,39 @@ class _RaceSlot {
     required this.isCurrent,
   });
 }
+
+// [追加] 調教タブ改修Step6: 調教と出走レースを日付順に並べた一覧（調教タイムタブ用） (v.2026.9.23+26092303)
+
+/// 一覧の1件。調教（[entry]）か出走レース（[race]）のどちらか一方が入る。
+class TrainingTimelineItem {
+  final String date; // YYYYMMDD
+  final MergedTrainingEntry? entry;
+  final HorseRaceRecord? race;
+
+  const TrainingTimelineItem({required this.date, this.entry, this.race});
+
+  bool get isRace => race != null;
+}
+
+/// 調教と出走レースを日付の新しい順に並べる。同じ日はレースを先、調教は時刻の新しい順。
+/// 日付が読めないレースは入れない。
+List<TrainingTimelineItem> buildTrainingTimeline(
+  List<MergedTrainingEntry> entries,
+  List<HorseRaceRecord> races,
+) {
+  final items = <TrainingTimelineItem>[
+    for (final entry in entries)
+      TrainingTimelineItem(date: entry.trainingDate, entry: entry),
+  ];
+  for (final race in races) {
+    final ymd = toYyyymmdd(race.date);
+    if (ymd != null) items.add(TrainingTimelineItem(date: ymd, race: race));
+  }
+  items.sort((a, b) {
+    final byDate = b.date.compareTo(a.date);
+    if (byDate != 0) return byDate;
+    if (a.isRace != b.isRace) return a.isRace ? -1 : 1;
+    return (b.entry?.trainingTime ?? '').compareTo(a.entry?.trainingTime ?? '');
+  });
+  return items;
+}

@@ -153,4 +153,27 @@ void main() {
     expect(groups[2].entries.map((e) => e.trainingDate).toList(),
         ['20260420', '20260101']);
   });
+
+  // [追加] 調教タブ改修Step6: 調教と出走レースの並び順 (v.2026.9.23+26092303)
+  test('buildTrainingTimeline: 日付の新しい順、同じ日はレースが先、調教は時刻の新しい順', () {
+    final timeline = buildTrainingTimeline(
+      [
+        const MergedTrainingEntry(trainingDate: '20260826', trainingTime: '0600'),
+        const MergedTrainingEntry(trainingDate: '20260916', trainingTime: '0535'),
+        const MergedTrainingEntry(trainingDate: '20260916', trainingTime: '0710'),
+      ],
+      [
+        _race('P1', '2026/08/30', raceName: '日高S'),
+        _race('P2', '2026/08/26', raceName: '同日のレース'),
+        _race('PX', '不明'),
+      ],
+    );
+    expect(timeline.map((i) => i.isRace ? 'R:${i.race!.raceId}' : 'T:${i.date}${i.entry!.trainingTime}').toList(), [
+      'T:202609160710',
+      'T:202609160535',
+      'R:P1',
+      'R:P2',
+      'T:202608260600',
+    ]);
+  });
 }
