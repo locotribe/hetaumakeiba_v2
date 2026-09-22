@@ -67,6 +67,8 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   // [追加] 調教タブ改修Step6: netkeiba の調教（レース日より前） (v.2026.9.23+26092303)
   final NetkeibaTrainingRepository _netkeibaTrainingRepository = NetkeibaTrainingRepository();
   Map<String, List<NetkeibaTrainingSession>> _netkeibaTrainingMap = {};
+  // [追加] 調教タブ改修Step7: 今回のレースの netkeiba 評価（相対評価の調教点に使う） (v.2026.9.23+26092305)
+  Map<String, NetkeibaTrainingReview> _netkeibaReviews = {};
 
   @override
   void initState() {
@@ -155,12 +157,17 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
 
     // [追加] 調教タブ改修Step6: netkeiba の調教も読む (v.2026.9.23+26092303)
     final newNetkeibaTrainingMap = await _loadNetkeibaTrainingBeforeRace();
+    // [追加] 調教タブ改修Step7: 今回のレースの netkeiba 評価も読む (v.2026.9.23+26092305)
+    final newNetkeibaReviews =
+        await _netkeibaTrainingRepository.getReviewsForRace(widget.raceId);
     if (!mounted) return;
     setState(() {
       // [修正] 調教タブ改修Step1: レース当日以降の調教・成績を除外する (v.2026.9.22+26092210)
       _trainingDataMap = _trainingBeforeRace(newTrainingDataMap);
       _pastRecordsMap = _recordsBeforeRace(allPerformanceRecords);
       _netkeibaTrainingMap = newNetkeibaTrainingMap;
+      // [追加] 調教タブ改修Step7 (v.2026.9.23+26092305)
+      _netkeibaReviews = newNetkeibaReviews;
     });
   }
 
@@ -352,6 +359,9 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
 
       // [追加] 調教タブ改修Step6: netkeiba の調教も読み直す (v.2026.9.23+26092303)
       final newNetkeibaTrainingMap = await _loadNetkeibaTrainingBeforeRace();
+      // [追加] 調教タブ改修Step7: 今回のレースの netkeiba 評価も読み直す (v.2026.9.23+26092305)
+      final newNetkeibaReviews =
+          await _netkeibaTrainingRepository.getReviewsForRace(widget.raceId);
 
       final cacheToSave = HorseStatsCache(
         raceId: widget.raceId,
@@ -370,6 +380,8 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         _pastRecordsMap = _recordsBeforeRace(allPerformanceRecords);
         // [追加] 調教タブ改修Step6: netkeiba の調教 (v.2026.9.23+26092303)
         _netkeibaTrainingMap = newNetkeibaTrainingMap;
+        // [追加] 調教タブ改修Step7 (v.2026.9.23+26092305)
+        _netkeibaReviews = newNetkeibaReviews;
         _isLoading = false;
       });
     } catch (e) {
@@ -502,6 +514,9 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
           horses: widget.horses,
           raceData: widget.raceData,
           trainingDataMap: _trainingDataMap, // ★ここが抜けていたのを修正しました！
+          // [追加] 調教タブ改修Step7: netkeiba の調教・評価も渡す (v.2026.9.23+26092305)
+          netkeibaTrainingMap: _netkeibaTrainingMap,
+          netkeibaReviews: _netkeibaReviews,
         ),
       ],
     );

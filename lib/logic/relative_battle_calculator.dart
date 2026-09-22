@@ -5,6 +5,8 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
+// [追加] 調教タブ改修Step7: netkeiba の調教・評価 (v.2026.9.23+26092305)
+import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/stats_analyzer.dart';
@@ -22,13 +24,18 @@ class RelativeBattleCalculator {
         Map<String, JockeyStats>? jockeyStats,
         Map<String, List<HorseRaceRecord>>? horsePerformanceMap,
         Map<String, List<TrainingTimeModel>>? trainingDataMap,
+        // [追加] 調教タブ改修Step7: netkeiba の調教・評価（渡されないときは従来どおり pakara だけで計算） (v.2026.9.23+26092305)
+        Map<String, List<NetkeibaTrainingSession>>? netkeibaTrainingMap,
+        Map<String, NetkeibaTrainingReview>? netkeibaReviews,
+        String? raceId,
       }) {
     if (horses.length < 2) return [];
 
     int totalHorses = horses.length;
 
     final List<_HorseStaticData> staticDataList = horses
-        .map((h) => _prepareStaticData(h, totalHorses, jockeyStats, horsePerformanceMap, trainingDataMap))
+        .map((h) => _prepareStaticData(h, totalHorses, jockeyStats, horsePerformanceMap, trainingDataMap,
+            netkeibaTrainingMap, netkeibaReviews, raceId))
         .toList();
 
     // 各シナリオを実行
@@ -276,6 +283,10 @@ class RelativeBattleCalculator {
       Map<String, JockeyStats>? jockeyStats,
       Map<String, List<HorseRaceRecord>>? horsePerformanceMap,
       Map<String, List<TrainingTimeModel>>? trainingDataMap,
+      // [追加] 調教タブ改修Step7 (v.2026.9.23+26092305)
+      [Map<String, List<NetkeibaTrainingSession>>? netkeibaTrainingMap,
+      Map<String, NetkeibaTrainingReview>? netkeibaReviews,
+      String? raceId]
       ) {
     double baseAbility = 50.0;
     if (horse.overallScore != null) {
@@ -435,14 +446,43 @@ class RelativeBattleCalculator {
     }
 
     // --- 調教評価 ---
+    // [修正] 調教タブ改修Step7: netkeiba の調教・最終追切の評価も渡す (v.2026.9.23+26092305)
     final tf = TrainingFactor();
-    final tResult = tf.evaluate(horse.horseId, trainingDataMap ?? {}, horse.sexAndAge);
+    final netkeibaSessions = netkeibaTrainingMap?[horse.horseId] ?? const <NetkeibaTrainingSession>[];
+    NetkeibaTrainingSession? finalSession;
+    if (raceId != null && raceId.isNotEmpty) {
+      for (final session in netkeibaSessions) {
+        if (session.raceId != raceId) continue;
+        if (session.laps.any((l) => l != null)) {
+          finalSession = session;
+          break;
+        }
+        finalSession ??= session;
+      }
+    }
+    final netkeibaReview = netkeibaReviews?[horse.horseId];
+    final tResult = tf.evaluate(
+      horse.horseId,
+      trainingDataMap ?? {},
+      horse.sexAndAge,
+      netkeibaTrainingMap: netkeibaTrainingMap ?? const {},
+      review: netkeibaReview,
+      finalSession: finalSession,
+    );
 
     double trainingScore = tResult.score;
+    final partnerText = finalSession?.partners
+        ?.map((p) => p.fullText)
+        .join(' / ');
     Map<String, dynamic> tDetails = {
       'rank': tResult.rank,
       'score': tResult.score,
       'diagnosis': tResult.diagnosis,
+      // [追加] 調教タブ改修Step7: ダイアログ表示用 (v.2026.9.23+26092305)
+      'netkeibaRank': netkeibaReview?.rank ?? finalSession?.rank,
+      'netkeibaCritic': netkeibaReview?.critic ?? finalSession?.critic,
+      'partner': (partnerText == null || partnerText.isEmpty) ? null : partnerText,
+      'isBestTime': finalSession?.isBestTime == true,
       'course': tResult.course,
       'timeStr': tResult.timeStr,
       'lapStr': tResult.lapStr,

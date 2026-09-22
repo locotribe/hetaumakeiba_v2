@@ -1,6 +1,9 @@
 // lib/logic/analysis/historical_match_engine_factors/training_factor.dart
 
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
+// [追加] 調教タブ改修Step7: netkeiba の調教・評価を使う (v.2026.9.23+26092305)
+import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
+import 'package:hetaumakeiba_v2/logic/training_merge.dart';
 import 'dart:math' as math;
 
 class TrainingFactorResult {
@@ -22,6 +25,58 @@ class TrainingFactorResult {
 }
 
 class TrainingFactor {
+  // [追加] 調教タブ改修Step7: netkeiba の最終追切の評価による加減点（設計書 13-1） (v.2026.9.23+26092305)
+  /// A +1.5 / B ±0 / C −1.0 / D −2.0、併せ馬「先着」+0.5・「遅れ」−0.5（1本目のみ）、一番時計 +0.5
+  static double netkeibaAdjustment({
+    String? rank,
+    List<TrainingPartner>? partners,
+    bool isBestTime = false,
+  }) {
+    double adjust = 0.0;
+    switch (rank) {
+      case 'A':
+        adjust += 1.5;
+        break;
+      case 'C':
+        adjust -= 1.0;
+        break;
+      case 'D':
+        adjust -= 2.0;
+        break;
+      default:
+        break;
+    }
+    if (partners != null) {
+      for (final partner in partners) {
+        if (partner.text.contains('先着')) {
+          adjust += 0.5;
+          break;
+        }
+        if (partner.text.contains('遅れ')) {
+          adjust -= 0.5;
+          break;
+        }
+      }
+    }
+    if (isBestTime) adjust += 0.5;
+    return adjust;
+  }
+
+  // [追加] 調教タブ改修Step7: 坂路・ウッドの時計が無い馬を netkeiba の評価だけで採点する (v.2026.9.23+26092305)
+  static double rankOnlyScore(String? rank) {
+    switch (rank) {
+      case 'A':
+        return 3.0;
+      case 'B':
+        return 1.0;
+      case 'C':
+        return -1.0;
+      case 'D':
+        return -3.0;
+    }
+    return -5.0;
+  }
+
   DateTime _parseDate(String dateStr) {
     try {
       if (dateStr.length == 8) {
@@ -37,15 +92,37 @@ class TrainingFactor {
   }
 
   // ★修正: 単一馬の履歴ではなく、全馬の調教データと対象馬IDを受け取り、完全相対評価を行う
-  TrainingFactorResult evaluate(String horseId, Map<String, List<TrainingTimeModel>> allTrainingData, String sexAndAge) {
-    List<TrainingTimeModel> trainingHistory = allTrainingData[horseId] ?? [];
+  // [修正] 調教タブ改修Step7: netkeiba の坂路・ウッドの時計も計算に使い、最終追切の評価で加減点する (v.2026.9.23+26092305)
+  TrainingFactorResult evaluate(
+    String horseId,
+    Map<String, List<TrainingTimeModel>> allTrainingData,
+    String sexAndAge, {
+    Map<String, List<NetkeibaTrainingSession>> netkeibaTrainingMap = const {},
+    NetkeibaTrainingReview? review,
+    NetkeibaTrainingSession? finalSession,
+  }) {
+    // pakara と netkeiba を突き合わせ、坂路・ウッドの行だけを計算に使う（相対評価のため全馬分を作る）
+    final horseIds = <String>{...allTrainingData.keys, ...netkeibaTrainingMap.keys};
+    final Map<String, List<TrainingTimeModel>> mergedTrainingData = {
+      for (final id in horseIds)
+        id: combinedHanroWoodTrainings(
+            allTrainingData[id] ?? const [], netkeibaTrainingMap[id] ?? const []),
+    };
+    final String? netkeibaRank = review?.rank ?? finalSession?.rank;
+    final String? netkeibaCritic = review?.critic ?? finalSession?.critic;
+
+    List<TrainingTimeModel> trainingHistory = mergedTrainingData[horseId] ?? [];
 
     if (trainingHistory.isEmpty) {
+      final score = rankOnlyScore(netkeibaRank);
       return TrainingFactorResult(
-        score: -5.0, // データなしは最低点へ
-        rank: 'C',
-        diagnosis: '調教データなし',
-        course: '-',
+        score: score,
+        rank: netkeibaRank ?? 'C',
+        diagnosis: netkeibaRank == null
+            ? '調教データなし'
+            : 'netkeibaの評価のみ（坂路・ウッドの時計なし）'
+                '${netkeibaCritic == null ? '' : ': $netkeibaCritic'}',
+        course: finalSession?.courseRaw ?? '-',
         timeStr: '-',
         lapStr: '-',
       );
@@ -143,7 +220,8 @@ class TrainingFactor {
     List<double> raceTimes = [];
     List<double> raceLaps = [];
 
-    allTrainingData.forEach((keyHorseId, hHistory) {
+    // [修正] 調教タブ改修Step7: メンバー内の比較も突き合わせ後のデータで行う (v.2026.9.23+26092305)
+    mergedTrainingData.forEach((keyHorseId, hHistory) {
       if (hHistory.isEmpty) return;
       var sHist = List<TrainingTimeModel>.from(hHistory)..sort((a,b) => _parseDate(b.trainingDate).compareTo(_parseDate(a.trainingDate)));
       try {
@@ -270,6 +348,15 @@ class TrainingFactor {
     // ★ステップ5: 連続値シームレススコアリングへの変換 (-5.0 〜 +10.0)
     // 0点 -> -5.0, 100点 -> +10.0 に線形マッピング
     double finalContinuousScore = -5.0 + (totalPoints / 100.0) * 15.0;
+    // [追加] 調教タブ改修Step7: netkeiba の最終追切の評価で加減点し、-5.0〜+10.0 に収める (v.2026.9.23+26092305)
+    finalContinuousScore = (finalContinuousScore +
+            netkeibaAdjustment(
+              rank: netkeibaRank,
+              partners: finalSession?.partners,
+              isBestTime: finalSession?.isBestTime == true,
+            ))
+        .clamp(-5.0, 10.0);
+
     // 小数第1位で丸める
     finalContinuousScore = double.parse(finalContinuousScore.toStringAsFixed(1));
 
@@ -309,6 +396,13 @@ class TrainingFactor {
       } else {
         diagnosisText = 'メンバー比較で時計・キレ共に見劣り。良化途上か';
       }
+    }
+
+    // [追加] 調教タブ改修Step7: 診断文の末尾に netkeiba の評価を足す (v.2026.9.23+26092305)
+    final netkeibaText =
+        [netkeibaRank, netkeibaCritic].whereType<String>().join(' ');
+    if (netkeibaText.isNotEmpty) {
+      diagnosisText += ' / netkeiba: $netkeibaText';
     }
 
     // 表示用文字列の生成

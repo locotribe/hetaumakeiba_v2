@@ -150,3 +150,43 @@ int? _matchByClock(NetkeibaTrainingSession nk,
   }
   return best;
 }
+
+// [追加] 調教タブ改修Step7: 突き合わせ後の行を独自評価の計算用（pakara と同じ形）に直す (v.2026.9.23+26092305)
+
+/// 突き合わせ後の1件を `TrainingTimeModel` にする。
+/// pakara の行があればそれをそのまま返す。netkeiba だけの行は、コース表記から地区・種別を判定して作る。
+TrainingTimeModel toTrainingTimeModel(MergedTrainingEntry entry) {
+  final pakara = entry.pakara;
+  if (pakara != null) return pakara;
+  final nk = entry.netkeiba!;
+  final info = classifyTrainingCourse(nk.courseRaw);
+  final furlongs = slotsToFurlongs(nk.courseRaw, nk.slots);
+  return TrainingTimeModel(
+    horseId: nk.horseId,
+    trainingDate: nk.trainingDate,
+    trainingTime: nk.trainingTime ?? '',
+    trackType: info.pakaraTrackType ?? nk.courseRaw,
+    location: info.location.isEmpty ? nk.courseRaw : info.location,
+    f6: furlongs[6],
+    f5: furlongs[5],
+    f4: furlongs[4],
+    f3: furlongs[3],
+    f2: furlongs[2],
+    f1: furlongs[1],
+  );
+}
+
+/// pakara と netkeiba を突き合わせ、**坂路・ウッドの行だけ**を pakara と同じ形で返す（新しい順）。
+/// ＤＰ・函Ｗなど基準の時計が無いコースは含めない。
+List<TrainingTimeModel> combinedHanroWoodTrainings(
+  List<TrainingTimeModel> pakaraList,
+  List<NetkeibaTrainingSession> netkeibaList,
+) {
+  final result = <TrainingTimeModel>[];
+  for (final entry in mergeTrainingSources(pakaraList, netkeibaList)) {
+    final model = toTrainingTimeModel(entry);
+    if (model.trackType != '坂路' && model.trackType != 'ウッド') continue;
+    result.add(model);
+  }
+  return result;
+}

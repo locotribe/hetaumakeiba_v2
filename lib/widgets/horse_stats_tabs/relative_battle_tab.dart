@@ -9,18 +9,25 @@ import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
+// [追加] 調教タブ改修Step7: netkeiba の調教・評価 (v.2026.9.23+26092305)
+import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 
 class RelativeBattleTab extends StatefulWidget {
   final List<PredictionHorseDetail> horses;
   final PredictionRaceData? raceData;
   final Map<String, List<TrainingTimeModel>>? trainingDataMap;
+  // [追加] 調教タブ改修Step7: netkeiba の調教・今回のレースの評価 (v.2026.9.23+26092305)
+  final Map<String, List<NetkeibaTrainingSession>>? netkeibaTrainingMap;
+  final Map<String, NetkeibaTrainingReview>? netkeibaReviews;
 
   const RelativeBattleTab({
     super.key,
     required this.horses,
     this.raceData,
     this.trainingDataMap,
+    this.netkeibaTrainingMap,
+    this.netkeibaReviews,
   });
 
   @override
@@ -70,6 +77,10 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
       jockeyStats: jockeyStats,
       horsePerformanceMap: horsePerformanceMap,
       trainingDataMap: widget.trainingDataMap,
+      // [追加] 調教タブ改修Step7 (v.2026.9.23+26092305)
+      netkeibaTrainingMap: widget.netkeibaTrainingMap,
+      netkeibaReviews: widget.netkeibaReviews,
+      raceId: widget.raceData?.raceId,
     );
 
     if (mounted) {
@@ -324,6 +335,15 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
           _detailRow("コース", course),
           _detailRow("全体時計", timeStr),
           _detailRow("上がり2F", lapStr),
+          // [追加] 調教タブ改修Step7: netkeiba の最終追切の評価 (v.2026.9.23+26092305)
+          if (details['netkeibaRank'] != null || details['netkeibaCritic'] != null)
+            _detailRow(
+                "netkeiba評価",
+                [details['netkeibaRank'], details['netkeibaCritic']]
+                    .whereType<String>()
+                    .join(' ')),
+          if (details['partner'] != null) _detailRow("併せ馬", details['partner']),
+          if (details['isBestTime'] == true) _detailRow("一番時計", "○"),
           const Divider(),
           const Text("評価理由", style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
