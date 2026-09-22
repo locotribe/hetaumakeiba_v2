@@ -5,6 +5,8 @@ import 'dart:async';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+// [追加] 個別ラップ取得Step2: 出馬表を開いたときに前走の個別ラップを取りに行く (v.2026.9.23+26092304)
+import 'package:hetaumakeiba_v2/services/horse_laptime_service.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
@@ -414,6 +416,15 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               debugPrint('RacePreparationService.enqueuePreparation failed: $e');
             }));
           }
+
+          // [追加] 個別ラップ取得Step2: 前走の個別ラップが未取得の馬だけ取りに行く。
+          // レース準備が既に done のレース（過去に開いたレース）でも動くようにするため (v.2026.9.23+26092304)
+          unawaited(HorseLapTimeService()
+              .fetchAndSaveForHorses(
+                  data.horses.map((h) => h.horseId).toList())
+              .catchError((e) {
+            debugPrint('HorseLapTimeService.fetchAndSaveForHorses failed: $e');
+          }));
         }
       }
     } catch (e) {

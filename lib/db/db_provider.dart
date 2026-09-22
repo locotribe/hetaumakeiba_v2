@@ -368,6 +368,13 @@ class DbProvider {
         newspaper_fetched_at  TEXT,
         horse_page_fetched_at TEXT,
         horse_page_premium    INTEGER,
+        individual_last_3f    REAL,
+        individual_first_5f   REAL,
+        individual_last_5f    REAL,
+        individual_laps       TEXT,
+        race_laps             TEXT,
+        lap_race_type         TEXT,
+        lap_page_fetched_at   TEXT,
         PRIMARY KEY (horse_id, race_id)
       )
     ''');
@@ -655,6 +662,27 @@ class DbProvider {
         await _createNetkeibaTrainingTables(db);
       } catch (e) {
         debugPrint('Migration error (v17->v18): $e');
+        rethrow;
+      }
+    }
+    // [追加] 個別ラップ取得: horse_past_race_extras に個別ラップの列を追加 (v.2026.9.23+26092304)
+    if (oldVersion < 19) {
+      try {
+        const columns = [
+          'individual_last_3f REAL',
+          'individual_first_5f REAL',
+          'individual_last_5f REAL',
+          'individual_laps TEXT',
+          'race_laps TEXT',
+          'lap_race_type TEXT',
+          'lap_page_fetched_at TEXT',
+        ];
+        for (final column in columns) {
+          await db.execute(
+              'ALTER TABLE ${DbConstants.tableHorsePastRaceExtras} ADD COLUMN $column');
+        }
+      } catch (e) {
+        debugPrint('Migration error (v18->v19): $e');
         rethrow;
       }
     }

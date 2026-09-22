@@ -352,8 +352,11 @@ class PerformanceTabWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildAgariText(String agari, int? agariRank, Color textColor, bool isHighlighted) {
-    if (agari.isEmpty) return const SizedBox.shrink();
+  // [修正] 個別ラップ取得Step3: 個別前半3F を上がり3F の直前に並べて表示する (v.2026.9.23+26092304)
+  Widget _buildAgariText(String agari, int? agariRank, double? individualFirst3f,
+      Color textColor, bool isHighlighted) {
+    final hasAgari = agari.isNotEmpty;
+    if (!hasAgari && individualFirst3f == null) return const SizedBox.shrink();
     Color? background;
     if (!isHighlighted && agariRank != null) {
       if (agariRank == 1) background = Colors.red.shade100;
@@ -361,21 +364,36 @@ class PerformanceTabWidget extends StatelessWidget {
       if (agariRank == 3) background = Colors.yellow.shade200;
     }
     final rankText = agariRank != null ? '($agariRank)' : '';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      color: background,
-      child: Text(
-        '上$agari$rankText',
-        maxLines: 1,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (individualFirst3f != null)
+          Padding(
+            padding: const EdgeInsets.only(right: 3),
+            child: Text(
+              '前${individualFirst3f.toStringAsFixed(1)}',
+              maxLines: 1,
+              style: TextStyle(fontSize: 11, color: textColor),
+            ),
+          ),
+        if (hasAgari)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            color: background,
+            child: Text(
+              '上$agari$rankText',
+              maxLines: 1,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor),
+            ),
+          ),
+      ],
     );
   }
 
+  // [修正] 個別ラップ取得Step3: 個別前半3F は5行目（上がりの前）へ移したため、この行では扱わない (v.2026.9.23+26092304)
   Widget _buildPaceText(
       String? paceMark,
       ({double first3f, double last3f})? firstLast3f,
-      double? individualFirst3f,
       Color textColor,
       bool isHighlighted,
       ) {
@@ -391,12 +409,6 @@ class PerformanceTabWidget extends StatelessWidget {
     if (firstLast3f != null) {
       spans.add(TextSpan(
         text: '${firstLast3f.first3f.toStringAsFixed(1)}-${firstLast3f.last3f.toStringAsFixed(1)}',
-        style: TextStyle(color: textColor),
-      ));
-    }
-    if (individualFirst3f != null) {
-      spans.add(TextSpan(
-        text: ' 前${individualFirst3f.toStringAsFixed(1)}',
         style: TextStyle(color: textColor),
       ));
     }
@@ -626,14 +638,16 @@ class PerformanceTabWidget extends StatelessWidget {
                         Text(displayMargin, maxLines: 1, overflow: TextOverflow.ellipsis,
                             style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: textColor)),
                       ),
-                      // 5行目: 通過順（注記は赤字） / 上がり3F（順位1〜3位は背景色）
+                      // 5行目: 通過順（注記は赤字） / 個別前半3F・上がり3F（順位1〜3位は背景色）
                       _buildLine(
                         _buildCornerText(corners, textColor, isHighlighted),
-                        _buildAgariText(record.agari, agariRank, textColor, isHighlighted),
+                        // [修正] 個別ラップ取得Step3: 個別前半3F を上がりの直前に並べる (v.2026.9.23+26092304)
+                        _buildAgariText(record.agari, agariRank,
+                            extra?.individualFirst3f, textColor, isHighlighted),
                       ),
-                      // 6行目: ペース記号・レース前後半3F・個別前半3F / タイム指数
+                      // 6行目: ペース記号・レース前後半3F / タイム指数
                       _buildLine(
-                        _buildPaceText(paceMark, firstLast3f, extra?.individualFirst3f, textColor, isHighlighted),
+                        _buildPaceText(paceMark, firstLast3f, textColor, isHighlighted),
                         extra?.timeIndex != null
                             ? Text('指数${extra!.timeIndex}', maxLines: 1,
                                 style: TextStyle(fontSize: smallFontSize, fontWeight: FontWeight.bold, color: textColor))

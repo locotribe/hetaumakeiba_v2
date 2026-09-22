@@ -2,8 +2,8 @@
 
 class DbConstants {
   static const String dbName = 'hetaumakeiba_v2.db';
-  // [修正] 17 -> 18に更新（netkeiba 調教の2テーブル新設） (v.2026.9.22+26092211)
-  static const int dbVersion = 18;
+  // [修正] 18 -> 19に更新（horse_past_race_extras に個別ラップの列を追加） (v.2026.9.23+26092304)
+  static const int dbVersion = 19;
 
   // --- Tables ---
   static const String tableQrData = 'qr_data';

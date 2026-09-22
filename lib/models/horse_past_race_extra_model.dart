@@ -40,6 +40,14 @@ class HorsePastRaceExtra {
   final String? newspaperFetchedAt; // 新聞ページから保存した日時 (ISO8601)
   final String? horsePageFetchedAt; // 競走馬ページから保存した日時 (ISO8601)
   final bool? horsePagePremium; // 競走馬ページ取得時にnetkeibaログイン中だったか
+  // [追加] 個別ラップ取得: db.sp.netkeiba の個別ラップページ（前走分）から保存する項目 (v.2026.9.23+26092304)
+  final double? individualLast3f; // 個別後半3F
+  final double? individualFirst5f; // 個別前半5F
+  final double? individualLast5f; // 個別後半5F
+  final List<double>? individualLaps; // 個別ラップ（200mごと）
+  final List<double>? raceLaps; // レースラップ（200mごと）
+  final String? lapRaceType; // 加速戦・瞬発戦 など
+  final String? lapPageFetchedAt; // 個別ラップページから保存した日時 (ISO8601)
 
   const HorsePastRaceExtra({
     required this.horseId,
@@ -60,7 +68,31 @@ class HorsePastRaceExtra {
     this.newspaperFetchedAt,
     this.horsePageFetchedAt,
     this.horsePagePremium,
+    this.individualLast3f,
+    this.individualFirst5f,
+    this.individualLast5f,
+    this.individualLaps,
+    this.raceLaps,
+    this.lapRaceType,
+    this.lapPageFetchedAt,
   });
+
+  // [追加] 個別ラップ取得: ラップ列（CSV）の変換 (v.2026.9.23+26092304)
+  static String? _lapsToText(List<double>? laps) =>
+      laps == null ? null : laps.map((l) => l.toStringAsFixed(1)).join(',');
+
+  static List<double>? _textToLaps(dynamic value) {
+    if (value == null) return null;
+    final text = value.toString().trim();
+    if (text.isEmpty) return null;
+    final laps = <double>[];
+    for (final part in text.split(',')) {
+      final lap = double.tryParse(part.trim());
+      if (lap == null) return null;
+      laps.add(lap);
+    }
+    return laps;
+  }
 
   static int? _boolToInt(bool? value) => value == null ? null : (value ? 1 : 0);
 
@@ -88,6 +120,14 @@ class HorsePastRaceExtra {
       'newspaper_fetched_at': newspaperFetchedAt,
       'horse_page_fetched_at': horsePageFetchedAt,
       'horse_page_premium': _boolToInt(horsePagePremium),
+      // [追加] 個別ラップ取得 (v.2026.9.23+26092304)
+      'individual_last_3f': individualLast3f,
+      'individual_first_5f': individualFirst5f,
+      'individual_last_5f': individualLast5f,
+      'individual_laps': _lapsToText(individualLaps),
+      'race_laps': _lapsToText(raceLaps),
+      'lap_race_type': lapRaceType,
+      'lap_page_fetched_at': lapPageFetchedAt,
     };
   }
 
@@ -122,6 +162,14 @@ class HorsePastRaceExtra {
       newspaperFetchedAt: map['newspaper_fetched_at'] as String?,
       horsePageFetchedAt: map['horse_page_fetched_at'] as String?,
       horsePagePremium: _intToBool(map['horse_page_premium']),
+      // [追加] 個別ラップ取得 (v.2026.9.23+26092304)
+      individualLast3f: (map['individual_last_3f'] as num?)?.toDouble(),
+      individualFirst5f: (map['individual_first_5f'] as num?)?.toDouble(),
+      individualLast5f: (map['individual_last_5f'] as num?)?.toDouble(),
+      individualLaps: _textToLaps(map['individual_laps']),
+      raceLaps: _textToLaps(map['race_laps']),
+      lapRaceType: map['lap_race_type'] as String?,
+      lapPageFetchedAt: map['lap_page_fetched_at'] as String?,
     );
   }
 
@@ -148,6 +196,14 @@ class HorsePastRaceExtra {
       newspaperFetchedAt: newspaperFetchedAt ?? base.newspaperFetchedAt,
       horsePageFetchedAt: horsePageFetchedAt ?? base.horsePageFetchedAt,
       horsePagePremium: horsePagePremium ?? base.horsePagePremium,
+      // [追加] 個別ラップ取得 (v.2026.9.23+26092304)
+      individualLast3f: individualLast3f ?? base.individualLast3f,
+      individualFirst5f: individualFirst5f ?? base.individualFirst5f,
+      individualLast5f: individualLast5f ?? base.individualLast5f,
+      individualLaps: individualLaps ?? base.individualLaps,
+      raceLaps: raceLaps ?? base.raceLaps,
+      lapRaceType: lapRaceType ?? base.lapRaceType,
+      lapPageFetchedAt: lapPageFetchedAt ?? base.lapPageFetchedAt,
     );
   }
 

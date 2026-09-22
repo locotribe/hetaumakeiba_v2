@@ -26,6 +26,8 @@ import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_past_race_extra_repository.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/services/netkeiba_session_service.dart';
+// [追加] 個別ラップ取得: 前走の個別ラップ (v.2026.9.23+26092304)
+import 'package:hetaumakeiba_v2/services/horse_laptime_service.dart';
 
 /// 1ステップ分の実処理。戻り値は取得できた件数(itemCount)。
 /// テストではネットワークを伴わない差し替え実装を注入する。
@@ -320,8 +322,19 @@ class RacePreparationService {
       } else {
         total += existing.length;
       }
+      // [追加] 個別ラップ取得: 最新の過去走に個別ラップが未保存なら、個別ラップページを1回取得する（ログイン不要） (v.2026.9.23+26092304)
+      await _fetchLapTimeIfNeeded(horseId);
     }
     return total;
+  }
+
+  // [修正] 個別ラップ取得Step2: 取得要否の判定を HorseLapTimeService に任せる (v.2026.9.23+26092304)
+  Future<void> _fetchLapTimeIfNeeded(String horseId) async {
+    try {
+      await HorseLapTimeService().fetchAndSaveForHorses([horseId]);
+    } catch (e) {
+      debugPrint('RacePreparationService: 個別ラップの取得に失敗 ($horseId): $e');
+    }
   }
 
   Future<int> _defaultPastRaceResults({
