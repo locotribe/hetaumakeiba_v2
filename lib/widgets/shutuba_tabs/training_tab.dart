@@ -9,6 +9,8 @@ import 'package:hetaumakeiba_v2/db/repositories/race_preparation_repository.dart
 import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 import 'package:hetaumakeiba_v2/services/training_data_service.dart';
 import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
+// [追加] 調教タブ改修Step1: レース日での絞り込みとラップ計算の共通関数 (v.2026.9.22+26092210)
+import 'package:hetaumakeiba_v2/utils/training_date_utils.dart';
 
 class TrainingTabWidget extends StatefulWidget {
   final String raceId;
@@ -46,7 +48,8 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
     Map<String, List<TrainingTimeModel>> newData = {};
     for (var horse in widget.horses) {
       final records = await _repository.getTrainingTimesForHorse(horse.horseId);
-      newData[horse.horseId] = records;
+      // [修正] 調教タブ改修Step1: レース当日以降の調教を除外する (v.2026.9.22+26092210)
+      newData[horse.horseId] = filterTrainingBeforeRace(records, widget.raceDate);
     }
     // [追加] Phase 4-C: 調教データの取得状態を読み、見出し文言に反映する (v.2026.9.5+26090503)
     final preparationStatus = await _preparationRepository.getStep(
@@ -145,26 +148,17 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
 
     if (furlongs.isEmpty) return const Text('タイムデータなし');
 
-    // ラップタイムの計算
-    List<double?> laps = [];
-    for (int i = 0; i < furlongs.length; i++) {
-      if (i == 0) {
-        laps.add(null); // 最初の区間は前のデータがないためラップなし(全体の最初のタイムそのままは出さない)
-      } else {
-        // 前のハロンタイム - 今のハロンタイム = その1Fのラップ
-        double lap = furlongs[i - 1]['time'] - furlongs[i]['time'];
-        laps.add(double.parse(lap.toStringAsFixed(1)));
-      }
-    }
-    // 最後の1Fはそのままがラップになることが多いが、念のため
-    laps[furlongs.length - 1] = furlongs.last['time'];
+    // [修正] 調教タブ改修Step1: 2F→1F区間が消えて列がずれていたため、共通関数で
+    // 「各列の下にその列から始まる1Fのラップ（最後は1Fそのもの）」を出す (v.2026.9.22+26092210)
+    final List<double> laps = calcTrainingLaps(
+        furlongs.map((f) => f['time'] as double).toList());
 
     // ラップ色の判定（最後の1Fが、その前のラップより速いか遅いか）
     Color lastLapColor = Colors.black87;
-    if (laps.length >= 2 && laps.last != null && laps[laps.length - 2] != null) {
-      if (laps.last! < laps[laps.length - 2]!) {
+    if (laps.length >= 2) {
+      if (laps.last < laps[laps.length - 2]) {
         lastLapColor = Colors.red; // 加速ラップ
-      } else if (laps.last! > laps[laps.length - 2]!) {
+      } else if (laps.last > laps[laps.length - 2]) {
         lastLapColor = Colors.blue; // 減速ラップ
       }
     }
@@ -190,7 +184,8 @@ class _TrainingTabWidgetState extends State<TrainingTabWidget> {
         Row(
           children: List.generate(furlongs.length, (i) {
             final isLast = i == furlongs.length - 1;
-            final lapText = laps[i] != null ? '(${laps[i]!.toStringAsFixed(1)})' : '-';
+            // [修正] 調教タブ改修Step1: ラップは全列に値がある (v.2026.9.22+26092210)
+            final lapText = '(${laps[i].toStringAsFixed(1)})';
             return SizedBox(
               width: 45,
               child: Text(

@@ -24,6 +24,9 @@ import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/training_time_chart_tab.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
+// [追加] 調教タブ改修Step1: レース日より前への絞り込み (v.2026.9.22+26092210)
+import 'package:hetaumakeiba_v2/utils/training_date_utils.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -145,9 +148,33 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     }
 
     setState(() {
-      _trainingDataMap = newTrainingDataMap;
-      _pastRecordsMap = allPerformanceRecords;
+      // [修正] 調教タブ改修Step1: レース当日以降の調教・成績を除外する (v.2026.9.22+26092210)
+      _trainingDataMap = _trainingBeforeRace(newTrainingDataMap);
+      _pastRecordsMap = _recordsBeforeRace(allPerformanceRecords);
     });
+  }
+
+  // [追加] 調教タブ改修Step1: 調教データと過去成績をレース日より前だけに絞る。
+  // レース日が不明（raceData が null・変換不可）の場合は絞らない (v.2026.9.22+26092210)
+  String get _raceDateRaw => widget.raceData?.raceDate ?? '';
+
+  Map<String, List<TrainingTimeModel>> _trainingBeforeRace(
+      Map<String, List<TrainingTimeModel>> map) {
+    if (toYyyymmdd(_raceDateRaw) == null) return map;
+    return filterTrainingMapBeforeRace(map, _raceDateRaw);
+  }
+
+  Map<String, List<HorseRaceRecord>> _recordsBeforeRace(
+      Map<String, List<HorseRaceRecord>> map) {
+    final ymd = toYyyymmdd(_raceDateRaw);
+    if (ymd == null) return map;
+    final asOf = DateTime(
+      int.parse(ymd.substring(0, 4)),
+      int.parse(ymd.substring(4, 6)),
+      int.parse(ymd.substring(6, 8)),
+    );
+    return map.map((horseId, records) =>
+        MapEntry(horseId, filterRecordsBeforeAsOf(records, asOf: asOf)));
   }
 
   Future<void> _showConfirmationDialog({bool isRefresh = false}) async {
@@ -311,8 +338,9 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         _statsMap = newStatsMap;
         _matchupStats = newMatchupStats;
         _jockeyComboStats = newJockeyComboStats;
-        _trainingDataMap = newTrainingDataMap;
-        _pastRecordsMap = allPerformanceRecords;
+        // [修正] 調教タブ改修Step1: レース当日以降の調教・成績を除外する (v.2026.9.22+26092210)
+        _trainingDataMap = _trainingBeforeRace(newTrainingDataMap);
+        _pastRecordsMap = _recordsBeforeRace(allPerformanceRecords);
         _isLoading = false;
       });
     } catch (e) {
