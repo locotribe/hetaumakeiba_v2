@@ -371,6 +371,9 @@ class DbProvider {
         PRIMARY KEY (horse_id, race_id)
       )
     ''');
+
+    // [追加] 調教タブ改修Step2: netkeiba 調教の2テーブル作成 (v.2026.9.22+26092211)
+    await _createNetkeibaTrainingTables(db);
   }
 
   // [修正] マイグレーション失敗時にエラーを握りつぶさず、rethrowで上位へ伝播させるよう全catchブロックを修正 (v.13.40.3)
@@ -646,6 +649,59 @@ class DbProvider {
         rethrow;
       }
     }
+    // [追加] 調教タブ改修Step2: netkeiba 調教の2テーブル新設 (v.2026.9.22+26092211)
+    if (oldVersion < 18) {
+      try {
+        await _createNetkeibaTrainingTables(db);
+      } catch (e) {
+        debugPrint('Migration error (v17->v18): $e');
+        rethrow;
+      }
+    }
+  }
+
+  // [追加] 調教タブ改修Step2: netkeiba 調教の2テーブル（_onCreate / _onUpgrade 共通） (v.2026.9.22+26092211)
+  Future<void> _createNetkeibaTrainingTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableNetkeibaTrainingReviews}(
+        race_id            TEXT NOT NULL,
+        horse_id           TEXT NOT NULL,
+        short_review       TEXT,
+        critic             TEXT,
+        rank               TEXT,
+        stable_comment     TEXT,
+        stable_speaker     TEXT,
+        stable_mark        TEXT,
+        oikiri_fetched_at  TEXT,
+        comment_fetched_at TEXT,
+        PRIMARY KEY (race_id, horse_id)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableNetkeibaTrainingSessions}(
+        horse_id        TEXT NOT NULL,
+        training_date   TEXT NOT NULL,
+        course_raw      TEXT NOT NULL,
+        seq             INTEGER NOT NULL,
+        training_time   TEXT,
+        track_condition TEXT,
+        rider           TEXT,
+        is_best_time    INTEGER,
+        slot1 REAL, slot2 REAL, slot3 REAL, slot4 REAL, slot5 REAL,
+        lap1 REAL, lap2 REAL, lap3 REAL, lap4 REAL, lap5 REAL,
+        color1 INTEGER, color2 INTEGER, color3 INTEGER, color4 INTEGER, color5 INTEGER,
+        position        INTEGER,
+        training_load   TEXT,
+        critic          TEXT,
+        rank            TEXT,
+        partner_text    TEXT,
+        partner_json    TEXT,
+        race_id         TEXT,
+        source          TEXT,
+        fetched_at      TEXT,
+        PRIMARY KEY (horse_id, training_date, course_raw, seq)
+      )
+    ''');
   }
 
   Future<void> _createCoursePresetsTable(Database db) async {
