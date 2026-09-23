@@ -49,73 +49,136 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
     }
   }
 
+  // [追加] 保存済みフィードの種類を、ドロップダウンの選択肢（'RSS' / 'Web' / 'youtube'）に合わせる (v.2026.9.24+26092404)
+  // v.13.0.0 以前に保存された 'news'、および 'YouTube'（大文字）で保存されたデータでも編集ダイアログを開けるようにする
+  String _normalizeFeedType(String? type) {
+    switch (type) {
+      case 'RSS':
+        return 'RSS';
+      case 'Web':
+        return 'Web';
+      case 'youtube':
+      case 'YouTube':
+        return 'youtube';
+      default:
+        return 'RSS';
+    }
+  }
+
   void _showAddOrEditFeedDialog({Feed? existingFeed}) {
     final titleController = TextEditingController(text: existingFeed?.title);
     final urlController = TextEditingController(text: existingFeed?.url);
-    String selectedType = existingFeed?.type ?? 'RSS';
+    // [修正] 保存済みの種類を正規化してから選択状態にする (v.2026.9.24+26092404)
+    String selectedType = _normalizeFeedType(existingFeed?.type);
+    // [追加] YouTubeチャンネルID未入力時のエラー表示用 (v.2026.9.24+26092404)
+    String? urlErrorText;
+
+    // [追加] YouTubeフィードの編集時は、保存済みURLからチャンネルIDのみを取り出して入力欄に表示する (v.2026.9.24+26092404)
+    if (selectedType == 'youtube' && urlController.text.contains('channel_id=')) {
+      urlController.text = Uri.tryParse(urlController.text)?.queryParameters['channel_id'] ?? urlController.text;
+    }
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(existingFeed == null ? 'フィードの追加' : 'フィードの編集'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: 'サイト名'),
-              ),
-              TextField(
-                controller: urlController,
-                decoration: const InputDecoration(labelText: 'URL (RSS または Web)'),
-              ),
-              DropdownButtonFormField<String>(
-                value: selectedType,
-                items: const [
-                  DropdownMenuItem(value: 'RSS', child: Text('RSS')),
-                  DropdownMenuItem(value: 'Web', child: Text('Webページ')),
+      // [修正] 種類の切り替えに応じて入力欄の表示を変えるため、StatefulBuilder で囲む (v.2026.9.24+26092404)
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final bool isYouTube = selectedType == 'youtube';
+          return AlertDialog(
+            title: Text(existingFeed == null ? 'フィードの追加' : 'フィードの編集'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'サイト名'),
+                  ),
+                  TextField(
+                    controller: urlController,
+                    // [修正] YouTube選択時はラベル・ヒントを「チャンネルID」用に切り替える (v.2026.9.24+26092404)
+                    decoration: InputDecoration(
+                      labelText: isYouTube ? 'YouTubeチャンネルID' : 'URL (RSS または Web)',
+                      hintText: isYouTube ? '例: UCxxxxxxxxxxxx' : null,
+                      errorText: urlErrorText,
+                    ),
+                    // [追加] 入力し直したらエラー表示を消す (v.2026.9.24+26092404)
+                    onChanged: (_) {
+                      if (urlErrorText != null) {
+                        setDialogState(() => urlErrorText = null);
+                      }
+                    },
+                  ),
+                  DropdownButtonFormField<String>(
+                    value: selectedType,
+                    items: const [
+                      DropdownMenuItem(value: 'RSS', child: Text('RSS')),
+                      DropdownMenuItem(value: 'Web', child: Text('Webページ')),
+                      // [修正] 保存値は feed_card_widget.dart の判定に合わせて小文字 'youtube' とする (v.2026.9.24+26092404)
+                      DropdownMenuItem(value: 'youtube', child: Text('YouTube')),
+                    ],
+                    // [修正] 選択に応じて入力欄の表示を切り替えるため setDialogState で再描画する (v.2026.9.24+26092404)
+                    onChanged: (val) {
+                      if (val == null) return;
+                      setDialogState(() {
+                        selectedType = val;
+                        urlErrorText = null;
+                      });
+                    },
+                    decoration: const InputDecoration(labelText: 'タイプ'),
+                  ),
                 ],
-                onChanged: (val) => selectedType = val!,
-                decoration: const InputDecoration(labelText: 'タイプ'),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('キャンセル')),
+              TextButton(
+                onPressed: () async {
+                  // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
+                  final userId = UserSession().localUserId;
+                  if (userId == null) return;
+
+                  // [追加] YouTubeの場合はチャンネルIDからRSSフィードURLを組み立てる。RSS/Webは従来どおり入力値をそのまま保存 (v.2026.9.24+26092404)
+                  String finalUrl = urlController.text;
+                  if (selectedType == 'youtube') {
+                    final String channelInput = urlController.text.trim();
+                    if (channelInput.isEmpty) {
+                      setDialogState(() => urlErrorText = 'チャンネルIDを入力してください');
+                      return;
+                    }
+                    finalUrl = channelInput.contains('youtube.com')
+                        ? channelInput
+                        : 'https://www.youtube.com/feeds/videos.xml?channel_id=$channelInput';
+                  }
+
+                  if (existingFeed == null) {
+                    final newFeed = Feed(
+                      userId: userId,
+                      title: titleController.text,
+                      url: finalUrl,
+                      type: selectedType,
+                      displayOrder: _feeds.length,
+                    );
+                    await _userRepository.insertFeed(newFeed);
+                  } else {
+                    final updatedFeed = Feed(
+                      id: existingFeed.id,
+                      userId: userId,
+                      title: titleController.text,
+                      url: finalUrl,
+                      type: selectedType,
+                      displayOrder: existingFeed.displayOrder,
+                    );
+                    await _userRepository.updateFeed(updatedFeed);
+                  }
+                  if (context.mounted) Navigator.of(context).pop();
+                  _loadFeeds();
+                },
+                child: const Text('保存'),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('キャンセル')),
-          TextButton(
-            onPressed: () async {
-              // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
-              final userId = UserSession().localUserId;
-              if (userId == null) return;
-
-              if (existingFeed == null) {
-                final newFeed = Feed(
-                  userId: userId,
-                  title: titleController.text,
-                  url: urlController.text,
-                  type: selectedType,
-                  displayOrder: _feeds.length,
-                );
-                await _userRepository.insertFeed(newFeed);
-              } else {
-                final updatedFeed = Feed(
-                  id: existingFeed.id,
-                  userId: userId,
-                  title: titleController.text,
-                  url: urlController.text,
-                  type: selectedType,
-                  displayOrder: existingFeed.displayOrder,
-                );
-                await _userRepository.updateFeed(updatedFeed);
-              }
-              if (context.mounted) Navigator.of(context).pop();
-              _loadFeeds();
-            },
-            child: const Text('保存'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
