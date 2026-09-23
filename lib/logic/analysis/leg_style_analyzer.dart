@@ -6,11 +6,15 @@ class LegStyleProfile {
   final String primaryStyle;
   final Map<String, double> styleDistribution; // 脚質分布（頻度 %）
   final Map<String, double> styleWinRates;     // ★追加: 脚質別勝率（質 %）
+  // [追加] 脚質別着度数 [1着,2着,3着,着外]（マクリ含む・中止/除外は着外に合算） (v.2026.9.24+26092403)
+  final Map<String, List<int>> styleRecordCounts;
 
   LegStyleProfile({
     required this.primaryStyle,
     required this.styleDistribution,
     this.styleWinRates = const {}, // ★追加: 既存コードへの影響を防ぐためデフォルト値を設定
+    // [追加] 既存コード・旧キャッシュへの影響を防ぐためデフォルト値を設定 (v.2026.9.24+26092403)
+    this.styleRecordCounts = const {},
   });
 
   Map<String, dynamic> toJson() {
@@ -18,6 +22,7 @@ class LegStyleProfile {
       'primaryStyle': primaryStyle,
       'styleDistribution': styleDistribution,
       'styleWinRates': styleWinRates, // ★追加
+      'styleRecordCounts': styleRecordCounts, // [追加] (v.2026.9.24+26092403)
     };
   }
 
@@ -33,10 +38,21 @@ class LegStyleProfile {
     )
         : {};
 
+    // [追加] 古いJSONデータには styleRecordCounts がない可能性があるため、nullチェックを行う (v.2026.9.24+26092403)
+    final Map<String, List<int>> recordCounts = json['styleRecordCounts'] != null
+        ? (json['styleRecordCounts'] as Map<String, dynamic>).map(
+          (key, value) => MapEntry(
+        key,
+        (value as List).map((e) => (e as num).toInt()).toList(),
+      ),
+    )
+        : {};
+
     return LegStyleProfile(
       primaryStyle: json['primaryStyle'] as String,
       styleDistribution: distribution,
       styleWinRates: winRates,
+      styleRecordCounts: recordCounts, // [追加] (v.2026.9.24+26092403)
     );
   }
 }
@@ -62,7 +78,7 @@ class _RaceActionProfile {
 class LegStyleAnalyzer {
   static LegStyleProfile getRunningStyle(List<HorseRaceRecord> records) {
     if (records.isEmpty) {
-      return LegStyleProfile(primaryStyle: "不明", styleDistribution: {}, styleWinRates: {});
+      return LegStyleProfile(primaryStyle: "不明", styleDistribution: {}, styleWinRates: {}, styleRecordCounts: {});
     }
 
     // 脚質判定結果と、そのレースでの着順をペアで保持するリスト
@@ -126,11 +142,13 @@ class LegStyleAnalyzer {
     }
 
     if (validRaceData.isEmpty) {
-      return LegStyleProfile(primaryStyle: "不明", styleDistribution: {}, styleWinRates: {});
+      return LegStyleProfile(primaryStyle: "不明", styleDistribution: {}, styleWinRates: {}, styleRecordCounts: {});
     }
 
     final Map<String, int> styleCounts = {};
     final Map<String, int> styleWinCounts = {}; // 脚質ごとの勝利数
+    // [追加] 脚質ごとの着度数 [1着,2着,3着,着外]。着順が数値でない場合(中止・除外等)は着外に合算する (v.2026.9.24+26092403)
+    final Map<String, List<int>> styleRecordCounts = {};
 
     for (final data in validRaceData) {
       final style = data['style'] as String;
@@ -139,6 +157,18 @@ class LegStyleAnalyzer {
       styleCounts[style] = (styleCounts[style] ?? 0) + 1;
       if (rank == 1) {
         styleWinCounts[style] = (styleWinCounts[style] ?? 0) + 1;
+      }
+
+      // [追加] 着度数の集計。1着/2着/3着/着外(4着以下・中止・除外等)を数える (v.2026.9.24+26092403)
+      final bucket = styleRecordCounts.putIfAbsent(style, () => [0, 0, 0, 0]);
+      if (rank == 1) {
+        bucket[0] += 1;
+      } else if (rank == 2) {
+        bucket[1] += 1;
+      } else if (rank == 3) {
+        bucket[2] += 1;
+      } else {
+        bucket[3] += 1;
       }
     }
 
@@ -196,6 +226,7 @@ class LegStyleAnalyzer {
       primaryStyle: primaryStyle,
       styleDistribution: styleDistribution,
       styleWinRates: styleWinRates, // ★追加
+      styleRecordCounts: styleRecordCounts, // [追加] (v.2026.9.24+26092403)
     );
   }
 
