@@ -189,6 +189,10 @@ class StatsAnalyzer {
       date: bestTimeRecord.date,
       sourceRaceId: bestTimeRecord.raceId,
       venueAndDistance: '${bestTimeRecord.venue} ${bestTimeRecord.distance}',
+      // [追加] その時計を出した走の枠番・着順・人気（数値でなければ null） (v.2026.9.24+26092402)
+      frameNumber: int.tryParse(bestTimeRecord.frameNumber),
+      finishRank: int.tryParse(bestTimeRecord.rank),
+      popularity: int.tryParse(bestTimeRecord.popularity),
     );
   }
 
@@ -250,6 +254,10 @@ class StatsAnalyzer {
       date: bestAgariRecord.date,
       sourceRaceId: bestAgariRecord.raceId,
       venueAndDistance: '${bestAgariRecord.venue} ${bestAgariRecord.distance}',
+      // [追加] その上がりを出した走の枠番・着順・人気（数値でなければ null） (v.2026.9.24+26092402)
+      frameNumber: int.tryParse(bestAgariRecord.frameNumber),
+      finishRank: int.tryParse(bestAgariRecord.rank),
+      popularity: int.tryParse(bestAgariRecord.popularity),
     );
   }
 

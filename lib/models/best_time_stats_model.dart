@@ -13,6 +13,10 @@ class BestTimeStats {
   // ▼ 変更: 1つだった含水率を、ゴール前(G)と4コーナー(4c)の2つに分割
   final double? moistureGoal;
   final double? moisture4c;
+  // [追加] 馬柱の時計列に、その時計を出した過去走の枠番・着順・人気を表示するための項目 (v.2026.9.24+26092402)
+  final int? frameNumber; // その走の枠番
+  final int? finishRank; // その走の着順
+  final int? popularity; // その走の人気
 
   BestTimeStats({
     required this.timeInSeconds,
@@ -25,6 +29,10 @@ class BestTimeStats {
     this.cushionValue,
     this.moistureGoal,
     this.moisture4c,
+    // [追加] 枠番・着順・人気 (v.2026.9.24+26092402)
+    this.frameNumber,
+    this.finishRank,
+    this.popularity,
   });
 
   Map<String, dynamic> toMap() {
@@ -39,6 +47,10 @@ class BestTimeStats {
       'cushionValue': cushionValue,
       'moistureGoal': moistureGoal,
       'moisture4c': moisture4c,
+      // [追加] 枠番・着順・人気 (v.2026.9.24+26092402)
+      'frameNumber': frameNumber,
+      'finishRank': finishRank,
+      'popularity': popularity,
     };
   }
 
@@ -54,6 +66,10 @@ class BestTimeStats {
       cushionValue: (map['cushionValue'] as num?)?.toDouble(),
       moistureGoal: (map['moistureGoal'] as num?)?.toDouble(),
       moisture4c: (map['moisture4c'] as num?)?.toDouble(),
+      // [追加] 旧キャッシュにキーが無い場合は null（後方互換） (v.2026.9.24+26092402)
+      frameNumber: (map['frameNumber'] as num?)?.toInt(),
+      finishRank: (map['finishRank'] as num?)?.toInt(),
+      popularity: (map['popularity'] as num?)?.toInt(),
     );
   }
 
@@ -73,6 +89,10 @@ class BestTimeStats {
       cushionValue: cushionValue ?? this.cushionValue,
       moistureGoal: moistureGoal ?? this.moistureGoal,
       moisture4c: moisture4c ?? this.moisture4c,
+      // [追加] 枠番・着順・人気は元の値を維持する (v.2026.9.24+26092402)
+      frameNumber: frameNumber,
+      finishRank: finishRank,
+      popularity: popularity,
     );
   }
 }

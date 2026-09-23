@@ -238,6 +238,10 @@ class StartersTabWidget extends StatelessWidget {
             // [追加] 時計を出したレースの名前と日付を上段に表示 (v.2026.9.22+26092207)
             raceName: currentBestTime?.raceName,
             date: currentBestTime?.date,
+            // [追加] 時計を出した走の枠番・着順・人気を最下段に表示 (v.2026.9.24+26092402)
+            frameNumber: currentBestTime?.frameNumber,
+            finishRank: currentBestTime?.finishRank,
+            popularity: currentBestTime?.popularity,
           )),
           DataCell(TrackStatsCell(
             formattedValue: currentAgari?.formattedAgari,
@@ -250,6 +254,10 @@ class StartersTabWidget extends StatelessWidget {
             // [追加] 上がりを出したレースの名前と日付を上段に表示 (v.2026.9.22+26092207)
             raceName: currentAgari?.raceName,
             date: currentAgari?.date,
+            // [追加] 上がりを出した走の枠番・着順・人気を最下段に表示 (v.2026.9.24+26092402)
+            frameNumber: currentAgari?.frameNumber,
+            finishRank: currentAgari?.finishRank,
+            popularity: currentAgari?.popularity,
           )),
         ];
       },
