@@ -12,6 +12,7 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart'; // [追加] CSVメモ入出力改善 (v.2026.9.24+26092401)
 
 // [追加] 馬詳細タブStep2: メモタブ（memo_tab.dart）のメモ入力ダイアログ・過去メモ・CSV入出力をここへ移した。
 // 見た目・文言・処理内容は移す前と同じ。馬詳細タブ（Step3）からも使う (v.2026.9.23+26092307)
@@ -167,13 +168,14 @@ Future<HorseMemo?> showPredictionMemoDialog(
   );
 }
 
-/// このレースのメモを CSV にして共有する
+/// このレースの「予想メモ」を CSV にして共有する
 Future<void> exportMemosAsCsv({
   required String raceId,
   required PredictionRaceData raceData,
 }) async {
   final List<List<dynamic>> rows = [];
-  rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'predictionMemo', 'reviewMemo']);
+  // [修正] CSVメモ入出力改善: 予想メモCSVは予想メモのみ。回顧メモ列は出力しない (v.2026.9.24+26092401)
+  rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'predictionMemo']);
 
   for (final horse in raceData.horses) {
     rows.add([
@@ -182,21 +184,28 @@ Future<void> exportMemosAsCsv({
       horse.horseNumber,
       horse.horseName,
       horse.userMemo?.predictionMemo ?? '',
-      horse.userMemo?.reviewMemo ?? '',
     ]);
   }
 
   final String csv = const ListToCsvConverter().convert(rows);
 
+  // [修正] CSVメモ入出力改善: ファイル名を「レースID_日付_レース名_予想メモ.csv」にする (v.2026.9.24+26092401)
+  final fileName = buildMemoCsvFileName(
+    raceId: raceId,
+    raceDate: raceData.raceDate,
+    raceName: raceData.raceName,
+    suffix: '予想メモ',
+  );
+
   final directory = await getTemporaryDirectory();
-  final path = '${directory.path}/${raceId}_memos.csv';
+  final path = '${directory.path}/$fileName';
   final file = File(path);
   await file.writeAsString(csv);
 
-  await Share.shareXFiles([XFile(path)], text: '${raceData.raceName} のメモ');
+  await Share.shareXFiles([XFile(path, name: fileName)], text: '${raceData.raceName} の予想メモ');
 }
 
-/// CSV からこのレースのメモを取り込む。取り込んだ件数を返す（取り消し・未ログイン・エラーは null）
+/// CSV からこのレースの「予想メモ」を取り込む。取り込んだ件数を返す（取り消し・未ログイン・エラーは null）
 Future<int?> importMemosFromCsv(
   BuildContext context, {
   required String raceId,
@@ -210,16 +219,25 @@ Future<int?> importMemosFromCsv(
   }
 
   try {
+    // [修正] CSVメモ入出力改善: Googleドライブ等のCSVも選べるよう FileType.any にし、選択後に拡張子を確認 (v.2026.9.24+26092401)
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['csv'],
+      type: FileType.any,
     );
 
     if (result == null || result.files.single.path == null) {
       return null;
     }
 
-    final filePath = result.files.single.path!;
+    final picked = result.files.single;
+    final ext = (picked.extension ?? '').toLowerCase();
+    final filePath = picked.path!;
+    if (ext != 'csv' && !filePath.toLowerCase().endsWith('.csv')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('CSVファイルを選択してください。')),
+      );
+      return null;
+    }
+
     final file = File(filePath);
     final csvString = await file.readAsString();
 
@@ -228,26 +246,39 @@ Future<int?> importMemosFromCsv(
     if (rows.length < 2) {
       throw Exception('CSVファイルにデータがありません。');
     }
-    final header = rows.first;
-    if (header.join(',') != 'raceId,horseId,horseNumber,horseName,predictionMemo,reviewMemo') {
-      throw Exception('CSVファイルのヘッダー形式が正しくありません。');
+    // [修正] CSVメモ入出力改善: 予想メモCSV専用のヘッダー。回顧メモCSVや旧形式は弾く (v.2026.9.24+26092401)
+    final header = rows.first.map((e) => e.toString().trim()).toList();
+    if (header.join(',') != 'raceId,horseId,horseNumber,horseName,predictionMemo') {
+      throw Exception('予想メモ用のCSVを選択してください。（回顧メモCSVや旧形式は取り込めません）');
     }
+
+    // [修正] CSVメモ入出力改善: 既存メモを取得し、回顧メモ・odds・人気・idを保持したまま予想メモだけ更新する (v.2026.9.24+26092401)
+    final existingMemos = await HorseRepository().getMemosForRace(userId, raceId);
+    final existingMap = {for (var m in existingMemos) m.horseId: m};
 
     final List<HorseMemo> memosToUpdate = [];
     for (int i = 1; i < rows.length; i++) {
       final row = rows[i];
+      if (row.isEmpty) continue;
       final csvRaceId = row[0].toString();
 
       if (csvRaceId != raceId) {
         throw Exception('CSVファイルのレースIDが、現在表示しているレースと一致しません。');
       }
 
+      final horseId = row[1].toString();
+      final csvPrediction = row.length > 4 ? row[4].toString() : '';
+      final existing = existingMap[horseId];
+
       memosToUpdate.add(HorseMemo(
+        id: existing?.id,
         userId: userId,
         raceId: csvRaceId,
-        horseId: row[1].toString(),
-        predictionMemo: row[4].toString(),
-        reviewMemo: row[5].toString(),
+        horseId: horseId,
+        predictionMemo: csvPrediction,
+        reviewMemo: existing?.reviewMemo,
+        odds: existing?.odds,
+        popularity: existing?.popularity,
         timestamp: DateTime.now(),
       ));
     }
@@ -256,7 +287,7 @@ Future<int?> importMemosFromCsv(
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${memosToUpdate.length}件のメモをインポートしました。')),
+        SnackBar(content: Text('${memosToUpdate.length}件の予想メモをインポートしました。')),
       );
     }
     return memosToUpdate.length;

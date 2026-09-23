@@ -27,6 +27,7 @@ import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart'; // [追加] CSVメモ入出力改善 (v.2026.9.24+26092401)
 
 // [追加] race_result_page.dartからViewModelへ移行 (v.13.41.0)
 /// 画面表示に必要な各種データ（馬券・レース結果・展開予測）をまとめて保持するクラス
@@ -275,8 +276,8 @@ class RaceResultViewModel extends ChangeNotifier {
     final raceMemoText = raceMemo?.memo ?? '';
 
     final List<List<dynamic>> rows = [];
-    // ヘッダーに raceMemo を追加
-    rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'reviewMemo', 'predictionMemo', 'raceMemo']);
+    // [修正] CSVメモ入出力改善: 回顧メモCSVは「各馬の回顧メモ＋レース総評」。予想メモ列は出力しない (v.2026.9.24+26092401)
+    rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'reviewMemo', 'raceMemo']);
 
     for (int i = 0; i < raceResult.horseResults.length; i++) {
       final horse = raceResult.horseResults[i];
@@ -286,22 +287,30 @@ class RaceResultViewModel extends ChangeNotifier {
         horse.horseNumber,
         horse.horseName,
         horse.userMemo?.reviewMemo ?? '',
-        horse.userMemo?.predictionMemo ?? '',
         // レース総評は長文になるため、最初のデータ行（i == 0）にのみ出力してスッキリさせる
         i == 0 ? raceMemoText : '',
       ]);
     }
 
     final String csv = const ListToCsvConverter().convert(rows);
+
+    // [修正] CSVメモ入出力改善: ファイル名を「レースID_日付_レース名_回顧メモ.csv」にする (v.2026.9.24+26092401)
+    final fileName = buildMemoCsvFileName(
+      raceId: raceId,
+      raceDate: raceResult.raceDate,
+      raceName: raceResult.raceTitle,
+      suffix: '回顧メモ',
+    );
+
     final directory = await getTemporaryDirectory();
-    final path = '${directory.path}/${raceId}_reviews.csv';
+    final path = '${directory.path}/$fileName';
     final file = File(path);
     await file.writeAsString(csv);
 
-    await Share.shareXFiles([XFile(path)], text: '${raceResult.raceTitle} の回顧メモ');
+    await Share.shareXFiles([XFile(path, name: fileName)], text: '${raceResult.raceTitle} の回顧メモ');
   }
 
-  // CSVから回顧/予想メモ・レース総評を読み込み、競合があればresolveConflict経由でUIに解決させる
+  // CSVからこのレースの回顧メモ・レース総評を読み込み、競合があればresolveConflict経由でUIに解決させる
   Future<ImportCsvResult> importReviewsFromCsv(ConflictResolver resolveConflict) async {
     final userId = UserSession().localUserId;
     if (userId == null) {
@@ -309,29 +318,36 @@ class RaceResultViewModel extends ChangeNotifier {
     }
 
     try {
+      // [修正] CSVメモ入出力改善: Googleドライブ等のCSVも選べるよう FileType.any にし、選択後に拡張子を確認 (v.2026.9.24+26092401)
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
+        type: FileType.any,
       );
 
       if (result == null || result.files.single.path == null) {
         return const ImportCsvResult(success: false, message: '');
       }
 
-      final filePath = result.files.single.path!;
+      final picked = result.files.single;
+      final ext = (picked.extension ?? '').toLowerCase();
+      final filePath = picked.path!;
+      if (ext != 'csv' && !filePath.toLowerCase().endsWith('.csv')) {
+        return const ImportCsvResult(success: false, message: 'CSVファイルを選択してください。');
+      }
+
       final file = File(filePath);
       final csvString = await file.readAsString();
       final List<List<dynamic>> rows = const CsvToListConverter().convert(csvString);
 
       if (rows.length < 2) throw Exception('データがありません');
 
+      // [修正] CSVメモ入出力改善: 回顧メモCSV専用のヘッダー。予想メモCSVや旧形式は弾く (v.2026.9.24+26092401)
       final header = rows.first.map((e) => e.toString().trim()).toList();
-      // 旧フォーマットのCSVでも読み込めるように後方互換性を持たせる
-      final hasRaceMemoCol = header.length > 6 && header[6] == 'raceMemo';
-
-      if (header[0] != 'raceId' || header[1] != 'horseId') {
-        throw Exception('CSVヘッダーが正しくありません');
+      if (header.join(',') != 'raceId,horseId,horseNumber,horseName,reviewMemo,raceMemo') {
+        throw Exception('回顧メモ用のCSVを選択してください。（予想メモCSVや旧形式は取り込めません）');
       }
+
+      // [修正] CSVメモ入出力改善: 競合ダイアログの見出しに出すレース名 (v.2026.9.24+26092401)
+      final raceTitle = pageData?.raceResult?.raceTitle ?? '';
 
       // === 既存データの取得 ===
       final existingHorseMemos = await _horseRepo.getMemosForRace(userId, raceId);
@@ -345,6 +361,7 @@ class RaceResultViewModel extends ChangeNotifier {
 
       for (int i = 1; i < rows.length; i++) {
         final row = rows[i];
+        if (row.isEmpty) continue;
         final csvRaceId = row[0].toString();
 
         if (csvRaceId != raceId) continue;
@@ -352,11 +369,9 @@ class RaceResultViewModel extends ChangeNotifier {
         final horseId = row[1].toString();
         final horseName = row.length > 3 ? row[3].toString() : '馬番不明';
         final csvReview = row.length > 4 ? row[4].toString() : '';
-        final csvPrediction = row.length > 5 ? row[5].toString() : '';
 
         final existingHorse = existingHorseMemosMap[horseId];
         String finalReview = existingHorse?.reviewMemo ?? '';
-        String finalPrediction = existingHorse?.predictionMemo ?? '';
         bool isHorseUpdated = false;
 
         // 回顧メモの競合判定
@@ -365,37 +380,28 @@ class RaceResultViewModel extends ChangeNotifier {
           finalReview = reviewMerge.resultText;
           isHorseUpdated = true;
         } else if (reviewMerge.action == MemoMergeAction.conflict) {
-          final resolved = await resolveConflict('$horseNameの回顧メモ', reviewMerge);
+          // [修正] CSVメモ入出力改善: 見出しにレース名を出す (v.2026.9.24+26092401)
+          final resolved = await resolveConflict(
+            raceTitle.isEmpty ? '$horseNameの回顧メモ' : '$raceTitle\n$horseNameの回顧メモ',
+            reviewMerge,
+          );
           if (resolved != null && resolved != finalReview) {
             finalReview = resolved;
             isHorseUpdated = true;
           }
         }
 
-        // 予想メモの競合判定
-        final predictionMerge = MemoImportLogic.determineMergeAction(existingHorse?.predictionMemo, csvPrediction);
-        if (predictionMerge.action == MemoMergeAction.overwrite) {
-          finalPrediction = predictionMerge.resultText;
-          isHorseUpdated = true;
-        } else if (predictionMerge.action == MemoMergeAction.conflict) {
-          final resolved = await resolveConflict('$horseNameの予想メモ', predictionMerge);
-          if (resolved != null && resolved != finalPrediction) {
-            finalPrediction = resolved;
-            isHorseUpdated = true;
-          }
-        }
-
         // 変更があった場合、または新規作成の場合のみ更新リストへ追加
         if (isHorseUpdated || existingHorse == null) {
-          // 新規の場合でかつCSVのメモがどちらも空なら追加しない
-          if (existingHorse != null || finalReview.isNotEmpty || finalPrediction.isNotEmpty) {
+          // 新規の場合で回顧メモが空なら追加しない
+          if (existingHorse != null || finalReview.isNotEmpty) {
             memosToUpdate.add(HorseMemo(
               id: existingHorse?.id,
               userId: userId,
               raceId: csvRaceId,
               horseId: horseId,
               reviewMemo: finalReview,
-              predictionMemo: finalPrediction,
+              predictionMemo: existingHorse?.predictionMemo, // 既存の予想メモは維持
               timestamp: DateTime.now(),
               odds: existingHorse?.odds,
               popularity: existingHorse?.popularity,
@@ -404,16 +410,20 @@ class RaceResultViewModel extends ChangeNotifier {
           }
         }
 
-        // レース総評の競合判定
-        if (hasRaceMemoCol && row.length > 6) {
-          final csvRaceMemo = row[6].toString().trim();
+        // レース総評の競合判定（回顧メモCSVは6列目=raceMemo）
+        if (row.length > 5) {
+          final csvRaceMemo = row[5].toString().trim();
           if (csvRaceMemo.isNotEmpty) {
             final raceMerge = MemoImportLogic.determineMergeAction(finalRaceMemo, csvRaceMemo);
             if (raceMerge.action == MemoMergeAction.overwrite) {
               finalRaceMemo = raceMerge.resultText;
               updateRaceMemo = true;
             } else if (raceMerge.action == MemoMergeAction.conflict) {
-              final resolved = await resolveConflict('レース総評', raceMerge);
+              // [修正] CSVメモ入出力改善: 見出しにレース名を出す (v.2026.9.24+26092401)
+              final resolved = await resolveConflict(
+                raceTitle.isEmpty ? 'レース総評' : '$raceTitle\nレース総評',
+                raceMerge,
+              );
               if (resolved != null && resolved != finalRaceMemo) {
                 finalRaceMemo = resolved;
                 updateRaceMemo = true;
@@ -445,7 +455,7 @@ class RaceResultViewModel extends ChangeNotifier {
         await loadPageData();
       }
 
-      final message = '$updatedHorseCount頭のメモ${updateRaceMemo ? 'とレース総評' : ''}を更新・インポートしました';
+      final message = '$updatedHorseCount頭の回顧メモ${updateRaceMemo ? 'とレース総評' : ''}を更新・インポートしました';
       return ImportCsvResult(success: true, message: message);
     } catch (e) {
       return ImportCsvResult(success: false, message: 'インポートエラー: $e');
