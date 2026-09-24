@@ -228,6 +228,8 @@ MergedTrainingEntry? pickFinalEntry(
 /// レースごとのまとまり。
 class TrainingRaceGroup {
   final String? raceId;
+  // [追加] 調教タイム個別データ移植Step2: レース見出しのレース遷移リンク用の日付（例: 2025/07/19） (v.2026.9.25+26092502)
+  final String raceDate;
   final String title; // 例: 2026/05/31 東京11R 東京優駿 / 今回のレース
   final String? result; // 例: 1着
   final bool isCurrent;
@@ -235,6 +237,7 @@ class TrainingRaceGroup {
 
   const TrainingRaceGroup({
     this.raceId,
+    this.raceDate = '',
     required this.title,
     this.result,
     required this.isCurrent,
@@ -278,6 +281,8 @@ List<TrainingRaceGroup> groupTrainingByRace({
     }
     slots.add(_RaceSlot(
       raceId: record.raceId,
+      // [追加] 調教タイム個別データ移植Step2: レース遷移リンク用の日付 (v.2026.9.25+26092502)
+      raceDate: record.date,
       ymd: ymd,
       title: pastRaceTitle(record),
       result: pastRaceResult(record),
@@ -312,6 +317,8 @@ List<TrainingRaceGroup> groupTrainingByRace({
     final slot = slots[i];
     groups.add(TrainingRaceGroup(
       raceId: slot.raceId,
+      // [追加] 調教タイム個別データ移植Step2: レース遷移リンク用の日付 (v.2026.9.25+26092502)
+      raceDate: slot.raceDate,
       title: slot.title,
       result: slot.result,
       isCurrent: slot.isCurrent,
@@ -323,6 +330,8 @@ List<TrainingRaceGroup> groupTrainingByRace({
 
 class _RaceSlot {
   final String raceId;
+  // [追加] 調教タイム個別データ移植Step2: レース遷移リンク用の日付 (v.2026.9.25+26092502)
+  final String raceDate;
   final String ymd;
   final String title;
   final String? result;
@@ -330,6 +339,7 @@ class _RaceSlot {
 
   const _RaceSlot({
     required this.raceId,
+    this.raceDate = '',
     required this.ymd,
     required this.title,
     this.result,
