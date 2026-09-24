@@ -14,6 +14,9 @@ import 'package:hetaumakeiba_v2/widgets/horse_detail/memo_section.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/pedigree_section.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/training_section.dart';
 import 'package:hetaumakeiba_v2/widgets/memo/horse_memo_parts.dart';
+// [追加] 好走条件 馬詳細移植 StepA-2: 好走条件ビュー用 (v.2026.9.25+26092506)
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/widgets/horse_detail/condition_section.dart';
 
 // [追加] 馬詳細タブStep3: 出馬表の「馬詳細」タブ。馬番順・1頭1ページで、左右スワイプ／◀▶／馬番チップで馬を切り替える (v.2026.9.23+26092308)
 // [修正] 馬詳細タブStep4: チップの左端に「全」（全頭の最終追い切り一覧。PageView の1ページ目、開いたときの初期表示）を追加。
@@ -22,7 +25,7 @@ import 'package:hetaumakeiba_v2/widgets/memo/horse_memo_parts.dart';
 enum _HorseDetailMenuAction { fetchTraining, bulkEditMemos, importMemos, exportMemos }
 
 /// 馬のページに表示する内容（ボタンで切り替え、馬を変えても保つ）
-enum _HorseDetailView { info, finalTraining, interimTraining, memo }
+enum _HorseDetailView { info, finalTraining, interimTraining, memo, condition }
 
 class HorseDetailTabWidget extends StatefulWidget {
   final String raceId;
@@ -137,6 +140,21 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
               horseId: horseId,
               currentRaceId: widget.raceId,
             ));
+  }
+
+  // [追加] 好走条件 馬詳細移植 StepA-2: 全馬の過去走を1回だけ読む（対戦成績用。好走条件を初めて開いたときに実行） (v.2026.9.25+26092506)
+  Future<Map<String, List<HorseRaceRecord>>>? _allPastRecordsFuture;
+
+  Future<Map<String, List<HorseRaceRecord>>> _allPastRecords() {
+    return _allPastRecordsFuture ??= _loadAllPastRecords();
+  }
+
+  Future<Map<String, List<HorseRaceRecord>>> _loadAllPastRecords() async {
+    final Map<String, List<HorseRaceRecord>> map = {};
+    for (final h in _horses) {
+      map[h.horseId] = await _horseRepo.getHorsePerformanceRecords(h.horseId);
+    }
+    return map;
   }
 
   void _goToPage(int page, {bool animate = true}) {
@@ -472,6 +490,7 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       _HorseDetailView.finalTraining: '最終追切',
       _HorseDetailView.interimTraining: '中間追切',
       _HorseDetailView.memo: 'メモ',
+      _HorseDetailView.condition: '好走条件',
     };
     return Container(
       color: Colors.white,
@@ -578,6 +597,24 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
           horse: horse,
           pastMemosFuture: _pastMemosFor(horse.horseId),
           onEdit: () => _editMemo(horse),
+        );
+        break;
+      case _HorseDetailView.condition:
+        content = FutureBuilder<Map<String, List<HorseRaceRecord>>>(
+          future: _allPastRecords(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            return ConditionSection(
+              horse: horse,
+              allPastRecords: snapshot.data ?? const {},
+              currentRaceHorses: _horses,
+            );
+          },
         );
         break;
     }
