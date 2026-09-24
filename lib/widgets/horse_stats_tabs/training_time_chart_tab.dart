@@ -9,6 +9,8 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 // [追加] 調教タブ改修Step6: netkeiba の調教（評価データの参照に使う） (v.2026.9.23+26092303)
 // [修正] 調教タイム個別データ移植Step3: 下部詳細パネル撤去に伴い、突き合わせ/表示用/コース分類/レース画面の import を削除 (v.2026.9.25+26092503)
 import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
+// [追加] 調教タイムタブUI調整(微修正): 下部リストのドットに枠色を使う (v.2026.9.25+26092504)
+import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 
 class TrainingTimeChartTab extends StatefulWidget {
   final List<PredictionHorseDetail> horses;
@@ -36,6 +38,12 @@ class TrainingTimeChartTab extends StatefulWidget {
 class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with SingleTickerProviderStateMixin {
   final Set<String> _selectedHorseIds = {};
   String _selectedPeriod = '3ヶ月';
+
+  // [追加] 調教タイムタブUI調整: タップで確定する読み取り対象（未タップ時はnull=下部バー非表示） (v.2026.9.25+26092504)
+  String? _readoutLocation; // '美浦' / '栗東'
+  String? _readoutTrack;    // '坂路' / 'ウッド'
+  DateTime? _readoutDate;   // タップ点の日付（基準日）
+  static const int READOUT_WINDOW_DAYS = 10; // 近接窓（±10日）。UIセッションで調整可
 
   late AnimationController _animationController;
   late Animation<double> _glowAnimation;
@@ -121,16 +129,6 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
     return c;
   }
 
-  List<double> _getSplits(TrainingTimeModel t) {
-    List<double> c = _getCumulatives(t);
-    List<double> splits = [];
-    for (int i = 0; i < c.length - 1; i++) {
-      splits.add(c[i] - c[i + 1]);
-    }
-    if (c.isNotEmpty) splits.add(c.last);
-    return splits;
-  }
-
   double? _getDynamicBaseTime(TrainingTimeModel t, List<double> cumulatives) {
     if (cumulatives.isEmpty) return null;
     bool isMiho = t.location.contains('美浦');
@@ -147,12 +145,51 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
     return null;
   }
 
-  // ★修正: ツールチップ用のラップ文字列をシンプル化（アイコンなし・横一列強制）
-  String _getTooltipLapStr(TrainingTimeModel t) {
-    List<double> splits = _getSplits(t);
-    if (splits.isEmpty) return '-';
-    // 改行を防ぐために、通常のスペースではなくノーブレークスペース（\u00A0）で繋ぐ
-    return splits.map((e) => e.toStringAsFixed(1)).join('\u00A0-\u00A0');
+  // [追加] 調教タイムタブUI調整: 下部読み取りバー用ヘルパ (v.2026.9.25+26092504)
+  String _fmtMd(DateTime d) => '${d.month}/${d.day}';
+
+  // [追加] 調教タイムタブUI調整: 読み取り対象トラックと一致するか (v.2026.9.25+26092504)
+  bool _matchReadoutTrack(TrainingTimeModel t) {
+    if (_readoutTrack == '坂路') return t.trackType.contains('坂路');
+    return t.trackType.contains('ウッド') || t.trackType.contains('W');
+  }
+
+  // [追加] 調教タイムタブUI調整: 指定ハロン(fN)の累計タイム（>0のみ、無ければnull） (v.2026.9.25+26092504)
+  double? _cumForFurlong(TrainingTimeModel t, int f) {
+    double? v;
+    switch (f) {
+      case 6: v = t.f6; break;
+      case 5: v = t.f5; break;
+      case 4: v = t.f4; break;
+      case 3: v = t.f3; break;
+      case 2: v = t.f2; break;
+      case 1: v = t.f1; break;
+    }
+    return (v != null && v > 0) ? v : null;
+  }
+
+  // [追加] 調教タイムタブUI調整: 各ハロンの1Fラップを算出（算出不可はnull）。lap(f)= f>1 ? cum(f)-cum(f-1) : cum(1) (v.2026.9.25+26092504)
+  List<double?> _readoutLaps(TrainingTimeModel t, List<int> furlongs) {
+    final List<double?> laps = [];
+    for (final f in furlongs) {
+      if (f > 1) {
+        final cur = _cumForFurlong(t, f);
+        final nxt = _cumForFurlong(t, f - 1);
+        laps.add((cur != null && nxt != null) ? cur - nxt : null);
+      } else {
+        laps.add(_cumForFurlong(t, 1));
+      }
+    }
+    return laps;
+  }
+
+  // [追加] 調教タイムタブUI調整: ラップのトレンド（前ハロン比）。-1=加速(赤)/0=横ばい(灰)/1=減速(青) (v.2026.9.25+26092504)
+  int _lapTrend(double? cur, double? prev) {
+    if (cur == null || prev == null) return 0;
+    final d = cur - prev;
+    if (d < -0.05) return -1;
+    if (d > 0.05) return 1;
+    return 0;
   }
 
   @override
@@ -202,7 +239,15 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
                     DropdownMenuItem(value: 'すべて', child: Text('全期間')),
                   ],
                   onChanged: (val) {
-                    if (val != null) setState(() => _selectedPeriod = val);
+                    if (val != null) {
+                      // [修正] 調教タイムタブUI調整: 期間変更時は古い基準日をクリア (v.2026.9.25+26092504)
+                      setState(() {
+                        _selectedPeriod = val;
+                        _readoutLocation = null;
+                        _readoutTrack = null;
+                        _readoutDate = null;
+                      });
+                    }
                   },
                 ),
               ],
@@ -395,21 +440,22 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildSectionTitle('【坂路エリア】 4Fタイム'),
-                      _buildChartCard('美浦 坂路', mihoHanro, hanroBounds[0], hanroBounds[1], maxX, baseDate, xInterval, '坂路', '美浦', CHART_MIHO_HANRO, filteredTraining),
+                      _buildChartCard('美浦 坂路', mihoHanro, hanroBounds[0], hanroBounds[1], maxX, baseDate, xInterval, '坂路', '美浦', CHART_MIHO_HANRO, filteredTraining, filteredRaces),
                       const SizedBox(height: 16),
-                      _buildChartCard('栗東 坂路', rittoHanro, hanroBounds[0], hanroBounds[1], maxX, baseDate, xInterval, '坂路', '栗東', CHART_RITTO_HANRO, filteredTraining),
+                      _buildChartCard('栗東 坂路', rittoHanro, hanroBounds[0], hanroBounds[1], maxX, baseDate, xInterval, '坂路', '栗東', CHART_RITTO_HANRO, filteredTraining, filteredRaces),
                       const SizedBox(height: 24),
                       _buildSectionTitle('【ウッドエリア】 6Fタイム'),
-                      _buildChartCard('美浦 ウッド', mihoWood, woodBounds[0], woodBounds[1], maxX, baseDate, xInterval, 'ウッド', '美浦', CHART_MIHO_WOOD, filteredTraining),
+                      _buildChartCard('美浦 ウッド', mihoWood, woodBounds[0], woodBounds[1], maxX, baseDate, xInterval, 'ウッド', '美浦', CHART_MIHO_WOOD, filteredTraining, filteredRaces),
                       const SizedBox(height: 16),
-                      _buildChartCard('栗東 ウッド', rittoWood, woodBounds[0], woodBounds[1], maxX, baseDate, xInterval, 'ウッド', '栗東', CHART_RITTO_WOOD, filteredTraining),
+                      _buildChartCard('栗東 ウッド', rittoWood, woodBounds[0], woodBounds[1], maxX, baseDate, xInterval, 'ウッド', '栗東', CHART_RITTO_WOOD, filteredTraining, filteredRaces),
                     ],
                   );
                 }
             ),
           ),
         ),
-        // [修正] 調教タイム個別データ移植Step3: 下部詳細パネルを撤去し、グラフを縦いっぱいに表示（個別データは馬詳細タブへ移設済み） (v.2026.9.25+26092503)
+        // [追加] 調教タイムタブUI調整: 画面下部の固定読み取りバー（未タップ時は非表示） (v.2026.9.25+26092504)
+        if (_readoutDate != null) _buildReadoutBar(filteredTraining),
       ],
     );
   }
@@ -421,12 +467,196 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
     );
   }
 
+  // [追加] 調教タイムタブUI調整: 画面下部の固定読み取りバー（タップ地点付近の選択馬を縦リスト表で比較） (v.2026.9.25+26092504)
+  Widget _buildReadoutBar(Map<String, List<TrainingTimeModel>> filteredTraining) {
+    final String furLabel = _readoutTrack == '坂路' ? '4F' : '6F';
+    final List<int> furlongs = _readoutTrack == '坂路' ? [4, 3, 2, 1] : [6, 5, 4, 3, 2, 1];
+    const double labelW = 76;
+    const double overallW = 58;
+    const double cellW = 46;
+    const Color accelColor = Color(0xFFF06292); // 加速=赤
+    const Color decelColor = Color(0xFF64B5F6); // 減速=青
+
+    final List<Widget> rows = [];
+
+    // 列見出し行（全体・各ハロン）
+    rows.add(Padding(
+      padding: const EdgeInsets.only(bottom: 2.0),
+      child: Row(
+        children: [
+          const SizedBox(width: labelW),
+          const SizedBox(width: overallW, child: Text('全体', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 10))),
+          ...furlongs.map((f) => SizedBox(width: cellW, child: Text('${f}F', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54, fontSize: 10)))),
+        ],
+      ),
+    ));
+
+    for (var horse in widget.horses) {
+      if (!_selectedHorseIds.contains(horse.horseId)) continue;
+      if (_getHorseLocation(horse.horseId) != _readoutLocation) continue;
+
+      final list = (filteredTraining[horse.horseId] ?? []).where(_matchReadoutTrack).toList();
+      if (list.isEmpty) continue;
+
+      TrainingTimeModel? nearest;
+      int bestDiff = 1 << 30;
+      for (var t in list) {
+        final diffDays = _parseDate(t.trainingDate).difference(_readoutDate!).inDays.abs();
+        if (diffDays < bestDiff) {
+          bestDiff = diffDays;
+          nearest = t;
+        }
+      }
+      if (nearest == null || bestDiff > READOUT_WINDOW_DAYS) continue;
+
+      final cum = _getCumulatives(nearest);
+      if (cum.isEmpty) continue;
+      final double overall = cum.first;
+      final double? base = _getDynamicBaseTime(nearest, cum);
+      final double? diff = base != null ? cum.first - base : null;
+      final Color diffColor = diff == null ? Colors.white54 : (diff < 0 ? accelColor : decelColor);
+      final String diffStr = diff == null ? '' : '${diff > 0 ? '+' : ''}${diff.toStringAsFixed(1)}';
+      // [修正] 調教タイムタブUI調整(微修正): ドット色は枠色（未発表=パレット色にフォールバック）、馬名は頭3文字 (v.2026.9.25+26092504)
+      final Color dotColor = horse.gateNumber >= 1 ? horse.gateNumber.gateBackgroundColor : _getHorseColor(horse.horseId);
+      final String shortName = horse.horseName.length <= 3 ? horse.horseName : horse.horseName.substring(0, 3);
+      final List<double?> laps = _readoutLaps(nearest, furlongs);
+
+      final List<Widget> lapCells = [];
+      for (int i = 0; i < furlongs.length; i++) {
+        final double? lap = laps[i];
+        final String txt = lap == null ? '-' : lap.toStringAsFixed(1);
+        String arrow = '';
+        Color aColor = Colors.white38;
+        if (i > 0 && lap != null) {
+          final int tr = _lapTrend(lap, laps[i - 1]);
+          if (tr < 0) {
+            arrow = '↗';
+            aColor = accelColor;
+          } else if (tr > 0) {
+            arrow = '↘';
+            aColor = decelColor;
+          } else {
+            arrow = '→';
+            aColor = Colors.white38;
+          }
+        }
+        lapCells.add(SizedBox(
+          width: cellW,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(txt, style: const TextStyle(color: Colors.white, fontSize: 12)),
+              if (arrow.isNotEmpty)
+                Text(arrow, style: TextStyle(color: aColor, fontSize: 11, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ));
+      }
+
+      rows.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: labelW,
+              child: Row(
+                children: [
+                  // [修正] 調教タイムタブUI調整(微修正): 枠色ドット（枠2=黒が暗背景で埋もれないよう細い白枠線） (v.2026.9.25+26092504)
+                  Container(width: 8, height: 8, margin: const EdgeInsets.only(right: 5), decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle, border: Border.all(color: Colors.white24, width: 0.5))),
+                  Expanded(
+                    child: Text('${horse.horseNumber} $shortName',
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: overallW,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(overall.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  if (diffStr.isNotEmpty)
+                    Text(diffStr, style: TextStyle(color: diffColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            ...lapCells,
+          ],
+        ),
+      ));
+    }
+
+    final bool hasHorseRow = rows.length > 1; // 見出し行＋馬1行以上
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade900,
+        border: const Border(top: BorderSide(color: Colors.white24, width: 0.5)),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4.0),
+            child: Text(
+              '$_readoutLocation $_readoutTrack $furLabel ・ ${_fmtMd(_readoutDate!)} 付近',
+              style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ),
+          if (!hasHorseRow)
+            const Text('近くにデータがありません', style: TextStyle(color: Colors.white38, fontSize: 11))
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.vertical,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: rows,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildChartCard(
       String title, Map<String, List<FlSpot>> dataMap, double minY, double maxY,
       double maxX, DateTime baseDate, double xInterval, String trackType, String locationGroup, double chartBaseTime,
-      Map<String, List<TrainingTimeModel>> filteredTraining) {
+      Map<String, List<TrainingTimeModel>> filteredTraining, Map<String, List<HorseRaceRecord>> filteredRaces) {
 
     if (dataMap.values.every((list) => list.isEmpty)) return const SizedBox.shrink();
+
+    // [追加] 調教タイムタブUI調整: このグラフに出ている選択馬の過去走日を馬色の縦点線で表示（視覚目印のみ） (v.2026.9.25+26092504)
+    List<VerticalLine> raceLines = [];
+    for (var horse in widget.horses) {
+      if (!_selectedHorseIds.contains(horse.horseId)) continue;
+      if (_getHorseLocation(horse.horseId) != locationGroup) continue;
+      final rList = filteredRaces[horse.horseId] ?? [];
+      final rColor = _getHorseColor(horse.horseId);
+      for (var r in rList) {
+        final rx = _parseDate(r.date).difference(baseDate).inDays.toDouble();
+        raceLines.add(VerticalLine(
+          x: rx,
+          color: rColor.withValues(alpha: 0.28),
+          strokeWidth: 1.0,
+          dashArray: [3, 3],
+        ));
+      }
+    }
 
     List<LineChartBarData> lineBars = [];
     for (var horse in widget.horses) {
@@ -476,6 +706,8 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
                 clipData: const FlClipData.all(),
                 lineBarsData: lineBars,
                 extraLinesData: ExtraLinesData(
+                  // [追加] 調教タイムタブUI調整: レース開催日の縦点線（馬色） (v.2026.9.25+26092504)
+                  verticalLines: raceLines,
                   horizontalLines: [
                     HorizontalLine(
                       y: -chartBaseTime,
@@ -516,59 +748,31 @@ class _TrainingTimeChartTabState extends State<TrainingTimeChartTab> with Single
                 lineTouchData: LineTouchData(
                   touchSpotThreshold: 30,
                   handleBuiltInTouches: true,
+                  // [追加] 調教タイムタブUI調整: タップ点を下部バーへ確定（location/track/基準日を保存） (v.2026.9.25+26092504)
+                  touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
+                    if (!event.isInterestedForInteractions) return;
+                    if (event is FlTapDownEvent) {
+                      if (response != null && response.lineBarSpots != null && response.lineBarSpots!.isNotEmpty) {
+                        final spot = response.lineBarSpots!.first;
+                        final d = baseDate.add(Duration(days: spot.x.round()));
+                        setState(() {
+                          _readoutLocation = locationGroup;
+                          _readoutTrack = trackType;
+                          _readoutDate = d;
+                        });
+                      }
+                    }
+                  },
                   getTouchedSpotIndicator: (LineChartBarData barData, List<int> spotIndexes) {
                     return spotIndexes.map((index) => TouchedSpotIndicatorData(FlLine(color: barData.color?.withOpacity(1.0) ?? Colors.white, strokeWidth: 1.5, dashArray: [2, 2]), FlDotData(show: true, getDotPainter: (s, p, b, i) => FlDotCirclePainter(radius: 6, color: barData.color?.withOpacity(1.0) ?? Colors.white)))).toList();
                   },
+                  // [修正] 調教タイムタブUI調整: 浮動テキストツールチップを廃止（読み取りは下部バーへ一本化） (v.2026.9.25+26092504)
                   touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (_) => Colors.black87,
-                    fitInsideHorizontally: true,
-                    fitInsideVertically: true,
-                    maxContentWidth: 350,
+                    getTooltipColor: (_) => Colors.transparent,
+                    tooltipPadding: EdgeInsets.zero,
+                    tooltipMargin: 0,
                     getTooltipItems: (touchedSpots) {
-                      return touchedSpots.map((spot) {
-                        DateTime tDate = baseDate.add(Duration(days: spot.x.toInt()));
-                        TrainingTimeModel? targetRecord;
-
-                        for (var horseId in filteredTraining.keys) {
-                          if (_getHorseLocation(horseId) != locationGroup) continue;
-                          for (var t in filteredTraining[horseId]!) {
-                            DateTime d = _parseDate(t.trainingDate);
-                            if (d.year == tDate.year && d.month == tDate.month && d.day == tDate.day) {
-                              double val = trackType == '坂路' ? (t.f4 ?? 0) : (t.f6 ?? 0);
-                              if ((spot.y.abs() - val).abs() < 0.01) {
-                                targetRecord = t;
-                                break;
-                              }
-                            }
-                          }
-                          if (targetRecord != null) break;
-                        }
-
-                        String lapStr = '${spot.y.abs().toStringAsFixed(1)}秒';
-                        String diffText = '';
-
-                        if (targetRecord != null) {
-                          lapStr = _getTooltipLapStr(targetRecord);
-                          List<double> cumulatives = _getCumulatives(targetRecord);
-                          double? dynamicBase = _getDynamicBaseTime(targetRecord, cumulatives);
-                          if (dynamicBase != null) {
-                            double diff = cumulatives.first - dynamicBase;
-                            String sign = diff > 0 ? '+' : '';
-                            // ★修正: ノーブレークスペース(\u00A0)で繋ぐことで絶対に改行させない
-                            diffText = '\u00A0(基準差:\u00A0$sign${diff.toStringAsFixed(1)}秒)';
-                          }
-                        }
-
-                        String text = '$lapStr$diffText';
-                        return LineTooltipItem(
-                            text,
-                            TextStyle(
-                              color: spot.bar.color?.withOpacity(1.0) ?? Colors.white70,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11, // フォントサイズを少し大きくして見やすく
-                            )
-                        );
-                      }).toList();
+                      return touchedSpots.map((s) => const LineTooltipItem('', TextStyle(fontSize: 0))).toList();
                     },
                   ),
                 ),
