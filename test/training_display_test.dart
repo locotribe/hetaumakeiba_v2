@@ -43,7 +43,8 @@ MergedTrainingEntry _entry(String date) =>
     MergedTrainingEntry(trainingDate: date);
 
 void main() {
-  test('pakara だけの坂路: 5マスとラップ（2F→1F が抜けない）', () {
+  // [修正] 中間追切6列化: 期待値を6マスに更新（先頭6F・5Fが空欄） (v.2026.9.24+26092405)
+  test('pakara だけの坂路: 6マスとラップ（2F→1F が抜けない）', () {
     final row = buildTrainingRowView(MergedTrainingEntry(
       trainingDate: '20260921',
       trainingTime: '0450',
@@ -61,14 +62,17 @@ void main() {
     ));
     expect(row.courseLabel, '栗坂');
     expect(row.isHanro, isTrue);
-    expect(row.cells.map((c) => c.time).toList(), [null, 64.0, 46.1, 30.4, 15.4]);
-    expect(row.cells.map((c) => c.lap).toList(), [null, 17.9, 15.7, 15.0, 15.4]);
+    expect(row.cells.map((c) => c.time).toList(),
+        [null, null, 64.0, 46.1, 30.4, 15.4]);
+    expect(row.cells.map((c) => c.lap).toList(),
+        [null, null, 17.9, 15.7, 15.0, 15.4]);
     expect(row.lastLapTrend, 1);
     expect(row.headerLabel, '26/09/21(月) 04:50 栗坂');
     expect(row.loadLabel, isNull);
     expect(row.rank, isNull);
   });
 
+  // [修正] 中間追切6列化: 期待値を6マスに更新（netkeiba単独は2Fが空欄、3Fラップは2ハロンのまま） (v.2026.9.24+26092405)
   test('netkeiba のウッド: 色・脚色(位置)・評価・併せ馬', () {
     final row = buildTrainingRowView(MergedTrainingEntry(
       trainingDate: '20260916',
@@ -94,13 +98,54 @@ void main() {
       ),
     ));
     expect(row.isHanro, isFalse);
-    expect(row.cells.map((c) => c.lap).toList(), [16.0, 17.2, 16.1, 27.9, 11.8]);
+    expect(row.cells.map((c) => c.time).toList(),
+        [89.0, 73.0, 55.8, 39.7, null, 11.8]);
+    expect(row.cells.map((c) => c.lap).toList(),
+        [16.0, 17.2, 16.1, 27.9, null, 11.8]);
     expect(row.cells.last.color, 1);
     expect(row.loadLabel, '馬也⑧');
     expect(row.lastLapTrend, -1);
     expect(row.headerLabel, '26/09/16(水) 05:35 ＣＷ 重 助手');
     expect(row.isBestTime, isTrue);
     expect(row.partners.single.fullText, '内レイルジェット一杯と併せ０秒６先着');
+  });
+
+  // [追加] 中間追切6列化: 突き合わせ済みは共有ハロンnetkeiba優先・2Fはpakara補完・3Fが丸まらない (v.2026.9.24+26092405)
+  test('netkeiba＋pakara のウッド: 2Fはpakaraで補完、共有ハロンはnetkeiba優先で丸めない', () {
+    final row = buildTrainingRowView(MergedTrainingEntry(
+      trainingDate: '20260916',
+      trainingTime: '0535',
+      netkeiba: NetkeibaTrainingSession(
+        horseId: 'h1',
+        trainingDate: '20260916',
+        courseRaw: 'ＣＷ',
+        seq: 0,
+        trainingTime: '0535',
+        slots: [89.0, 73.0, 55.8, 39.7, 11.8],
+        colors: [0, 0, 0, 0, 1],
+      ),
+      pakara: TrainingTimeModel(
+        horseId: 'h1',
+        trainingDate: '20260916',
+        trainingTime: '0535',
+        trackType: 'ウッド',
+        location: '栗東',
+        f6: 89.5,
+        f5: 73.5,
+        f4: 56.0,
+        f3: 40.0,
+        f2: 25.4,
+        f1: 12.0,
+      ),
+    ));
+    expect(row.isHanro, isFalse);
+    // 共有ハロンは netkeiba 値を維持（pakara の 89.5 / 12.0 ではない）、2F だけ pakara(25.4)
+    expect(row.cells.map((c) => c.time).toList(),
+        [89.0, 73.0, 55.8, 39.7, 25.4, 11.8]);
+    // 3F ラップが丸まらず 14.3、2F ラップ 13.6 に分割される
+    expect(row.cells.map((c) => c.lap).toList(),
+        [16.0, 17.2, 16.1, 14.3, 13.6, 11.8]);
+    expect(row.cells.last.color, 1);
   });
 
   test('pickFinalEntry: このレースの調教ページ由来の行を優先、無ければ先頭', () {

@@ -23,7 +23,7 @@ class TrainingRowView {
   final String? trainingTime; // HHmm
   final String courseLabel; // 栗坂 / 美坂 / ＣＷ / 美Ｗ / ＤＰ …
   final bool isHanro;
-  final List<TrainingCellView> cells; // 常に5マス
+  final List<TrainingCellView> cells; // 常に6マス
   final String? trackCondition;
   final String? rider;
   final bool isBestTime;
@@ -98,9 +98,14 @@ class TrainingRowView {
   }
 }
 
-/// 5マスの並び（ハロン数）。坂路は先頭(5F)がほぼ空欄。
-const List<int> _hanroOrder = [5, 4, 3, 2, 1];
-const List<int> _otherOrder = [6, 5, 4, 3, 1];
+// [修正] 中間追切6列化: 表示を6マスにして2Fを出す。坂路は先頭(6F・5F)がほぼ空欄、ウッドは2Fも表示 (v.2026.9.24+26092405)
+/// 6マスの並び（ハロン数）。表示用。坂路は先頭(6F・5F)がほぼ空欄。
+const List<int> _hanroOrder = [6, 5, 4, 3, 2, 1];
+const List<int> _otherOrder = [6, 5, 4, 3, 2, 1];
+
+// [追加] 中間追切6列化: netkeibaのスロット(5枠)→ハロンの対応。色をハロンに割り当てるのに使う（slotsToFurlongsと同じ並び。netkeibaは2Fを持たない） (v.2026.9.24+26092405)
+const List<int> _nkSlotOrderHanro = [5, 4, 3, 2, 1];
+const List<int> _nkSlotOrderOther = [6, 5, 4, 3, 1];
 
 /// pakara の（地区, 種別）を netkeiba と同じ表記にする。
 String pakaraCourseLabel(String location, String trackType) {
@@ -116,7 +121,8 @@ String pakaraCourseLabel(String location, String trackType) {
 }
 
 /// 突き合わせ後の1件を表示用データにする。
-/// 時計は netkeiba の行があればその5枠、無ければ pakara の値を同じ並びに置く。
+/// 時計は netkeiba の行があればその枠、無ければ pakara の値を同じ並びに置く。
+/// netkeiba に無いハロン（主にウッドの2F）は、同じ調教の pakara があれば pakara で補完する。
 /// ラップ = そのマスの時計 − 次に値のあるマスの時計、最後の値のマスは1Fそのもの。
 TrainingRowView buildTrainingRowView(MergedTrainingEntry entry) {
   final nk = entry.netkeiba;
@@ -124,14 +130,34 @@ TrainingRowView buildTrainingRowView(MergedTrainingEntry entry) {
   String courseLabel = '';
   bool isHanro = false;
   Map<int, double> furlongs = {};
-  List<int> colors = const [0, 0, 0, 0, 0];
+  // [修正] 中間追切6列化: 色はハロン→色で持つ（列を増やしても崩れないように） (v.2026.9.24+26092405)
+  final Map<int, int> colorByFurlong = {};
 
   if (nk != null) {
     courseLabel = nk.courseRaw;
     isHanro = classifyTrainingCourse(nk.courseRaw).isHanro;
     furlongs = slotsToFurlongs(nk.courseRaw, nk.slots);
-    colors = List<int>.generate(
-        NetkeibaTrainingSession.slotCount, (i) => nk.colors[i] ?? 0);
+    // [追加] 中間追切6列化: netkeibaの色(5枠)をハロンに割り当てる (v.2026.9.24+26092405)
+    final nkSlotOrder = isHanro ? _nkSlotOrderHanro : _nkSlotOrderOther;
+    for (int i = 0; i < nkSlotOrder.length && i < nk.colors.length; i++) {
+      final c = nk.colors[i];
+      if (c != null) colorByFurlong[nkSlotOrder[i]] = c;
+    }
+    // [追加] 中間追切6列化: netkeibaに無いハロン(主にウッドの2F)を、同じ調教のpakaraで補完（netkeibaにある枠は上書きしない） (v.2026.9.24+26092405)
+    if (pakara != null) {
+      void fillFromPakara(int furlong, double? value) {
+        if (value != null && !furlongs.containsKey(furlong)) {
+          furlongs[furlong] = value;
+        }
+      }
+
+      fillFromPakara(6, pakara.f6);
+      fillFromPakara(5, pakara.f5);
+      fillFromPakara(4, pakara.f4);
+      fillFromPakara(3, pakara.f3);
+      fillFromPakara(2, pakara.f2);
+      fillFromPakara(1, pakara.f1);
+    }
   } else if (pakara != null) {
     courseLabel = pakaraCourseLabel(pakara.location, pakara.trackType);
     isHanro = pakara.trackType == '坂路';
@@ -162,7 +188,9 @@ TrainingRowView buildTrainingRowView(MergedTrainingEntry entry) {
       final value = next == null ? time : time - next;
       lap = double.parse(value.toStringAsFixed(1));
     }
-    cells.add(TrainingCellView(time: time, lap: lap, color: colors[i]));
+    // [修正] 中間追切6列化: 色はハロン→色マップから引く（無ければ0=色なし） (v.2026.9.24+26092405)
+    cells.add(TrainingCellView(
+        time: time, lap: lap, color: colorByFurlong[order[i]] ?? 0));
   }
 
   return TrainingRowView(
