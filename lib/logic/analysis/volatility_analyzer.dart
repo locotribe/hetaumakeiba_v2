@@ -1,6 +1,7 @@
 // lib/logic/analysis/volatility_analyzer.dart
 
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart'; // [追加] 脚質判定を共通関数へ統一 (v.2026.9.26+26092604)
 
 class VolatilityResult {
   final double averagePopularity;
@@ -233,28 +234,13 @@ class LegStyleAnalyzer {
     final showCounts = <String, int>{};  // ★追加
     final totalCounts = <String, int>{};
 
-    // ★修正: 判定ロジックを精細化（逃げと先行を分離、差しと追込の基準設定）
-    String determineLegStyle(String? cornerStr) {
-      if (cornerStr == null || cornerStr.isEmpty) return '不明';
-      final corners = cornerStr.split('-');
-      if (corners.isEmpty) return '不明';
-
-      final lastCornerStr = corners.last.replaceAll(RegExp(r'[^0-9]'), '');
-      final pos = int.tryParse(lastCornerStr);
-      if (pos == null) return '不明';
-
-      if (pos == 1) return '逃げ';       // 1番手のみ逃げ
-      if (pos <= 5) return '先行';      // 2〜5番手
-      if (pos <= 10) return '差し';     // 6〜10番手
-      return '追込';                    // 11番手以降
-    }
-
+    // [修正] 脚質判定を共通関数 classifyLegStyle に統一（率ベース＋最終コーナー1位の逃げ特例）。内部の determineLegStyle は廃止 (v.2026.9.26+26092604)
     for (final r in pastRaces) {
       for (final h in r.horseResults) {
         int rank = int.tryParse(h.rank ?? '') ?? 0;
-        String style = determineLegStyle(h.cornerRanking);
+        String style = classifyLegStyle(h.cornerRanking, r.horseResults.length);
 
-        if (style != '不明') {
+        if (style != legStyleUnknown) {
           totalCounts[style] = (totalCounts[style] ?? 0) + 1;
           // 各着順ごとにカウント
           if (rank == 1) winCounts[style] = (winCounts[style] ?? 0) + 1;
@@ -578,18 +564,7 @@ class LapTimeAnalyzer {
     List<RaceLapData> allRacesLapData = []; // ★追加: 全レースデータを保持するリスト
     Map<String, int> paceCounts = {'ハイペース': 0, 'ミドルペース': 0, 'スローペース': 0};
 
-    String determineLegStyle(String? cornerStr) {
-      if (cornerStr == null || cornerStr.isEmpty) return '不明';
-      final corners = cornerStr.split('-');
-      if (corners.isEmpty) return '不明';
-      final lastCornerStr = corners.last.replaceAll(RegExp(r'[^0-9]'), '');
-      final pos = int.tryParse(lastCornerStr);
-      if (pos == null) return '不明';
-      if (pos == 1) return '逃げ';
-      if (pos <= 5) return '先行';
-      if (pos <= 10) return '差し';
-      return '追込';
-    }
+    // [修正] 脚質判定を共通関数 classifyLegStyle に統一。内部の determineLegStyle は廃止 (v.2026.9.26+26092604)
 
     for (final r in pastRaces) {
       // 距離の抽出（距離が異なるレースを計算から除外するため）
@@ -657,7 +632,7 @@ class LapTimeAnalyzer {
       for (final h in r.horseResults) {
         int rank = int.tryParse(h.rank ?? '') ?? 0;
         if (rank >= 1 && rank <= 3) {
-          String style = determineLegStyle(h.cornerRanking);
+          String style = classifyLegStyle(h.cornerRanking, r.horseResults.length);
           if (paceLegStyleStats[paceCategory]!.showCounts.containsKey(style)) {
             paceLegStyleStats[paceCategory]!.showCounts[style] =
                 paceLegStyleStats[paceCategory]!.showCounts[style]! + 1;
