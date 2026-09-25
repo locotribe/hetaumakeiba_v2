@@ -1,12 +1,14 @@
+// lib/widgets/horse_stats_tabs/condition_based_analysis_tab.dart
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/condition_presentation_model.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/condition_match_engine.dart';
-import 'package:hetaumakeiba_v2/widgets/condition_horse_row.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/condition_ranking_builder.dart';
+import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/condition_heatmap_table.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 
-/// 好走条件出馬表タブのメインコンテンツ
+// [修正] 好走条件 相対順位付け StepB-2: 着順グループ主軸から今回条件ヒートマップへ刷新（クラス名・引数は不変） (v.2026.9.25+26092509)
+/// 好走条件出馬表タブ（今回条件ヒートマップ）
 class ConditionBasedAnalysisTab extends StatefulWidget {
   final PredictionRaceData raceData;
 
@@ -19,9 +21,11 @@ class ConditionBasedAnalysisTab extends StatefulWidget {
   State<ConditionBasedAnalysisTab> createState() => _ConditionBasedAnalysisTabState();
 }
 
-class _ConditionBasedAnalysisTabState extends State<ConditionBasedAnalysisTab> with AutomaticKeepAliveClientMixin {
+class _ConditionBasedAnalysisTabState extends State<ConditionBasedAnalysisTab>
+    with AutomaticKeepAliveClientMixin {
   bool _isLoading = true;
-  List<HorseConditionDisplayData> _displayDataList = [];
+  ConditionRankingTable? _table;
+  Map<String, List<HorseRaceRecord>> _allPastRecords = {};
   final HorseRepository _horseRepository = HorseRepository();
 
   @override
@@ -37,70 +41,22 @@ class _ConditionBasedAnalysisTabState extends State<ConditionBasedAnalysisTab> w
     setState(() => _isLoading = true);
 
     try {
-      final List<HorseConditionDisplayData> resultList = [];
+      // 全頭の過去成績をDBから取得（対戦成績・列集計に使用）
       final Map<String, List<HorseRaceRecord>> allPastRecords = {};
-
-      // 1. 全頭の過去成績をDBから取得
       for (var horse in widget.raceData.horses) {
-        final records = await _horseRepository.getHorsePerformanceRecords(horse.horseId);
-        allPastRecords[horse.horseId] = records;
+        allPastRecords[horse.horseId] =
+            await _horseRepository.getHorsePerformanceRecords(horse.horseId);
       }
 
-      // 2. 各馬のデータを表示モデルに変換
-      for (var horse in widget.raceData.horses) {
-        final myRecords = allPastRecords[horse.horseId] ?? [];
-        final grouped = ConditionMatchEngine.groupRecordsByRank(myRecords);
-        final Map<String, RankSummaryDisplay> summaries = {};
-
-        grouped.forEach((rankLabel, records) {
-          if (records.isNotEmpty) {
-            final range = ConditionMatchEngine.calculateRange(records, widget.raceData.raceDate);
-
-            // ▼ 追加: 脚質・回り・馬場のサマリー文字列を計算
-            final summaryResults = ConditionMatchEngine.calculateSummaries(records);
-
-            // 詳細リストの作成（対戦相手スキャンを含む）
-            final detailedRaces = records.map((record) {
-              final matchup = ConditionMatchEngine.scanMatchups(
-                targetRaceId: record.raceId,
-                myHorseId: horse.horseId,
-                myRank: record.rank,
-                currentRaceMembers: widget.raceData.horses,
-                allHorsesPastRecords: allPastRecords,
-              );
-              return PastRaceWithMatchup(record: record, matchupContext: matchup);
-            }).toList();
-
-            summaries[rankLabel] = RankSummaryDisplay(
-              rankLabel: rankLabel,
-              count: records.length,
-              distanceRange: ConditionMatchEngine.formatRange(
-                  range.minDistance?.toInt(), range.maxDistance?.toInt(), 'm'),
-              weightRange: ConditionMatchEngine.formatRange(
-                  range.minWeight, range.maxWeight, 'kg'),
-              carriedWeightRange: ConditionMatchEngine.formatRange(
-                  range.minCarriedWeight, range.maxCarriedWeight, 'kg'),
-              venueList: records.map((r) => r.venue.replaceAll(RegExp(r'\d'), '')).toSet().join(', '),
-
-              legStyleSummary: summaryResults['legStyle'] ?? '',
-              directionSummary: summaryResults['direction'] ?? '',
-              trackConditionSummary: summaryResults['trackCondition'] ?? '',
-
-              detailedRaces: detailedRaces,
-            );
-          }
-        });
-
-        resultList.add(HorseConditionDisplayData(
-          horseId: horse.horseId,
-          horseName: horse.horseName,
-          summaries: summaries,
-        ));
-      }
+      final table = ConditionRankingBuilder.build(
+        raceData: widget.raceData,
+        allPastRecords: allPastRecords,
+      );
 
       if (mounted) {
         setState(() {
-          _displayDataList = resultList;
+          _allPastRecords = allPastRecords;
+          _table = table;
           _isLoading = false;
         });
       }
@@ -118,15 +74,15 @@ class _ConditionBasedAnalysisTabState extends State<ConditionBasedAnalysisTab> w
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_displayDataList.isEmpty) {
+    final table = _table;
+    if (table == null || table.rows.isEmpty) {
       return const Center(child: Text('分析データがありません。'));
     }
 
-    return ListView.builder(
-      itemCount: _displayDataList.length,
-      itemBuilder: (context, index) {
-        return ConditionHorseRow(data: _displayDataList[index]);
-      },
+    return ConditionHeatmapTable(
+      table: table,
+      allPastRecords: _allPastRecords,
+      currentRaceHorses: widget.raceData.horses,
     );
   }
 }
