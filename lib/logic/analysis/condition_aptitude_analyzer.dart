@@ -2,6 +2,8 @@
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
+// [追加] 好走条件 馬詳細移植 StepA-3: 馬場データ（芝クッション値/ダ含水率）の集計 (v.2026.9.25+26092507)
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 
 // [追加] 好走条件 馬詳細移植 StepA-1: 各馬の好走条件（得意条件）を条件カテゴリ主軸で集計する純粋ロジック (v.2026.9.25+26092505)
 
@@ -149,6 +151,36 @@ class ConditionAptitudeAnalyzer {
     return '大幅増';
   }
 
+  // [追加] 好走条件 馬詳細移植 StepA-3: 芝クッション値の帯（2段） (v.2026.9.25+26092507)
+  static String cushionBand(double v) => v >= 9.5 ? '9.5以上' : '9.4以下';
+
+  // [追加] 好走条件 馬詳細移植 StepA-3: ダート含水率(ゴール前)の帯（下限基準4段） (v.2026.9.25+26092507)
+  static String moistureBand(double v) {
+    if (v < 7) return '6%以下';
+    if (v < 11) return '7〜10%';
+    if (v < 14) return '11〜13%';
+    return '14%以上';
+  }
+
+  // [追加] 好走条件 馬詳細移植 StepA-3: 固定順カテゴリ（勝率順・得意印なし。馬場データ用） (v.2026.9.25+26092507)
+  static AptitudeCategory? _buildFixedCategory(
+      String name, List<String> order, Map<String, List<HorseRaceRecord>> grouped) {
+    if (grouped.isEmpty) return null;
+    final List<AptitudeValue> values = [];
+    for (final label in order) {
+      final recs = grouped[label];
+      if (recs == null || recs.isEmpty) continue;
+      values.add(AptitudeValue(
+        label: label,
+        tally: rankTallyOf(recs),
+        isReference: false,
+        isBest: false,
+      ));
+    }
+    if (values.isEmpty) return null;
+    return AptitudeCategory(name: name, values: values);
+  }
+
   /// レコード群の着度数
   static RankTally rankTallyOf(List<HorseRaceRecord> records) {
     var t = const RankTally();
@@ -172,7 +204,8 @@ class ConditionAptitudeAnalyzer {
     MapEntry('馬体重増減', (r) => weightDeltaBand(r.horseWeight)),
   ];
 
-  static ConditionAptitude analyze(List<HorseRaceRecord> records) {
+  static ConditionAptitude analyze(List<HorseRaceRecord> records,
+      {Map<String, TrackConditionRecord?> trackConditions = const {}}) {
     final overall = rankTallyOf(records);
     final List<AptitudeCategory> categories = [];
 
@@ -227,6 +260,41 @@ class ConditionAptitudeAnalyzer {
       }
 
       categories.add(AptitudeCategory(name: name, values: values));
+    }
+
+    // [追加] 好走条件 馬詳細移植 StepA-3: 馬場データ（芝→クッション値 / ダ→含水率ゴール前）を馬場カテゴリの直後に挿入 (v.2026.9.25+26092507)
+    final Map<String, List<HorseRaceRecord>> cushionGroups = {};
+    final Map<String, List<HorseRaceRecord>> moistureGroups = {};
+    for (final r in records) {
+      final tc = trackConditions[r.raceId];
+      if (tc == null) continue;
+      final s = surfaceOf(r.distance);
+      if (s == '芝') {
+        final cv = tc.cushionValue;
+        if (cv != null) {
+          cushionGroups.putIfAbsent(cushionBand(cv), () => <HorseRaceRecord>[]).add(r);
+        }
+      } else if (s == 'ダ') {
+        final mg = tc.moistureDirtGoal;
+        if (mg != null) {
+          moistureGroups.putIfAbsent(moistureBand(mg), () => <HorseRaceRecord>[]).add(r);
+        }
+      }
+    }
+    final List<AptitudeCategory> trackExtras = [];
+    final cushionCat =
+        _buildFixedCategory('クッション値(芝)', ['9.5以上', '9.4以下'], cushionGroups);
+    if (cushionCat != null) trackExtras.add(cushionCat);
+    final moistureCat = _buildFixedCategory(
+        '含水率(ダ・ゴール前)', ['6%以下', '7〜10%', '11〜13%', '14%以上'], moistureGroups);
+    if (moistureCat != null) trackExtras.add(moistureCat);
+    if (trackExtras.isNotEmpty) {
+      final idx = categories.indexWhere((c) => c.name == '馬場');
+      if (idx >= 0) {
+        categories.insertAll(idx + 1, trackExtras);
+      } else {
+        categories.addAll(trackExtras);
+      }
     }
 
     return ConditionAptitude(overall: overall, categories: categories);

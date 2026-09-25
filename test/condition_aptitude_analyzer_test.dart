@@ -3,8 +3,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_aptitude_analyzer.dart';
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 
 HorseRaceRecord rec({
+  String raceId = 'r',
   String rank = '5',
   String distance = '芝1600',
   String venue = '5東京8',
@@ -19,7 +21,7 @@ HorseRaceRecord rec({
 }) {
   return HorseRaceRecord(
     horseId: 'h',
-    raceId: 'r',
+    raceId: raceId,
     date: '2025/01/01',
     venue: venue,
     weather: weather,
@@ -193,6 +195,70 @@ void main() {
       final a = ConditionAptitudeAnalyzer.analyze(<HorseRaceRecord>[]);
       expect(a.overall.total, 0);
       expect(a.categories, isEmpty);
+    });
+  });
+
+  group('track condition categories (StepA-3)', () {
+    test('cushionBand / moistureBand', () {
+      expect(ConditionAptitudeAnalyzer.cushionBand(9.5), '9.5以上');
+      expect(ConditionAptitudeAnalyzer.cushionBand(10.2), '9.5以上');
+      expect(ConditionAptitudeAnalyzer.cushionBand(9.4), '9.4以下');
+      expect(ConditionAptitudeAnalyzer.cushionBand(8.0), '9.4以下');
+      expect(ConditionAptitudeAnalyzer.moistureBand(5), '6%以下');
+      expect(ConditionAptitudeAnalyzer.moistureBand(6.9), '6%以下');
+      expect(ConditionAptitudeAnalyzer.moistureBand(7), '7〜10%');
+      expect(ConditionAptitudeAnalyzer.moistureBand(10), '7〜10%');
+      expect(ConditionAptitudeAnalyzer.moistureBand(11), '11〜13%');
+      expect(ConditionAptitudeAnalyzer.moistureBand(13), '11〜13%');
+      expect(ConditionAptitudeAnalyzer.moistureBand(14), '14%以上');
+      expect(ConditionAptitudeAnalyzer.moistureBand(20), '14%以上');
+    });
+
+    test('no trackConditions → no track categories', () {
+      final a = ConditionAptitudeAnalyzer.analyze([rec(distance: '芝1600', rank: '1')]);
+      expect(catOf(a, 'クッション値(芝)'), isNull);
+      expect(catOf(a, '含水率(ダ・ゴール前)'), isNull);
+    });
+
+    test('turf → cushion category (fixed order, no best/reference)', () {
+      final records = <HorseRaceRecord>[
+        rec(raceId: 'a', distance: '芝1600', rank: '1'),
+        rec(raceId: 'b', distance: '芝1600', rank: '3'),
+        rec(raceId: 'c', distance: '芝2000', rank: '5'),
+      ];
+      final tc = <String, TrackConditionRecord?>{
+        'a': TrackConditionRecord(trackConditionId: 1, date: '2025-01-01', weekDay: 'sa', cushionValue: 9.8),
+        'b': TrackConditionRecord(trackConditionId: 2, date: '2025-01-02', weekDay: 'su', cushionValue: 9.0),
+        'c': TrackConditionRecord(trackConditionId: 3, date: '2025-01-03', weekDay: 'mo', cushionValue: 10.1),
+      };
+      final a = ConditionAptitudeAnalyzer.analyze(records, trackConditions: tc);
+      final cat = catOf(a, 'クッション値(芝)')!;
+      expect(cat.values[0].label, '9.5以上');
+      expect(cat.values[0].tally.total, 2);
+      expect(cat.values[0].tally.first, 1);
+      expect(cat.values[1].label, '9.4以下');
+      expect(cat.values[1].tally.total, 1);
+      for (final v in cat.values) {
+        expect(v.isBest, isFalse);
+        expect(v.isReference, isFalse);
+      }
+      expect(catOf(a, '含水率(ダ・ゴール前)'), isNull);
+    });
+
+    test('dirt → moisture category (goal-front)', () {
+      final records = <HorseRaceRecord>[
+        rec(raceId: 'a', distance: 'ダ1200', rank: '1'),
+        rec(raceId: 'b', distance: 'ダ1200', rank: '4'),
+      ];
+      final tc = <String, TrackConditionRecord?>{
+        'a': TrackConditionRecord(trackConditionId: 1, date: '2025-01-01', weekDay: 'sa', moistureDirtGoal: 15.0),
+        'b': TrackConditionRecord(trackConditionId: 2, date: '2025-01-02', weekDay: 'su', moistureDirtGoal: 5.0),
+      };
+      final a = ConditionAptitudeAnalyzer.analyze(records, trackConditions: tc);
+      final cat = catOf(a, '含水率(ダ・ゴール前)')!;
+      expect(cat.values.first.label, '6%以下');
+      expect(cat.values.last.label, '14%以上');
+      expect(catOf(a, 'クッション値(芝)'), isNull);
     });
   });
 }

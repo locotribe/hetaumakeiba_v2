@@ -17,6 +17,9 @@ import 'package:hetaumakeiba_v2/widgets/memo/horse_memo_parts.dart';
 // [追加] 好走条件 馬詳細移植 StepA-2: 好走条件ビュー用 (v.2026.9.25+26092506)
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/condition_section.dart';
+// [追加] 好走条件 馬詳細移植 StepA-3: 馬場データ取得（クッション値/含水率） (v.2026.9.25+26092507)
+import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 
 // [追加] 馬詳細タブStep3: 出馬表の「馬詳細」タブ。馬番順・1頭1ページで、左右スワイプ／◀▶／馬番チップで馬を切り替える (v.2026.9.23+26092308)
 // [修正] 馬詳細タブStep4: チップの左端に「全」（全頭の最終追い切り一覧。PageView の1ページ目、開いたときの初期表示）を追加。
@@ -155,6 +158,26 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       map[h.horseId] = await _horseRepo.getHorsePerformanceRecords(h.horseId);
     }
     return map;
+  }
+
+  // [追加] 好走条件 馬詳細移植 StepA-3: 好走条件を開いた馬の過去走ごとに馬場データ（クッション値/含水率）を引く（馬柱と同じ getTrackConditionForRace） (v.2026.9.25+26092507)
+  final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
+  final Map<String, Future<Map<String, TrackConditionRecord?>>> _trackCondFutures = {};
+
+  Future<Map<String, TrackConditionRecord?>> _trackCondsFor(
+      String horseId, Map<String, List<HorseRaceRecord>> all) {
+    return _trackCondFutures.putIfAbsent(horseId, () async {
+      final Map<String, TrackConditionRecord?> map = {};
+      for (final r in (all[horseId] ?? const <HorseRaceRecord>[])) {
+        if (r.raceId.length >= 10) {
+          map[r.raceId] = await _trackConditionRepo.getTrackConditionForRace(
+            raceId: r.raceId,
+            raceDate: r.date,
+          );
+        }
+      }
+      return map;
+    });
   }
 
   void _goToPage(int page, {bool animate = true}) {
@@ -609,10 +632,24 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
                 child: Center(child: CircularProgressIndicator()),
               );
             }
-            return ConditionSection(
-              horse: horse,
-              allPastRecords: snapshot.data ?? const {},
-              currentRaceHorses: _horses,
+            final all = snapshot.data ?? const <String, List<HorseRaceRecord>>{};
+            // [追加] 好走条件 馬詳細移植 StepA-3: 馬場データ（クッション値/含水率）を読んでから表示 (v.2026.9.25+26092507)
+            return FutureBuilder<Map<String, TrackConditionRecord?>>(
+              future: _trackCondsFor(horse.horseId, all),
+              builder: (context, tcSnapshot) {
+                if (tcSnapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                return ConditionSection(
+                  horse: horse,
+                  allPastRecords: all,
+                  currentRaceHorses: _horses,
+                  trackConditions: tcSnapshot.data ?? const {},
+                );
+              },
             );
           },
         );

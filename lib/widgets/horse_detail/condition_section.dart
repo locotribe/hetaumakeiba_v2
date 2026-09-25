@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/condition_presentation_model.dart';
+// [追加] 好走条件 馬詳細移植 StepA-3: 馬場データ（クッション値/含水率） (v.2026.9.25+26092507)
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_match_engine.dart';
 import 'package:hetaumakeiba_v2/widgets/condition_race_tile.dart';
@@ -13,12 +15,14 @@ class ConditionSection extends StatelessWidget {
   final PredictionHorseDetail horse;
   final Map<String, List<HorseRaceRecord>> allPastRecords;
   final List<PredictionHorseDetail> currentRaceHorses;
+  final Map<String, TrackConditionRecord?> trackConditions;
 
   const ConditionSection({
     super.key,
     required this.horse,
     required this.allPastRecords,
     required this.currentRaceHorses,
+    this.trackConditions = const {},
   });
 
   // 1着=赤 / 2着=青 / 3着=橙 / 着外=灰
@@ -48,7 +52,7 @@ class ConditionSection extends StatelessWidget {
       );
     }
 
-    final aptitude = ConditionAptitudeAnalyzer.analyze(records);
+    final aptitude = ConditionAptitudeAnalyzer.analyze(records, trackConditions: trackConditions);
     final o = aptitude.overall;
 
     // 出典レース（新しい順）
