@@ -71,21 +71,9 @@ class HistoricalMatchEngine {
       avgCushion: trackConditionTrendResult.avgCushion, // ★追加
     );
 
-    // ★波乱度（過去の上位馬の平均人気）の算出
-    double totalTopPop = 0.0;
-    int topPopCount = 0;
-    for (final r in pastRaces) {
-      for (final h in r.horseResults) {
-        int rank = int.tryParse(h.rank ?? '') ?? 0;
-        int pop = int.tryParse(h.popularity ?? '') ?? 0;
-        if (rank >= 1 && rank <= 3 && pop > 0) {
-          totalTopPop += pop;
-          topPopCount++;
-        }
-      }
-    }
-    // 過去1〜3着馬の平均人気（例：3.0なら堅い、6.0なら荒れる）
-    double pastRaceVolatility = topPopCount > 0 ? totalTopPop / topPopCount : 3.5;
+    // [削除] 波乱度(過去1〜3着馬の平均人気)は引数 pastRaceVolatility で受け取る。
+    // 呼び出し側(stats_match_tab.dart)が VolatilityAnalyzer.analyze() で算出済みの
+    // averagePopularity を渡すため、ここでの同名ローカル変数による再計算(旧74〜88行)は削除。 (v.2026.9.26+26092601)
 
     // 3. 各馬のマッチング計算 (ファクター呼び出し)
     final List<HistoricalMatchModel> results = [];
