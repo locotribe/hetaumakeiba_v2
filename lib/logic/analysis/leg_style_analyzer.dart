@@ -1,6 +1,7 @@
 // lib/logic/analysis/leg_style_analyzer.dart
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart'; // [追加] 脚質の基底4分類を共通関数へ委譲 (v.2026.9.26+26092605)
 
 class LegStyleProfile {
   final String primaryStyle;
@@ -132,7 +133,7 @@ class LegStyleAnalyzer {
         agariTime: agari,
       );
 
-      final style = _getTentativeLegStyle(profile, positions.length);
+      final style = _getTentativeLegStyle(profile, positions.length, record.cornerPassage, horseCount);
       final rank = int.tryParse(record.rank);
 
       validRaceData.add({
@@ -230,7 +231,8 @@ class LegStyleAnalyzer {
     );
   }
 
-  /// 1レース分の脚質を判定して返す（外部呼び出し用） - 変更なし
+  /// 1レース分の脚質を判定して返す（外部呼び出し用）
+  // [修正] マクリ判定（4コーナー）は温存し、基底4分類は共通関数 classifyLegStyle へ委譲 (v.2026.9.26+26092605)
   static String analyzeSingleRaceStyle(HorseRaceRecord record) {
     final positions = record.cornerPassage
         .split('-')
@@ -247,74 +249,26 @@ class LegStyleAnalyzer {
       return "不明";
     }
 
-    double startPositionRate = 0;
-    double finalPositionRate = 0;
-    double positionGain = 0;
-    double makuriIndex = 0;
-    double longMakuriIndex = 0;
-
+    // マクリ判定用の指標（4コーナーのときのみ算出）
     if (positions.length == 4) {
-      startPositionRate = positions[0]! / horseCount;
-      finalPositionRate = positions[3]! / horseCount;
-      positionGain = (positions[0]! - positions[3]!) / horseCount;
-      makuriIndex = (positions[2]! - positions[3]!) / horseCount;
-      longMakuriIndex = (positions[1]! - positions[3]!) / horseCount;
-    } else if (positions.length == 3) {
-      startPositionRate = positions[0]! / horseCount;
-      finalPositionRate = positions[2]! / horseCount;
-      positionGain = (positions[0]! - positions[2]!) / horseCount;
-      makuriIndex = (positions[1]! - positions[2]!) / horseCount;
-    } else if (positions.length == 2) {
-      startPositionRate = positions[0]! / horseCount;
-      finalPositionRate = positions[1]! / horseCount;
-      positionGain = (positions[0]! - positions[1]!) / horseCount;
-    }
-
-    final cornerCount = positions.length;
-
-    if (cornerCount == 4) {
+      final makuriIndex = (positions[2]! - positions[3]!) / horseCount;
+      final longMakuriIndex = (positions[1]! - positions[3]!) / horseCount;
       if (longMakuriIndex > 0.4 || makuriIndex > 0.3) {
         return 'マクリ';
       }
     }
 
-    if (startPositionRate <= 0.15 && finalPositionRate <= 0.2) {
-      return '逃げ';
-    }
-    if (startPositionRate <= 0.4 && positionGain.abs() < 0.2) {
-      return '先行';
-    }
-    if (finalPositionRate >= 0.8 && agari <= 34.5) {
-      return '追込';
-    }
-    if (positionGain > 0.15) {
-      return '差し';
-    }
-
-    return '先行';
+    return classifyLegStyle(record.cornerPassage, horseCount);
   }
 
-  // 内部ロジック - 変更なし
-  static String _getTentativeLegStyle(_RaceActionProfile profile, int cornerCount) {
+  // [修正] マクリ判定（4コーナー）は温存し、基底4分類は共通関数 classifyLegStyle へ委譲。start/final/positionGain/agari による旧カスケードは廃止 (v.2026.9.26+26092605)
+  static String _getTentativeLegStyle(
+      _RaceActionProfile profile, int cornerCount, String cornerStr, int fieldSize) {
     if (cornerCount == 4) {
       if (profile.longMakuriIndex > 0.4 || profile.makuriIndex > 0.3) {
         return 'マクリ';
       }
     }
-
-    if (profile.startPositionRate <= 0.15 && profile.finalPositionRate <= 0.2) {
-      return '逃げ';
-    }
-    if (profile.startPositionRate <= 0.4 && profile.positionGain.abs() < 0.2) {
-      return '先行';
-    }
-    if (profile.finalPositionRate >= 0.8 && profile.agariTime <= 34.5) {
-      return '追込';
-    }
-    if (profile.positionGain > 0.15) {
-      return '差し';
-    }
-
-    return '先行';
+    return classifyLegStyle(cornerStr, fieldSize);
   }
 }
