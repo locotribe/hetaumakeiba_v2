@@ -110,5 +110,16 @@ void main() {
       expect(md, contains('AI分析資料（要約）'));
       expect(md, contains('### 1 テスト馬（horseId: h1）'));
     });
+
+    test('フロントマター(依頼ブロック)を先頭に含む', () {
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: _bundle(), grain: AiExportGrain.standard);
+      expect(md, contains('# この資料の使い方（AIへの依頼）'));
+      expect(md, contains('raceId,horseId,horseNumber,horseName,predictionMemo'));
+      expect(
+          md.indexOf('# この資料の使い方（AIへの依頼）') <
+              md.indexOf('AI分析資料（標準）'),
+          isTrue);
+    });
   });
 }
