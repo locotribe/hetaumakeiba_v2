@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/models/ai_export/ai_race_export_bundle.dart';
 import 'package:hetaumakeiba_v2/models/horse_speed_index_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 
 PredictionRaceData _race() => PredictionRaceData(
       raceId: '202606040911',
@@ -120,6 +121,66 @@ void main() {
           md.indexOf('# この資料の使い方（AIへの依頼）') <
               md.indexOf('AI分析資料（標準）'),
           isTrue);
+    });
+
+    test('馬柱に過去走の馬体重・騎手・頭数の列が出る', () {
+      final rec = HorseRaceRecord(
+        horseId: 'h1',
+        raceId: 'pr1',
+        date: '2026/06/01',
+        venue: '2中山3',
+        weather: '晴',
+        raceNumber: '11',
+        raceName: 'テスト重賞(GII)',
+        numberOfHorses: '16',
+        frameNumber: '3',
+        horseNumber: '5',
+        odds: '4.5',
+        popularity: '2',
+        rank: '1',
+        jockey: '武豊',
+        jockeyId: 'j1',
+        carriedWeight: '57',
+        distance: '芝1200',
+        trackCondition: '良',
+        time: '1:08.0',
+        margin: '0.0',
+        cornerPassage: '3-3',
+        pace: '33.0-34.0',
+        agari: '33.5',
+        horseWeight: '502(+4)',
+        winnerOrSecondHorse: 'テスト2着馬',
+        prizeMoney: '5000',
+      );
+      final bundle = AiRaceExportBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年9月27日',
+        horses: [
+          AiHorseData(
+            horseId: 'h1',
+            performance: [rec],
+            extrasByRaceId: const {},
+            trainingSessions: const [],
+            trainingReview: null,
+            profile: null,
+            speedIndex: null,
+            simulationParams: null,
+            trainingTimes: const [],
+          ),
+        ],
+        raceStatistics: null,
+        trackCondition: null,
+        raceMemoText: null,
+      );
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
+      expect(
+          md,
+          contains(
+              '| 日付 | レース | 距離馬場 | 頭数 | 枠馬番 | 人気着 | 馬体重 | 騎手 |'));
+      expect(md, contains('502(+4)'));
+      expect(md, contains('武豊'));
     });
   });
 }

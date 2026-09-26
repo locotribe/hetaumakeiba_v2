@@ -222,14 +222,17 @@ void _renderHorse(
   if (perf.isEmpty) {
     buf.writeln('（過去成績データなし）');
   } else {
-    buf.writeln('| 日付 | レース | 距離馬場 | 枠馬番 | 人気着 | タイム(着差) | 通過/上り | ペース | 指数 |');
-    buf.writeln('|---|---|---|---|---|---|---|---|---|');
+    // [修正] T3: 馬柱に過去走の馬体重・騎手・頭数を追加、指数を「タイム指数/馬場指数」に (v.2026.9.27+26092707)
+    buf.writeln(
+        '| 日付 | レース | 距離馬場 | 頭数 | 枠馬番 | 人気着 | 馬体重 | 騎手 | タイム(着差) | 通過/上り | ペース | 指数/馬場 |');
+    buf.writeln('|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (final r in _take(perf, pastLimit)) {
       final ex = d?.extrasByRaceId[r.raceId];
       final pace =
           '${_cell(_t(r.pace))}${ex?.paceMark != null ? '[${ex!.paceMark}]' : ''}';
+      final index = '${_i(ex?.timeIndex)}/${_i(ex?.trackIndex)}';
       buf.writeln(
-          '| ${_cell(_t(r.date))} | ${_cell(_t(r.raceName))} | ${_cell(_t(r.distance))}${_cell(_t(r.trackCondition))} | ${_cell(_t(r.frameNumber))}-${_cell(_t(r.horseNumber))} | ${_cell(_t(r.popularity))}人${_cell(_t(r.rank))}着 | ${_cell(_t(r.time))}(${_cell(_t(r.margin))}) | ${_cell(_t(r.cornerPassage))}/${_cell(_t(r.agari))} | $pace | ${_i(ex?.timeIndex)} |');
+          '| ${_cell(_t(r.date))} | ${_cell(_t(r.raceName))} | ${_cell(_t(r.distance))}${_cell(_t(r.trackCondition))} | ${_cell(_t(r.numberOfHorses))} | ${_cell(_t(r.frameNumber))}-${_cell(_t(r.horseNumber))} | ${_cell(_t(r.popularity))}人${_cell(_t(r.rank))}着 | ${_cell(_t(r.horseWeight))} | ${_cell(_t(r.jockey))} | ${_cell(_t(r.time))}(${_cell(_t(r.margin))}) | ${_cell(_t(r.cornerPassage))}/${_cell(_t(r.agari))} | $pace | $index |');
     }
   }
 
