@@ -13,6 +13,8 @@ import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart'; // [追加] CSVメモ入出力改善 (v.2026.9.24+26092401)
+import 'package:hetaumakeiba_v2/services/ai_export/ai_race_data_collector.dart'; // [追加] AI分析データエクスポート Step4 (v.2026.9.27+26092704)
+import 'package:hetaumakeiba_v2/logic/ai_export/ai_race_full_markdown_builder.dart'; // [追加] AI分析データエクスポート Step4 (v.2026.9.27+26092704)
 
 // [追加] 馬詳細タブStep2: メモタブ（memo_tab.dart）のメモ入力ダイアログ・過去メモ・CSV入出力をここへ移した。
 // 見た目・文言・処理内容は移す前と同じ。馬詳細タブ（Step3）からも使う (v.2026.9.23+26092307)
@@ -203,6 +205,78 @@ Future<void> exportMemosAsCsv({
   await file.writeAsString(csv);
 
   await Share.shareXFiles([XFile(path, name: fileName)], text: '${raceData.raceName} の予想メモ');
+}
+
+/// [追加] AI分析データエクスポート Step4: AI分析用データ(Markdown)を予想メモCSVと一緒に共有する (v.2026.9.27+26092704)
+/// Markdown は buildRaceFullAiMarkdown（既定=標準粒度）、CSV は現行の予想メモCSVと同一フォーマット。
+Future<void> exportAiRaceDataAsMarkdown(
+  BuildContext context, {
+  required String raceId,
+  required PredictionRaceData raceData,
+  AiExportGrain grain = AiExportGrain.standard,
+}) async {
+  final userId = UserSession().localUserId;
+  if (userId == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('ログインが必要です。')),
+    );
+    return;
+  }
+
+  // AI分析用データを収集して Markdown を生成
+  final bundle = await AiRaceDataCollector().collect(
+    raceId: raceId,
+    raceName: raceData.raceName,
+    raceDate: raceData.raceDate,
+    userId: userId,
+    horseIds: raceData.horses.map((h) => h.horseId).toList(),
+  );
+  final markdown = buildRaceFullAiMarkdown(
+    raceData: raceData,
+    bundle: bundle,
+    grain: grain,
+  );
+
+  // 予想メモCSV（現行と同一フォーマット）
+  final List<List<dynamic>> rows = [];
+  rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'predictionMemo']);
+  for (final horse in raceData.horses) {
+    rows.add([
+      raceId,
+      horse.horseId,
+      horse.horseNumber,
+      horse.horseName,
+      horse.userMemo?.predictionMemo ?? '',
+    ]);
+  }
+  final csv = const ListToCsvConverter().convert(rows);
+
+  final mdName = buildMemoCsvFileName(
+    raceId: raceId,
+    raceDate: raceData.raceDate,
+    raceName: raceData.raceName,
+    suffix: 'AI分析データ',
+  ).replaceAll(RegExp(r'\.csv$'), '.md');
+  final csvName = buildMemoCsvFileName(
+    raceId: raceId,
+    raceDate: raceData.raceDate,
+    raceName: raceData.raceName,
+    suffix: '予想メモ',
+  );
+
+  final directory = await getTemporaryDirectory();
+  final mdFile = File('${directory.path}/$mdName');
+  await mdFile.writeAsString(markdown);
+  final csvFile = File('${directory.path}/$csvName');
+  await csvFile.writeAsString(csv);
+
+  await Share.shareXFiles(
+    [
+      XFile(mdFile.path, name: mdName),
+      XFile(csvFile.path, name: csvName),
+    ],
+    text: '${raceData.raceName} のAI分析用データ（Markdown）＋予想メモ（CSV）',
+  );
 }
 
 /// CSV からこのレースの「予想メモ」を取り込む。取り込んだ件数を返す（取り消し・未ログイン・エラーは null）

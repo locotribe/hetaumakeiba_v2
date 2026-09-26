@@ -25,7 +25,8 @@ import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 // [修正] 馬詳細タブStep4: チップの左端に「全」（全頭の最終追い切り一覧。PageView の1ページ目、開いたときの初期表示）を追加。
 // 項目の開閉行をやめ、見出しの下の4つのボタン（情報・血統／最終追切／中間追切／メモ）で表示を切り替える (v.2026.9.23+26092309)
 
-enum _HorseDetailMenuAction { fetchTraining, bulkEditMemos, importMemos, exportMemos }
+// [追加] AI分析データエクスポート Step4: exportAiData を追加 (v.2026.9.27+26092704)
+enum _HorseDetailMenuAction { fetchTraining, bulkEditMemos, importMemos, exportMemos, exportAiData }
 
 /// 馬のページに表示する内容（ボタンで切り替え、馬を変えても保つ）
 enum _HorseDetailView { info, finalTraining, interimTraining, memo, condition }
@@ -276,6 +277,14 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
           raceData: widget.predictionRaceData,
         );
         break;
+      // [追加] AI分析データエクスポート Step4 (v.2026.9.27+26092704)
+      case _HorseDetailMenuAction.exportAiData:
+        await exportAiRaceDataAsMarkdown(
+          context,
+          raceId: widget.raceId,
+          raceData: widget.predictionRaceData,
+        );
+        break;
     }
   }
 
@@ -384,6 +393,11 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
               PopupMenuItem(
                 value: _HorseDetailMenuAction.exportMemos,
                 child: Text('メモをエクスポート'),
+              ),
+              // [追加] AI分析データエクスポート Step4 (v.2026.9.27+26092704)
+              PopupMenuItem(
+                value: _HorseDetailMenuAction.exportAiData,
+                child: Text('AI分析用データを共有'),
               ),
             ],
           ),
