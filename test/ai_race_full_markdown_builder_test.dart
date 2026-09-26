@@ -119,6 +119,8 @@ void main() {
           raceData: _race(), bundle: _bundle(), grain: AiExportGrain.standard);
       expect(md, contains('# この資料の使い方（AIへの依頼）'));
       expect(md, contains('raceId,horseId,horseNumber,horseName,predictionMemo'));
+      expect(md, contains('AI総評テキスト'));
+      expect(md, contains('レース情報タブ'));
       expect(
           md.indexOf('# この資料の使い方（AIへの依頼）') <
               md.indexOf('AI分析資料（標準）'),
