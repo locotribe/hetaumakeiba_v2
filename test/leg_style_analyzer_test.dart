@@ -1,5 +1,5 @@
 // test/leg_style_analyzer_test.dart
-// [追加] 脚質プロフィール(leg_style_analyzer)の回帰テスト。基底委譲後もマクリ/自在・JSONが温存されることを確認 (v.2026.9.26+26092605)
+// [修正] 脚質プロフィール(leg_style_analyzer)の回帰テスト。基底のTARGET3グループ化＋自在バランス条件に更新。マクリ/JSON温存も確認 (v.2026.9.26+26092606)
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
@@ -43,23 +43,23 @@ HorseRaceRecord _rec({
 
 void main() {
   group('analyzeSingleRaceStyle', () {
-    test('4コーナーで大きく順位を上げたらマクリ', () {
+    test('4コーナーで大きく順位を上げたらマクリ（温存）', () {
       expect(LegStyleAnalyzer.analyzeSingleRaceStyle(
           _rec(cornerPassage: '10-9-8-2', numberOfHorses: '16')), 'マクリ');
     });
-    test('最終コーナー1位は逃げ（基底委譲）', () {
+    test('道中で先頭なら逃げ', () {
       expect(LegStyleAnalyzer.analyzeSingleRaceStyle(
           _rec(cornerPassage: '1-1-1-1', numberOfHorses: '16')), '逃げ');
     });
-    test('少頭数の1位も逃げ（2コーナー）', () {
+    test('道中後方→最後だけ先頭は逃げにしない（先行）', () {
       expect(LegStyleAnalyzer.analyzeSingleRaceStyle(
-          _rec(cornerPassage: '2-1', numberOfHorses: '6')), '逃げ');
+          _rec(cornerPassage: '2-1', numberOfHorses: '6')), '先行');
     });
-    test('中団は差し（基底委譲）', () {
+    test('中団は差し（TARGET第2グループ）', () {
       expect(LegStyleAnalyzer.analyzeSingleRaceStyle(
           _rec(cornerPassage: '5-6-7-7', numberOfHorses: '16')), '差し');
     });
-    test('最後方は追込（基底委譲）', () {
+    test('最後方は追込（TARGET第3グループ）', () {
       expect(LegStyleAnalyzer.analyzeSingleRaceStyle(
           _rec(cornerPassage: '16-16-15-14', numberOfHorses: '16')), '追込');
     });
@@ -69,8 +69,8 @@ void main() {
     });
   });
 
-  group('getRunningStyle', () {
-    test('全レース先頭ならprimaryStyleは逃げ・分布も逃げ100%', () {
+  group('getRunningStyle: primaryStyle', () {
+    test('全レース道中先頭ならprimaryStyleは逃げ・分布も逃げ100%', () {
       final records = [
         _rec(cornerPassage: '1-1-1-1', numberOfHorses: '16', rank: '1'),
         _rec(cornerPassage: '1-1-1-1', numberOfHorses: '16', rank: '2'),
@@ -90,8 +90,40 @@ void main() {
       final profile = LegStyleAnalyzer.getRunningStyle(records);
       expect(profile.primaryStyle, 'マクリ');
     });
+  });
 
-    test('toJson/fromJson で往復してもprimaryStyle・分布が不変（スキーマ温存）', () {
+  group('getRunningStyle: 自在バランス条件', () {
+    test('前後がバランスし最大脚質<0.5なら自在', () {
+      // 逃げ1/先行1/追込1 → 前0.67・後0.33・最大0.33
+      final records = [
+        _rec(cornerPassage: '1-1-1-1', numberOfHorses: '16'),
+        _rec(cornerPassage: '3-3-3-3', numberOfHorses: '16'),
+        _rec(cornerPassage: '16-16-15-14', numberOfHorses: '16'),
+      ];
+      final profile = LegStyleAnalyzer.getRunningStyle(records);
+      expect(profile.primaryStyle, '自在');
+    });
+
+    test('後方偏重（前シェア<0.3）は自在にせず最大脚質にする', () {
+      // 先行2/差し3/追込4 → 前0.22(<0.3)・最大は追込0.44(<0.5)。自在にならず追込
+      final records = [
+        _rec(cornerPassage: '3-3-3-3', numberOfHorses: '16'),
+        _rec(cornerPassage: '3-3-3-3', numberOfHorses: '16'),
+        _rec(cornerPassage: '8-8-8-8', numberOfHorses: '16'),
+        _rec(cornerPassage: '8-8-8-8', numberOfHorses: '16'),
+        _rec(cornerPassage: '8-8-8-8', numberOfHorses: '16'),
+        _rec(cornerPassage: '16-16-15-14', numberOfHorses: '16'),
+        _rec(cornerPassage: '16-16-15-14', numberOfHorses: '16'),
+        _rec(cornerPassage: '16-16-15-14', numberOfHorses: '16'),
+        _rec(cornerPassage: '16-16-15-14', numberOfHorses: '16'),
+      ];
+      final profile = LegStyleAnalyzer.getRunningStyle(records);
+      expect(profile.primaryStyle, '追込');
+    });
+  });
+
+  group('getRunningStyle: JSON温存', () {
+    test('toJson/fromJson で往復してもprimaryStyle・分布が不変', () {
       final records = [
         _rec(cornerPassage: '1-1-1-1', numberOfHorses: '16', rank: '1'),
         _rec(cornerPassage: '1-1-1-1', numberOfHorses: '16', rank: '4'),

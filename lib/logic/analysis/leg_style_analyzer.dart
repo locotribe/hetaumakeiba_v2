@@ -213,10 +213,11 @@ class LegStyleAnalyzer {
       final topStyleEntry = styleDistribution.entries
           .reduce((a, b) => a.value > b.value ? a : b);
 
-      final hasFrontStyle = (styleDistribution['逃げ']! + styleDistribution['先行']!) > 0;
-      final hasBackStyle = (styleDistribution['差し']! + styleDistribution['追込']!) > 0;
+      // [修正] 自在は前後どちらかが僅少なら付けない。前(逃げ+先行)・後(差し+追込)の両シェアが0.3以上のときのみ自在 (v.2026.9.26+26092606)
+      final frontShare = styleDistribution['逃げ']! + styleDistribution['先行']!;
+      final backShare = styleDistribution['差し']! + styleDistribution['追込']!;
 
-      if (topStyleEntry.value < 0.5 && hasFrontStyle && hasBackStyle) {
+      if (topStyleEntry.value < 0.5 && frontShare >= 0.3 && backShare >= 0.3) {
         primaryStyle = '自在';
       } else {
         primaryStyle = topStyleEntry.key;
