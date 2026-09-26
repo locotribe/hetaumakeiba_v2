@@ -18,6 +18,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
+import 'package:hetaumakeiba_v2/logic/ai_export/citation_sanitizer.dart';
 
 class RaceInfoTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
@@ -89,7 +90,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
       final result = await FilePicker.platform.pickFiles(type: FileType.any);
       if (result == null || result.files.single.path == null) return;
       final content = await File(result.files.single.path!).readAsString();
-      final text = content.trim();
+      // [追加] T8: AI出力の引用記号([cite: n]等)を除去してから保存 (v.2026.9.27+26092713)
+      final text = stripCitations(content).trim();
       if (text.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

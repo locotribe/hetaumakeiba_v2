@@ -15,6 +15,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart'; // [追加] CSVメモ入出力改善 (v.2026.9.24+26092401)
 import 'package:hetaumakeiba_v2/services/ai_export/ai_race_data_collector.dart'; // [追加] AI分析データエクスポート Step4 (v.2026.9.27+26092704)
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_race_full_markdown_builder.dart'; // [追加] AI分析データエクスポート Step4 (v.2026.9.27+26092704)
+import 'package:hetaumakeiba_v2/logic/ai_export/citation_sanitizer.dart'; // [追加] T8: 引用記号除去
 
 // [追加] 馬詳細タブStep2: メモタブ（memo_tab.dart）のメモ入力ダイアログ・過去メモ・CSV入出力をここへ移した。
 // 見た目・文言・処理内容は移す前と同じ。馬詳細タブ（Step3）からも使う (v.2026.9.23+26092307)
@@ -336,9 +337,12 @@ Future<int?> importMemosFromCsv(
     }
 
     final file = File(filePath);
-    final csvString = await file.readAsString();
+    // [追加] T8: Gemini等が出力するCSVの表記揺れ(改行LF/BOM/Markdownフェンス)を吸収 (v.2026.9.27+26092713)
+    final csvString =
+        normalizeImportedPredictionCsv(await file.readAsString());
 
-    final List<List<dynamic>> rows = const CsvToListConverter().convert(csvString);
+    final List<List<dynamic>> rows =
+        const CsvToListConverter(eol: '\n').convert(csvString);
 
     if (rows.length < 2) {
       throw Exception('CSVファイルにデータがありません。');
@@ -364,7 +368,9 @@ Future<int?> importMemosFromCsv(
       }
 
       final horseId = row[1].toString();
-      final csvPrediction = row.length > 4 ? row[4].toString() : '';
+      // [追加] T8: AI出力の引用記号([cite: n]等)を除去し前後空白を整える (v.2026.9.27+26092713)
+      final csvPrediction =
+          stripCitations(row.length > 4 ? row[4].toString() : '').trim();
       final existing = existingMap[horseId];
 
       memosToUpdate.add(HorseMemo(
