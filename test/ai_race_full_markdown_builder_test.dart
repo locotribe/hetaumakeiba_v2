@@ -70,7 +70,8 @@ AiRaceExportBundle _bundle() => AiRaceExportBundle(
       raceStatistics: RaceStatistics(
         raceId: '202606040911',
         raceName: 'スプリンターズS',
-        statisticsJson: '{"sample":123}',
+        statisticsJson:
+            '{"analyzedYears":["2025","2024"],"frameStats":{"1":{"total":10,"win":1,"place":2,"show":3},"8":{"total":10,"win":3,"place":5,"show":6}},"legStyleStats":{"逃げ":{"total":8,"win":2,"place":3,"show":4}},"avgWinningHorseWeight":486.0}',
         lastUpdatedAt: DateTime(2026, 9, 27),
       ),
       trackCondition: TrackConditionRecord(
@@ -94,15 +95,16 @@ void main() {
       expect(md, contains('レースメモ: 重い馬場想定'));
       expect(md, contains('過去10年統計: 登録あり'));
       expect(md, contains('（過去成績データなし）'));
-      expect(md, isNot(contains('{"sample":123}')));
+      expect(md, contains('## 過去10年傾向（縦の比較）'));
     });
 
     test('全部: 統計JSONを埋め込む', () {
       final md = buildRaceFullAiMarkdown(
           raceData: _race(), bundle: _bundle(), grain: AiExportGrain.full);
       expect(md, contains('AI分析資料（全部）'));
-      expect(md, contains('過去10年統計データ（JSON）'));
-      expect(md, contains('{"sample":123}'));
+      expect(md, contains('## 過去10年傾向（縦の比較）'));
+      expect(md, contains('**枠番別**'));
+      expect(md, contains('勝ち馬の平均馬体重: 486kg'));
     });
 
     test('要約: 見出しと各馬詳細を含む', () {

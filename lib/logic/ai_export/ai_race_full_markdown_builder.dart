@@ -1,6 +1,8 @@
 // lib/logic/ai_export/ai_race_full_markdown_builder.dart
 // [追加] AI分析データエクスポート Step3: 出馬表(PredictionRaceData)と収集バンドル(AiRaceExportBundle)から全部入りのAI分析用Markdownを組み立てる純粋関数。DB/I/Oなし。粒度(要約/標準/全部)で情報量を切り替える。Step1の buildRaceAiMarkdown には手を触れない (v.2026.9.27+26092703)
 
+import 'dart:convert';
+
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/ai_export/ai_race_export_bundle.dart';
 
@@ -65,6 +67,80 @@ raceId,horseId,horseNumber,horseName,predictionMemo
 ''';
 }
 
+/// [追加] T2: 過去10年統計(statisticsJson)を整形テーブルで描画するヘルパー群 (v.2026.9.27+26092708)
+int _numAwareCompare(String a, String b) {
+  final na = int.tryParse(a);
+  final nb = int.tryParse(b);
+  if (na != null && nb != null) return na.compareTo(nb);
+  return a.compareTo(b);
+}
+
+Map<String, dynamic>? _asStatMap(dynamic v) {
+  if (v is Map<String, dynamic>) return v;
+  if (v is Map) return v.map((k, val) => MapEntry(k.toString(), val));
+  return null;
+}
+
+void _renderStatTable(StringBuffer buf, String title,
+    Map<String, dynamic>? stats, List<String> order) {
+  if (stats == null || stats.isEmpty) return;
+  buf.writeln();
+  buf.writeln('**$title**');
+  buf.writeln('| 区分 | 該当 | 勝 | 連対 | 複勝 | 勝率 | 複勝率 |');
+  buf.writeln('|---|---|---|---|---|---|---|');
+  final keys = <String>[];
+  for (final k in order) {
+    if (stats.containsKey(k)) keys.add(k);
+  }
+  final rest = stats.keys.where((k) => !order.contains(k)).toList()
+    ..sort(_numAwareCompare);
+  keys.addAll(rest);
+  for (final k in keys) {
+    final v = stats[k];
+    if (v is! Map) continue;
+    final total = (v['total'] as num?)?.toInt() ?? 0;
+    final win = (v['win'] as num?)?.toInt() ?? 0;
+    final place = (v['place'] as num?)?.toInt() ?? 0;
+    final show = (v['show'] as num?)?.toInt() ?? 0;
+    final wr = total > 0 ? (win * 100 / total).round().toString() : '-';
+    final sr = total > 0 ? (show * 100 / total).round().toString() : '-';
+    buf.writeln('| ${_cell(k)} | $total | $win | $place | $show | $wr% | $sr% |');
+  }
+}
+
+void _renderRaceStatistics(StringBuffer buf, String? statisticsJson) {
+  if (statisticsJson == null || statisticsJson.trim().isEmpty) return;
+  Map<String, dynamic>? data;
+  try {
+    final decoded = jsonDecode(statisticsJson);
+    if (decoded is Map<String, dynamic>) data = decoded;
+  } catch (_) {
+    data = null;
+  }
+  if (data == null) return;
+  buf.writeln();
+  buf.writeln('## 過去10年傾向（縦の比較）');
+  final years = data['analyzedYears'];
+  if (years is List && years.isNotEmpty) {
+    buf.writeln('- 対象年: ${years.join('、')}（${years.length}年）');
+  }
+  final avgW = data['avgWinningHorseWeight'];
+  if (avgW is num && avgW > 0) {
+    buf.writeln('- 勝ち馬の平均馬体重: ${avgW.round()}kg');
+  }
+  _renderStatTable(buf, '枠番別', _asStatMap(data['frameStats']),
+      const ['1', '2', '3', '4', '5', '6', '7', '8']);
+  _renderStatTable(buf, '脚質別', _asStatMap(data['legStyleStats']),
+      const ['逃げ', '先行', '差し', '追込']);
+  _renderStatTable(
+      buf, '人気別', _asStatMap(data['popularityStats']), const <String>[]);
+  _renderStatTable(
+      buf, '性別別', _asStatMap(data['genderStats']), const ['牡', '牝', 'セ']);
+  _renderStatTable(buf, '馬体重増減別', _asStatMap(data['horseWeightChangeStats']),
+      const ['-10kg以下', '-4~-8kg', '-2~+2kg', '+4~+8kg', '+10kg以上']);
+  buf.writeln();
+}
+
 /// PredictionRaceData と AiRaceExportBundle から全部入りのAI分析用Markdownを組み立てる（純粋関数・副作用なし）。
 String buildRaceFullAiMarkdown({
   required PredictionRaceData raceData,
@@ -79,7 +155,6 @@ String buildRaceFullAiMarkdown({
       : (grain == AiExportGrain.standard ? 5 : -1);
   final bool includeLaps = grain == AiExportGrain.full;
   final bool includeOldTraining = grain == AiExportGrain.full;
-  final bool includeStatsJson = grain == AiExportGrain.full;
 
   final Map<String, AiHorseData> byId = {
     for (final h in bundle.horses) h.horseId: h,
@@ -123,12 +198,9 @@ String buildRaceFullAiMarkdown({
       '- レースメモ: ${(memo == null || memo.trim().isEmpty) ? '（未記入）' : _cell(memo)}');
   buf.writeln();
 
-  if (includeStatsJson && rs != null) {
-    buf.writeln('### 過去10年統計データ（JSON）');
-    buf.writeln('~~~json');
-    buf.writeln(rs.statisticsJson);
-    buf.writeln('~~~');
-    buf.writeln();
+  // [修正] T2: 過去10年統計(縦の比較)を生JSONではなく整形テーブルで出力。要約粒度では省略 (v.2026.9.27+26092708)
+  if (grain != AiExportGrain.summary) {
+    _renderRaceStatistics(buf, rs?.statisticsJson);
   }
 
   // 出走馬一覧
