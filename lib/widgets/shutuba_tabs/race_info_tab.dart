@@ -12,6 +12,12 @@ import 'package:hetaumakeiba_v2/logic/elevation_logic.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/course_diagram_painter.dart';
+// [追加] T6: AIレース総評の取り込み・保存
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
+import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
+import 'package:hetaumakeiba_v2/services/user_session.dart';
 
 class RaceInfoTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
@@ -49,6 +55,108 @@ class RaceInfoTabWidget extends StatefulWidget {
 class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+
+  // [追加] T6: AIレース総評（race_memos に保存・レース情報タブに表示） (v.2026.9.27+26092711)
+  String? _aiRaceComment;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAiRaceComment();
+  }
+
+  Future<void> _loadAiRaceComment() async {
+    final userId = UserSession().localUserId;
+    if (userId == null) return;
+    final memo = await RaceMemoRepository()
+        .getRaceMemo(userId, widget.predictionRaceData.raceId);
+    if (!mounted) return;
+    setState(() {
+      final text = memo?.memo.trim() ?? '';
+      _aiRaceComment = text.isEmpty ? null : text;
+    });
+  }
+
+  Future<void> _importAiRaceComment() async {
+    final userId = UserSession().localUserId;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ログインが必要です。')),
+      );
+      return;
+    }
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.any);
+      if (result == null || result.files.single.path == null) return;
+      final content = await File(result.files.single.path!).readAsString();
+      final text = content.trim();
+      if (text.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ファイルが空です。')),
+        );
+        return;
+      }
+      await RaceMemoRepository().insertOrUpdateRaceMemo(RaceMemo(
+        userId: userId,
+        raceId: widget.predictionRaceData.raceId,
+        memo: text,
+        timestamp: DateTime.now(),
+      ));
+      await _loadAiRaceComment();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AIレース総評を取り込みました。')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('取り込みエラー: ${e.toString()}')),
+      );
+    }
+  }
+
+  Widget _buildAiCommentSection(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('AI予想・買い目',
+                  style:
+                      TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              OutlinedButton.icon(
+                onPressed: _importAiRaceComment,
+                icon: const Icon(Icons.file_download, size: 18),
+                label: const Text('取り込み'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              _aiRaceComment ??
+                  '未取り込み（AIのレース総評テキストを「取り込み」から読み込めます）',
+              style: TextStyle(
+                fontSize: 12,
+                color: _aiRaceComment == null ? Colors.grey : Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   String _mapToTrackTypeKey() {
     final tt = widget.predictionRaceData.trackType ?? '';
@@ -90,6 +198,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           _buildRaceHeader(context),
           const Divider(height: 1, thickness: 1),
           _buildSimpleShutubaList(context),
+          const Divider(height: 1, thickness: 1),
+          _buildAiCommentSection(context),
         ],
       ),
     );
