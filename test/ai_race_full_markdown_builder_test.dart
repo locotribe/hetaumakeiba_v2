@@ -184,5 +184,67 @@ void main() {
       expect(md, contains('502(+4)'));
       expect(md, contains('武豊'));
     });
+
+    test('馬柱の距離馬場に過去走の馬場(クッション値)が付記される', () {
+      final rec = HorseRaceRecord(
+        horseId: 'h1',
+        raceId: 'pr1',
+        date: '2026/06/01',
+        venue: '2中山3',
+        weather: '晴',
+        raceNumber: '11',
+        raceName: 'テスト重賞(GII)',
+        numberOfHorses: '16',
+        frameNumber: '3',
+        horseNumber: '5',
+        odds: '4.5',
+        popularity: '2',
+        rank: '1',
+        jockey: '武豊',
+        jockeyId: 'j1',
+        carriedWeight: '57',
+        distance: '芝1200',
+        trackCondition: '良',
+        time: '1:08.0',
+        margin: '0.0',
+        cornerPassage: '3-3',
+        pace: '33.0-34.0',
+        agari: '33.5',
+        horseWeight: '502(+4)',
+        winnerOrSecondHorse: 'テスト2着馬',
+        prizeMoney: '5000',
+      );
+      final tc = TrackConditionRecord(
+        trackConditionId: 1,
+        date: '2026-06-01',
+        weekDay: 'sa',
+        cushionValue: 9.2,
+      );
+      final bundle = AiRaceExportBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年9月27日',
+        horses: [
+          AiHorseData(
+            horseId: 'h1',
+            performance: [rec],
+            extrasByRaceId: const {},
+            trainingSessions: const [],
+            trainingReview: null,
+            profile: null,
+            speedIndex: null,
+            simulationParams: null,
+            trainingTimes: const [],
+            pastTrackByRaceId: {'pr1': tc},
+          ),
+        ],
+        raceStatistics: null,
+        trackCondition: null,
+        raceMemoText: null,
+      );
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
+      expect(md, contains('芝1200良(ク9.20)'));
+    });
   });
 }

@@ -76,6 +76,9 @@ class AiRaceDataCollector {
     final sessionsByHorse = <String, List<NetkeibaTrainingSession>>{};
     final profileByHorse = <String, HorseProfile>{};
     final trainingTimesByHorse = <String, List<TrainingTimeModel>>{};
+    // [追加] T4a: 過去走ごとの馬場を prefix10 で収集（キャッシュで重複クエリ回避）
+    final trackByPrefix10 = <String, TrackConditionRecord?>{};
+    final pastTrackByHorse = <String, Map<String, TrackConditionRecord>>{};
 
     for (final horseId in horseIds) {
       final performance =
@@ -88,6 +91,20 @@ class AiRaceDataCollector {
       }.toList();
       extrasByHorse[horseId] =
           await _extraRepository.getForHorse(horseId, raceIds);
+
+      // [追加] T4a: 各過去走の raceId 先頭10桁で馬場を照合（既取得はキャッシュ流用）
+      final pastTrack = <String, TrackConditionRecord>{};
+      for (final rid in raceIds) {
+        if (rid.length < 10) continue;
+        final prefix10 = rid.substring(0, 10);
+        if (!trackByPrefix10.containsKey(prefix10)) {
+          trackByPrefix10[prefix10] = await _trackConditionRepository
+              .getLatestTrackConditionByPrefix(prefix10);
+        }
+        final tc = trackByPrefix10[prefix10];
+        if (tc != null) pastTrack[rid] = tc;
+      }
+      pastTrackByHorse[horseId] = pastTrack;
 
       sessionsByHorse[horseId] =
           await _trainingRepository.getSessionsForHorse(horseId);
@@ -128,6 +145,7 @@ class AiRaceDataCollector {
       raceStatistics: raceStatistics,
       trackCondition: trackCondition,
       raceMemoText: raceMemo?.memo,
+      pastTrackByHorse: pastTrackByHorse,
     );
   }
 
@@ -151,6 +169,7 @@ class AiRaceDataCollector {
     RaceStatistics? raceStatistics,
     TrackConditionRecord? trackCondition,
     String? raceMemoText,
+    Map<String, Map<String, TrackConditionRecord>> pastTrackByHorse = const {},
   }) {
     final horses = <AiHorseData>[];
     for (final horseId in horseIds) {
@@ -164,6 +183,7 @@ class AiRaceDataCollector {
         speedIndex: speedIndexByHorse[horseId],
         simulationParams: simParamsByHorse[horseId],
         trainingTimes: trainingTimesByHorse[horseId] ?? const [],
+        pastTrackByRaceId: pastTrackByHorse[horseId] ?? const {},
       ));
     }
     return AiRaceExportBundle(

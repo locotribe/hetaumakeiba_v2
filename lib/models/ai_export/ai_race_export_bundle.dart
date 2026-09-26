@@ -39,6 +39,9 @@ class AiHorseData {
   /// 旧・調教タイム（pakara）。
   final List<TrainingTimeModel> trainingTimes;
 
+  /// [追加] T4a: 過去走ごとの馬場(クッション値・含水率)。キー=過去走のraceId。prefix10で照合して収集 (v.2026.9.27+26092709)
+  final Map<String, TrackConditionRecord> pastTrackByRaceId;
+
   const AiHorseData({
     required this.horseId,
     required this.performance,
@@ -49,6 +52,7 @@ class AiHorseData {
     required this.speedIndex,
     required this.simulationParams,
     required this.trainingTimes,
+    this.pastTrackByRaceId = const {},
   });
 }
 

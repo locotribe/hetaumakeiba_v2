@@ -303,8 +303,18 @@ void _renderHorse(
       final pace =
           '${_cell(_t(r.pace))}${ex?.paceMark != null ? '[${ex!.paceMark}]' : ''}';
       final index = '${_i(ex?.timeIndex)}/${_i(ex?.trackIndex)}';
+      // [追加] T4a: 過去走の馬場(クッション値/含水率)を距離馬場セルに付記
+      final tc = d?.pastTrackByRaceId[r.raceId];
+      final moist = tc?.moistureTurfGoal ?? tc?.moistureDirtGoal;
+      final trackTag = tc == null
+          ? ''
+          : (tc.cushionValue != null
+              ? '(ク${_d(tc.cushionValue)})'
+              : (moist != null ? '(含${_d(moist)}%)' : ''));
+      final track =
+          '${_cell(_t(r.distance))}${_cell(_t(r.trackCondition))}$trackTag';
       buf.writeln(
-          '| ${_cell(_t(r.date))} | ${_cell(_t(r.raceName))} | ${_cell(_t(r.distance))}${_cell(_t(r.trackCondition))} | ${_cell(_t(r.numberOfHorses))} | ${_cell(_t(r.frameNumber))}-${_cell(_t(r.horseNumber))} | ${_cell(_t(r.popularity))}人${_cell(_t(r.rank))}着 | ${_cell(_t(r.horseWeight))} | ${_cell(_t(r.jockey))} | ${_cell(_t(r.time))}(${_cell(_t(r.margin))}) | ${_cell(_t(r.cornerPassage))}/${_cell(_t(r.agari))} | $pace | $index |');
+          '| ${_cell(_t(r.date))} | ${_cell(_t(r.raceName))} | $track | ${_cell(_t(r.numberOfHorses))} | ${_cell(_t(r.frameNumber))}-${_cell(_t(r.horseNumber))} | ${_cell(_t(r.popularity))}人${_cell(_t(r.rank))}着 | ${_cell(_t(r.horseWeight))} | ${_cell(_t(r.jockey))} | ${_cell(_t(r.time))}(${_cell(_t(r.margin))}) | ${_cell(_t(r.cornerPassage))}/${_cell(_t(r.agari))} | $pace | $index |');
     }
   }
 
