@@ -96,21 +96,24 @@ class _ConditionHeatmapTableState extends State<ConditionHeatmapTable> {
   Widget _buildHeaderRow(List<RaceConditionColumn> columns) {
     return Container(
       color: Colors.green.shade50,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(
-            width: _nameColWidth,
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 6.0, horizontal: 2.0),
-              child: Center(
-                child: Text('馬',
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+      // [修正] ヘッダー行を IntrinsicHeight で包み、縦スクロール内(高さ無限)での crossAxisAlignment.stretch によるレイアウト例外(RenderBox was not laid out / hasSize)を解消。馬行(_buildHorseRow)と同じパターンに統一 (v.2026.9.27+26092705)
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(
+              width: _nameColWidth,
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 6.0, horizontal: 2.0),
+                child: Center(
+                  child: Text('馬',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
               ),
             ),
-          ),
-          for (final c in columns) Expanded(child: _headerCell(c)),
-        ],
+            for (final c in columns) Expanded(child: _headerCell(c)),
+          ],
+        ),
       ),
     );
   }
