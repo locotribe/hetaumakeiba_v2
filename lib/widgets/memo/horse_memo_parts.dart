@@ -213,8 +213,31 @@ Future<void> exportAiRaceDataAsMarkdown(
   BuildContext context, {
   required String raceId,
   required PredictionRaceData raceData,
-  AiExportGrain grain = AiExportGrain.standard,
 }) async {
+  // [追加] T5: 粒度(要約/標準/全部)を選択するダイアログ。キャンセルで中止 (v.2026.9.27+26092710)
+  final selectedGrain = await showDialog<AiExportGrain>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: const Text('AI分析用データの粒度'),
+      children: [
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, AiExportGrain.summary),
+          child: const Text('要約（直近5走・調教1本）'),
+        ),
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, AiExportGrain.standard),
+          child: const Text('標準（直近10走・調教5本）'),
+        ),
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, AiExportGrain.full),
+          child: const Text('全部（全走・全調教＋個別ラップ・旧調教タイム）'),
+        ),
+      ],
+    ),
+  );
+  if (selectedGrain == null) return;
+  if (!context.mounted) return;
+
   final userId = UserSession().localUserId;
   if (userId == null) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -234,7 +257,7 @@ Future<void> exportAiRaceDataAsMarkdown(
   final markdown = buildRaceFullAiMarkdown(
     raceData: raceData,
     bundle: bundle,
-    grain: grain,
+    grain: selectedGrain,
   );
 
   // 予想メモCSV（現行と同一フォーマット）
