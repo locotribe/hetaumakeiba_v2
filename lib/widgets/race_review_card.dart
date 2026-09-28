@@ -54,14 +54,20 @@ class _RaceReviewCardState extends State<RaceReviewCard> {
 
   Future<void> _saveMemo() async {
     final text = _controller.text;
+    // [修正] レースメモ用途分離: 総評(memo列)のみ更新し、AI予想(aiPredictionMemo列)は保持 (v.2026.9.28+26092802)
+    await _raceMemoRepo.upsertRaceReviewMemo(
+      userId: widget.userId,
+      raceId: widget.raceId,
+      memo: text,
+    );
     final newMemo = RaceMemo(
       id: _currentMemo?.id,
       userId: widget.userId,
       raceId: widget.raceId,
       memo: text,
+      aiPredictionMemo: _currentMemo?.aiPredictionMemo,
       timestamp: DateTime.now(),
     );
-    await _raceMemoRepo.insertOrUpdateRaceMemo(newMemo);
     if (mounted) {
       setState(() {
         _currentMemo = newMemo;

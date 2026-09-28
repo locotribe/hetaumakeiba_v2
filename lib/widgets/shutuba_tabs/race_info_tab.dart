@@ -16,7 +16,6 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/course_diagram_painter.dart
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
-import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/citation_sanitizer.dart';
 
@@ -73,7 +72,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
         .getRaceMemo(userId, widget.predictionRaceData.raceId);
     if (!mounted) return;
     setState(() {
-      final text = memo?.memo.trim() ?? '';
+      // [修正] レースメモ用途分離: AI予想・買い目は aiPredictionMemo列から読む (v.2026.9.28+26092802)
+      final text = memo?.aiPredictionMemo?.trim() ?? '';
       _aiRaceComment = text.isEmpty ? null : text;
     });
   }
@@ -99,12 +99,12 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
         );
         return;
       }
-      await RaceMemoRepository().insertOrUpdateRaceMemo(RaceMemo(
+      // [修正] レースメモ用途分離: AI予想・買い目は aiPredictionMemo列へ保存し、総評(memo)は保持 (v.2026.9.28+26092802)
+      await RaceMemoRepository().upsertAiPredictionMemo(
         userId: userId,
         raceId: widget.predictionRaceData.raceId,
-        memo: text,
-        timestamp: DateTime.now(),
-      ));
+        aiPredictionMemo: text,
+      );
       await _loadAiRaceComment();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

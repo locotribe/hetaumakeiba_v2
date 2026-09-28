@@ -19,7 +19,6 @@ import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
-import 'package:hetaumakeiba_v2/models/race_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/statistics_service.dart';
@@ -440,14 +439,12 @@ class RaceResultViewModel extends ChangeNotifier {
 
       // レース総評の保存
       if (updateRaceMemo) {
-        final newRaceMemo = RaceMemo(
-          id: existingRaceMemo?.id,
+        // [修正] レースメモ用途分離: 総評(memo列)のみ更新し、AI予想(aiPredictionMemo列)は保持 (v.2026.9.28+26092802)
+        await _raceMemoRepo.upsertRaceReviewMemo(
           userId: userId,
           raceId: raceId,
           memo: finalRaceMemo,
-          timestamp: DateTime.now(),
         );
-        await _raceMemoRepo.insertOrUpdateRaceMemo(newRaceMemo);
       }
 
       // 画面を再読み込みして最新データを反映（RaceReviewCardも更新される）

@@ -144,7 +144,8 @@ class AiRaceDataCollector {
       trainingTimesByHorse: trainingTimesByHorse,
       raceStatistics: raceStatistics,
       trackCondition: trackCondition,
-      raceMemoText: raceMemo?.memo,
+      // [修正] レースメモ用途分離: エクスポートはAI予想・買い目(aiPredictionMemo)を読む (v.2026.9.28+26092802)
+      raceMemoText: raceMemo?.aiPredictionMemo,
       pastTrackByHorse: pastTrackByHorse,
     );
   }
