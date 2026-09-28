@@ -252,12 +252,14 @@ class DbProvider {
       )
     ''');
 
+    // [修正] レースメモ用途分離: race_memos に aiPredictionMemo列を追加 (v.2026.9.28+26092801)
     await db.execute('''
       CREATE TABLE ${DbConstants.tableRaceMemos}(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         userId TEXT NOT NULL,
         raceId TEXT NOT NULL,
         memo TEXT,
+        aiPredictionMemo TEXT,
         timestamp TEXT NOT NULL,
         UNIQUE(userId, raceId) ON CONFLICT REPLACE
       )
@@ -683,6 +685,28 @@ class DbProvider {
         }
       } catch (e) {
         debugPrint('Migration error (v18->v19): $e');
+        rethrow;
+      }
+    }
+    // [追加] レースメモ用途分離: race_memos に aiPredictionMemo列を追加 (v.2026.9.28+26092801)
+    if (oldVersion < 20) {
+      try {
+        // v10未満を経由していないDBでは race_memos が未作成のことがあるため、
+        // 先に存在を保証してから列を追加する（既存DB・テストの合成DBの両方に対応）。
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS ${DbConstants.tableRaceMemos}(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId TEXT NOT NULL,
+            raceId TEXT NOT NULL,
+            memo TEXT,
+            timestamp TEXT NOT NULL,
+            UNIQUE(userId, raceId) ON CONFLICT REPLACE
+          )
+        ''');
+        await db.execute(
+            'ALTER TABLE ${DbConstants.tableRaceMemos} ADD COLUMN aiPredictionMemo TEXT');
+      } catch (e) {
+        debugPrint('Migration error (v19->v20): $e');
         rethrow;
       }
     }
