@@ -253,7 +253,10 @@ class AptitudeAnalyzer {
     pastRecords.where((record) => record.jockeyId == horse.jockeyId).toList();
 
     if (sameJockeyRaces.isEmpty) {
-      return 75.0; // コンビ実績がない場合は中立的な点数
+      // コンビ実績がない場合は中立的な点数
+      // [修正] 過去走があるのに今回の騎手とのコンビ実績が無い(初騎乗)場合は、継続騎乗より少し不利とみて
+      // 悪い相性(60点)より下の55点にする。過去走が無い馬(新馬等)は判断材料が無いので従来の中立75点のまま (v.2026.9.29+26092904)
+      return pastRecords.isEmpty ? 75.0 : 55.0;
     }
 
     // 2. コンビでの複勝率を計算
