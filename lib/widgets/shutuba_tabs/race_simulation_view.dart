@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
+// [追加] 展開シミュ騎手要素Step3: 棒グラフ用の騎手要素 (v.2026.9.29+26092903)
+import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/elevation_logic.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
@@ -31,6 +33,8 @@ class RaceSimulationView extends StatefulWidget {
   final RaceCourseData? raceCourse;
   final Map<String, HorseSimulationParams> simulationParams;
   final List<PredictionHorseDetail> horses;
+  // [追加] 展開シミュ騎手要素Step3 騎手の強さ・相性・乗り替わり方向(キーは馬番) (v.2026.9.29+26092903)
+  final Map<String, HorseJockeyFactor> jockeyFactorParams;
   // [追加] 0-9(b) 使用データカード表示用 (v.2026.7.27+26072703)
   final String? predictedPace;
   final String? trackConditionText;   // 馬場状態(良/稍重/重/不良)
@@ -59,6 +63,8 @@ class RaceSimulationView extends StatefulWidget {
     this.raceCourse,
     this.simulationParams = const {},
     this.horses = const [],
+    // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
+    this.jockeyFactorParams = const {},
     this.predictedPace,
     this.trackConditionText,
     this.cushionValue,
@@ -498,8 +504,19 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
                 ...widget.horses.map((horse) {
                   final params =
                       widget.simulationParams[horse.horseNumber.toString()];
-                  return _buildStatusRow(horse, params);
+                  // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
+                  final jockeyFactor =
+                      widget.jockeyFactorParams[horse.horseNumber.toString()];
+                  return _buildStatusRow(horse, params, jockeyFactor);
                 }),
+                // [追加] 展開シミュ騎手要素Step3: 騎手・相性の反映の強さと、乗替の印の意味 (v.2026.9.29+26092903)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 6.0),
+                  child: Text(
+                    '騎手・相性は直線でごく弱く反映（最大約5m）。乗替: 継=継続騎乗／替=乗り替わり／初=初騎乗、↑↓は前走騎手より実績が高い／低い。薄い棒はサンプル少',
+                    style: TextStyle(fontSize: 9, color: Colors.black54),
+                  ),
+                ),
               ],
             ),
           ),
@@ -522,6 +539,10 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
           SizedBox(
               width: 30,
               child: Text('脚質', style: style, textAlign: TextAlign.center)),
+          // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
+          SizedBox(
+              width: 30,
+              child: Text('乗替', style: style, textAlign: TextAlign.center)),
           Expanded(
               flex: 2,
               child: Text('テン', style: style, textAlign: TextAlign.center)),
@@ -531,13 +552,21 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
           Expanded(
               flex: 2,
               child: Text('スタ', style: style, textAlign: TextAlign.center)),
+          // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
+          Expanded(
+              flex: 2,
+              child: Text('騎手', style: style, textAlign: TextAlign.center)),
+          Expanded(
+              flex: 2,
+              child: Text('相性', style: style, textAlign: TextAlign.center)),
         ],
       ),
     );
   }
 
   Widget _buildStatusRow(
-      PredictionHorseDetail horse, HorseSimulationParams? params) {
+      PredictionHorseDetail horse, HorseSimulationParams? params,
+      [HorseJockeyFactor? jockeyFactor]) {
     const numStyle =
         TextStyle(fontSize: 10, fontWeight: FontWeight.bold);
     const nameStyle = TextStyle(fontSize: 10);
@@ -559,6 +588,8 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
               width: 30,
               child: Text(params?.legStyle ?? '不明',
                   style: legStyleTextStyle, textAlign: TextAlign.center)),
+          // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
+          _buildRideMark(jockeyFactor),
           Expanded(
               flex: 2,
               child: _buildBar(params?.tenAccelIndex ?? 0, Colors.orange)),
@@ -568,6 +599,17 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
           Expanded(
               flex: 2,
               child: _buildBar(params?.staminaIndex ?? 0, Colors.green)),
+          // [追加] 展開シミュ騎手要素Step3: 騎手の強さ・相性の棒（統計なし・サンプル少は薄く表示） (v.2026.9.29+26092903)
+          Expanded(
+              flex: 2,
+              child: _buildFactorBar(
+                  jockeyFactor?.strengthRatio ?? 0,
+                  Colors.deepPurple,
+                  jockeyFactor?.strengthIsLowSample ?? true)),
+          Expanded(
+              flex: 2,
+              child: _buildFactorBar(jockeyFactor?.comboRatio ?? 0,
+                  Colors.pink, jockeyFactor?.comboIsLowSample ?? true)),
         ],
       ),
     );
@@ -701,6 +743,56 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
         minHeight: 6,
         backgroundColor: Colors.grey.shade200,
         valueColor: AlwaysStoppedAnimation<Color>(color),
+      ),
+    );
+  }
+
+  // [追加] 展開シミュ騎手要素Step3: 統計なし・サンプル少の棒を薄く表示する (v.2026.9.29+26092903)
+  Widget _buildFactorBar(double value, Color color, bool faded) {
+    return Opacity(
+      opacity: faded ? 0.3 : 1.0,
+      child: _buildBar(value, color),
+    );
+  }
+
+  // [追加] 展開シミュ騎手要素Step3: 継続騎乗(継)/乗り替わり(替)/初騎乗(初)の印。
+  // 矢印は前走騎手より実績が高い(↑)/低い(↓) (v.2026.9.29+26092903)
+  Widget _buildRideMark(HorseJockeyFactor? factor) {
+    String label = '－';
+    Color color = Colors.grey;
+    if (factor != null) {
+      final double? dir = factor.changeDirection;
+      final String arrow =
+          dir == null ? '' : (dir > 0.25 ? '↑' : (dir < -0.25 ? '↓' : ''));
+      switch (factor.rideType) {
+        case JockeyRideType.continued:
+          label = '継';
+          color = Colors.blueGrey;
+          break;
+        case JockeyRideType.changed:
+          label = '替$arrow';
+          color = Colors.orange.shade800;
+          break;
+        case JockeyRideType.firstRide:
+          label = '初$arrow';
+          color = Colors.orange.shade800;
+          break;
+        case JockeyRideType.unknown:
+          break;
+      }
+      if (arrow == '↑') {
+        color = Colors.green.shade700;
+      } else if (arrow == '↓') {
+        color = Colors.red.shade700;
+      }
+    }
+    return SizedBox(
+      width: 30,
+      child: Text(
+        label,
+        style: TextStyle(
+            fontSize: 9, fontWeight: FontWeight.bold, color: color),
+        textAlign: TextAlign.center,
       ),
     );
   }

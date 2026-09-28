@@ -118,6 +118,8 @@ class _RaceSimulationLoadResult {
   final RaceCourseData? raceCourse;
   final Map<String, HorseSimulationParams> simulationParams;
   final List<PredictionHorseDetail> horses;
+  // [追加] 展開シミュ騎手要素Step3 棒グラフ表示用(キーは馬番) (v.2026.9.29+26092903)
+  final Map<String, HorseJockeyFactor> jockeyFactorParams;
   // [追加] 0-9(b) 使用データカード表示用 (v.2026.7.27+26072703)
   final String? predictedPace;
   final String? trackConditionText;
@@ -138,6 +140,7 @@ class _RaceSimulationLoadResult {
     required this.raceCourse,
     required this.simulationParams,
     required this.horses,
+    required this.jockeyFactorParams,
     this.predictedPace,
     this.trackConditionText,
     this.cushionValue,
@@ -605,6 +608,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       raceCourse: cached.raceCourse,
       simulationParams: cached.simulationParams,
       horses: cached.horsesForSim,
+      // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
+      jockeyFactorParams: cached.jockeyFactorParams,
       predictedPace: cached.predictedPace,
       trackConditionText: cached.trackConditionText,
       cushionValue: selectedCushion,
@@ -658,6 +663,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
                 raceCourse: result.raceCourse,
                 simulationParams: result.simulationParams,
                 horses: result.horses,
+                // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
+                jockeyFactorParams: result.jockeyFactorParams,
                 predictedPace: result.predictedPace,
                 trackConditionText: result.trackConditionText,
                 cushionValue: result.cushionValue,
