@@ -9,6 +9,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 // [追加] 展開シミュ騎手要素Step2: 騎手の強さ・相性・乗り替わり方向 (v.2026.9.29+26092902)
 import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
+// [追加] 展開シミュ一般論見直しStep2: ゴールの着差の新方式(実測定数・末脚) (v.2026.9.29+26092906)
+import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
 import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
@@ -61,6 +63,11 @@ class RaceAnalyzer {
   // 二重計上を避けて小さめに設定する。調整はこの2定数のみで完結させること (v.2026.7.30+26073001)
   static const double _kSpeedFactor4c = 0.15;       // 4コーナー(巡航能力)
   static const double _kSpeedFactorStraight = 0.15; // 直線(限界)
+
+  // [追加] 展開シミュ一般論見直しStep2 新方式の直線で使うスピード指数の換算率。
+  // 指数10点差で約6m(0.375点)になる。従来の0.15はほぼ効いていなかった。
+  // 実測できていない値のため、実機を見ながらStep4で調整する (v.2026.9.29+26092906)
+  static const double _kSpeedFactorStraightFinish = 3.75;
 
   // [追加] 1クラス差あたりの能力補正(点)。実装後の挙動を見て微調整する初期値 (v.2026.7.25+26072502)
   static const double _kClassAbilityWeight = 4.0;
@@ -326,6 +333,12 @@ class RaceAnalyzer {
       bool gatesConfirmed = true,
       // [追加] 展開シミュ騎手要素Step2 騎手の強さ・相性・乗り替わり方向。未指定(空)なら従来どおり何も加算しない (v.2026.9.29+26092902)
       Map<String, HorseJockeyFactor> jockeyFactorParams = const {},
+      // [追加] 展開シミュ一般論見直しStep2 各馬の割引き後の末脚(キーは馬番)。新方式でのみ使う (v.2026.9.29+26092906)
+      Map<String, HorseFinishKick> finishKickParams = const {},
+      // [追加] 展開シミュ一般論見直しStep2 馬場×ペースの実測定数。
+      // **非nullのときだけ**直線を新方式(位置×残る割合＋末脚＋能力)で計算する。
+      // nullなら従来どおりの直線処理を行い、既存の呼び出しの挙動は変わらない (v.2026.9.29+26092906)
+      RaceFinishConstants? finishConstants,
       }
       ) async {
     // [追加] フェーズ6 §1: speedFactorOverride省略時は従来の2定数をそのまま使う (v.2026.9.4)
@@ -730,6 +743,26 @@ class RaceAnalyzer {
 
     // [追加] 直線: finishingPowerで上がり3F区間の伸び/粘りを反映 (v.2026.6.19)
     if (cornersToPredict.contains('直線')) {
+      // [追加] 展開シミュ一般論見直しStep2 finishConstantsが渡されたときだけ新方式にする (v.2026.9.29+26092906)
+      final bool useFinishModel = finishConstants != null;
+
+      // [追加] 展開シミュ一般論見直しStep2 新方式で使う、4コーナー終了時点の先頭の
+      // スコアと、出走馬の末脚の平均。従来方式では使わない (v.2026.9.29+26092906)
+      double minBaseAt4c = 0.0;
+      double meanFinishKick = 0.0;
+      if (useFinishModel && simHorses.isNotEmpty) {
+        minBaseAt4c = simHorses
+            .map((h) => h.positionScore)
+            .reduce((a, b) => a < b ? a : b);
+        double kickSum = 0.0;
+        for (final h in simHorses) {
+          kickSum += finishKickParams[h.detail.horseNumber.toString()]
+                  ?.kickSeconds ??
+              0.0;
+        }
+        meanFinishKick = kickSum / simHorses.length;
+      }
+
       // [追加] 改善Phase5 直線で加える変化量の倍率。ペースと馬場バイアスで決まる
       // 「どれくらい直線で動くか」の一元的なつまみ (v.2026.9.18+26091802)
       final double straightMoveFactor =
@@ -746,7 +779,11 @@ class RaceAnalyzer {
         } else if (predictedPace.contains('ハイ')) {
           kickFactor = 1.0; // ハイペースは消耗戦で末脚の差が縮む
         }
-        horse.positionScore -= (finishingPower - 0.5) * kickFactor;
+        // [修正] 展開シミュ一般論見直しStep2 新方式では末脚を上がり3Fの実タイムで
+        // 作るため、順位ベースのfinishingPower(4角順位−着順)は使わない (v.2026.9.29+26092906)
+        if (!useFinishModel) {
+          horse.positionScore -= (finishingPower - 0.5) * kickFactor;
+        }
 
         // [追加] 能力反映: 直線でも能力差を反映 (v.2026.7.25)
         final abilityDeltaLast = (horse.abilityScore - meanAbility) / 100.0;
@@ -767,11 +804,20 @@ class RaceAnalyzer {
             meanBestSpeedIndex != null) {
           final speedDeltaLast =
               (speedIndexLast.bestIndex - meanBestSpeedIndex) / 100.0;
-          final paceModLast = _speedPaceMod(predictedPace);
-          horse.positionScore -= speedDeltaLast *
-              speedIndexLast.confidence *
-              effectiveSpeedFactorStraight *
-              paceModLast;
+          // [修正] 展開シミュ一般論見直しStep2 新方式では能力の物差しとして
+          // スピード指数を実際に効かせる(10点差で約6m)。ペースの影響は
+          // 「残る割合」側でまとめて扱うため、ここではペース係数を掛けない (v.2026.9.29+26092906)
+          if (useFinishModel) {
+            horse.positionScore -= speedDeltaLast *
+                speedIndexLast.confidence *
+                _kSpeedFactorStraightFinish;
+          } else {
+            final paceModLast = _speedPaceMod(predictedPace);
+            horse.positionScore -= speedDeltaLast *
+                speedIndexLast.confidence *
+                effectiveSpeedFactorStraight *
+                paceModLast;
+          }
         }
 
         // [追加] 斤量(差し・追込・自在・マクリ): 再加速=上がりに反映。重い馬は伸び鈍化 (v.2026.7.26+26072601)
@@ -790,18 +836,41 @@ class RaceAnalyzer {
         final kStr = _trackBiasKStr(horse.detail.legStyleProfile?.primaryStyle);
         if (kStr != 0.0) {
           horse.positionScore -= trackBias * _kTrackBiasScale * kStr;
-          // [追加] 改善Phase4 ペースによる前後バイアス(直線分=全体の0.5倍) (v.2026.9.18+26091802)
-          horse.positionScore -=
-              _pacePositionBias(predictedPace) * _kPaceBiasScale * 0.5 * kStr;
+          // [修正] 展開シミュ一般論見直しStep2 新方式ではペースの前後バイアスを
+          // 「残る割合」に統合したため、ここでは加えない (v.2026.9.29+26092906)
+          if (!useFinishModel) {
+            // [追加] 改善Phase4 ペースによる前後バイアス(直線分=全体の0.5倍) (v.2026.9.18+26091802)
+            horse.positionScore -=
+                _pacePositionBias(predictedPace) * _kPaceBiasScale * 0.5 * kStr;
+          }
         }
 
         // [追加] フェーズ1b ブリンカー装着の上がり等価交換（テンで前へ寄せた分だけ終盤を不利にする。差し・追込は係数0で無変化） (v.2026.7.28+26072806)
         horse.positionScore -= horse.blinkerTenDelta;
 
-        // [追加] 改善Phase5 直線で加わった変化量の合計に動きやすさ係数を掛ける。
-        // 「4角スコア + 変化量 × 係数」であり、当初案の加重平均(4角位置×w + 末脚×(1-w))と等価 (v.2026.9.18+26091802)
-        horse.positionScore = straightBaseScore +
-            (horse.positionScore - straightBaseScore) * straightMoveFactor;
+        // [修正] 展開シミュ一般論見直しStep2 新方式では
+        // 「4コーナーの遅れ × 残る割合 ＋ 末脚 ＋ 能力」でゴールの位置を作る。
+        // straightBaseScore から動いた量の合計が、そのまま能力ぶん(総合適性・
+        // スピード指数・着差・騎手・斤量・距離ローテ・ブリンカー・馬場)になる (v.2026.9.29+26092906)
+        if (useFinishModel) {
+          final abilityDelta = horse.positionScore - straightBaseScore;
+          final kickSeconds =
+              finishKickParams[horse.detail.horseNumber.toString()]
+                      ?.kickSeconds ??
+                  0.0;
+          horse.positionScore = RaceFinishCalculator.goalScore(
+            frontScoreAt4c: straightBaseScore - minBaseAt4c,
+            carryOver: finishConstants.carryOver,
+            kickSeconds: kickSeconds,
+            meanKickSeconds: meanFinishKick,
+            abilityScore: abilityDelta,
+          );
+        } else {
+          // [追加] 改善Phase5 直線で加わった変化量の合計に動きやすさ係数を掛ける。
+          // 「4角スコア + 変化量 × 係数」であり、当初案の加重平均(4角位置×w + 末脚×(1-w))と等価 (v.2026.9.18+26091802)
+          horse.positionScore = straightBaseScore +
+              (horse.positionScore - straightBaseScore) * straightMoveFactor;
+        }
       }
 
       // [追加] フェーズ6 バックテスト・ハーネス主指標用: 直線処理後の生positionScoreを

@@ -12,6 +12,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
 import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
+// [追加] 展開シミュ一般論見直しStep2: 末脚の算出・ペース自動判定・実測定数 (v.2026.9.29+26092906)
+import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/speed_index_calculator.dart';
@@ -70,6 +72,10 @@ class _CachedSimInputs {
   final bool gatesConfirmed;
   // [追加] 展開シミュ騎手要素Step2 騎手の強さ・相性・乗り替わり方向(キーは馬番) (v.2026.9.29+26092902)
   final Map<String, HorseJockeyFactor> jockeyFactorParams;
+  // [追加] 展開シミュ一般論見直しStep2 割引き後の末脚(キーは馬番) (v.2026.9.29+26092906)
+  final Map<String, HorseFinishKick> finishKickParams;
+  // [追加] 展開シミュ一般論見直しStep2 面子から自動判定したペース(日本語ラベル) (v.2026.9.29+26092906)
+  final String autoPace;
   final String? predictedPace;
   final String? trackConditionText;
   final bool hasActualToday;
@@ -95,6 +101,9 @@ class _CachedSimInputs {
     required this.speedIndexParams,
     required this.gatesConfirmed,
     required this.jockeyFactorParams,
+    // [追加] 展開シミュ一般論見直しStep2 (v.2026.9.29+26092906)
+    required this.finishKickParams,
+    required this.autoPace,
     required this.predictedPace,
     required this.trackConditionText,
     required this.hasActualToday,
@@ -234,6 +243,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       setState(() {
         _cachedInputs = cached;
         _selectedSource = _autoSelectSource(cached);
+        // [追加] 展開シミュ一般論見直しStep2 ペース選択の初期値を、面子から
+        // 自動判定した結果にする。ユーザーは3つのボタンで従来どおり上書きできる (v.2026.9.29+26092906)
+        _selectedPace = cached.autoPace;
       });
       _triggerRebuild(cached);
     });
@@ -511,6 +523,26 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       jockeyStats: jockeyStatsForSim,
     );
 
+    // [追加] 展開シミュ一般論見直しStep2 過去走の上がり3Fから割引き後の末脚を求め、
+    // 面子の脚質分布からペースを自動判定する。DB追加取得はしない (v.2026.9.29+26092906)
+    final finishKickParams = <String, HorseFinishKick>{};
+    for (final horse in horsesForSim) {
+      finishKickParams[horse.horseNumber.toString()] =
+          RaceFinishCalculator.calculateKick(
+              allPastRecords[horse.horseId] ?? const []);
+    }
+    final autoPace = RaceFinishCalculator.paceLabel(
+      RaceFinishCalculator.predictPace(
+        styleDistributions: horsesForSim
+            .map((h) =>
+                h.legStyleProfile?.styleDistribution ??
+                const <String, double>{})
+            .toList(),
+        distanceMeters: distance,
+        surface: isDirt ? SimSurface.dirt : SimSurface.turf,
+      ),
+    );
+
     return _CachedSimInputs(
       venueCode: venueCode,
       distance: distance,
@@ -527,6 +559,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       gatesConfirmed: gatesConfirmed,
       // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
       jockeyFactorParams: jockeyFactorParams,
+      // [追加] 展開シミュ一般論見直しStep2 (v.2026.9.29+26092906)
+      finishKickParams: finishKickParams,
+      autoPace: autoPace,
       predictedPace: widget.predictionRaceData.racePacePrediction?.predictedPace,
       trackConditionText: widget.predictionRaceData.trackCondition,
       hasActualToday: hasActualToday,
@@ -594,6 +629,12 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       gatesConfirmed: cached.gatesConfirmed,
       // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
       jockeyFactorParams: cached.jockeyFactorParams,
+      // [追加] 展開シミュ一般論見直しStep2 選択中のペースと馬場から実測定数を引いて渡す (v.2026.9.29+26092906)
+      finishKickParams: cached.finishKickParams,
+      finishConstants: RaceFinishCalculator.constantsFor(
+        cached.isDirt ? SimSurface.dirt : SimSurface.turf,
+        RaceFinishCalculator.paceFromLabel(_selectedPace),
+      ),
     );
     if (simulationData == null) return null;
 

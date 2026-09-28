@@ -3,6 +3,8 @@
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 // [追加] 展開シミュ騎手要素Step2: 騎手の強さ・相性・乗り替わり方向(型のみ使用) (v.2026.9.29+26092902)
 import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
+// [追加] 展開シミュ一般論見直しStep2: ゴールの着差の新方式(実測定数・末脚・広がりの倍率) (v.2026.9.29+26092906)
+import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
@@ -93,6 +95,15 @@ class RaceSimulationEngine {
   /// 発走直後に全馬が衝突扱いになるのを防ぐ (v.2026.9.18+26091802)
   static const double gateLaneSpacing = 1.1;
 
+  /// [追加] 展開シミュ一般論見直しStep2追補 馬群の広がりの基準に使う「後ろからの割合」。
+  /// 0.15なら「後ろから15%の位置にいる馬」の遅れを基準にする。1頭だけ飛び抜けて
+  /// 遅い馬に倍率が引っ張られ、他の全馬が押し縮められるのを防ぐ (v.2026.9.29+26092906)
+  static const double spreadReferenceTailFraction = 0.15;
+
+  /// [追加] 展開シミュ一般論見直しStep2追補 基準から外れる馬の遅れの上限(目標の広がりに対する倍率)。
+  /// これを超える馬は画面からはみ出さない範囲で最後方に置かれる (v.2026.9.29+26092906)
+  static const double spreadOverflowLimit = 1.6;
+
   /// [追加] 改善Phase6 スタミナ差による距離補正の強さ(m / 負荷km / スタミナ差1.0)。
   static const double staminaMeterFactor = 8.0;
 
@@ -134,6 +145,12 @@ class RaceSimulationEngine {
     bool gatesConfirmed = true,
     // [追加] 展開シミュ騎手要素Step2 騎手の強さ・相性・乗り替わり方向。build()自身は不使用、内部のsimulateRaceDevelopmentへ転送するのみ (v.2026.9.29+26092902)
     Map<String, HorseJockeyFactor> jockeyFactorParams = const {},
+    // [追加] 展開シミュ一般論見直しStep2 各馬の割引き後の末脚。内部のsimulateRaceDevelopmentへ転送するのみ (v.2026.9.29+26092906)
+    Map<String, HorseFinishKick> finishKickParams = const {},
+    // [追加] 展開シミュ一般論見直しStep2 馬場×ペースの実測定数。
+    // 非nullのとき、直線を新方式にし、馬群の広がりを実測の目標に合わせ、
+    // 消耗補正を道中(d1〜d5)だけに限定する。nullなら従来どおり (v.2026.9.29+26092906)
+    RaceFinishConstants? finishConstants,
   }) async {
     if (horses.isEmpty || raceDistance <= 0) return null;
 
@@ -159,6 +176,9 @@ class RaceSimulationEngine {
       gatesConfirmed: gatesConfirmed,
       // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
       jockeyFactorParams: jockeyFactorParams,
+      // [追加] 展開シミュ一般論見直しStep2 (v.2026.9.29+26092906)
+      finishKickParams: finishKickParams,
+      finishConstants: finishConstants,
     );
 
     // 「ゴールからの絶対残距離」(d0=raceDistance→d6=0, 単調減少)
@@ -336,7 +356,10 @@ class RaceSimulationEngine {
     final cumulativeClimbs =
         _cumulativeClimbAtKeyframes(raceCourse, distances, raceDistance);
 
-    for (int i = 1; i < 7; i++) {
+    // [修正] 展開シミュ一般論見直しStep2 新方式では、ゴールでの消耗は「残る割合」に
+    // 含まれているため二重になる。消耗補正は道中(d1〜d5)にだけ掛ける (v.2026.9.29+26092906)
+    final int fatigueEndIndex = finishConstants != null ? 6 : 7;
+    for (int i = 1; i < fatigueEndIndex; i++) {
       final travelled = raceDistance - distances[i];
       if (travelled <= 0) continue;
 
@@ -385,6 +408,54 @@ class RaceSimulationEngine {
       if (minGap.isFinite && minGap != 0.0) {
         for (int h = 0; h < n; h++) {
           rawDistances[h][i] -= minGap;
+        }
+      }
+    }
+
+    // [追加] 展開シミュ一般論見直しStep2 馬群の広がりを実測の目標に合わせる。
+    // 道中(d1〜d5)は4コーナーの広がりから、ゴール(d6)はゴールの広がりから
+    // それぞれ倍率を1つ求めて掛ける。倍率は0.4〜1.5でクランプされるため、
+    // 面子が極端に偏ったレースでは広がりがそのぶん狭く/広くなる (v.2026.9.29+26092906)
+    if (finishConstants != null) {
+      // [修正] 展開シミュ一般論見直しStep2追補 基準を「一番後ろの1頭」から
+      // 「後ろから約15%の位置にいる馬」に変える。1頭だけ極端に遅い馬がいても
+      // 残りの馬が押し縮められない (v.2026.9.29+26092906)
+      double referenceGapAt(int index) {
+        final gaps = <double>[];
+        for (int h = 0; h < n; h++) {
+          gaps.add(rawDistances[h][index] - distances[index]);
+        }
+        if (gaps.isEmpty) return 0.0;
+        gaps.sort((a, b) => b.compareTo(a)); // 大きい(後ろ)順
+        final refIndex = ((gaps.length - 1) * spreadReferenceTailFraction)
+            .round()
+            .clamp(0, gaps.length - 1);
+        return gaps[refIndex];
+      }
+
+      final double midScale = RaceFinishCalculator.spreadScale(
+        maxFrontScore: referenceGapAt(5) / scoreToMeters,
+        targetSpreadMeters: finishConstants.midSpreadMeters,
+        scoreToMeters: scoreToMeters,
+      );
+      final double goalScale = RaceFinishCalculator.spreadScale(
+        maxFrontScore: referenceGapAt(6) / scoreToMeters,
+        targetSpreadMeters: finishConstants.goalSpreadMeters,
+        scoreToMeters: scoreToMeters,
+      );
+
+      for (int i = 1; i < 7; i++) {
+        final double scale = i == 6 ? goalScale : midScale;
+        // [追加] 展開シミュ一般論見直しStep2追補 基準から外れる馬が画面外へ飛ばないよう、
+        // 遅れの上限を目標の広がりの1.6倍にする (v.2026.9.29+26092906)
+        final double limit = (i == 6
+                ? finishConstants.goalSpreadMeters
+                : finishConstants.midSpreadMeters) *
+            spreadOverflowLimit;
+        for (int h = 0; h < n; h++) {
+          final gap = rawDistances[h][i] - distances[i];
+          final scaled = (gap * scale).clamp(0.0, limit).toDouble();
+          rawDistances[h][i] = distances[i] + scaled;
         }
       }
     }
