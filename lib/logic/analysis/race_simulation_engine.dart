@@ -1,6 +1,8 @@
 // lib/logic/analysis/race_simulation_engine.dart
 
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
+// [追加] 展開シミュ騎手要素Step2: 騎手の強さ・相性・乗り替わり方向(型のみ使用) (v.2026.9.29+26092902)
+import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
@@ -130,6 +132,8 @@ class RaceSimulationEngine {
     // [追加] 改善Phase7 枠順が発表済みかどうか。falseのとき(仮枠番)は枠番由来の
     // 有利不利を計算に入れない (v.2026.9.18+26091802)
     bool gatesConfirmed = true,
+    // [追加] 展開シミュ騎手要素Step2 騎手の強さ・相性・乗り替わり方向。build()自身は不使用、内部のsimulateRaceDevelopmentへ転送するのみ (v.2026.9.29+26092902)
+    Map<String, HorseJockeyFactor> jockeyFactorParams = const {},
   }) async {
     if (horses.isEmpty || raceDistance <= 0) return null;
 
@@ -153,6 +157,8 @@ class RaceSimulationEngine {
       outPhaseScores: phaseScores,
       // [追加] 改善Phase7 (v.2026.9.18+26091802)
       gatesConfirmed: gatesConfirmed,
+      // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
+      jockeyFactorParams: jockeyFactorParams,
     );
 
     // 「ゴールからの絶対残距離」(d0=raceDistance→d6=0, 単調減少)

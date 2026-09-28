@@ -7,6 +7,8 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
+// [追加] 展開シミュ騎手要素Step2: 騎手の強さ・相性・乗り替わり方向 (v.2026.9.29+26092902)
+import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
 import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
@@ -322,6 +324,8 @@ class RaceAnalyzer {
       // [追加] 改善Phase7 枠順が発表済みかどうか。falseのとき(仮枠番)は
       // コースプリセットの枠番補正(内枠有利/外枠不利)を適用しない (v.2026.9.18+26091802)
       bool gatesConfirmed = true,
+      // [追加] 展開シミュ騎手要素Step2 騎手の強さ・相性・乗り替わり方向。未指定(空)なら従来どおり何も加算しない (v.2026.9.29+26092902)
+      Map<String, HorseJockeyFactor> jockeyFactorParams = const {},
       }
       ) async {
     // [追加] フェーズ6 §1: speedFactorOverride省略時は従来の2定数をそのまま使う (v.2026.9.4)
@@ -747,6 +751,13 @@ class RaceAnalyzer {
         // [追加] 能力反映: 直線でも能力差を反映 (v.2026.7.25)
         final abilityDeltaLast = (horse.abilityScore - meanAbility) / 100.0;
         horse.positionScore -= abilityDeltaLast * _kAbilityFactorLast;
+
+        // [追加] 展開シミュ騎手要素Step2: 騎手の強さ・相性・乗り替わり方向の合計(最大約5m相当)を能力の層に加える。
+        // positionBiasは加算する値(負=前進)。jockeyFactorParams未指定なら0で挙動不変 (v.2026.9.29+26092902)
+        horse.positionScore +=
+            jockeyFactorParams[horse.detail.horseNumber.toString()]
+                    ?.positionBias ??
+                0.0;
 
         // [追加] フェーズ5-2 スピード指数(限界/ceiling): bestIndexの平均比較を
         // confidence・ペースで重み付けし小さく反映する (v.2026.7.30+26073001)

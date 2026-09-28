@@ -10,6 +10,8 @@ import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
+// [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
+import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/speed_index_calculator.dart';
@@ -17,9 +19,13 @@ import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_speed_index_model.dart';
+// [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
+import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
+// [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
+import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_view.dart';
 
@@ -62,6 +68,8 @@ class _CachedSimInputs {
   final Map<String, HorseSpeedIndex> speedIndexParams;
   // [追加] 改善Phase7 枠順が発表済みかどうか (v.2026.9.18+26091802)
   final bool gatesConfirmed;
+  // [追加] 展開シミュ騎手要素Step2 騎手の強さ・相性・乗り替わり方向(キーは馬番) (v.2026.9.29+26092902)
+  final Map<String, HorseJockeyFactor> jockeyFactorParams;
   final String? predictedPace;
   final String? trackConditionText;
   final bool hasActualToday;
@@ -86,6 +94,7 @@ class _CachedSimInputs {
     required this.simulationParams,
     required this.speedIndexParams,
     required this.gatesConfirmed,
+    required this.jockeyFactorParams,
     required this.predictedPace,
     required this.trackConditionText,
     required this.hasActualToday,
@@ -468,6 +477,37 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       speedIndexParams[horse.horseNumber.toString()] = speedIndex;
     }
 
+    // [追加] 展開シミュ騎手要素Step2: 騎手の強さ・相性・乗り替わり方向を算出する。
+    // 騎手統計はDB全レース結果の走査を伴うため1回だけ行い、失敗しても展開シミュ自体は継続する (v.2026.9.29+26092902)
+    final jockeyIdsForStats = <String>{};
+    for (final horse in horsesForSim) {
+      if (horse.jockeyId.isNotEmpty) jockeyIdsForStats.add(horse.jockeyId);
+      final prevJockeyId = horse.previousJockeyId;
+      if (prevJockeyId != null && prevJockeyId.isNotEmpty) {
+        jockeyIdsForStats.add(prevJockeyId);
+      }
+      final pastList = allPastRecords[horse.horseId];
+      if (pastList != null &&
+          pastList.isNotEmpty &&
+          pastList.first.jockeyId.isNotEmpty) {
+        jockeyIdsForStats.add(pastList.first.jockeyId);
+      }
+    }
+    Map<String, JockeyStats> jockeyStatsForSim = const {};
+    try {
+      jockeyStatsForSim = await JockeyAnalysisService().analyzeAllJockeys(
+        jockeyIdsForStats.toList(),
+        raceData: widget.predictionRaceData,
+      );
+    } catch (_) {
+      jockeyStatsForSim = const {};
+    }
+    final jockeyFactorParams = JockeyFactorCalculator.calculate(
+      horses: horsesForSim,
+      allPastRecords: allPastRecords,
+      jockeyStats: jockeyStatsForSim,
+    );
+
     return _CachedSimInputs(
       venueCode: venueCode,
       distance: distance,
@@ -482,6 +522,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       speedIndexParams: speedIndexParams,
       // [追加] 改善Phase7 (v.2026.9.18+26091802)
       gatesConfirmed: gatesConfirmed,
+      // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
+      jockeyFactorParams: jockeyFactorParams,
       predictedPace: widget.predictionRaceData.racePacePrediction?.predictedPace,
       trackConditionText: widget.predictionRaceData.trackCondition,
       hasActualToday: hasActualToday,
@@ -547,6 +589,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       paceOverride: _selectedPace,
       // [追加] 改善Phase7 (v.2026.9.18+26091802)
       gatesConfirmed: cached.gatesConfirmed,
+      // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
+      jockeyFactorParams: cached.jockeyFactorParams,
     );
     if (simulationData == null) return null;
 
