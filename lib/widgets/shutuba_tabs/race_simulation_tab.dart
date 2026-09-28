@@ -631,8 +631,10 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       jockeyFactorParams: cached.jockeyFactorParams,
       // [追加] 展開シミュ一般論見直しStep2 選択中のペースと馬場から実測定数を引いて渡す (v.2026.9.29+26092906)
       finishKickParams: cached.finishKickParams,
+      // [修正] 展開シミュ一般論見直しStep4 定数を今回の距離帯でも引く (v.2026.9.29+26092907)
       finishConstants: RaceFinishCalculator.constantsFor(
         cached.isDirt ? SimSurface.dirt : SimSurface.turf,
+        RaceFinishCalculator.bandOfMeters(cached.distance),
         RaceFinishCalculator.paceFromLabel(_selectedPace),
       ),
     );

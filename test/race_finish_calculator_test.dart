@@ -1,6 +1,8 @@
 // test/race_finish_calculator_test.dart
 
-// [追加] 展開シミュ一般論見直しStep1: RaceFinishCalculator の単体テスト (2026.9.29+26092905)
+// [追加] 展開シミュ一般論見直しStep1: RaceFinishCalculator の単体テスト (v.2026.9.29+26092905)
+// [修正] 展開シミュ一般論見直しStep4: 定数表に距離帯の次元が入ったため期待値を更新し、
+// 距離帯のテストを追加した (v.2026.9.29+26092907)
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
@@ -44,27 +46,80 @@ HorseRaceRecord rec({
 }
 
 void main() {
+  group('距離帯', () {
+    test('境界の振り分け', () {
+      expect(RaceFinishCalculator.bandOfMeters(1200), SimDistanceBand.sprint);
+      expect(RaceFinishCalculator.bandOfMeters(1400), SimDistanceBand.sprint);
+      expect(RaceFinishCalculator.bandOfMeters(1600), SimDistanceBand.mile);
+      expect(RaceFinishCalculator.bandOfMeters(1800), SimDistanceBand.mile);
+      expect(RaceFinishCalculator.bandOfMeters(2000), SimDistanceBand.middle);
+      expect(RaceFinishCalculator.bandOfMeters(2200), SimDistanceBand.middle);
+      expect(RaceFinishCalculator.bandOfMeters(2400), SimDistanceBand.long);
+      expect(RaceFinishCalculator.bandOfMeters(3200), SimDistanceBand.long);
+    });
+
+    test('距離文字列からの距離', () {
+      expect(RaceFinishCalculator.distanceMetersOfText('芝1600'), 1600);
+      expect(RaceFinishCalculator.distanceMetersOfText('ダ1200'), 1200);
+      expect(RaceFinishCalculator.distanceMetersOfText(''), isNull);
+    });
+  });
+
   group('定数表', () {
-    test('芝ミドルの残る割合は0.30', () {
+    test('芝・中距離・ミドルの値', () {
       final c = RaceFinishCalculator.constantsFor(
-          SimSurface.turf, SimPace.middle);
-      expect(c.carryOver, 0.30);
+          SimSurface.turf, SimDistanceBand.mile, SimPace.middle);
+      expect(c.carryOver, 0.22);
       expect(c.midSpreadMeters, 25.0);
       expect(c.goalSpreadMeters, 40.0);
-      expect(c.kickSlopeSeconds, 0.72);
+      expect(c.kickSlopeSeconds, 0.85);
     });
 
     test('ハイペースほど残る割合が小さく、ダートは芝より大きい', () {
-      double turf(SimPace p) =>
-          RaceFinishCalculator.constantsFor(SimSurface.turf, p).carryOver;
+      double turf(SimPace p) => RaceFinishCalculator
+          .constantsFor(SimSurface.turf, SimDistanceBand.mile, p)
+          .carryOver;
       expect(turf(SimPace.slow) > turf(SimPace.middle), isTrue);
       expect(turf(SimPace.middle) > turf(SimPace.high), isTrue);
       expect(
-        RaceFinishCalculator.constantsFor(SimSurface.dirt, SimPace.high)
+        RaceFinishCalculator.constantsFor(
+                    SimSurface.dirt, SimDistanceBand.mile, SimPace.high)
                 .carryOver >
             turf(SimPace.high),
         isTrue,
       );
+    });
+
+    test('割引きの傾きは短距離ほど大きい(芝・ハイ)', () {
+      double slope(SimDistanceBand b) => RaceFinishCalculator
+          .constantsFor(SimSurface.turf, b, SimPace.high)
+          .kickSlopeSeconds;
+      expect(slope(SimDistanceBand.sprint), 1.11);
+      expect(slope(SimDistanceBand.middle), 0.28);
+      expect(slope(SimDistanceBand.sprint) > slope(SimDistanceBand.mile), isTrue);
+      expect(slope(SimDistanceBand.mile) > slope(SimDistanceBand.middle), isTrue);
+    });
+
+    test('ダートの中距離以上では傾きが負になる', () {
+      expect(
+        RaceFinishCalculator.constantsFor(
+                SimSurface.dirt, SimDistanceBand.mile, SimPace.high)
+            .kickSlopeSeconds,
+        lessThan(0.0),
+      );
+    });
+
+    test('全24通りが引ける', () {
+      for (final s in SimSurface.values) {
+        for (final b in SimDistanceBand.values) {
+          for (final p in SimPace.values) {
+            final c = RaceFinishCalculator.constantsFor(s, b, p);
+            expect(c.midSpreadMeters, greaterThan(0.0));
+            expect(c.goalSpreadMeters, greaterThan(0.0));
+            expect(c.carryOver, inInclusiveRange(0.0, 1.0));
+          }
+        }
+      }
     });
   });
 
@@ -101,11 +156,24 @@ void main() {
       expect(k.kickSeconds, closeTo(0.8 * 0.5 * (1 / 3), 1e-6));
     });
 
-    test('最後方だった走は上がりの下駄が割り引かれる', () {
+    test('最後方だった走は、その走の距離帯の傾きで割り引かれる', () {
+      // 芝1600(中距離)・ミドルの傾き0.85 × (1.0 - 0.5) = 0.425 を引く
       final k = RaceFinishCalculator.calculateKick(
           [rec(cornerPassage: '10-10', numberOfHorses: '10')]);
-      // 芝ミドルの傾き0.72 × (1.0 - 0.5) = 0.36 を引く
-      expect(k.rawKickSeconds, closeTo(0.8 - 0.36, 1e-6));
+      expect(k.rawKickSeconds, closeTo(0.8 - 0.425, 1e-6));
+    });
+
+    test('同じ内容でも短距離の走はより強く割り引かれる', () {
+      // 芝1200(短距離)・ミドルの傾き0.81。ミドルでは中距離(0.85)よりわずかに小さい
+      final sprint = RaceFinishCalculator.calculateKick(
+          [rec(distance: '芝1200', cornerPassage: '10-10', numberOfHorses: '10')]);
+      expect(sprint.rawKickSeconds, closeTo(0.8 - 0.81 * 0.5, 1e-6));
+
+      // 芝2000(中長距離)・ミドルの傾き0.42。割引きが小さくなる
+      final middle = RaceFinishCalculator.calculateKick(
+          [rec(distance: '芝2000', cornerPassage: '10-10', numberOfHorses: '10')]);
+      expect(middle.rawKickSeconds, closeTo(0.8 - 0.42 * 0.5, 1e-6));
+      expect(middle.rawKickSeconds > sprint.rawKickSeconds, isTrue);
     });
 
     test('3走あれば信頼度は1.0になる', () {

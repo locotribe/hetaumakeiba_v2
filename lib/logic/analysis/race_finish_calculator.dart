@@ -4,7 +4,9 @@
 // 「4コーナーの位置 × 残る割合 ＋ 末脚 ＋ 能力」で組み立てるための純粋ロジック。
 // 定数はすべて過去のレース結果3,286レースの実測に基づく
 // (根拠: memory/展開シミュ一般論見直し_実測メモ.md)。
-// このファイルは DB / I/O / UI に一切触れない (2026.9.29+26092905)
+// このファイルは DB / I/O / UI に一切触れない (v.2026.9.29+26092905)
+// [修正] 展開シミュ一般論見直しStep4: 末脚の割引きと残る割合が距離で大きく変わるため、
+// 定数表に距離帯(短/中/中長/長)の次元を足した。計算の流れは変えていない (v.2026.9.29+26092907)
 
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -15,7 +17,11 @@ enum SimSurface { turf, dirt }
 /// 展開シミュで使うペース。
 enum SimPace { slow, middle, high }
 
-/// 馬場 × ペース ごとの実測定数。
+/// [追加] 展開シミュ一般論見直しStep4 展開シミュで使う距離帯。
+/// 短=〜1400m / 中=1400〜1800m / 中長=1800〜2200m / 長=2200m〜 (v.2026.9.29+26092907)
+enum SimDistanceBand { sprint, mile, middle, long }
+
+/// 馬場 × 距離帯 × ペース ごとの実測定数。
 class RaceFinishConstants {
   /// 道中(テン〜4コーナー)の馬群の広がりの目標(m)。
   final double midSpreadMeters;
@@ -29,6 +35,7 @@ class RaceFinishConstants {
 
   /// 「後ろから行った馬ほど上がりが速く出る」分の割引き傾き(秒)。
   /// 最後方(通過順位率1.0)の馬は最前(0.0)よりこの秒数だけ上がりが速く出る。
+  /// ダートの中距離以上では負の値になる(後方の馬ほど上がりが遅い)。
   final double kickSlopeSeconds;
 
   const RaceFinishConstants({
@@ -103,52 +110,110 @@ class RaceFinishCalculator {
   /// ペース判定: この割合以上「先行」している馬を先行馬とみなす。
   static const double senkoShareThreshold = 0.40;
 
-  static const Map<SimSurface, Map<SimPace, RaceFinishConstants>> _constants = {
+  /// [追加] 展開シミュ一般論見直しStep4 距離帯の境界(m) (v.2026.9.29+26092907)
+  static const int sprintMaxMeters = 1400;
+  static const int mileMaxMeters = 1800;
+  static const int middleMaxMeters = 2200;
+
+  // [修正] 展開シミュ一般論見直しStep4 馬場 × 距離帯 × ペース の実測定数表。
+  // 芝は全12通りとも十分なサンプル(30レース以上)がある実測値。
+  // ダートはサンプルの少ない区分があり、近い区分から補っている(下のコメント参照)。
+  // ゴールの広がりは画面の幅(約60m相当)を超えても情報が増えないため60mで頭打ちにしてある (v.2026.9.29+26092907)
+  static const Map<SimSurface,
+      Map<SimDistanceBand, Map<SimPace, RaceFinishConstants>>> _constants = {
     SimSurface.turf: {
-      SimPace.slow: RaceFinishConstants(
-        midSpreadMeters: 22.0,
-        goalSpreadMeters: 38.0,
-        carryOver: 0.60,
-        kickSlopeSeconds: 0.29,
-      ),
-      SimPace.middle: RaceFinishConstants(
-        midSpreadMeters: 25.0,
-        goalSpreadMeters: 40.0,
-        carryOver: 0.30,
-        kickSlopeSeconds: 0.72,
-      ),
-      SimPace.high: RaceFinishConstants(
-        midSpreadMeters: 28.0,
-        goalSpreadMeters: 42.0,
-        carryOver: 0.16,
-        kickSlopeSeconds: 0.90,
-      ),
+      // 短(〜1400m)
+      SimDistanceBand.sprint: {
+        SimPace.slow: RaceFinishConstants(
+            midSpreadMeters: 22.0, goalSpreadMeters: 30.0, carryOver: 0.46, kickSlopeSeconds: 0.64),
+        SimPace.middle: RaceFinishConstants(
+            midSpreadMeters: 25.0, goalSpreadMeters: 32.0, carryOver: 0.34, kickSlopeSeconds: 0.81),
+        SimPace.high: RaceFinishConstants(
+            midSpreadMeters: 28.0, goalSpreadMeters: 37.0, carryOver: 0.16, kickSlopeSeconds: 1.11),
+      },
+      // 中(1400〜1800m)
+      SimDistanceBand.mile: {
+        SimPace.slow: RaceFinishConstants(
+            midSpreadMeters: 22.0, goalSpreadMeters: 37.0, carryOver: 0.61, kickSlopeSeconds: 0.34),
+        SimPace.middle: RaceFinishConstants(
+            midSpreadMeters: 25.0, goalSpreadMeters: 40.0, carryOver: 0.22, kickSlopeSeconds: 0.85),
+        SimPace.high: RaceFinishConstants(
+            midSpreadMeters: 32.0, goalSpreadMeters: 47.0, carryOver: 0.15, kickSlopeSeconds: 0.99),
+      },
+      // 中長(1800〜2200m)
+      SimDistanceBand.middle: {
+        SimPace.slow: RaceFinishConstants(
+            midSpreadMeters: 20.0, goalSpreadMeters: 40.0, carryOver: 0.60, kickSlopeSeconds: 0.20),
+        SimPace.middle: RaceFinishConstants(
+            midSpreadMeters: 25.0, goalSpreadMeters: 47.0, carryOver: 0.30, kickSlopeSeconds: 0.42),
+        SimPace.high: RaceFinishConstants(
+            midSpreadMeters: 30.0, goalSpreadMeters: 60.0, carryOver: 0.08, kickSlopeSeconds: 0.28),
+      },
+      // 長(2200m〜)
+      SimDistanceBand.long: {
+        SimPace.slow: RaceFinishConstants(
+            midSpreadMeters: 22.0, goalSpreadMeters: 52.0, carryOver: 0.65, kickSlopeSeconds: 0.07),
+        SimPace.middle: RaceFinishConstants(
+            midSpreadMeters: 25.0, goalSpreadMeters: 60.0, carryOver: 0.32, kickSlopeSeconds: 0.46),
+        SimPace.high: RaceFinishConstants(
+            midSpreadMeters: 23.0, goalSpreadMeters: 52.0, carryOver: 0.26, kickSlopeSeconds: 0.56),
+      },
     },
     SimSurface.dirt: {
-      SimPace.slow: RaceFinishConstants(
-        midSpreadMeters: 22.0,
-        goalSpreadMeters: 55.0,
-        carryOver: 0.65,
-        kickSlopeSeconds: 0.10,
-      ),
-      SimPace.middle: RaceFinishConstants(
-        midSpreadMeters: 27.0,
-        goalSpreadMeters: 58.0,
-        carryOver: 0.65,
-        kickSlopeSeconds: 0.06,
-      ),
-      SimPace.high: RaceFinishConstants(
-        midSpreadMeters: 30.0,
-        goalSpreadMeters: 62.0,
-        carryOver: 0.50,
-        kickSlopeSeconds: 0.30,
-      ),
+      // 短(〜1400m)。スローはサンプル1件のためミドルから補い、残る割合だけ上げている。
+      SimDistanceBand.sprint: {
+        SimPace.slow: RaceFinishConstants(
+            midSpreadMeters: 27.0, goalSpreadMeters: 50.0, carryOver: 0.60, kickSlopeSeconds: 0.44),
+        SimPace.middle: RaceFinishConstants(
+            midSpreadMeters: 27.0, goalSpreadMeters: 50.0, carryOver: 0.56, kickSlopeSeconds: 0.44),
+        SimPace.high: RaceFinishConstants(
+            midSpreadMeters: 33.0, goalSpreadMeters: 53.0, carryOver: 0.39, kickSlopeSeconds: 0.87),
+      },
+      // 中(1400〜1800m)。スローはサンプル18件のためミドルから補っている。
+      SimDistanceBand.mile: {
+        SimPace.slow: RaceFinishConstants(
+            midSpreadMeters: 27.0, goalSpreadMeters: 60.0, carryOver: 0.68, kickSlopeSeconds: -0.09),
+        SimPace.middle: RaceFinishConstants(
+            midSpreadMeters: 27.0, goalSpreadMeters: 60.0, carryOver: 0.65, kickSlopeSeconds: -0.09),
+        SimPace.high: RaceFinishConstants(
+            midSpreadMeters: 30.0, goalSpreadMeters: 60.0, carryOver: 0.64, kickSlopeSeconds: -0.21),
+      },
+      // 中長(1800〜2200m)。ハイ以外はサンプル不足のためハイから補っている。
+      SimDistanceBand.middle: {
+        SimPace.slow: RaceFinishConstants(
+            midSpreadMeters: 28.0, goalSpreadMeters: 60.0, carryOver: 0.68, kickSlopeSeconds: -0.33),
+        SimPace.middle: RaceFinishConstants(
+            midSpreadMeters: 28.0, goalSpreadMeters: 60.0, carryOver: 0.66, kickSlopeSeconds: -0.33),
+        SimPace.high: RaceFinishConstants(
+            midSpreadMeters: 28.0, goalSpreadMeters: 60.0, carryOver: 0.64, kickSlopeSeconds: -0.33),
+      },
+      // 長(2200m〜)。JRAのダート重賞にはほぼ無く、実測できないため中長と同値。
+      SimDistanceBand.long: {
+        SimPace.slow: RaceFinishConstants(
+            midSpreadMeters: 28.0, goalSpreadMeters: 60.0, carryOver: 0.68, kickSlopeSeconds: -0.33),
+        SimPace.middle: RaceFinishConstants(
+            midSpreadMeters: 28.0, goalSpreadMeters: 60.0, carryOver: 0.66, kickSlopeSeconds: -0.33),
+        SimPace.high: RaceFinishConstants(
+            midSpreadMeters: 28.0, goalSpreadMeters: 60.0, carryOver: 0.64, kickSlopeSeconds: -0.33),
+      },
     },
   };
 
-  /// 馬場×ペースの実測定数を返す。
-  static RaceFinishConstants constantsFor(SimSurface surface, SimPace pace) {
-    return _constants[surface]![pace]!;
+  /// 馬場 × 距離帯 × ペース の実測定数を返す。
+  static RaceFinishConstants constantsFor(
+    SimSurface surface,
+    SimDistanceBand band,
+    SimPace pace,
+  ) {
+    return _constants[surface]![band]![pace]!;
+  }
+
+  /// [追加] 展開シミュ一般論見直しStep4 距離(m)から距離帯を返す (v.2026.9.29+26092907)
+  static SimDistanceBand bandOfMeters(int meters) {
+    if (meters <= sprintMaxMeters) return SimDistanceBand.sprint;
+    if (meters <= mileMaxMeters) return SimDistanceBand.mile;
+    if (meters <= middleMaxMeters) return SimDistanceBand.middle;
+    return SimDistanceBand.long;
   }
 
   /// 'ハイ' / 'スロー' を含む文字列を SimPace に変換する。それ以外はミドル。
@@ -243,6 +308,7 @@ class RaceFinishCalculator {
   }
 
   /// 1走分の割引き後の末脚(秒)。必要な値が欠けていれば null。
+  /// 割引きの強さは、その過去走自身の馬場・距離帯・ペースから引く。
   static double? _recordKickSeconds(HorseRaceRecord record) {
     final last3F = raceLast3F(record.pace);
     if (last3F == null) return null;
@@ -256,8 +322,13 @@ class RaceFinishCalculator {
     final surface = surfaceOfDistanceText(record.distance);
     if (surface == null) return null;
 
+    // [修正] 展開シミュ一般論見直しStep4 その過去走自身の距離帯で割引きの強さを引く (v.2026.9.29+26092907)
+    final meters = distanceMetersOfText(record.distance);
+    if (meters == null || meters <= 0) return null;
+    final band = bandOfMeters(meters);
+
     final pace = paceFromLabel(RaceDataParser.calculatePace(record.pace));
-    final slope = constantsFor(surface, pace).kickSlopeSeconds;
+    final slope = constantsFor(surface, band, pace).kickSlopeSeconds;
 
     // 生の末脚 = レースの後半3F − その馬の上がり3F。正 = レースの上がりより速い。
     // そこから「後ろにいたぶんの下駄」を引く。
@@ -295,6 +366,13 @@ class RaceFinishCalculator {
     if (text.startsWith('ダ')) return SimSurface.dirt;
     if (text.startsWith('芝')) return SimSurface.turf;
     return null;
+  }
+
+  /// [追加] 展開シミュ一般論見直しStep4 "芝1600" / "ダ1200" から距離(m)を取り出す (v.2026.9.29+26092907)
+  static int? distanceMetersOfText(String distanceText) {
+    final match = RegExp(r'(\d+)').firstMatch(distanceText);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
   }
 
   /// ゴール時点の「先頭からの遅れ(位置スコアの点)」を組み立てる(設計書 5-4)。
