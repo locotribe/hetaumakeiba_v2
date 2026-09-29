@@ -12,6 +12,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
 // [追加] 展開シミュ一般論見直しStep2: ゴールの着差の新方式(実測定数・末脚) (v.2026.9.29+26092906)
 import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
 import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
+// [追加] 展開シミュ コースプリセット内外回り対応Step2: 内外回り込みのID候補 (v.2026.9.30+26093002)
+import 'package:hetaumakeiba_v2/logic/analysis/course_preset_id_resolver.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_speed_index_model.dart';
@@ -364,8 +366,21 @@ class RaceAnalyzer {
       distance = distanceMatch.group(1)!;
     }
 
-    final courseId = '${venueCode}_${trackType}_$distance';
-    final CoursePreset? coursePreset = await coursePresetRepo.getCoursePreset(courseId);
+    // [修正] 展開シミュ コースプリセット内外回り対応Step2: 従来のIDで見つからない
+    // 内外回りのある競馬場(中山・京都・阪神・新潟の芝)は、出馬表の内外表記に合わせて
+    // uchi/soto/w/straight 入りのIDを順に試す。従来のIDで見つかるコースは結果が変わらない (v.2026.9.30+26093002)
+    CoursePreset? foundCoursePreset;
+    for (final candidateId in CoursePresetIdResolver.candidates(
+      venueCode: venueCode,
+      trackType: trackType,
+      distance: distance,
+      direction: raceData.direction,
+      courseInOut: raceData.courseInOut,
+    )) {
+      foundCoursePreset = await coursePresetRepo.getCoursePreset(candidateId);
+      if (foundCoursePreset != null) break;
+    }
+    final CoursePreset? coursePreset = foundCoursePreset;
 
     // [修正] horsesOverride が渡された場合はそちらを使用する (v.13.43.0)
     final simHorses = (horsesOverride ?? raceData.horses)
