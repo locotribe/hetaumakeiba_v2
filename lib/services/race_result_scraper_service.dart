@@ -69,9 +69,9 @@ class RaceResultScraperService {
       final resultTable = document.querySelector('table.race_table_01');
       if (resultTable != null && resultTable.querySelectorAll('tr').length > 1) {
         final raceTitle = _safeGetText(document.querySelector('div.race_head h1'));
-        final raceInfoSpan =
-        document.querySelector('div.data_intro p diary_snap_cut span');
-        final raceInfo = _safeGetText(raceInfoSpan).replaceAll(RegExp(r'\s+'), ' ');
+        // [修正] netkeibaがdiary_snap_cutとpの入れ子の順を入れ替え、コース情報が空で保存されていたため、
+        // diary_snap_cutに依存しない取り出し関数へ差し替え (v.2026.9.30+26093003)
+        final raceInfo = parseRaceInfoText(document);
         final smallTxt = _safeGetText(document.querySelector('p.smalltxt'));
         final raceDate = smallTxt.split(' ').first;
         final raceGrade = raceTitle;
@@ -115,6 +115,16 @@ class RaceResultScraperService {
   /// dom.Elementから安全にテキストを取得するヘルパー関数
   static String _safeGetText(dom.Element? element) {
     return element?.text.trim() ?? '';
+  }
+
+  // [追加] コース情報の1行を取り出す関数。diary_snap_cutの位置(pの内側/外側)に関係なく取れる (v.2026.9.30+26093003)
+  /// db.netkeibaのレースページから、コース情報の1行
+  /// (例: "芝右 外1600m / 天候 : 晴 / 芝 : 良 / 発走 : 15:30")を取り出す。
+  /// 見つからなければ空文字を返す。
+  static String parseRaceInfoText(dom.Document document) {
+    final raceInfoSpan =
+        document.querySelector('div.data_intro dl.racedata dd span');
+    return _safeGetText(raceInfoSpan).replaceAll(RegExp(r'\s+'), ' ');
   }
 
   /// HTMLドキュメントから全出走馬のレース結果を解析する
