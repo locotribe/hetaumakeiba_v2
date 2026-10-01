@@ -1,5 +1,8 @@
 // lib/screens/horse_stats_page.dart
 
+// [追加] 陣営の本気度指数 過去走取り直しStep3: 完了通知の購読と1秒ごとの読み直しに使う (v.2026.10.2+26100203)
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
@@ -30,12 +33,20 @@ import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
 // [追加] 調教タブ改修Step6: netkeiba の調教（評価・併せ馬）を調教タイムタブへ渡す (v.2026.9.23+26092303)
 import 'package:hetaumakeiba_v2/db/repositories/netkeiba_training_repository.dart';
 import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
+// [追加] 陣営の本気度指数 過去走取り直しStep3: レース準備の状態を読んで、過去走の取り直しまで計算を待つ (v.2026.10.2+26100203)
+import 'package:hetaumakeiba_v2/db/repositories/race_preparation_repository.dart';
+import 'package:hetaumakeiba_v2/logic/horse_stats_gate.dart';
+import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
+import 'package:hetaumakeiba_v2/services/race_preparation_service.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
   final String raceName;
   final List<PredictionHorseDetail> horses;
   final PredictionRaceData? raceData;
+  // [追加] 陣営の本気度指数 過去走取り直しStep3: このレースで過去走の取り直し（レース準備）が投入されるか。
+  // true のとき、取り直しが終わるまで計算を始めない。race_page がレース結果の無いとき true を渡す (v.2026.10.2+26100203)
+  final bool waitForPreparation;
 
   const HorseStatsPage({
     super.key,
@@ -43,6 +54,7 @@ class HorseStatsPage extends StatefulWidget {
     required this.raceName,
     required this.horses,
     this.raceData,
+    this.waitForPreparation = false,
   });
 
   @override
@@ -69,27 +81,129 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   Map<String, List<NetkeibaTrainingSession>> _netkeibaTrainingMap = {};
   // [追加] 調教タブ改修Step7: 今回のレースの netkeiba 評価（相対評価の調教点に使う） (v.2026.9.23+26092305)
   Map<String, NetkeibaTrainingReview> _netkeibaReviews = {};
+  // [追加] 陣営の本気度指数 過去走取り直しStep3: 過去走の取り直し待ちの状態 (v.2026.10.2+26100203)
+  final RacePreparationRepository _preparationRepository = RacePreparationRepository();
+  StreamSubscription<RacePreparationStepCompleted>? _preparationSubscription;
+  Timer? _preparationPollTimer;
+  bool _checkingPreparation = false;
+  bool _preparationResolved = false;
+  bool _waitingForPreparation = false;
+  bool _preparationFailed = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
-    _loadInitialData();
+    // [修正] 陣営の本気度指数 過去走取り直しStep3: すぐ計算せず、先に過去走の取り直しの状態を確かめる。
+    // このレースの過去走ステップの完了通知も購読する (v.2026.10.2+26100203)
+    _preparationSubscription =
+        RacePreparationService.stepCompletedStream.listen((event) {
+      if (event.raceId != widget.raceId) return;
+      if (event.step != PreparationStep.horsePerformance) return;
+      _onHorsePerformanceDone();
+    });
+    _checkPreparationAndLoad();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    // [追加] 陣営の本気度指数 過去走取り直しStep3: 完了通知の購読と1秒ごとの読み直しを止める (v.2026.10.2+26100203)
+    _preparationSubscription?.cancel();
+    _preparationPollTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadInitialData() async {
+  // [追加] 陣営の本気度指数 過去走取り直しStep3: レース準備の状態と計算結果の保存時刻から、
+  // 待つ／今までどおり読む／保存を使わず計算し直す／失敗を知らせて計算する、を決めて実行する。
+  // 待つ間は1秒ごとにこの処理を呼び直す（失敗は完了通知が来ないため） (v.2026.10.2+26100203)
+  Future<void> _checkPreparationAndLoad() async {
+    if (_checkingPreparation || _preparationResolved) return;
+    _checkingPreparation = true;
+    HorseStatsGateDecision decision = HorseStatsGateDecision.ready;
+    try {
+      final statuses = await _preparationRepository.getForRace(widget.raceId);
+      final cache = await _horseRepository.getHorseStatsCache(widget.raceId);
+      decision = decideHorseStatsGate(
+        waitForPreparation: widget.waitForPreparation,
+        shutubaStatus: statuses[PreparationStep.shutuba],
+        horsePerformanceStatus: statuses[PreparationStep.horsePerformance],
+        cacheUpdatedAt: cache?.lastUpdatedAt,
+      );
+    } catch (e) {
+      debugPrint('HorseStatsPage: レース準備の状態の読み込みに失敗: $e');
+    } finally {
+      _checkingPreparation = false;
+    }
+    if (!mounted || _preparationResolved) return;
+
+    switch (decision) {
+      case HorseStatsGateDecision.wait:
+        if (!_waitingForPreparation) {
+          setState(() {
+            _waitingForPreparation = true;
+            _isLoading = false;
+          });
+        }
+        _preparationPollTimer ??=
+            Timer.periodic(const Duration(seconds: 1), (_) {
+          _checkPreparationAndLoad();
+        });
+        return;
+      case HorseStatsGateDecision.ready:
+        _resolvePreparation(failed: false);
+        _loadInitialData();
+        return;
+      case HorseStatsGateDecision.readyRecompute:
+        _resolvePreparation(failed: false);
+        _loadInitialData(ignoreCache: true);
+        return;
+      case HorseStatsGateDecision.failed:
+        _resolvePreparation(failed: true);
+        _loadInitialData(ignoreCache: true);
+        return;
+    }
+  }
+
+  // [追加] 陣営の本気度指数 過去走取り直しStep3: 待つのをやめる（以後は判定し直さない） (v.2026.10.2+26100203)
+  void _resolvePreparation({required bool failed}) {
+    _preparationResolved = true;
+    _preparationPollTimer?.cancel();
+    _preparationPollTimer = null;
+    if (!mounted) return;
+    setState(() {
+      _waitingForPreparation = false;
+      _preparationFailed = failed;
+    });
+  }
+
+  // [追加] 陣営の本気度指数 過去走取り直しStep3: このレースの過去走ステップが完了したとき。
+  // 待っている間なら判定し直す。中身が出たあとなら文字は出さずに計算し直す（計算中なら何もしない） (v.2026.10.2+26100203)
+  void _onHorsePerformanceDone() {
+    if (!mounted) return;
+    if (!_preparationResolved) {
+      _checkPreparationAndLoad();
+      return;
+    }
+    if (_isLoading) return;
+    if (_preparationFailed) {
+      setState(() {
+        _preparationFailed = false;
+      });
+    }
+    _fetchAndCalculateStats();
+  }
+
+  // [修正] 陣営の本気度指数 過去走取り直しStep3: ignoreCache が true なら保存済みの計算結果を使わない (v.2026.10.2+26100203)
+  Future<void> _loadInitialData({bool ignoreCache = false}) async {
     setState(() {
       _isLoading = true;
       _loadingMessage = '分析データを確認中...';
     });
 
-    final cache = await _horseRepository.getHorseStatsCache(widget.raceId);
+    final cache = ignoreCache
+        ? null
+        : await _horseRepository.getHorseStatsCache(widget.raceId);
     if (cache != null) {
       await _recalculateExtraStats(cache.statsMap);
       setState(() {
@@ -231,6 +345,10 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
     );
 
     if (confirmed == true) {
+      // [追加] 陣営の本気度指数 過去走取り直しStep3: 更新ボタンで取り直すときは待つのをやめ、失敗の帯も消す (v.2026.10.2+26100203)
+      if (isRefresh) {
+        _resolvePreparation(failed: false);
+      }
       // [修正] Phase 2: isRefreshをforceRefreshとして伝搬し、更新ボタン経由では
       // 従来どおり全馬を再スクレイプさせる (v.2026.9.4+26090405)
       _fetchAndCalculateStats(forceRefresh: isRefresh);
@@ -430,6 +548,17 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
             value: _loadingProgress,
             backgroundColor: Colors.transparent,
           ),
+        // [追加] 陣営の本気度指数 過去走取り直しStep3: 過去走の取り直しに失敗したことを知らせる (v.2026.10.2+26100203)
+        if (_preparationFailed)
+          Container(
+            width: double.infinity,
+            color: Colors.orange.shade100,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: const Text(
+              '出走馬の過去走を取り直せませんでした。今ある過去走で計算しています。右上の更新ボタンで取り直せます。',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
         Expanded(
           child: _buildBody(),
         ),
@@ -438,6 +567,25 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
   }
 
   Widget _buildBody() {
+    // [追加] 陣営の本気度指数 過去走取り直しStep3: 過去走の取り直しが終わるまで中身を出さない (v.2026.10.2+26100203)
+    if (_waitingForPreparation) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 32.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 24),
+              Text(
+                '出走馬の過去走を取り直しています。\n終わると自動で計算します。',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (_isLoading) {
       return Center(
         child: Padding(

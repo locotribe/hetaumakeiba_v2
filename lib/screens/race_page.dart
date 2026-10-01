@@ -384,6 +384,9 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                 raceName: _predictionRaceData!.raceName,
                 horses: _predictionRaceData!.horses,
                 raceData: _predictionRaceData!,
+                // [追加] 陣営の本気度指数 過去走取り直しStep3: レース結果が無い（＝出馬表がレース準備を投入する）レースでは、
+                // 過去走の取り直しが終わるまで出走馬分析の計算を待つ (v.2026.10.2+26100203)
+                waitForPreparation: _raceResult == null,
               )
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),
