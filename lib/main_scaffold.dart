@@ -11,8 +11,6 @@ import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart'
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 // [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
 import 'package:hetaumakeiba_v2/services/user_session.dart';
-// [一時] 陣営の本気度指数 実施順2: 過去走の一括取り直し（実行後に削除する） (v.2026.10.2+26100205)
-import 'package:hetaumakeiba_v2/screens/debug/bulk_performance_refresh.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/home_page.dart';
 import 'package:hetaumakeiba_v2/screens/home_settings_page.dart';
@@ -412,17 +410,6 @@ class _MainScaffoldState extends State<MainScaffold> {
               },
             ),
             const Divider(),
-            // [一時] 陣営の本気度指数 実施順2: 過去走の一括取り直し。実行後に削除する (v.2026.10.2+26100205)
-            ListTile(
-              enabled: !_isBusy,
-              leading: const Icon(Icons.cloud_download_outlined, color: Colors.red),
-              title: const Text('【一時】過去走の一括取り直し'),
-              subtitle: const Text('過去走のある全馬の競走馬ページを取り直します（約20分）。'),
-              onTap: () {
-                Navigator.of(context).pop();
-                runBulkPerformanceRefresh(context, onBackup: _backupDatabase);
-              },
-            ),
           ],
         ),
       ),
