@@ -20,6 +20,9 @@ import 'package:hetaumakeiba_v2/widgets/horse_detail/condition_section.dart';
 // [追加] 好走条件 馬詳細移植 StepA-3: 馬場データ取得（クッション値/含水率） (v.2026.9.25+26092507)
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+// [追加] 馬体重成長曲線 Step2: 情報・血統の最下部の成長曲線（期間の種類とセクション部品） (v.2026.10.1+26100102)
+import 'package:hetaumakeiba_v2/logic/growth_curve_builder.dart';
+import 'package:hetaumakeiba_v2/widgets/horse_detail/growth_curve_section.dart';
 
 // [追加] 馬詳細タブStep3: 出馬表の「馬詳細」タブ。馬番順・1頭1ページで、左右スワイプ／◀▶／馬番チップで馬を切り替える (v.2026.9.23+26092308)
 // [修正] 馬詳細タブStep4: チップの左端に「全」（全頭の最終追い切り一覧。PageView の1ページ目、開いたときの初期表示）を追加。
@@ -72,6 +75,9 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   /// 表示中の馬（全頭一覧のときは null）
   String? _currentHorseId;
   _HorseDetailView _view = _HorseDetailView.finalTraining;
+
+  // [追加] 馬体重成長曲線 Step2: 成長曲線の表示期間（馬を切り替えても保つ） (v.2026.10.1+26100102)
+  GrowthRange _growthRange = GrowthRange.all;
 
   /// ページを表示したときに1頭1回だけ読む（通信なし）
   final Map<String, Future<HorseProfile?>> _profileFutures = {};
@@ -144,6 +150,20 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
               horseId: horseId,
               currentRaceId: widget.raceId,
             ));
+  }
+
+  // [追加] 馬体重成長曲線 Step2: 成長曲線用に、表示した馬の過去走を1頭1回だけ読む（通信なし）。
+  // 結果が空のときは保持せず、次に表示したときに読み直す（レース準備で戦績が後から入る場合に備える） (v.2026.10.1+26100102)
+  final Map<String, Future<List<HorseRaceRecord>>> _recordsFutures = {};
+
+  Future<List<HorseRaceRecord>> _recordsFor(String horseId) {
+    return _recordsFutures.putIfAbsent(horseId, () async {
+      final records = await _horseRepo.getHorsePerformanceRecords(horseId);
+      if (records.isEmpty) {
+        _recordsFutures.remove(horseId);
+      }
+      return records;
+    });
   }
 
   // [追加] 好走条件 馬詳細移植 StepA-2: 全馬の過去走を1回だけ読む（対戦成績用。好走条件を初めて開いたときに実行） (v.2026.9.25+26092506)
@@ -598,6 +618,28 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
           const SizedBox(height: 12),
           _sectionLabel('血統'),
           PedigreeSection(horse: horse, profile: snapshot.data),
+          // [追加] 馬体重成長曲線 Step2: 血統表の下に成長曲線（馬体重の推移＋人気・着順） (v.2026.10.1+26100102)
+          const SizedBox(height: 12),
+          _sectionLabel('成長曲線（馬体重・人気・着順）'),
+          FutureBuilder<List<HorseRaceRecord>>(
+            future: _recordsFor(horse.horseId),
+            builder: (context, recordSnapshot) {
+              if (recordSnapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              return GrowthCurveSection(
+                horse: horse,
+                records: recordSnapshot.data ?? const <HorseRaceRecord>[],
+                raceDate: widget.predictionRaceData.raceDate,
+                range: _growthRange,
+                onRangeChanged: (range) =>
+                    setState(() => _growthRange = range),
+              );
+            },
+          ),
         ],
       ),
     );
