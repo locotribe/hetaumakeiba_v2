@@ -16,6 +16,8 @@ import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
 import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
+// [追加] 陣営の本気度指数 実施順4: 速報版のレース結果をdb版に取り直す判定 (v.2026.10.2+26100208)
+import 'package:hetaumakeiba_v2/logic/provisional_race_result.dart';
 import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/training_data_service.dart';
@@ -341,8 +343,12 @@ class RacePreparationService {
 
     final existingResults =
         await _raceRepository.getMultipleRaceResults(pastRaceIds.toList());
-    final toFetch =
-        pastRaceIds.where((id) => !existingResults.containsKey(id)).toList();
+    // [修正] 陣営の本気度指数 実施順4: 保存済みでも速報版（JRAで開催日か全頭の賞金が空）なら取り直す (v.2026.10.2+26100208)
+    final toFetch = pastRaceIds
+        .where((id) =>
+            !existingResults.containsKey(id) ||
+            isProvisionalJraRaceResult(existingResults[id]!))
+        .toList();
 
     int fetchedCount = 0;
     for (final pastRaceId in toFetch) {
