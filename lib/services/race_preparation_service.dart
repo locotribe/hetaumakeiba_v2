@@ -22,10 +22,7 @@ import 'package:hetaumakeiba_v2/services/training_data_service.dart';
 // [追加] 調教タブ改修Step3: netkeiba の最終追切・厩舎コメント (v.2026.9.22+26092212)
 import 'package:hetaumakeiba_v2/services/netkeiba_training_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
-// [追加] 成績タブ拡充: ログイン中のタイム指数取り直し判定用 (v.2026.9.22+26092205)
-import 'package:hetaumakeiba_v2/db/repositories/horse_past_race_extra_repository.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/services/netkeiba_session_service.dart';
+// [削除] 陣営の本気度指数 過去走取り直しStep1: _needsPremiumRefresh の削除に伴い未使用になった import 3本を削除 (v.2026.10.2+26100201)
 // [追加] 個別ラップ取得: 前走の個別ラップ (v.2026.9.23+26092304)
 import 'package:hetaumakeiba_v2/services/horse_laptime_service.dart';
 
@@ -272,26 +269,13 @@ class RacePreparationService {
     return count;
   }
 
-  // race_page.dartの_fetchAndSaveRaceResult()と同じ冪等パターン:
-  // 既に成績がある馬はforce時以外スクレイプしない (v.2026.9.5+26090502)
-  // [追加] 成績タブ拡充: 取り直し判定。ログインしていなければ常に false (v.2026.9.22+26092205)
-  Future<bool> _needsPremiumRefresh(String horseId, List<HorseRaceRecord> records) async {
-    try {
-      if (!await NetkeibaSessionService.isLoggedIn()) return false;
-      final raceIds = records
-          .take(5)
-          .map((r) => r.raceId)
-          .where((id) => id.isNotEmpty)
-          .toList();
-      if (raceIds.isEmpty) return false;
-      final extras = await HorsePastRaceExtraRepository().getForHorse(horseId, raceIds);
-      return raceIds.any((id) => extras[id]?.horsePagePremium != true);
-    } catch (e) {
-      debugPrint('RacePreparationService: _needsPremiumRefresh failed for $horseId: $e');
-      return false;
-    }
-  }
+  // [削除] 陣営の本気度指数 過去走取り直しStep1: _needsPremiumRefresh（ログイン中に直近5走のタイム指数が欠けた馬だけ取り直す判定）を削除。
+  // 下の _defaultHorsePerformance が全頭を必ず取り直すため不要になった。タイム指数・備考は scrapeHorsePerformance 側で引き続き保存される (v.2026.10.2+26100201)
 
+  // [修正] 陣営の本気度指数 過去走取り直しStep1: 既に成績がある馬も含め、全頭の競走馬ページを必ず1回取り直す。
+  // このステップはレースごとに1回だけ動く（done になれば再投入されない）ため、出馬表を初めて開いたときの取り直しになる。
+  // 取得結果が空なのにDBに成績がある馬（通信失敗とみなす）が1頭でもいれば、全頭を処理したあと例外にして
+  // ステップを failed にする（次に出馬表を開いたとき再試行される） (v.2026.10.2+26100201)
   Future<int> _defaultHorsePerformance({
     required String raceId,
     required String raceDate,
@@ -299,31 +283,33 @@ class RacePreparationService {
     required bool force,
   }) async {
     int total = 0;
+    final failedHorseIds = <String>[];
     for (final horseId in horseIds) {
       final existing = await _horseRepository.getHorsePerformanceRecords(horseId);
-      // [修正] 成績タブ拡充: ログイン中で、表示対象の直近5走に「ログイン状態で取得した競走馬ページの情報」が
-      // 無い馬だけ、競走馬ページを1回取り直す（タイム指数・備考の取得用） (v.2026.9.22+26092205)
-      final needsPremiumRefresh =
-          !force && existing.isNotEmpty && await _needsPremiumRefresh(horseId, existing);
-      if (force || existing.isEmpty || needsPremiumRefresh) {
-        try {
-          final scraped =
-              await HorsePerformanceScraperService.scrapeHorsePerformance(horseId);
-          for (final record in scraped) {
-            await _horseRepository.insertOrUpdateHorsePerformance(record);
-          }
-        } catch (e) {
-          debugPrint(
-              'RacePreparationService: horsePerformance scrape failed for $horseId: $e');
+      bool scrapedAny = false;
+      try {
+        final scraped =
+            await HorsePerformanceScraperService.scrapeHorsePerformance(horseId);
+        scrapedAny = scraped.isNotEmpty;
+        for (final record in scraped) {
+          await _horseRepository.insertOrUpdateHorsePerformance(record);
         }
-        await Future.delayed(const Duration(milliseconds: 500));
-        final updated = await _horseRepository.getHorsePerformanceRecords(horseId);
-        total += updated.length;
-      } else {
-        total += existing.length;
+      } catch (e) {
+        debugPrint(
+            'RacePreparationService: horsePerformance scrape failed for $horseId: $e');
       }
-      // [追加] 個別ラップ取得: 最新の過去走に個別ラップが未保存なら、個別ラップページを1回取得する（ログイン不要） (v.2026.9.23+26092304)
+      if (!scrapedAny && existing.isNotEmpty) {
+        failedHorseIds.add(horseId);
+      }
+      await Future.delayed(const Duration(milliseconds: 500));
+      final updated = await _horseRepository.getHorsePerformanceRecords(horseId);
+      total += updated.length;
+      // 最新の過去走に個別ラップが未保存なら、個別ラップページを1回取得する（ログイン不要）
       await _fetchLapTimeIfNeeded(horseId);
+    }
+    if (failedHorseIds.isNotEmpty) {
+      throw Exception(
+          '過去走の取り直しに失敗した馬が${failedHorseIds.length}頭あります: ${failedHorseIds.join(',')}');
     }
     return total;
   }
