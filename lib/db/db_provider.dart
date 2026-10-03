@@ -383,6 +383,9 @@ class DbProvider {
 
     // [追加] 調教タブ改修Step2: netkeiba 調教の2テーブル作成 (v.2026.9.22+26092211)
     await _createNetkeibaTrainingTables(db);
+
+    // [追加] 陣営の本気度指数 実施順6: entry_meaning_cache テーブル作成 (v.2026.10.3+26100307)
+    await _createEntryMeaningCacheTable(db);
   }
 
   // [修正] マイグレーション失敗時にエラーを握りつぶさず、rethrowで上位へ伝播させるよう全catchブロックを修正 (v.13.40.3)
@@ -710,6 +713,15 @@ class DbProvider {
         rethrow;
       }
     }
+    // [追加] 陣営の本気度指数 実施順6: entry_meaning_cache テーブル新設 (v.2026.10.3+26100307)
+    if (oldVersion < 21) {
+      try {
+        await _createEntryMeaningCacheTable(db);
+      } catch (e) {
+        debugPrint('Migration error (v20->v21): $e');
+        rethrow;
+      }
+    }
   }
 
   // [追加] 調教タブ改修Step2: netkeiba 調教の2テーブル（_onCreate / _onUpgrade 共通） (v.2026.9.22+26092211)
@@ -752,6 +764,18 @@ class DbProvider {
         source          TEXT,
         fetched_at      TEXT,
         PRIMARY KEY (horse_id, training_date, course_raw, seq)
+      )
+    ''');
+  }
+
+  // [追加] 陣営の本気度指数 実施順6: 出走の意味の計算結果のテーブル（_onCreate / _onUpgrade 共通） (v.2026.10.3+26100307)
+  Future<void> _createEntryMeaningCacheTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableEntryMeaningCache}(
+        race_id           TEXT PRIMARY KEY,
+        meanings_json     TEXT NOT NULL,
+        preparation_state TEXT NOT NULL,
+        computed_at       TEXT NOT NULL
       )
     ''');
   }

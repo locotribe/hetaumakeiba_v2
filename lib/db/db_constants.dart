@@ -4,7 +4,8 @@ class DbConstants {
   static const String dbName = 'hetaumakeiba_v2.db';
   // [修正] 18 -> 19に更新（horse_past_race_extras に個別ラップの列を追加） (v.2026.9.23+26092304)
   // [修正] レースメモ用途分離: race_memosにaiPredictionMemo列を追加 (v.2026.9.28+26092801)
-  static const int dbVersion = 20;
+  // [修正] 陣営の本気度指数 実施順6: entry_meaning_cache テーブルを追加 (v.2026.10.3+26100307)
+  static const int dbVersion = 21;
 
   // --- Tables ---
   static const String tableQrData = 'qr_data';
@@ -39,6 +40,8 @@ class DbConstants {
   // [追加] 調教タブ改修Step2: netkeiba 調教のレース×馬の評価 / 調教1本ごと (v.2026.9.22+26092211)
   static const String tableNetkeibaTrainingReviews = 'netkeiba_training_reviews';
   static const String tableNetkeibaTrainingSessions = 'netkeiba_training_sessions';
+  // [追加] 陣営の本気度指数 実施順6: 出走の意味の計算結果（レースごとに1件） (v.2026.10.3+26100307)
+  static const String tableEntryMeaningCache = 'entry_meaning_cache';
 
   // --- Common Columns ---
   static const String colId = 'id';
