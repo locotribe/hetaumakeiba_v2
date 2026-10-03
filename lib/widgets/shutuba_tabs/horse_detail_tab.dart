@@ -23,6 +23,9 @@ import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 // [追加] 馬体重成長曲線 Step2: 情報・血統の最下部の成長曲線（期間の種類とセクション部品） (v.2026.10.1+26100102)
 import 'package:hetaumakeiba_v2/logic/growth_curve_builder.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/growth_curve_section.dart';
+// [追加] 陣営の本気度指数 実施順6: 情報・血統のいちばん下の「出走の意味」 (v.2026.10.3+26100308)
+import 'package:hetaumakeiba_v2/logic/entry_meaning_snapshot.dart';
+import 'package:hetaumakeiba_v2/widgets/horse_detail/entry_meaning_section.dart';
 
 // [追加] 馬詳細タブStep3: 出馬表の「馬詳細」タブ。馬番順・1頭1ページで、左右スワイプ／◀▶／馬番チップで馬を切り替える (v.2026.9.23+26092308)
 // [修正] 馬詳細タブStep4: チップの左端に「全」（全頭の最終追い切り一覧。PageView の1ページ目、開いたときの初期表示）を追加。
@@ -42,6 +45,11 @@ class HorseDetailTabWidget extends StatefulWidget {
   final void Function(PredictionHorseDetail horse, HorseMemo memo) onMemoSaved;
   final Future<void> Function() reloadMemos;
 
+  // [追加] 陣営の本気度指数 実施順6: 出走の意味の計算結果・1回読み終わったか・レース結果があるレースか（出馬表から受け取る） (v.2026.10.3+26100308)
+  final EntryMeaningSnapshot? entryMeaningSnapshot;
+  final bool entryMeaningLoaded;
+  final bool isResultView;
+
   const HorseDetailTabWidget({
     Key? key,
     required this.raceId,
@@ -50,6 +58,9 @@ class HorseDetailTabWidget extends StatefulWidget {
     required this.buildMarkDropdown,
     required this.onMemoSaved,
     required this.reloadMemos,
+    this.entryMeaningSnapshot,
+    this.entryMeaningLoaded = false,
+    this.isResultView = false,
   }) : super(key: key);
 
   @override
@@ -640,6 +651,16 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
               );
             },
           ),
+          // [追加] 陣営の本気度指数 実施順6: 成長曲線の下（いちばん下）に「出走の意味」 (v.2026.10.3+26100308)
+          const SizedBox(height: 12),
+          _sectionLabel('出走の意味'),
+          EntryMeaningSection(
+            horse: horse,
+            snapshot: widget.entryMeaningSnapshot,
+            loaded: widget.entryMeaningLoaded,
+            isResultView: widget.isResultView,
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );

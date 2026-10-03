@@ -44,6 +44,9 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/performance_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/starters_tab.dart';
 // [修正] 馬詳細タブStep3: メモタブ・調教タブを廃止し、馬詳細タブにまとめた (v.2026.9.23+26092308)
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/horse_detail_tab.dart';
+// [追加] 陣営の本気度指数 実施順6: 出走の意味の計算・保存 (v.2026.10.3+26100308)
+import 'package:hetaumakeiba_v2/logic/entry_meaning_snapshot.dart';
+import 'package:hetaumakeiba_v2/services/entry_meaning_service.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/user_mark_dropdown.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_info_tab.dart'; // ▼ 追加
@@ -110,6 +113,13 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   // [追加] Phase 4-D: RacePreparationServiceの完了通知を購読し、戦績取得完了時に
   // 分析をローカル再計算するために保持する (v.2026.9.5+26090504)
   StreamSubscription<RacePreparationStepCompleted>? _preparationStepSubscription;
+
+  // [追加] 陣営の本気度指数 実施順6: 出走の意味の計算結果と、計算の重なりを防ぐ印 (v.2026.10.3+26100308)
+  final EntryMeaningService _entryMeaningService = EntryMeaningService();
+  EntryMeaningSnapshot? _entryMeaningSnapshot;
+  bool _entryMeaningLoaded = false;
+  bool _entryMeaningRunning = false;
+  bool _entryMeaningRerun = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -394,6 +404,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           _loadWeatherAndTrackData();
         }
 
+        // [追加] 陣営の本気度指数 実施順6: 出馬表を読み終えたら出走の意味を出す（初回・更新ボタン） (v.2026.10.3+26100308)
+        if (data != null) {
+          unawaited(_refreshEntryMeanings());
+        }
+
         if (data != null) {
           _horseProfileSyncService.syncMissingHorseProfiles(data.horses, (updatedHorseId) async {
             if (!mounted) return;
@@ -403,6 +418,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
               setState(() {
                 _predictionRaceData = updatedData;
               });
+              // [追加] 陣営の本気度指数 実施順6: プロフィールが届いたら出走の意味を計算し直す（同じ馬主の判定） (v.2026.10.3+26100308)
+              unawaited(_refreshEntryMeanings());
             }
           });
 
@@ -782,9 +799,44 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         if (widget.onDataRefreshed != null) {
           widget.onDataRefreshed!(enrichedData);
         }
+        // [追加] 陣営の本気度指数 実施順6: 過去走の取り直しが終わったら出走の意味を計算し直す (v.2026.10.3+26100308)
+        unawaited(_refreshEntryMeanings());
       }
     } catch (e) {
       debugPrint('分析の再計算に失敗: $e');
+    }
+  }
+
+  // [追加] 陣営の本気度指数 実施順6: 出走の意味を出す。レース結果が無いレースは計算して保存し、
+  // レース結果があるレースは保存分を読むだけにする。計算中に呼ばれたら、終わった後にもう1回だけ計算する (v.2026.10.3+26100308)
+  Future<void> _refreshEntryMeanings() async {
+    if (_entryMeaningRunning) {
+      _entryMeaningRerun = true;
+      return;
+    }
+    _entryMeaningRunning = true;
+    try {
+      do {
+        _entryMeaningRerun = false;
+        final data = _predictionRaceData;
+        if (data == null) return;
+        EntryMeaningSnapshot? snapshot;
+        try {
+          snapshot = widget.raceResult != null
+              ? await _entryMeaningService.loadSaved(widget.raceId)
+              : await _entryMeaningService.computeAndSave(data);
+        } catch (e) {
+          debugPrint('出走の意味の計算に失敗: $e');
+          snapshot = _entryMeaningSnapshot;
+        }
+        if (!mounted) return;
+        setState(() {
+          _entryMeaningSnapshot = snapshot;
+          _entryMeaningLoaded = true;
+        });
+      } while (_entryMeaningRerun);
+    } finally {
+      _entryMeaningRunning = false;
     }
   }
 
@@ -1016,6 +1068,10 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             ),
                             onMemoSaved: _onMemoSaved,
                             reloadMemos: _reloadMemosOnly,
+                            // [追加] 陣営の本気度指数 実施順6: 出走の意味の計算結果を渡す (v.2026.10.3+26100308)
+                            entryMeaningSnapshot: _entryMeaningSnapshot,
+                            entryMeaningLoaded: _entryMeaningLoaded,
+                            isResultView: widget.raceResult != null,
                           ),
                         ],
                       );
