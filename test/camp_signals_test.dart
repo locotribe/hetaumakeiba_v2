@@ -1,6 +1,6 @@
 // test/camp_signals_test.dart
 
-// [追加] 陣営の本気度指数 実施順5 Step3: 仕上げ・人のサイン（camp_signals.dart）の単体テスト (v.2026.10.3+26100303)
+// [修正] 陣営の本気度指数: 仕上げ・人のサイン（camp_signals.dart）の単体テスト。120日の区切り・前走の日付・休み明けから数えたか・前走騎手の名前のテストを追加 (v.2026.10.3+26100304)
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/camp_signals.dart';
@@ -74,7 +74,10 @@ void main() {
       expect(restCategoryOf(null), RestCategory.debut);
       expect(restCategoryOf(400), RestCategory.longLayoff);
       expect(restCategoryOf(180), RestCategory.longLayoff);
-      expect(restCategoryOf(179), RestCategory.layoff);
+      // [修正] 120日の区切りを追加 (v.2026.10.3+26100304)
+      expect(restCategoryOf(179), RestCategory.longishLayoff);
+      expect(restCategoryOf(120), RestCategory.longishLayoff);
+      expect(restCategoryOf(119), RestCategory.layoff);
       expect(restCategoryOf(60), RestCategory.layoff);
       expect(restCategoryOf(59), RestCategory.standard);
       expect(restCategoryOf(28), RestCategory.standard);
@@ -207,6 +210,21 @@ void main() {
       expect(s.previousJockeyRidingHorseNumber, isNull);
       expect(s.bodyWeightChange, 0);
     });
+
+    // [追加] 前走の日付・休み明けから数えたか (v.2026.10.3+26100304)
+    test('前走の日付・休み明けから数えたか', () {
+      expect(signals[0].lastStartDate, DateTime(2026, 9, 13));
+      expect(signals[0].isCountedFromLayoff, isTrue);
+      expect(signals[1].lastStartDate, DateTime(2026, 8, 30));
+      expect(signals[1].isCountedFromLayoff, isTrue);
+      expect(signals[2].lastStartDate, isNull);
+      expect(signals[2].isCountedFromLayoff, isFalse);
+      expect(signals[3].lastStartDate, DateTime(2026, 4, 1));
+      expect(signals[3].isCountedFromLayoff, isTrue);
+      expect(signals[4].lastStartDate, DateTime(2026, 8, 9));
+      expect(signals[4].isCountedFromLayoff, isFalse);
+      expect(signals[0].previousJockeyName, isNull);
+    });
   });
 
   test('新馬戦・未勝利戦では過去走が無い馬を初出走とみなす', () {
@@ -219,5 +237,64 @@ void main() {
     expect(signals.single.canJudge, isTrue);
     expect(signals.single.restCategory, RestCategory.debut);
     expect(signals.single.startNumberSinceLayoff, 1);
+  });
+
+  // [追加] 前走騎手の名前（過去走の騎手列。前後の空白を除く） (v.2026.10.3+26100304)
+  test('前走騎手の名前は過去走の騎手列から読む', () {
+    HorseRaceRecord rec(String horseId, String date, String jockey,
+        String jockeyId) {
+      return HorseRaceRecord(
+        horseId: horseId,
+        raceId: '202605050811',
+        date: date,
+        venue: '5東京8',
+        weather: '',
+        raceNumber: '',
+        raceName: '3歳以上2勝クラス',
+        numberOfHorses: '',
+        frameNumber: '',
+        horseNumber: '',
+        odds: '',
+        popularity: '',
+        rank: '3',
+        jockey: jockey,
+        jockeyId: jockeyId,
+        carriedWeight: '',
+        distance: '芝1600',
+        trackCondition: '',
+        time: '',
+        margin: '',
+        cornerPassage: '',
+        pace: '',
+        agari: '',
+        horseWeight: '',
+        winnerOrSecondHorse: '',
+        prizeMoney: '',
+      );
+    }
+
+    final signals = buildCampSignals(
+      raceDate: DateTime(2026, 10, 4),
+      horses: [_h('2022100031', 1, '05339'), _h('2022100032', 2, '')],
+      recordsByHorseId: {
+        '2022100031': [
+          rec('2022100031', '2026/09/06', ' 武豊 ', '00666'),
+          rec('2022100031', '2026/08/09', 'ルメール', '05339'),
+        ],
+        '2022100032': [
+          rec('2022100032', '2026/09/06', '', ''),
+        ],
+      },
+    );
+    expect(signals[0].previousJockeyName, '武豊');
+    expect(signals[0].previousJockeyId, '00666');
+    expect(signals[0].isJockeyChanged, isTrue);
+    expect(signals[0].lastStartDate, DateTime(2026, 9, 6));
+    expect(signals[0].daysSinceLastStart, 28);
+    expect(signals[0].restCategory, RestCategory.standard);
+    expect(signals[0].startNumberSinceLayoff, 3);
+    expect(signals[0].isCountedFromLayoff, isFalse);
+    expect(signals[1].previousJockeyName, isNull);
+    expect(signals[1].isJockeyChanged, isNull);
   });
 }

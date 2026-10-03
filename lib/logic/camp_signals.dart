@@ -1,9 +1,10 @@
 // lib/logic/camp_signals.dart
 
-// [追加] 陣営の本気度指数 実施順5 Step3: 仕上げ・人の視点のうち、出馬表と過去走だけで分かるサイン
+// [修正] 陣営の本気度指数: 仕上げ・人の視点のうち、出馬表と過去走だけで分かるサイン
 // （前走からの日数と間隔の区分・休み明けから何戦目・使い詰め・ブリンカー初・当日の馬体重の増減・
 // 乗り替わり・この馬への騎乗回数・主戦・前走騎手が同じレースの別馬に騎乗）を出す純粋関数。
-// 日数の区切りはオーナー決定の仮の値（Colabの解析で見直す）。DB・画面・通信には触れない (v.2026.10.3+26100303)
+// 間隔の区分に120日の区切り（長めの休み明け）を追加し、前走の日付・前走騎手の名前・休み明けから数えたかを追加。
+// DB・画面・通信には触れない (v.2026.10.3+26100304)
 
 import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/horse_circumstance.dart';
@@ -13,7 +14,10 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 /// 長期休養明け: 前走から180日以上
 const int kLongLayoffDays = 180;
 
-/// 休み明け: 前走から60日以上（179日以下）
+/// 長めの休み明け: 前走から120日以上（179日以下）
+const int kLongishLayoffDays = 120;
+
+/// 休み明け: 前走から60日以上（119日以下）。休み明けから何戦目かもこの日数で区切る
 const int kLayoffDays = 60;
 
 /// 標準（外厩調整を含む）: 前走から28日以上（59日以下）。27日以下は間隔が詰まっている
@@ -30,7 +34,10 @@ enum RestCategory {
   /// 長期休養明け（180日以上）
   longLayoff,
 
-  /// 休み明け（60〜179日）
+  /// 長めの休み明け（120〜179日）
+  longishLayoff,
+
+  /// 休み明け（60〜119日）
   layoff,
 
   /// 標準（28〜59日。外厩調整を含む）
@@ -47,6 +54,9 @@ enum RestCategory {
 RestCategory restCategoryOf(int? daysSinceLastStart) {
   if (daysSinceLastStart == null) return RestCategory.debut;
   if (daysSinceLastStart >= kLongLayoffDays) return RestCategory.longLayoff;
+  if (daysSinceLastStart >= kLongishLayoffDays) {
+    return RestCategory.longishLayoff;
+  }
   if (daysSinceLastStart >= kLayoffDays) return RestCategory.layoff;
   if (daysSinceLastStart >= kStandardIntervalDays) {
     return RestCategory.standard;
@@ -78,6 +88,9 @@ class HorseCampSignals {
   /// （過去走を取得していない馬を「初出走」と誤判定しないため）
   final bool canJudge;
 
+  /// 前走（実際に出走した走）の日付。前走が無ければ null
+  final DateTime? lastStartDate;
+
   /// 前走（実際に出走した走）からの日数。前走が無ければ null
   final int? daysSinceLastStart;
 
@@ -86,6 +99,10 @@ class HorseCampSignals {
   /// 休み明け（前の走から60日以上あいた走）から数えて、今回が何戦目か。
   /// 今回が休み明けなら1。休み明けが無ければデビュー戦を1戦目として数える
   final int startNumberSinceLayoff;
+
+  /// startNumberSinceLayoff を休み明け（60日以上の間隔）から数えたか。
+  /// false はデビュー戦から数えた（休み明けが一度も無い）か、前走が無い
+  final bool isCountedFromLayoff;
 
   /// 使い詰めのアラート（前走から27日以下 かつ 休み明けから4戦目以上）
   final bool isOverworked;
@@ -98,6 +115,9 @@ class HorseCampSignals {
 
   /// 前走の騎手ID。前走が無い・IDが空なら null
   final String? previousJockeyId;
+
+  /// 前走の騎手の名前（過去走の騎手列）。前走が無い・名前が空なら null
+  final String? previousJockeyName;
 
   /// 乗り替わりか。前走が無い・騎手IDが分からないときは null
   final bool? isJockeyChanged;
@@ -115,13 +135,16 @@ class HorseCampSignals {
     required this.horseId,
     required this.horseNumber,
     required this.canJudge,
+    required this.lastStartDate,
     required this.daysSinceLastStart,
     required this.restCategory,
     required this.startNumberSinceLayoff,
+    required this.isCountedFromLayoff,
     required this.isOverworked,
     required this.isFirstBlinker,
     required this.bodyWeightChange,
     required this.previousJockeyId,
+    required this.previousJockeyName,
     required this.isJockeyChanged,
     required this.ridesOnThisHorse,
     required this.isMainJockey,
@@ -167,13 +190,18 @@ List<HorseCampSignals> buildCampSignals({
     // 新しい順
     starts.sort((a, b) => b.date.compareTo(a.date));
 
+    final lastStartDate = starts.isEmpty ? null : starts.first.date;
     final daysSinceLastStart =
-        starts.isEmpty ? null : daysBetween(raceDay, starts.first.date);
+        lastStartDate == null ? null : daysBetween(raceDay, lastStartDate);
 
     var startNumber = 1;
+    var isCountedFromLayoff = false;
     var current = raceDay;
     for (final start in starts) {
-      if (daysBetween(current, start.date) >= kLayoffDays) break;
+      if (daysBetween(current, start.date) >= kLayoffDays) {
+        isCountedFromLayoff = true;
+        break;
+      }
       startNumber++;
       current = start.date;
     }
@@ -198,9 +226,12 @@ List<HorseCampSignals> buildCampSignals({
     final isMainJockey = ridesOnThisHorse > 0 && ridesOnThisHorse >= maxRides;
 
     String? previousJockeyId;
+    String? previousJockeyName;
     if (starts.isNotEmpty) {
       final id = starts.first.record.jockeyId.trim();
       if (id.isNotEmpty) previousJockeyId = id;
+      final name = starts.first.record.jockey.trim();
+      if (name.isNotEmpty) previousJockeyName = name;
     }
     bool? isJockeyChanged;
     if (previousJockeyId != null && currentJockeyId.isNotEmpty) {
@@ -222,15 +253,18 @@ List<HorseCampSignals> buildCampSignals({
       horseId: horse.horseId,
       horseNumber: horse.horseNumber,
       canJudge: canJudge,
+      lastStartDate: lastStartDate,
       daysSinceLastStart: daysSinceLastStart,
       restCategory: canJudge
           ? restCategoryOf(daysSinceLastStart)
           : RestCategory.unknown,
       startNumberSinceLayoff: startNumber,
+      isCountedFromLayoff: isCountedFromLayoff,
       isOverworked: isOverworked,
       isFirstBlinker: horse.isFirstBlinker,
       bodyWeightChange: bodyWeightChangeOf(horse.horseWeight),
       previousJockeyId: previousJockeyId,
+      previousJockeyName: previousJockeyName,
       isJockeyChanged: isJockeyChanged,
       ridesOnThisHorse: ridesOnThisHorse,
       isMainJockey: isMainJockey,
