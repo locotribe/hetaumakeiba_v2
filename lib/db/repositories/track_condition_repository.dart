@@ -135,8 +135,8 @@ class TrackConditionRepository {
     final db = await _dbProvider.database;
     final List<Map<String, dynamic>> maps = await db.query(
       DbConstants.tableTrackConditions,
-      // 先頭10桁が一致、かつ下2桁が00(前日データ)ではないものを抽出
-      where: 'CAST(track_condition_id AS TEXT) LIKE ? AND track_condition_id % 100 != 0',
+      // [削除] 「下2桁00(前日データ)を除く」条件は、下2桁が01始まりの管理番号で何も除外していなかったため削除 (v.2026.10.6+26100604)
+      where: 'CAST(track_condition_id AS TEXT) LIKE ?',
       whereArgs: ['$prefix10%'],
       // 複数ある場合は一番新しい(IDが大きい)ものを取得
       orderBy: 'track_condition_id DESC',
@@ -184,7 +184,8 @@ class TrackConditionRepository {
     final db = await _dbProvider.database;
     final List<Map<String, dynamic>> maps = await db.query(
       DbConstants.tableTrackConditions,
-      where: 'SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) = ? AND track_condition_id % 100 != 0',
+      // [削除] 「下2桁00(前日データ)を除く」条件は、下2桁が01始まりの管理番号で何も除外していなかったため削除 (v.2026.10.6+26100604)
+      where: 'SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) = ?',
       whereArgs: [venueCode],
       orderBy: 'track_condition_id DESC',
       limit: limit,
@@ -192,12 +193,13 @@ class TrackConditionRepository {
     return maps.map((e) => TrackConditionRecord.fromJson(e)).toList();
   }
 
-  // [追加] 同一開催(prefix8=YYYYCCKK)の全馬場状態履歴を取得（トレンドグラフ表示用、古い順・前日データ(下2桁00)は除外） (v.2026.7.28+26072809)
+  // [修正] 同一開催(prefix8=YYYYCCKK)の全馬場状態履歴を取得（トレンドグラフ表示用、古い順。金曜などレースの無い日の測定も含む）。
+  // 「下2桁00(前日データ)を除く」条件は、下2桁が01始まりの管理番号で何も除外していなかったため削除 (v.2026.10.6+26100604)
   Future<List<TrackConditionRecord>> getTrackConditionsByMeeting(String prefix8) async {
     final db = await _dbProvider.database;
     final List<Map<String, dynamic>> maps = await db.query(
       DbConstants.tableTrackConditions,
-      where: 'CAST(track_condition_id AS TEXT) LIKE ? AND track_condition_id % 100 != 0',
+      where: 'CAST(track_condition_id AS TEXT) LIKE ?',
       whereArgs: ['$prefix8%'],
       orderBy: 'date ASC, track_condition_id ASC',
     );

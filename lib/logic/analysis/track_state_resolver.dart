@@ -75,8 +75,6 @@ class TrackStateResolver {
 
   /// venueCode に一致する track_conditions から date完全一致のレコードを探し、
   /// 無ければ同一週内(±3日)で最も近い日付のレコードを返す。
-  /// track_condition_id % 100 == 0 (前日データ) の行は既存リポジトリの
-  /// 読み出しパターンと同様に除外する。
   Future<TrackConditionRecord?> _findRecord(
     String venueCode,
     String normalizedDate,
@@ -84,8 +82,8 @@ class TrackStateResolver {
     final db = await _dbAccessor();
     final maps = await db.query(
       DbConstants.tableTrackConditions,
-      where:
-          'SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) = ? AND track_condition_id % 100 != 0',
+      // [削除] 「下2桁00(前日データ)を除く」条件とその説明は、下2桁が01始まりの管理番号で何も除外していなかったため削除 (v.2026.10.6+26100604)
+      where: 'SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) = ?',
       whereArgs: [venueCode],
     );
     if (maps.isEmpty) return null;
