@@ -7,6 +7,7 @@ import 'package:hetaumakeiba_v2/services/track_conditions_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/cloud_sync_service.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/track_condition_card.dart';
+import 'package:hetaumakeiba_v2/logic/track_condition_active_filter.dart';
 
 // [修正] 馬場状態をカードリストで表示する専用ページ。開催ごとのトレンドグラフ対応のため保持データをMapに変更 (v.2026.7.28+26072809)
 class TrackConditionPage extends StatefulWidget {
@@ -82,9 +83,17 @@ class _TrackConditionPageState extends State<TrackConditionPage> {
       final List<String> activeCourseNames = await TrackConditionsScraperService.getActiveCourseNames();
       final allLatestRecords = await _trackConditionRepo.getLatestTrackConditionsForEachCourse();
 
+      // [追加] JRAのページに残った非開催会場を除くため、最新測定日が全会場の最新から4日以内の会場だけを表示する (v.2026.10.6+26100602)
+      final Map<String, String> latestDateByName = {};
+      for (final r in allLatestRecords) {
+        latestDateByName.putIfAbsent(_getCourseName(r.trackConditionId), () => r.date);
+      }
+      final List<String> displayCourseNames =
+          selectActiveCourseNames(activeCourseNames, latestDateByName);
+
       // [修正] 各会場の最新レコードから開催prefix8(YYYYCCKK)を求め、同一開催の全履歴を取得するよう変更（トレンドグラフ表示用） (v.2026.7.28+26072809)
       final Map<String, List<TrackConditionRecord>> meetingRecords = {};
-      for (var name in activeCourseNames) {
+      for (var name in displayCourseNames) {
         try {
           final latest = allLatestRecords.firstWhere(
                   (r) => _getCourseName(r.trackConditionId) == name
