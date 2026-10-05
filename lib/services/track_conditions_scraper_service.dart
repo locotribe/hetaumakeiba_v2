@@ -7,8 +7,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:charset_converter/charset_converter.dart';
 import '../models/track_conditions_model.dart';
 import '../db/repositories/track_condition_repository.dart';
-import '../db/repositories/race_schedule_repository.dart';
-import '../models/race_schedule_model.dart';
+import 'kaisai_nichi_service.dart';
 
 /// スクレイピング中の一時データ保持用クラス
 class _CourseMetadata {
@@ -159,7 +158,8 @@ class TrackConditionsScraperService {
       // ---------------------------------------------------------
       List<TrackConditionRecord> newRecords = [];
       final TrackConditionRepository _trackConditionRepo = TrackConditionRepository();
-      final RaceScheduleRepository _raceRepo = RaceScheduleRepository();
+      // [修正] 日次は保存済みの開催日程ではなく netkeiba の開催一覧から取る。同じ測定日は1回だけ取得する (v.2026.10.6+26100603)
+      final Map<String, Map<String, String>?> nichiCache = {};
 
       // 同じプレフィックス（同一競馬場の同一日など）でIDが重複しないよう、セッション内でNNを記憶
       Map<String, int> sessionNextIdMap = {};
@@ -198,31 +198,19 @@ class TrackConditionsScraperService {
           String yyyy = data.parsedDate!.date.year.toString();
           String cc = courseCodeStr;
           String kk = course.kai.toString().padLeft(2, '0');
-          String dd = '00'; // 初期値
 
-          if (data.parsedDate!.weekDayCode == 'fr') {
-            dd = '00'; // 金曜は00固定
-          } else {
-            // 土日はカレンダーから raceId を取得して DD を抽出
-            RaceSchedule? schedule = await _raceRepo.getRaceSchedule(dateStr);
-            bool ddFound = false;
-            if (schedule != null) {
-              for (var venue in schedule.venues) {
-                if (venue.venueTitle.contains(course.courseName) && venue.races.isNotEmpty) {
-                  String raceId = venue.races.first.raceId;
-                  if (raceId.length >= 10) {
-                    dd = raceId.substring(8, 10);
-                    ddFound = true;
-                    break;
-                  }
-                }
-              }
-            }
-            if (!ddFound) {
-              // 万が一取得できない場合はページの数値をフォールバックとして使用
-              dd = course.nichi.toString().padLeft(2, '0');
-            }
+          // [修正] 日次は「測定日にその競馬場でレースがあれば、そのレースIDの日次(9〜10桁目)、無ければ00」とする。
+          // netkeiba の開催一覧から測定日のレースIDを取得し、曜日や取得した時刻には依存しない。
+          // 開催一覧を取得できなかった日付の行は保存せず、次回の取得で取り直す (v.2026.10.6+26100603)
+          if (!nichiCache.containsKey(dateStr)) {
+            nichiCache[dateStr] = await KaisaiNichiService.fetchNichiByVenue(dateStr);
           }
+          final Map<String, String>? nichiByVenue = nichiCache[dateStr];
+          if (nichiByVenue == null) {
+            debugPrint('DEBUG: $dateStr の開催一覧を取得できなかったため ${course.courseName} の行は保存しません（次回取り直し）');
+            continue;
+          }
+          String dd = nichiByVenue[cc] ?? '00';
 
           // ★修正: 10桁ではなく、8桁(開催回ごと)のプレフィックスをキーにする
           String prefix8 = '$yyyy$cc$kk';
