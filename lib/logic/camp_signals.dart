@@ -128,8 +128,9 @@ class HorseCampSignals {
   /// 今回の騎手が主戦か（この馬に最も多く乗っている騎手。同数を含む。1回以上）
   final bool isMainJockey;
 
-  /// 乗り替わりのとき、前走の騎手が同じレースで乗る別の馬の馬番（取消の馬は除く）。いなければ null
-  final int? previousJockeyRidingHorseNumber;
+  // [修正] 前走の騎手が乗る別馬を馬番ではなく馬IDで渡す（枠順発表前は全馬が0番で馬番が重なるため） (v.2026.10.6+26100601)
+  /// 乗り替わりのとき、前走の騎手が同じレースで乗る別の馬の馬ID（取消の馬は除く）。いなければ null
+  final String? previousJockeyRidingHorseId;
 
   const HorseCampSignals({
     required this.horseId,
@@ -148,7 +149,8 @@ class HorseCampSignals {
     required this.isJockeyChanged,
     required this.ridesOnThisHorse,
     required this.isMainJockey,
-    required this.previousJockeyRidingHorseNumber,
+    // [修正] 馬番ではなく馬ID (v.2026.10.6+26100601)
+    required this.previousJockeyRidingHorseId,
   });
 }
 
@@ -238,12 +240,13 @@ List<HorseCampSignals> buildCampSignals({
       isJockeyChanged = previousJockeyId != currentJockeyId;
     }
 
-    int? previousJockeyRidingHorseNumber;
+    // [修正] 見つけた馬は馬番ではなく馬IDで渡す（枠順発表前は全馬が0番のため） (v.2026.10.6+26100601)
+    String? previousJockeyRidingHorseId;
     if (isJockeyChanged == true) {
       for (final other in horses) {
         if (other.horseId == horse.horseId || other.isScratched) continue;
         if (other.jockeyId.trim() == previousJockeyId) {
-          previousJockeyRidingHorseNumber = other.horseNumber;
+          previousJockeyRidingHorseId = other.horseId;
           break;
         }
       }
@@ -268,7 +271,8 @@ List<HorseCampSignals> buildCampSignals({
       isJockeyChanged: isJockeyChanged,
       ridesOnThisHorse: ridesOnThisHorse,
       isMainJockey: isMainJockey,
-      previousJockeyRidingHorseNumber: previousJockeyRidingHorseNumber,
+      // [修正] 馬番ではなく馬ID (v.2026.10.6+26100601)
+      previousJockeyRidingHorseId: previousJockeyRidingHorseId,
     ));
   }
 

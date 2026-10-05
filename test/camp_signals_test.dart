@@ -155,7 +155,8 @@ void main() {
       expect(s.isJockeyChanged, isTrue);
       expect(s.ridesOnThisHorse, 0);
       expect(s.isMainJockey, isFalse);
-      expect(s.previousJockeyRidingHorseNumber, 7);
+      // [修正] 馬番7ではなく、その馬の馬ID (v.2026.10.6+26100601)
+      expect(s.previousJockeyRidingHorseId, '2022100022');
       expect(s.isFirstBlinker, isFalse);
       expect(s.bodyWeightChange, isNull);
     });
@@ -169,7 +170,8 @@ void main() {
       expect(s.isJockeyChanged, isFalse);
       expect(s.ridesOnThisHorse, 2);
       expect(s.isMainJockey, isTrue);
-      expect(s.previousJockeyRidingHorseNumber, isNull);
+      // [修正] 馬番ではなく馬ID (v.2026.10.6+26100601)
+      expect(s.previousJockeyRidingHorseId, isNull);
       expect(s.isFirstBlinker, isTrue);
       expect(s.bodyWeightChange, -6);
     });
@@ -207,7 +209,8 @@ void main() {
       expect(s.isOverworked, isFalse);
       expect(s.previousJockeyId, 'F');
       expect(s.isJockeyChanged, isTrue);
-      expect(s.previousJockeyRidingHorseNumber, isNull);
+      // [修正] 馬番ではなく馬ID (v.2026.10.6+26100601)
+      expect(s.previousJockeyRidingHorseId, isNull);
       expect(s.bodyWeightChange, 0);
     });
 

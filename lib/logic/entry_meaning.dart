@@ -543,11 +543,12 @@ RaceEntryMeanings buildEntryMeanings({
         ));
       }
 
-      final otherNumber = signals.previousJockeyRidingHorseNumber;
-      if (otherNumber != null) {
+      // [修正] 相手の馬を馬番ではなく馬IDで探す（枠順発表前は全馬が0番で別の馬を拾っていたため） (v.2026.10.6+26100601)
+      final otherHorseId = signals.previousJockeyRidingHorseId;
+      if (otherHorseId != null) {
         PredictionHorseDetail? other;
         for (final h in activeHorses) {
-          if (h.horseNumber == otherNumber && h.horseId != horse.horseId) {
+          if (h.horseId == otherHorseId && h.horseId != horse.horseId) {
             other = h;
             break;
           }

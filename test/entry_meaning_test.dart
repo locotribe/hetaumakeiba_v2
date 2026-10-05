@@ -106,7 +106,8 @@ HorseCampSignals _s(
   bool? isJockeyChanged = false,
   int ridesOnThisHorse = 1,
   bool isMainJockey = false,
-  int? previousJockeyRidingHorseNumber,
+  // [修正] 馬番ではなく馬ID (v.2026.10.6+26100601)
+  String? previousJockeyRidingHorseId,
 }) {
   final days = lastStartDate == null ? null : daysBetween(_raceDay, lastStartDate);
   return HorseCampSignals(
@@ -126,7 +127,7 @@ HorseCampSignals _s(
     isJockeyChanged: isJockeyChanged,
     ridesOnThisHorse: ridesOnThisHorse,
     isMainJockey: isMainJockey,
-    previousJockeyRidingHorseNumber: previousJockeyRidingHorseNumber,
+    previousJockeyRidingHorseId: previousJockeyRidingHorseId,
   );
 }
 
@@ -520,7 +521,8 @@ void main() {
             previousJockeyName: '武豊',
             isJockeyChanged: true,
             ridesOnThisHorse: 0,
-            previousJockeyRidingHorseNumber: 2),
+            // [修正] 2番の馬の馬ID (v.2026.10.6+26100601)
+            previousJockeyRidingHorseId: '2022100002'),
         _s('2022100002', 2,
             isJockeyChanged: false,
             ridesOnThisHorse: 3,
@@ -553,6 +555,38 @@ void main() {
     expect(_facts(result.horses[3]),
         ['乗り替わり（前走 横山武史 → 今回 戸崎圭太・この馬に3回目の騎乗・主戦騎手が戻る）']);
     expect(result.horses[4].lines, isEmpty);
+  });
+
+  // [追加] 枠順発表前は全馬が0番。前走の騎手が乗る別馬を馬IDで探し、先に並ぶ別の0番の馬を拾わない (v.2026.10.6+26100601)
+  test('枠順発表前（全馬0番）でも前走の騎手が乗る馬を取り違えない', () {
+    final race = _race('3歳以上2勝クラス');
+    final result = buildEntryMeanings(
+      circumstances: _rc(race, [
+        _c('2022100001', 0),
+        _c('2022100002', 0),
+        _c('2022100003', 0),
+      ]),
+      campSignals: [
+        _s('2022100001', 0,
+            previousJockeyName: '武豊',
+            isJockeyChanged: true,
+            ridesOnThisHorse: 0,
+            previousJockeyRidingHorseId: '2022100003'),
+        _s('2022100002', 0),
+        _s('2022100003', 0),
+      ],
+      horses: [
+        _h('2022100001', 0, jockey: 'ルメール', trainerName: '調教師A'),
+        _h('2022100002', 0, jockey: '松岡正海', trainerName: '調教師B'),
+        _h('2022100003', 0, jockey: '武豊', trainerName: '調教師C'),
+      ],
+    );
+    expect(_facts(result.horses[0]), [
+      '乗り替わり（前走 武豊 → 今回 ルメール・この馬に初騎乗）',
+      '前走の騎手（武豊）は0番馬0に騎乗',
+    ]);
+    expect(result.horses[1].lines, isEmpty);
+    expect(result.horses[2].lines, isEmpty);
   });
 
   test('同じ馬主（プロフィールの馬主ID）・同じ厩舎（調教師名＋所属）', () {
