@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:hetaumakeiba_v2/db/db_constants.dart';
 import 'package:hetaumakeiba_v2/db/course_presets.dart';
+import 'package:hetaumakeiba_v2/db/track_condition_id_fix.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 
 /// アプリケーションのSQLiteデータベース接続と初期化・マイグレーションを管理するクラス。
@@ -719,6 +720,16 @@ class DbProvider {
         await _createEntryMeaningCacheTable(db);
       } catch (e) {
         debugPrint('Migration error (v20->v21): $e');
+        rethrow;
+      }
+    }
+    // [追加] 馬場状態IDの日次(DD)のずれを、確認済みの表で一回だけ直す（新規作成の端末は表が空でサーバーの修正済みデータを取り込むため _onCreate では行わない） (v.2026.10.6+26100605)
+    if (oldVersion < 22) {
+      try {
+        final changed = await applyTrackConditionIdFixes(db, kTrackConditionDdFixes);
+        debugPrint('Migration (v21->v22): track_conditions のIDを $changed 行修正');
+      } catch (e) {
+        debugPrint('Migration error (v21->v22): $e');
         rethrow;
       }
     }

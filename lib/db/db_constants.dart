@@ -5,7 +5,8 @@ class DbConstants {
   // [修正] 18 -> 19に更新（horse_past_race_extras に個別ラップの列を追加） (v.2026.9.23+26092304)
   // [修正] レースメモ用途分離: race_memosにaiPredictionMemo列を追加 (v.2026.9.28+26092801)
   // [修正] 陣営の本気度指数 実施順6: entry_meaning_cache テーブルを追加 (v.2026.10.3+26100307)
-  static const int dbVersion = 21;
+  // [修正] 21 -> 22: 馬場状態IDの日次(DD)のずれをアップグレードで一回だけ直す (v.2026.10.6+26100605)
+  static const int dbVersion = 22;
 
   // --- Tables ---
   static const String tableQrData = 'qr_data';
