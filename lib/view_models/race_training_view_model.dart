@@ -172,8 +172,6 @@ class RaceTrainingViewModel extends ChangeNotifier {
     final formattedDate = _formatDateForApi(raceDate);
     final horseIds = horses.map((h) => h.horseId).toList();
 
-    debugPrint('DEBUG: [Training API] Request Date: $formattedDate, RaceID: $raceId');
-
     ScrapingManager().addRequest('調教データ取得', () async {
       await _service.fetchAndSaveTrainingData(
         raceId: raceId,

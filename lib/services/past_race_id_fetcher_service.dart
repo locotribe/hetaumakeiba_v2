@@ -47,8 +47,6 @@ class PastRaceIdResult {
 class PastRaceIdFetcherService {
   /// 踏み台ロジックを使って過去レース一覧を取得するメインメソッド
   Future<PastRaceIdResult> fetchPastRaceIds(String baseRaceId, String raceName) async {
-    debugPrint("DEBUG: fetchPastRaceIds called for raceId: $baseRaceId");
-
     // Step 1: past10.html から「踏み台」となる過去IDを取得
     // ※raceNameは引数として受け取るが、新ロジックではIDのみで判定するため使用しない
     String? stepStoneId;
@@ -64,8 +62,6 @@ class PastRaceIdFetcherService {
       return PastRaceIdResult(FetchStatus.empty);
     }
 
-    debugPrint("DEBUG: Step stone ID found: $stepStoneId. Proceeding to DB...");
-
     // Step 2: 踏み台IDを使ってDBページへ行き、一覧リストのURLを取得してデータ取得
     return await _fetchListFromDb(stepStoneId);
   }
@@ -73,7 +69,6 @@ class PastRaceIdFetcherService {
   /// 追加読み込み用メソッド (ページネーション)
   Future<List<PastRaceItem>> fetchMorePastRaces(String baseListUrl, int page) async {
     final targetUrl = _buildPagedUrl(baseListUrl, page);
-    debugPrint("DEBUG: Fetching more races from: $targetUrl");
 
     final htmlContent = await _fetchHtmlContent(targetUrl);
     if (htmlContent == null) return [];
@@ -143,11 +138,6 @@ class PastRaceIdFetcherService {
       initialSettings: InAppWebViewSettings(
         userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
       ),
-      onConsoleMessage: (controller, consoleMessage) {
-        if (consoleMessage.message.startsWith("DEBUG_JS:")) {
-          debugPrint(consoleMessage.message);
-        }
-      },
       onLoadStop: (controller, url) async {
         if (completer.isCompleted) return;
         await Future.delayed(const Duration(seconds: 3)); // 描画待ち
@@ -160,12 +150,10 @@ class PastRaceIdFetcherService {
               const baseId = '$baseRaceId';
               const baseYear = parseInt(baseId.substring(0, 4)); // 例: 2026
               
-              console.log('DEBUG_JS: Searching for step stone ID. Base Year: ' + baseYear);
 
               // 過去10年分遡って検索 (通常は1年前で見つかるはず)
               for (let offset = 1; offset <= 10; offset++) {
                 const targetYear = baseYear - offset; // 例: 2025
-                console.log('DEBUG_JS: Checking for year: ' + targetYear);
                 
                 // 条件: 
                 // 1. hrefに "db.netkeiba.com" を含む (レース結果DBへのリンク)
@@ -176,7 +164,6 @@ class PastRaceIdFetcherService {
                 const links = document.querySelectorAll(selector);
                 
                 if (links.length > 0) {
-                   console.log('DEBUG_JS: Found candidates for ' + targetYear + ': ' + links.length);
                    
                    // 最初に見つかったリンクを採用
                    const href = links[0].href;
@@ -185,13 +172,11 @@ class PastRaceIdFetcherService {
                    const match = href.match(new RegExp(targetYear + '\\\\d{8}'));
                    if (match) {
                       const foundId = match[0];
-                      console.log('DEBUG_JS: Match Found! ID: ' + foundId + ' from URL: ' + href);
                       return foundId;
                    }
                 }
               }
               
-              console.log('DEBUG_JS: No suitable step stone ID found in DB links.');
               return null;
             })();
           """);
@@ -255,8 +240,6 @@ class PastRaceIdFetcherService {
             completer.complete(PastRaceIdResult(FetchStatus.empty));
             return;
           }
-
-          debugPrint("DEBUG: List URL found: $listUrl");
 
           completer.complete(PastRaceIdResult(FetchStatus.success, baseListUrl: listUrl));
 

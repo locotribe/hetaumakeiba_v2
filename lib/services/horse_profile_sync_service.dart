@@ -21,8 +21,6 @@ class HorseProfileSyncService {
       List<PredictionHorseDetail> horses,
       Function(String horseId) onProfileUpdated,
       ) async {
-    debugPrint('DEBUG: syncMissingHorseProfiles started for ${horses.length} horses via Manager.');
-
     for (final horse in horses) {
       final existingProfile = await _horseRepository.getHorseProfile(horse.horseId);
 
@@ -30,11 +28,9 @@ class HorseProfileSyncService {
         _scrapingManager.addRequest(
             'プロフィール取得: ${horse.horseName}',
                 () async {
-              debugPrint('DEBUG: Executing queued profile fetch for: ${horse.horseName} (${horse.horseId})');
               final newProfile = await HorseProfileScraperService.scrapeAndSaveProfile(horse.horseId);
 
               if (newProfile != null) {
-                debugPrint('DEBUG: Profile synced for ${horse.horseId}, calling callback.');
                 onProfileUpdated(horse.horseId);
               } else {
                 debugPrint('DEBUG: Failed to sync profile for ${horse.horseId}');

@@ -231,8 +231,6 @@ class RaceResultViewModel extends ChangeNotifier {
         return const RefreshResult(success: false, message: 'ユーザー情報の取得に失敗しました。');
       }
 
-      debugPrint('DEBUG: Refreshing race data for raceId: $raceId');
-
       // 1. レース結果のスクレイピング更新
       await RaceResultScraperService.scrapeRaceDetails(generateRaceResultUrl(raceId));
 

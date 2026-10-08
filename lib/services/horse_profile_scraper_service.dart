@@ -23,16 +23,13 @@ class HorseProfileScraperService {
 
   /// 指定された馬IDのプロフィール（基本情報、馬主画像、血統）を取得し、DBに保存します。
   static Future<HorseProfile?> scrapeAndSaveProfile(String horseId) async {
-    debugPrint('DEBUG: scrapeAndSaveProfile START for ID: $horseId');
     try {
       // 1. プロフィールTOPから基本情報を取得
       final profileUrl = generateNetkeibaHorseProfileUrl(horseId: horseId);
-      debugPrint('DEBUG: Requesting Profile URL: $profileUrl');
       final profileResponse = await http.get(Uri.parse(profileUrl), headers: _headers);
 
       // 2. 血統ページから血統情報を取得 (★追加)
       final pedigreeUrl = generateNetkeibaHorsePedigreeUrl(horseId: horseId);
-      debugPrint('DEBUG: Requesting Pedigree URL: $pedigreeUrl');
       final pedigreeResponse = await http.get(Uri.parse(pedigreeUrl), headers: _headers);
 
       if (profileResponse.statusCode != 200 || pedigreeResponse.statusCode != 200) {
@@ -45,7 +42,6 @@ class HorseProfileScraperService {
 
       // 3. 基本情報の解析 (プロフィールTOPのHTMLを渡す)
       final profileData = await _parseBasicInfo(horseId, profileDoc);
-      debugPrint('DEBUG: Basic info parsed: $profileData');
 
       // 4. 血統情報の解析 (血統ページのHTMLを渡す)
       final pedigreeData = _parsePedigree(pedigreeDoc);
@@ -73,10 +69,8 @@ class HorseProfileScraperService {
         lastUpdated: DateTime.now().toIso8601String(),
       );
 
-      debugPrint('DEBUG: Saving profile to DB... (Owner Image Path: ${profile.ownerImageLocalPath})');
       // ★修正: staticな _horseRepository を使用して保存
       await _horseRepository.insertOrUpdateHorseProfile(profile);
-      debugPrint('DEBUG: scrapeAndSaveProfile END (Success) for $horseId');
       return profile;
 
     } catch (e, stackTrace) {
@@ -107,7 +101,6 @@ class HorseProfileScraperService {
         if (match != null) {
           ownerId = match.group(1)!;
           ownerName = link.text.trim();
-          debugPrint('DEBUG: Found ownerId: $ownerId, Name: $ownerName');
           break; // 最初に見つかったものを採用
         }
       }
@@ -116,14 +109,12 @@ class HorseProfileScraperService {
     // IDが取れたらURL生成
     if (ownerId.isNotEmpty) {
       ownerImageUrl = 'https://cdn.netkeiba.com/img//db/colours/$ownerId.gif';
-      debugPrint('DEBUG: Constructed Owner Image URL: $ownerImageUrl');
     } else {
       // バックアップ検索
       final ownerImg = document.querySelector('img.OwnerColours');
       if (ownerImg != null) {
         ownerImageUrl = ownerImg.attributes['src'] ?? '';
         ownerName = ownerImg.attributes['alt'] ?? '';
-        debugPrint('DEBUG: Found owner image via img tag: $ownerImageUrl');
       }
     }
 
@@ -171,14 +162,11 @@ class HorseProfileScraperService {
         final file = File(filePath);
 
         if (await file.exists()) {
-          debugPrint('DEBUG: Image file already exists at: $filePath');
           result['ownerImageLocalPath'] = filePath;
         } else {
-          debugPrint('DEBUG: Downloading image from $ownerImageUrl');
           final imageResponse = await http.get(Uri.parse(ownerImageUrl), headers: _headers);
           if (imageResponse.statusCode == 200 && imageResponse.bodyBytes.isNotEmpty) {
             await file.writeAsBytes(imageResponse.bodyBytes);
-            debugPrint('DEBUG: Image saved to $filePath, size: ${imageResponse.bodyBytes.length}');
             result['ownerImageLocalPath'] = filePath;
           } else {
             debugPrint('DEBUG: [ERROR] Image download failed. Status: ${imageResponse.statusCode}');
@@ -187,8 +175,6 @@ class HorseProfileScraperService {
       } catch (e) {
         debugPrint('DEBUG: [ERROR] Image save error: $e');
       }
-    } else {
-      debugPrint('DEBUG: Skipping image download (URL or OwnerID empty)');
     }
 
     return result;

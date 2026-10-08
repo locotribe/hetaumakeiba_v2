@@ -99,7 +99,6 @@ class TrainingDataService {
     // 取得した全データが存在すれば一括保存
     if (allRecords.isNotEmpty) {
       await _repository.insertTrainingTimes(allRecords);
-      debugPrint('DEBUG: TrainingDataService Saved ${allRecords.length} records to DB.');
     }
   }
 }

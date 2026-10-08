@@ -18,8 +18,6 @@ class JyusyoMatchingService {
 
   /// スケジュールデータから重賞一覧のIDを更新・自動連携する
   Future<void> reflectScheduleDataToJyusyoRaces(RaceSchedule schedule) async {
-    debugPrint('DEBUG: reflectScheduleDataToJyusyoRaces START for date: ${schedule.date}');
-
     int year;
     try {
       year = int.parse(schedule.date.substring(0, 4));
@@ -37,8 +35,6 @@ class JyusyoMatchingService {
     }
 
     String scheduleDateMMdd = schedule.date.substring(5).replaceAll('-', '/');
-    int processedCount = 0;
-    int matchedCount = 0;
 
     for (var venue in schedule.venues) {
       for (var race in venue.races) {
@@ -83,13 +79,10 @@ class JyusyoMatchingService {
 
           if (isMatch && candidate.id != null) {
             await _jyusyoRaceRepository.updateJyusyoRaceId(candidate.id!, race.raceId);
-            matchedCount++;
           }
         }
-        processedCount++;
       }
     }
-    debugPrint('DEBUG: reflectScheduleDataToJyusyoRaces END. Processed: $processedCount, Matched: $matchedCount');
   }
 
   /// コース種別・距離・グレードによる厳格マッチング
