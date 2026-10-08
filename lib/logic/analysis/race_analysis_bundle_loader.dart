@@ -42,9 +42,6 @@ class RaceAnalysisBundleLoader {
     List<String>? targetRaceIds,
     void Function(String message)? onProgress,
   }) async {
-    final stopwatch = Stopwatch()..start();
-    int queryCount = 0;
-
     onProgress?.call('詳細データを収集中...');
 
     // 1. 今回の出走馬の履歴を取得
@@ -52,7 +49,6 @@ class RaceAnalysisBundleLoader {
     for (final horse in horses) {
       final records = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
       currentHorseHistory[horse.horseId] = records;
-      queryCount++;
     }
 
     // 2. 過去レース情報を取得（比較対象のレース群）
@@ -63,7 +59,6 @@ class RaceAnalysisBundleLoader {
     } else {
       pastRaces = await _raceRepo.searchRaceResultsByName(raceName);
     }
-    queryCount++;
 
     if (pastRaces.isEmpty) {
       debugPrint('[RaceAnalysisBundle] 過去レースが0件のため読み込みを中止しました。');
@@ -81,7 +76,6 @@ class RaceAnalysisBundleLoader {
             final records =
                 await _horseRepo.getHorsePerformanceRecords(horse.horseId);
             pastTopHorseRecords[horse.horseId] = records;
-            queryCount++;
           }
         }
       }
@@ -90,14 +84,12 @@ class RaceAnalysisBundleLoader {
     // 4. 今回のレースの基本情報（芝ダ判定・開催日）
     bool isDirt = false;
     final targetCache = await _shutubaTableCacheRepository.getShutubaTableCache(raceId);
-    queryCount++;
     if (targetCache != null) {
       isDirt = targetCache.predictionRaceData.trackType?.contains('ダ') ?? false;
     }
 
     String targetRaceDate;
     final targetResult = await _raceRepo.getRaceResult(raceId);
-    queryCount++;
     if (targetResult != null) {
       targetRaceDate = targetResult.raceDate;
     } else if (targetCache != null) {
@@ -120,7 +112,6 @@ class RaceAnalysisBundleLoader {
           raceId: race.raceId,
           raceDate: race.raceDate,
         );
-        queryCount++;
         if (tc != null) trackConditionMap[race.raceId] = tc;
       }
     }
@@ -129,7 +120,6 @@ class RaceAnalysisBundleLoader {
     final Map<String, HorseProfile> horseProfileMap = {};
     for (final horse in horses) {
       final profile = await _horseRepo.getHorseProfile(horse.horseId);
-      queryCount++;
       if (profile != null) horseProfileMap[horse.horseId] = profile;
     }
 
@@ -142,7 +132,6 @@ class RaceAnalysisBundleLoader {
           pedigreeTargetIds.add(horse.horseId);
           if (!horseProfileMap.containsKey(horse.horseId)) {
             final profile = await _horseRepo.getHorseProfile(horse.horseId);
-            queryCount++;
             if (profile != null) horseProfileMap[horse.horseId] = profile;
           }
         }
@@ -175,7 +164,6 @@ class RaceAnalysisBundleLoader {
             raceId: rec.raceId,
             raceDate: rec.date,
           );
-          queryCount++;
           if (tc != null) horsePastTrackConditions[rec.raceId] = tc;
         }
       }
@@ -209,13 +197,6 @@ class RaceAnalysisBundleLoader {
     final matchResults =
         (analysisResult['results'] as List<HistoricalMatchModel>?) ?? const [];
     final summary = analysisResult['summary'] as TrendSummary?;
-
-    stopwatch.stop();
-    debugPrint(
-      '[RaceAnalysisBundle] 読み込み完了 raceId=$raceId '
-      '対象レース=${pastRaces.length}件 出走馬=${horses.length}頭 '
-      'DBクエリ=$queryCount回 所要=${stopwatch.elapsedMilliseconds}ms',
-    );
 
     return RaceAnalysisBundle(
       pastRaces: pastRaces,

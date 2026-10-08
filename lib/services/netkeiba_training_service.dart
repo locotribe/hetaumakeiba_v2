@@ -8,11 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:charset_converter/charset_converter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/db/repositories/netkeiba_training_repository.dart';
-import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 import 'package:hetaumakeiba_v2/logic/netkeiba_training_parser.dart';
-import 'package:hetaumakeiba_v2/logic/training_merge.dart';
 import 'package:hetaumakeiba_v2/services/netkeiba_session_service.dart';
-import 'package:hetaumakeiba_v2/utils/training_course_utils.dart';
 
 // [追加] 調教タブ改修Step3: netkeiba の最終追切（調教ページ type=2）と厩舎コメントの取得・保存 (v.2026.9.22+26092212)
 
@@ -38,13 +35,10 @@ class NetkeibaTrainingService {
   };
 
   final NetkeibaTrainingRepository _repository;
-  final TrainingRepository _trainingRepository;
 
   NetkeibaTrainingService({
     NetkeibaTrainingRepository? repository,
-    TrainingRepository? trainingRepository,
-  })  : _repository = repository ?? NetkeibaTrainingRepository(),
-        _trainingRepository = trainingRepository ?? TrainingRepository();
+  })  : _repository = repository ?? NetkeibaTrainingRepository();
 
   static String oikiriUrl(String raceId) =>
       'https://race.netkeiba.com/race/oikiri.html?race_id=$raceId&type=2';
@@ -62,7 +56,6 @@ class NetkeibaTrainingService {
   /// ログイン中なら、指定レースの最終追切と厩舎コメントを取得して保存する。
   /// 未ログインなら何もしない（先頭3頭だけの中途半端なデータを保存しないため）。
   /// 失敗してもエラーは投げず、ログだけ出す。
-  /// [horseIds] を渡すと、保存後に pakara との突き合わせ件数をログに出す。
   Future<NetkeibaRaceTrainingFetchResult> fetchAndSaveRaceTraining({
     required String raceId,
     List<String> horseIds = const [],
@@ -105,16 +98,6 @@ class NetkeibaTrainingService {
       debugPrint('NetkeibaTrainingService: 厩舎コメントの取得に失敗 (race=$raceId): $e');
     }
 
-    debugPrint('NetkeibaTrainingService: race=$raceId 最終追切 $reviewCount頭/$sessionCount本, 厩舎コメント $commentCount頭');
-
-    if (horseIds.isNotEmpty) {
-      try {
-        await _logMatchStats(horseIds);
-      } catch (e) {
-        debugPrint('NetkeibaTrainingService: 突き合わせログの出力に失敗: $e');
-      }
-    }
-
     return NetkeibaRaceTrainingFetchResult(
       reviewCount: reviewCount,
       sessionCount: sessionCount,
@@ -152,7 +135,6 @@ class NetkeibaTrainingService {
       await _repository.upsertSessionsMerge(result.sessions);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_fetchedPrefKey(horseId), fetchedAt);
-      debugPrint('NetkeibaTrainingService: horse=$horseId レース ${result.races.length}件 / 調教 ${result.sessions.length}本 / 短評 ${result.reviews.length}件');
       return result;
     } catch (e) {
       debugPrint('NetkeibaTrainingService: 競走馬調教ページの取得に失敗 (horse=$horseId): $e');
@@ -185,21 +167,13 @@ class NetkeibaTrainingService {
     bool force = false,
   }) async {
     if (!await NetkeibaSessionService.isLoggedIn()) return;
-    int fetched = 0;
     for (final horseId in horseIds) {
       if (!force &&
           !await needsHorseTrainingFetch(horseId, raceId: raceId)) {
         continue;
       }
-      final result = await fetchAndSaveHorseTraining(horseId);
-      if (result != null) fetched++;
+      await fetchAndSaveHorseTraining(horseId);
       await Future.delayed(const Duration(milliseconds: 300));
-    }
-    debugPrint('NetkeibaTrainingService: 競走馬調教ページ $fetched/${horseIds.length}頭 取得 (race=$raceId)');
-    try {
-      await _logMatchStats(horseIds);
-    } catch (e) {
-      debugPrint('NetkeibaTrainingService: 突き合わせログの出力に失敗: $e');
     }
   }
 
@@ -220,30 +194,5 @@ class NetkeibaTrainingService {
       return null;
     }
     return utf8.decode(response.bodyBytes, allowMalformed: true);
-  }
-
-  /// 突き合わせのしきい値確認用ログ（設計書 3-4）。
-  Future<void> _logMatchStats(List<String> horseIds) async {
-    int matched = 0;
-    int unmatchedComparable = 0;
-    int otherCourse = 0;
-    for (final horseId in horseIds) {
-      final pakara = await _trainingRepository.getTrainingTimesForHorse(horseId);
-      final netkeiba = await _repository.getSessionsForHorse(horseId);
-      for (final entry in mergeTrainingSources(pakara, netkeiba)) {
-        final nk = entry.netkeiba;
-        if (nk == null) continue;
-        if (entry.pakara != null) {
-          matched++;
-        } else if (classifyTrainingCourse(nk.courseRaw).pakaraTrackType !=
-            null) {
-          unmatchedComparable++;
-          debugPrint('  突き合わせ不一致: horse=$horseId ${nk.trainingDate} ${nk.trainingTime ?? '----'} ${nk.courseRaw} ${nk.slots}');
-        } else {
-          otherCourse++;
-        }
-      }
-    }
-    debugPrint('NetkeibaTrainingService: 突き合わせ 一致 $matched本 / 坂路・ウッドで不一致 $unmatchedComparable本 / pakara に無いコース $otherCourse本');
   }
 }

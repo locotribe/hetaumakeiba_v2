@@ -79,7 +79,6 @@ class NewspaperScraperService {
             if (extras.isNotEmpty) {
               await HorsePastRaceExtraRepository().upsertMerge(extras);
             }
-            debugPrint('NewspaperScraperService: saved ${extras.length} past race extras for $raceId');
           } catch (e) {
             debugPrint('NewspaperScraperService: past race extras failed for $raceId: $e');
           }

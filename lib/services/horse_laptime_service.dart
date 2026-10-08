@@ -49,8 +49,6 @@ class HorseLapTimeService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
           _fetchedPrefKey(horseId), DateTime.now().toIso8601String());
-      debugPrint('HorseLapTimeService: horse=$horseId 個別ラップ ${extras.length}走 '
-          '${extras.map((e) => '${e.raceId} 前${e.individualFirst3f}-後${e.individualLast3f}').join(' ')}');
       return extras;
     } catch (e) {
       debugPrint('HorseLapTimeService: 取得に失敗 (horse=$horseId): $e');
@@ -84,15 +82,10 @@ class HorseLapTimeService {
 
   /// 必要な馬だけ、1頭ずつ間隔を空けて取得する。
   Future<void> fetchAndSaveForHorses(List<String> horseIds) async {
-    int fetched = 0;
     for (final horseId in horseIds) {
       if (!await needsFetch(horseId)) continue;
       await fetchAndSave(horseId);
-      fetched++;
       await Future.delayed(const Duration(milliseconds: 300));
-    }
-    if (fetched > 0) {
-      debugPrint('HorseLapTimeService: 個別ラップ $fetched/${horseIds.length}頭 取得');
     }
   }
 
