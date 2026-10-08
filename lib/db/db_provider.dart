@@ -710,8 +710,7 @@ class DbProvider {
     // [追加] 馬場状態IDの日次(DD)のずれを、確認済みの表で一回だけ直す（新規作成の端末は表が空でサーバーの修正済みデータを取り込むため _onCreate では行わない） (v.2026.10.6+26100605)
     if (oldVersion < 22) {
       try {
-        final changed = await applyTrackConditionIdFixes(db, kTrackConditionDdFixes);
-        debugPrint('Migration (v21->v22): track_conditions のIDを $changed 行修正');
+        await applyTrackConditionIdFixes(db, kTrackConditionDdFixes);
       } catch (e) {
         debugPrint('Migration error (v21->v22): $e');
         rethrow;

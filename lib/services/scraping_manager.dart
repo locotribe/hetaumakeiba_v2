@@ -71,7 +71,6 @@ class ScrapingManager {
       final isDuplicateInQueue = _queue.any((t) => t.key == key);
       final isDuplicateRunning = _currentKey == key;
       if (isDuplicateInQueue || isDuplicateRunning) {
-        debugPrint('ScrapingManager: skipped duplicate: $key');
         return;
       }
     }
