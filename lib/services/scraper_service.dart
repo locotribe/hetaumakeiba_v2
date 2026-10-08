@@ -57,7 +57,6 @@ class ScraperService {
 
   /// 過去レース結果がない馬の成績データをバックグラウンドで取得し同期する
   static Future<void> syncNewHorseData(List<FeaturedRace> races) async {
-    debugPrint('[Horse Data Sync Start] 競走馬データの同期を開始します...');
     final HorseRepository horseRepository = HorseRepository();
     try {
       for (final race in races) {
@@ -73,7 +72,6 @@ class ScraperService {
           if (existingRecord != null && existingRecord.raceId.isNotEmpty) {
             continue;
           }
-          debugPrint('競走馬データ取得/更新中... Horse ID: $horseId');
           final newRecords = await HorsePerformanceScraperService.scrapeHorsePerformance(horseId);
 
           // リポジトリ経由で保存（一括保存）
@@ -85,7 +83,6 @@ class ScraperService {
     } catch (e) {
       debugPrint('[Horse Data Sync Error] 競走馬のデータ同期中にエラーが発生しました: $e');
     }
-    debugPrint('[Horse Data Sync End] 競走馬データの同期が完了しました。');
   }
 
   /// レース名から過去10年分のレースIDリストをスクレイピングする (統計分析機能で使用)

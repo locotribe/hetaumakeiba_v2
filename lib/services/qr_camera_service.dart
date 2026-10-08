@@ -31,7 +31,6 @@ class QrCameraService {
       try {
         await _scannerController.start();
         _isScannerActive = true;
-        debugPrint('Scanner started');
       } catch (e) {
         debugPrint('Error starting scanner: $e');
       }
@@ -43,7 +42,6 @@ class QrCameraService {
       try {
         await _scannerController.stop();
         _isScannerActive = false;
-        debugPrint('Scanner stopped');
       } catch (e) {
         debugPrint('Error stopping scanner: $e');
       }
@@ -52,6 +50,5 @@ class QrCameraService {
 
   void dispose() {
     _scannerController.dispose();
-    debugPrint('Scanner controller disposed');
   }
 }

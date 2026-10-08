@@ -91,7 +91,6 @@ class StatisticsService {
       debugPrint('警告: $raceName の過去レースID候補が見つかりませんでした。');
       return [];
     }
-    debugPrint('【情報】${pastRaceIdCandidates.length}件の過去レースID候補が見つかりました。');
 
     final List<RaceResult> pastResults = [];
     for (final pastId in pastRaceIdCandidates) {
@@ -99,7 +98,6 @@ class StatisticsService {
       RaceResult? result = await _raceRepo.getRaceResult(pastId);
       if (result == null) {
         // DBになければスクレイピング
-        debugPrint('DBに無いためWebから取得: $pastId');
         result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
         await Future.delayed(const Duration(milliseconds: 200)); // サーバー負荷軽減
       }
@@ -107,8 +105,6 @@ class StatisticsService {
       // 照合ロジックを撤廃し、取得した結果をそのまま追加する
       pastResults.add(result);
     }
-
-    debugPrint('【最終結果】${pastResults.length}件の過去レース結果を取得しました。');
 
     return pastResults;
   }

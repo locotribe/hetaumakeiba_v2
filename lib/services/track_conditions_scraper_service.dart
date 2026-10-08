@@ -46,8 +46,6 @@ class TrackConditionsScraperService {
   /// JRAサイトから最新の馬場状態をフェッチし、DBに保存・更新します。
   /// UIを持たず、どこからでも `TrackConditionsScraperService.scrapeAndSave();` で呼び出せます。
   static Future<void> scrapeAndSave() async {
-    debugPrint('=== [TrackConditionsScraperService] スクレイピング開始 ===');
-
     final headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
     };
@@ -88,7 +86,6 @@ class TrackConditionsScraperService {
                   int nichi = int.parse(bodyMatch.group(3)!);
 
                   courses.add(_CourseMetadata(courseName, kai, nichi, targetBlockId));
-                  debugPrint('特定: $courseName (第$kai回 第$nichi日) -> 抽出対象: [$targetBlockId]');
                 }
               }
             }
@@ -109,7 +106,6 @@ class TrackConditionsScraperService {
       // ---------------------------------------------------------
       // Step 2: クッション値の取得 (ブロックID抽出)
       // ---------------------------------------------------------
-      debugPrint('--- クッション値取得開始 ---');
       final cUrl = Uri.parse('https://www.jra.go.jp/keiba/baba/_data_cushion.html?_=$timestamp');
       final cResp = await http.get(cUrl, headers: headers);
       if (cResp.statusCode == 200) {
@@ -131,7 +127,6 @@ class TrackConditionsScraperService {
       // ---------------------------------------------------------
       // Step 3: 含水率の取得 (ブロックID抽出)
       // ---------------------------------------------------------
-      debugPrint('--- 含水率取得開始 ---');
       final mUrl = Uri.parse('https://www.jra.go.jp/keiba/baba/_data_moist.html?_=$timestamp');
       final mResp = await http.get(mUrl, headers: headers);
       if (mResp.statusCode == 200) {
@@ -190,7 +185,6 @@ class TrackConditionsScraperService {
           });
 
           if (alreadyExists) {
-            debugPrint('DEBUG: $dateStr の ${course.courseName} は既に保存済みのためスキップします。');
             continue;
           }
 
@@ -249,9 +243,6 @@ class TrackConditionsScraperService {
       if (newRecords.isNotEmpty) {
         // SQLiteに一括保存（INSERT OR REPLACE なので重複エラーなし）
         await _trackConditionRepo.insertOrUpdateMultipleTrackConditions(newRecords);
-        debugPrint('=== [TrackConditionsScraperService] 成功: ${newRecords.length}件のデータをDBに保存・更新しました ===');
-      } else {
-        debugPrint('=== [TrackConditionsScraperService] 完了: 新規・更新データはありませんでした ===');
       }
 
     } catch (e, stack) {

@@ -124,7 +124,6 @@ class ScrapingManager {
 
     try {
       // タスク実行
-      debugPrint('ScrapingManager: Start processing -> ${currentTask.label}');
       await currentTask.task();
     } catch (e) {
       debugPrint('ScrapingManager: Error in task ${currentTask.label}: $e');
