@@ -1,7 +1,5 @@
 // test/course_preset_id_resolver_test.dart
 
-// [追加] 展開シミュ コースプリセット内外回り対応Step1: CoursePresetIdResolver の単体テスト (v.2026.9.30+26093001)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/course_preset_id_resolver.dart';
 

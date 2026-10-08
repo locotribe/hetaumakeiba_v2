@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/horse_detail_order.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 
-// [追加] 馬詳細タブStep3: 馬詳細タブの馬の並び順 (v.2026.9.23+26092308)
-
 PredictionHorseDetail _horse(String id, int number, String name) {
   return PredictionHorseDetail(
     horseId: id,

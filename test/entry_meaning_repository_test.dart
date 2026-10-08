@@ -1,7 +1,5 @@
 // test/entry_meaning_repository_test.dart
 
-// [追加] 陣営の本気度指数 実施順6: entry_meaning_cache テーブル（EntryMeaningRepository）とマイグレーション v20→v21 の単体テスト (v.2026.10.3+26100307)
-
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';

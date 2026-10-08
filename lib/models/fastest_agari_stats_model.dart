@@ -29,7 +29,6 @@ class FastestAgariStats {
     this.cushionValue,
     this.moistureGoal,
     this.moisture4c,
-    // [追加] 枠番・着順・人気 (v.2026.9.24+26092402)
     this.frameNumber,
     this.finishRank,
     this.popularity,
@@ -47,7 +46,6 @@ class FastestAgariStats {
       'cushionValue': cushionValue,
       'moistureGoal': moistureGoal,
       'moisture4c': moisture4c,
-      // [追加] 枠番・着順・人気 (v.2026.9.24+26092402)
       'frameNumber': frameNumber,
       'finishRank': finishRank,
       'popularity': popularity,
@@ -89,7 +87,6 @@ class FastestAgariStats {
       cushionValue: cushionValue ?? this.cushionValue,
       moistureGoal: moistureGoal ?? this.moistureGoal,
       moisture4c: moisture4c ?? this.moisture4c,
-      // [追加] 枠番・着順・人気は元の値を維持する (v.2026.9.24+26092402)
       frameNumber: frameNumber,
       finishRank: finishRank,
       popularity: popularity,

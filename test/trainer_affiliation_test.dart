@@ -1,7 +1,5 @@
 // test/trainer_affiliation_test.dart
 
-// [追加] 陣営の本気度指数: 調教師の所属の読み替え（trainer_affiliation.dart）の単体テスト (v.2026.10.2+26100209)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/trainer_affiliation.dart';
 

@@ -3,7 +3,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/services/kaisai_nichi_service.dart';
 
-// [追加] netkeiba 開催一覧のHTMLから「競馬場コード→日次」を作る処理の検証 (v.2026.10.6+26100603)
 void main() {
   group('KaisaiNichiService.parseNichiByVenue', () {
     test('1会場の日（2026-09-21 阪神7日目）は 09→07 だけ', () {

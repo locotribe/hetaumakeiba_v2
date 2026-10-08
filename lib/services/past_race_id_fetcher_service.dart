@@ -72,7 +72,6 @@ class PastRaceIdFetcherService {
 
   /// 追加読み込み用メソッド (ページネーション)
   Future<List<PastRaceItem>> fetchMorePastRaces(String baseListUrl, int page) async {
-    // [修正] 複数クエリを含む詳細検索URLでもページングが機能するよう結合を堅牢化 (v.2026.9.9+26090903)
     final targetUrl = _buildPagedUrl(baseListUrl, page);
     debugPrint("DEBUG: Fetching more races from: $targetUrl");
 

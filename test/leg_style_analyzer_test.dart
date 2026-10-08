@@ -1,5 +1,4 @@
 // test/leg_style_analyzer_test.dart
-// [修正] 脚質プロフィール(leg_style_analyzer)の回帰テスト。基底のTARGET3グループ化＋自在バランス条件に更新。マクリ/JSON温存も確認 (v.2026.9.26+26092606)
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';

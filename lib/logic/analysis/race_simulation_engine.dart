@@ -170,13 +170,9 @@ class RaceSimulationEngine {
       speedIndexParams: speedIndexParams,
       trackBias: trackBias,
       paceOverride: paceOverride,
-      // [追加] 改善Phase2 (v.2026.9.18+26091802)
       outPhaseScores: phaseScores,
-      // [追加] 改善Phase7 (v.2026.9.18+26091802)
       gatesConfirmed: gatesConfirmed,
-      // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
       jockeyFactorParams: jockeyFactorParams,
-      // [追加] 展開シミュ一般論見直しStep2 (v.2026.9.29+26092906)
       finishKickParams: finishKickParams,
       finishConstants: finishConstants,
     );

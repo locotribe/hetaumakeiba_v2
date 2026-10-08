@@ -1,7 +1,5 @@
 // test/race_result_scraper_race_info_test.dart
 
-// [追加] レース結果のコース情報取得修正: parseRaceInfoText の単体テスト (v.2026.9.30+26093003)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html;
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';

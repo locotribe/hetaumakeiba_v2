@@ -65,7 +65,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1600));
     });
 
-    // [追加] Phase 4-F: ボトムナビゲーションバー分の下端パディング付け替えの検証 (v.2026.9.5+26090505)
     testWidgets('stackDepthが1かつ幅450px以下のときkBottomNavigationBarHeightが加算される', (tester) async {
       tester.view.physicalSize = const Size(400, 800);
       tester.view.devicePixelRatio = 1.0;

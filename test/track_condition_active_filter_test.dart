@@ -3,7 +3,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/track_condition_active_filter.dart';
 
-// [追加] 開催中の会場の絞り込み（最新測定日が全会場の最新から4日以内）の検証 (v.2026.10.6+26100602)
 void main() {
   group('selectActiveCourseNames', () {
     test('JRAのページに残った非開催会場（札幌 9/6）は除き、東京・京都（10/4）だけ残す', () {

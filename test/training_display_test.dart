@@ -43,7 +43,6 @@ MergedTrainingEntry _entry(String date) =>
     MergedTrainingEntry(trainingDate: date);
 
 void main() {
-  // [修正] 中間追切6列化: 期待値を6マスに更新（先頭6F・5Fが空欄） (v.2026.9.24+26092405)
   test('pakara だけの坂路: 6マスとラップ（2F→1F が抜けない）', () {
     final row = buildTrainingRowView(MergedTrainingEntry(
       trainingDate: '20260921',
@@ -72,7 +71,6 @@ void main() {
     expect(row.rank, isNull);
   });
 
-  // [修正] 中間追切6列化: 期待値を6マスに更新（netkeiba単独は2Fが空欄、3Fラップは2ハロンのまま） (v.2026.9.24+26092405)
   test('netkeiba のウッド: 色・脚色(位置)・評価・併せ馬', () {
     final row = buildTrainingRowView(MergedTrainingEntry(
       trainingDate: '20260916',
@@ -110,7 +108,6 @@ void main() {
     expect(row.partners.single.fullText, '内レイルジェット一杯と併せ０秒６先着');
   });
 
-  // [追加] 中間追切6列化: 突き合わせ済みは共有ハロンnetkeiba優先・2Fはpakara補完・3Fが丸まらない (v.2026.9.24+26092405)
   test('netkeiba＋pakara のウッド: 2Fはpakaraで補完、共有ハロンはnetkeiba優先で丸めない', () {
     final row = buildTrainingRowView(MergedTrainingEntry(
       trainingDate: '20260916',
@@ -199,7 +196,6 @@ void main() {
         ['20260420', '20260101']);
   });
 
-  // [追加] 調教タブ改修Step6: 調教と出走レースの並び順 (v.2026.9.23+26092303)
   test('buildTrainingTimeline: 日付の新しい順、同じ日はレースが先、調教は時刻の新しい順', () {
     final timeline = buildTrainingTimeline(
       [

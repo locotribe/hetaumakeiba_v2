@@ -8,7 +8,7 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart'; // [追加] 脚質判定を共通関数へ統一 (v.2026.9.26+26092603)
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
@@ -244,7 +244,6 @@ class StatisticsService {
         if (isPlace) trainerStats[trainer]!['place'] = (trainerStats[trainer]!['place'] ?? 0) + 1;
         if (isShow) trainerStats[trainer]!['show'] = (trainerStats[trainer]!['show'] ?? 0) + 1;
 
-        // [修正] 脚質判定を共通関数 classifyLegStyle に統一（率ベース＋最終コーナー1位の逃げ特例）。'不明' は集計しない (v.2026.9.26+26092603)
         final horseCount = result.horseResults.length;
         final style = classifyLegStyle(horse.cornerRanking, horseCount);
         if (style != legStyleUnknown) {

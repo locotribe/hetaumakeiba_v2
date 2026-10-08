@@ -1,7 +1,5 @@
 // test/entry_meaning_test.dart
 
-// [追加] 陣営の本気度指数: 出走の意味（entry_meaning.dart）の単体テスト (v.2026.10.3+26100305)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/camp_signals.dart';
 import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';

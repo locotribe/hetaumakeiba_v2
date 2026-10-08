@@ -1,7 +1,5 @@
 // test/camp_signals_test.dart
 
-// [修正] 陣営の本気度指数: 仕上げ・人のサイン（camp_signals.dart）の単体テスト。120日の区切り・前走の日付・休み明けから数えたか・前走騎手の名前のテストを追加 (v.2026.10.3+26100304)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/camp_signals.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -74,7 +72,6 @@ void main() {
       expect(restCategoryOf(null), RestCategory.debut);
       expect(restCategoryOf(400), RestCategory.longLayoff);
       expect(restCategoryOf(180), RestCategory.longLayoff);
-      // [修正] 120日の区切りを追加 (v.2026.10.3+26100304)
       expect(restCategoryOf(179), RestCategory.longishLayoff);
       expect(restCategoryOf(120), RestCategory.longishLayoff);
       expect(restCategoryOf(119), RestCategory.layoff);
@@ -214,7 +211,6 @@ void main() {
       expect(s.bodyWeightChange, 0);
     });
 
-    // [追加] 前走の日付・休み明けから数えたか (v.2026.10.3+26100304)
     test('前走の日付・休み明けから数えたか', () {
       expect(signals[0].lastStartDate, DateTime(2026, 9, 13));
       expect(signals[0].isCountedFromLayoff, isTrue);
@@ -242,7 +238,6 @@ void main() {
     expect(signals.single.startNumberSinceLayoff, 1);
   });
 
-  // [追加] 前走騎手の名前（過去走の騎手列。前後の空白を除く） (v.2026.10.3+26100304)
   test('前走騎手の名前は過去走の騎手列から読む', () {
     HorseRaceRecord rec(String horseId, String date, String jockey,
         String jockeyId) {

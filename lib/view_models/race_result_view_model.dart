@@ -26,7 +26,7 @@ import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart'; // [追加] CSVメモ入出力改善 (v.2026.9.24+26092401)
+import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart';
 
 /// 画面表示に必要な各種データ（馬券・レース結果・展開予測）をまとめて保持するクラス
 class PageData {
@@ -344,7 +344,6 @@ class RaceResultViewModel extends ChangeNotifier {
         throw Exception('回顧メモ用のCSVを選択してください。（予想メモCSVや旧形式は取り込めません）');
       }
 
-      // [修正] CSVメモ入出力改善: 競合ダイアログの見出しに出すレース名 (v.2026.9.24+26092401)
       final raceTitle = pageData?.raceResult?.raceTitle ?? '';
 
       // === 既存データの取得 ===
@@ -378,7 +377,6 @@ class RaceResultViewModel extends ChangeNotifier {
           finalReview = reviewMerge.resultText;
           isHorseUpdated = true;
         } else if (reviewMerge.action == MemoMergeAction.conflict) {
-          // [修正] CSVメモ入出力改善: 見出しにレース名を出す (v.2026.9.24+26092401)
           final resolved = await resolveConflict(
             raceTitle.isEmpty ? '$horseNameの回顧メモ' : '$raceTitle\n$horseNameの回顧メモ',
             reviewMerge,
@@ -417,7 +415,6 @@ class RaceResultViewModel extends ChangeNotifier {
               finalRaceMemo = raceMerge.resultText;
               updateRaceMemo = true;
             } else if (raceMerge.action == MemoMergeAction.conflict) {
-              // [修正] CSVメモ入出力改善: 見出しにレース名を出す (v.2026.9.24+26092401)
               final resolved = await resolveConflict(
                 raceTitle.isEmpty ? 'レース総評' : '$raceTitle\nレース総評',
                 raceMerge,

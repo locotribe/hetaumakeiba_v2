@@ -283,7 +283,6 @@ class RelativeBattleCalculator {
       Map<String, JockeyStats>? jockeyStats,
       Map<String, List<HorseRaceRecord>>? horsePerformanceMap,
       Map<String, List<TrainingTimeModel>>? trainingDataMap,
-      // [追加] 調教タブ改修Step7 (v.2026.9.23+26092305)
       [Map<String, List<NetkeibaTrainingSession>>? netkeibaTrainingMap,
       Map<String, NetkeibaTrainingReview>? netkeibaReviews,
       String? raceId]
@@ -358,8 +357,8 @@ class RelativeBattleCalculator {
           'raceCount': targetStats.raceCount,
           'winRate': winRateRatio,
           'score': jockeyScore.round(),
-          'bonus': bonusLabel, // [修正]
-          'rank': _getRankFor50PointScale(jockeyScore), // [追加]
+          'bonus': bonusLabel,
+          'rank': _getRankFor50PointScale(jockeyScore),
         };
       }
     }
@@ -372,7 +371,7 @@ class RelativeBattleCalculator {
       'winRate': 0.0,
       'placeRate': 0.0,
       'score': 0,
-      'rank': 'C', // [追加]
+      'rank': 'C',
     };
 
     // --- 枠順評価 & 傾向データ取得 ---
@@ -382,7 +381,7 @@ class RelativeBattleCalculator {
       'isDetermined': false,
       'tendency': <String, dynamic>{}, // 過去の内中外傾向
       'score': 0,
-      'rank': 'C', // [追加]
+      'rank': 'C',
     };
     Map<String, Map<String, double>> gateTendency = {}; // 生データ
 
@@ -411,7 +410,7 @@ class RelativeBattleCalculator {
           'winRate': winRateRatio,
           'placeRate': comboStats.placeRate,
           'score': compatibilityScore.round(),
-          'rank': _getRankFor50PointScale(compatibilityScore), // [追加]
+          'rank': _getRankFor50PointScale(compatibilityScore),
         };
       }
 
@@ -440,7 +439,7 @@ class RelativeBattleCalculator {
           'zone': zone, // 'inner', 'middle', 'outer'
           'tendency': gateTendency,
           'score': gateScore.round(),
-          'rank': _getRankFor50PointScale(gateScore), // [追加]
+          'rank': _getRankFor50PointScale(gateScore),
         };
       }
     }

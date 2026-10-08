@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hetaumakeiba_v2/db/track_condition_id_fix.dart';
 
-// [追加] 馬場状態IDの日次(DD)の一回限りの修正の検証 (v.2026.10.6+26100605)
 void main() {
   late Database db;
 

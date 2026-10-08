@@ -120,7 +120,6 @@ class HorsePastRaceExtra {
       'newspaper_fetched_at': newspaperFetchedAt,
       'horse_page_fetched_at': horsePageFetchedAt,
       'horse_page_premium': _boolToInt(horsePagePremium),
-      // [追加] 個別ラップ取得 (v.2026.9.23+26092304)
       'individual_last_3f': individualLast3f,
       'individual_first_5f': individualFirst5f,
       'individual_last_5f': individualLast5f,
@@ -162,7 +161,6 @@ class HorsePastRaceExtra {
       newspaperFetchedAt: map['newspaper_fetched_at'] as String?,
       horsePageFetchedAt: map['horse_page_fetched_at'] as String?,
       horsePagePremium: _intToBool(map['horse_page_premium']),
-      // [追加] 個別ラップ取得 (v.2026.9.23+26092304)
       individualLast3f: (map['individual_last_3f'] as num?)?.toDouble(),
       individualFirst5f: (map['individual_first_5f'] as num?)?.toDouble(),
       individualLast5f: (map['individual_last_5f'] as num?)?.toDouble(),
@@ -196,7 +194,6 @@ class HorsePastRaceExtra {
       newspaperFetchedAt: newspaperFetchedAt ?? base.newspaperFetchedAt,
       horsePageFetchedAt: horsePageFetchedAt ?? base.horsePageFetchedAt,
       horsePagePremium: horsePagePremium ?? base.horsePagePremium,
-      // [追加] 個別ラップ取得 (v.2026.9.23+26092304)
       individualLast3f: individualLast3f ?? base.individualLast3f,
       individualFirst5f: individualFirst5f ?? base.individualFirst5f,
       individualLast5f: individualLast5f ?? base.individualLast5f,

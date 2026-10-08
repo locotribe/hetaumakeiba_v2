@@ -2,10 +2,6 @@
 
 class DbConstants {
   static const String dbName = 'hetaumakeiba_v2.db';
-  // [修正] 18 -> 19に更新（horse_past_race_extras に個別ラップの列を追加） (v.2026.9.23+26092304)
-  // [修正] レースメモ用途分離: race_memosにaiPredictionMemo列を追加 (v.2026.9.28+26092801)
-  // [修正] 陣営の本気度指数 実施順6: entry_meaning_cache テーブルを追加 (v.2026.10.3+26100307)
-  // [修正] 21 -> 22: 馬場状態IDの日次(DD)のずれをアップグレードで一回だけ直す (v.2026.10.6+26100605)
   static const int dbVersion = 22;
 
   // --- Tables ---
@@ -31,16 +27,11 @@ class DbConstants {
   // 統合レーステーブル
   static const String tableIntegratedRaces = 'integrated_races';
   static const String tableHorseSimulationParams = 'horse_simulation_params';
-  // [追加] スピード指数保存用テーブル (v.2026.7.28+26072811)
   static const String tableHorseSpeedIndex = 'horse_speed_index';
-  // [追加] Phase 4-A: レース準備状況保存用テーブル (v.2026.9.5+26090501)
   static const String tableRacePreparationStatus = 'race_preparation_status';
-  // [追加] 成績タブ拡充: 過去走ごとの追加情報テーブル (v.2026.9.22+26092201)
   static const String tableHorsePastRaceExtras = 'horse_past_race_extras';
-  // [追加] 調教タブ改修Step2: netkeiba 調教のレース×馬の評価 / 調教1本ごと (v.2026.9.22+26092211)
   static const String tableNetkeibaTrainingReviews = 'netkeiba_training_reviews';
   static const String tableNetkeibaTrainingSessions = 'netkeiba_training_sessions';
-  // [追加] 陣営の本気度指数 実施順6: 出走の意味の計算結果（レースごとに1件） (v.2026.10.3+26100307)
   static const String tableEntryMeaningCache = 'entry_meaning_cache';
 
   // --- Common Columns ---
@@ -88,7 +79,6 @@ class DbConstants {
   static const String colStableName = 'stable_name';
 
   // --- Race Preparation Status Columns ---
-  // [追加] Phase 4-A: レース準備状況テーブル専用カラム (v.2026.9.5+26090501)
   static const String colPrepStep = 'step';
   static const String colPrepState = 'state';
   static const String colPrepItemCount = 'item_count';

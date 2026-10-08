@@ -1,7 +1,5 @@
 // test/entry_meaning_snapshot_test.dart
 
-// [追加] 陣営の本気度指数 実施順6: 出走の意味の組み立て・保存の形・取り直しの状態・ラベル（entry_meaning_snapshot.dart）の単体テスト (v.2026.10.3+26100306)
-
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';

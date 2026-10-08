@@ -1,7 +1,5 @@
 // test/growth_curve_builder_test.dart
 
-// [追加] 馬体重成長曲線 Step1: GrowthCurveBuilder の単体テスト (v.2026.10.1+26100101)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/growth_curve_builder.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';

@@ -59,7 +59,6 @@ class CloudSyncService {
         final csvString = utf8.decode(response.bodyBytes);
 
         // インポート実行
-        // [修正] 同一日付・同一競馬場はサーバーの行で置き換える方式に変更 (v.2026.9.19+26091902)
         await _repository.replaceTrackConditionsFromCsv(csvString);
 
         // 成功後にバージョンを更新するために、再度version.jsonを取得

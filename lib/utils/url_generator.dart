@@ -140,7 +140,6 @@ String generateOddsUrl({
   return 'https://race.netkeiba.com/odds/index.html?type=$oddsType&race_id=$raceId&housiki=c0&rf=shutuba_submenu';
 }
 
-// [追加] 過去レース検索の複数ワード(スペース区切り)AND詳細検索対応 (v.2026.9.9+26090903)
 const Map<String, String> _pastRaceSearchJyoCodeMap = {
   '札幌': '01',
   '函館': '02',
@@ -154,7 +153,6 @@ const Map<String, String> _pastRaceSearchJyoCodeMap = {
   '小倉': '10',
 };
 
-// [追加] 過去レース検索の複数ワード(スペース区切り)AND詳細検索対応 (v.2026.9.9+26090903)
 const Map<String, String> _pastRaceSearchTrackCodeMap = {
   '芝': '1',
   'ダート': '2',

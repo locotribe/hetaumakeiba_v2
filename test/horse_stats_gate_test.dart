@@ -1,7 +1,5 @@
 // test/horse_stats_gate_test.dart
 
-// [追加] 陣営の本気度指数 過去走取り直しStep2: decideHorseStatsGate の単体テスト (v.2026.10.2+26100202)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/horse_stats_gate.dart';
 import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';

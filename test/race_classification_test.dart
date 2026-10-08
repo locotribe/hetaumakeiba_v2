@@ -1,7 +1,5 @@
 // test/race_classification_test.dart
 
-// [追加] 陣営の本気度指数 実施順5 Step1: 今回レースの区分（race_classification.dart）の単体テスト (v.2026.10.3+26100301)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/race_classification.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';

@@ -1,7 +1,5 @@
 // test/horse_circumstance_test.dart
 
-// [追加] 陣営の本気度指数 実施順5 Step2: 出走馬ごとの事情（horse_circumstance.dart）の単体テスト (v.2026.10.3+26100302)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/horse_circumstance.dart';

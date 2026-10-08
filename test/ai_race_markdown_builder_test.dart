@@ -1,5 +1,4 @@
 // test/ai_race_markdown_builder_test.dart
-// [追加] AI分析データエクスポート Step1: buildRaceAiMarkdown の単体テスト（純粋関数・DB不要） (v.2026.9.27+26092701)
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_race_markdown_builder.dart';

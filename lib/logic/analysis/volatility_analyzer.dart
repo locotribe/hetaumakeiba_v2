@@ -1,7 +1,7 @@
 // lib/logic/analysis/volatility_analyzer.dart
 
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart'; // [追加] 脚質判定を共通関数へ統一 (v.2026.9.26+26092604)
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart';
 
 class VolatilityResult {
   final double averagePopularity;
@@ -234,7 +234,6 @@ class LegStyleAnalyzer {
     final showCounts = <String, int>{};  // ★追加
     final totalCounts = <String, int>{};
 
-    // [修正] 脚質判定を共通関数 classifyLegStyle に統一（率ベース＋最終コーナー1位の逃げ特例）。内部の determineLegStyle は廃止 (v.2026.9.26+26092604)
     for (final r in pastRaces) {
       for (final h in r.horseResults) {
         int rank = int.tryParse(h.rank ?? '') ?? 0;
@@ -555,8 +554,6 @@ class LapTimeAnalyzer {
     List<RaceLapData> acceleratingRaces = [];
     List<RaceLapData> allRacesLapData = []; // ★追加: 全レースデータを保持するリスト
     Map<String, int> paceCounts = {'ハイペース': 0, 'ミドルペース': 0, 'スローペース': 0};
-
-    // [修正] 脚質判定を共通関数 classifyLegStyle に統一。内部の determineLegStyle は廃止 (v.2026.9.26+26092604)
 
     for (final r in pastRaces) {
       // 距離の抽出（距離が異なるレースを計算から除外するため）

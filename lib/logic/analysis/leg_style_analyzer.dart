@@ -1,7 +1,7 @@
 // lib/logic/analysis/leg_style_analyzer.dart
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart'; // [追加] 脚質の基底4分類を共通関数へ委譲 (v.2026.9.26+26092605)
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart';
 
 class LegStyleProfile {
   final String primaryStyle;
@@ -23,7 +23,7 @@ class LegStyleProfile {
       'primaryStyle': primaryStyle,
       'styleDistribution': styleDistribution,
       'styleWinRates': styleWinRates, // ★追加
-      'styleRecordCounts': styleRecordCounts, // [追加] (v.2026.9.24+26092403)
+      'styleRecordCounts': styleRecordCounts,
     };
   }
 
@@ -53,7 +53,7 @@ class LegStyleProfile {
       primaryStyle: json['primaryStyle'] as String,
       styleDistribution: distribution,
       styleWinRates: winRates,
-      styleRecordCounts: recordCounts, // [追加] (v.2026.9.24+26092403)
+      styleRecordCounts: recordCounts,
     );
   }
 }
@@ -228,7 +228,7 @@ class LegStyleAnalyzer {
       primaryStyle: primaryStyle,
       styleDistribution: styleDistribution,
       styleWinRates: styleWinRates, // ★追加
-      styleRecordCounts: styleRecordCounts, // [追加] (v.2026.9.24+26092403)
+      styleRecordCounts: styleRecordCounts,
     );
   }
 

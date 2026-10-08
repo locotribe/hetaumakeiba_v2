@@ -6,8 +6,6 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 
-// [追加] 展開シミュ騎手要素Step1: 騎手要素の計算ロジックの検証 (v.2026.9.29+26092901)
-
 PredictionHorseDetail _horse({
   required String horseId,
   required int horseNumber,

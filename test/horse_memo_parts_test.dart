@@ -5,8 +5,6 @@ import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/widgets/memo/horse_memo_parts.dart';
 
-// [追加] 馬詳細タブStep2: 過去メモの対象の選び方と表示用データ（移す前のメモタブと同じ結果か） (v.2026.9.23+26092307)
-
 HorseRaceRecord _race(String raceId, String date,
     {String raceName = '', String rank = ''}) {
   return HorseRaceRecord(

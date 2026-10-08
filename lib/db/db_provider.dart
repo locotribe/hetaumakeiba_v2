@@ -253,7 +253,6 @@ class DbProvider {
       )
     ''');
 
-    // [修正] レースメモ用途分離: race_memos に aiPredictionMemo列を追加 (v.2026.9.28+26092801)
     await db.execute('''
       CREATE TABLE ${DbConstants.tableRaceMemos}(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -323,7 +322,6 @@ class DbProvider {
       )
     ''');
 
-    // [追加] スピード指数保存用テーブル作成 (v.2026.7.28+26072811)
     await db.execute('''
       CREATE TABLE ${DbConstants.tableHorseSpeedIndex}(
         horse_id         TEXT PRIMARY KEY,
@@ -336,7 +334,6 @@ class DbProvider {
       )
     ''');
 
-    // [追加] Phase 4-A: レース準備状況保存用テーブル作成 (v.2026.9.5+26090501)
     await db.execute('''
       CREATE TABLE ${DbConstants.tableRacePreparationStatus}(
         race_id    TEXT NOT NULL,
@@ -349,7 +346,6 @@ class DbProvider {
       )
     ''');
 
-    // [追加] 成績タブ拡充: 過去走ごとの追加情報テーブル作成 (v.2026.9.22+26092201)
     await db.execute('''
       CREATE TABLE ${DbConstants.tableHorsePastRaceExtras}(
         horse_id              TEXT NOT NULL,
@@ -381,10 +377,8 @@ class DbProvider {
       )
     ''');
 
-    // [追加] 調教タブ改修Step2: netkeiba 調教の2テーブル作成 (v.2026.9.22+26092211)
     await _createNetkeibaTrainingTables(db);
 
-    // [追加] 陣営の本気度指数 実施順6: entry_meaning_cache テーブル作成 (v.2026.10.3+26100307)
     await _createEntryMeaningCacheTable(db);
   }
 
@@ -590,7 +584,6 @@ class DbProvider {
         rethrow;
       }
     }
-    // [追加] horse_speed_index テーブル新設 (v.2026.7.28+26072811)
     if (oldVersion < 15) {
       try {
         await db.execute('''
@@ -609,7 +602,6 @@ class DbProvider {
         rethrow;
       }
     }
-    // [追加] Phase 4-A: race_preparation_status テーブル新設 (v.2026.9.5+26090501)
     if (oldVersion < 16) {
       try {
         await db.execute('''
@@ -628,7 +620,6 @@ class DbProvider {
         rethrow;
       }
     }
-    // [追加] 成績タブ拡充: horse_past_race_extras テーブル新設 (v.2026.9.22+26092201)
     if (oldVersion < 17) {
       try {
         await db.execute('''
@@ -659,7 +650,6 @@ class DbProvider {
         rethrow;
       }
     }
-    // [追加] 調教タブ改修Step2: netkeiba 調教の2テーブル新設 (v.2026.9.22+26092211)
     if (oldVersion < 18) {
       try {
         await _createNetkeibaTrainingTables(db);
@@ -668,7 +658,6 @@ class DbProvider {
         rethrow;
       }
     }
-    // [追加] 個別ラップ取得: horse_past_race_extras に個別ラップの列を追加 (v.2026.9.23+26092304)
     if (oldVersion < 19) {
       try {
         const columns = [
@@ -689,7 +678,6 @@ class DbProvider {
         rethrow;
       }
     }
-    // [追加] レースメモ用途分離: race_memos に aiPredictionMemo列を追加 (v.2026.9.28+26092801)
     if (oldVersion < 20) {
       try {
         // v10未満を経由していないDBでは race_memos が未作成のことがあるため、
@@ -711,7 +699,6 @@ class DbProvider {
         rethrow;
       }
     }
-    // [追加] 陣営の本気度指数 実施順6: entry_meaning_cache テーブル新設 (v.2026.10.3+26100307)
     if (oldVersion < 21) {
       try {
         await _createEntryMeaningCacheTable(db);
@@ -732,7 +719,6 @@ class DbProvider {
     }
   }
 
-  // [追加] 調教タブ改修Step2: netkeiba 調教の2テーブル（_onCreate / _onUpgrade 共通） (v.2026.9.22+26092211)
   Future<void> _createNetkeibaTrainingTables(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS ${DbConstants.tableNetkeibaTrainingReviews}(
@@ -776,7 +762,6 @@ class DbProvider {
     ''');
   }
 
-  // [追加] 陣営の本気度指数 実施順6: 出走の意味の計算結果のテーブル（_onCreate / _onUpgrade 共通） (v.2026.10.3+26100307)
   Future<void> _createEntryMeaningCacheTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS ${DbConstants.tableEntryMeaningCache}(

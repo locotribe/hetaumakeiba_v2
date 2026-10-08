@@ -315,7 +315,6 @@ class RacePreparationService {
     return total;
   }
 
-  // [修正] 個別ラップ取得Step2: 取得要否の判定を HorseLapTimeService に任せる (v.2026.9.23+26092304)
   Future<void> _fetchLapTimeIfNeeded(String horseId) async {
     try {
       await HorseLapTimeService().fetchAndSaveForHorses([horseId]);

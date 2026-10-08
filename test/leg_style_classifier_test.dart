@@ -1,5 +1,4 @@
 // test/leg_style_classifier_test.dart
-// [修正] 脚質共通判定関数の単体テスト。TARGET3グループ方式＋道中先頭=逃げ に更新 (v.2026.9.26+26092606)
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart';

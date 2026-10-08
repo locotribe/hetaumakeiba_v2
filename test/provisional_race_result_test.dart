@@ -1,7 +1,5 @@
 // test/provisional_race_result_test.dart
 
-// [追加] 陣営の本気度指数 実施順4: 速報版のレース結果の判定（provisional_race_result.dart）の単体テスト (v.2026.10.2+26100208)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/provisional_race_result.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';

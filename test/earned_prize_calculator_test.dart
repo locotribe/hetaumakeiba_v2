@@ -1,7 +1,5 @@
 // test/earned_prize_calculator_test.dart
 
-// [追加] 陣営の本気度指数 実施順3: 収得賞金の計算（earned_prize_calculator.dart）の単体テスト (v.2026.10.2+26100207)
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
