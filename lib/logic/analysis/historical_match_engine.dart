@@ -4,7 +4,7 @@ import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
-import 'package:intl/intl.dart'; // [追加] 日付パース用にintlパッケージをインポート (v.1.0)
+import 'package:intl/intl.dart';
 
 // 各ファクターをインポート
 import '../analysis/historical_match_engine_factors/weight_factor.dart';
@@ -206,7 +206,6 @@ class HistoricalMatchEngine {
       if (records == null || records.isEmpty) continue;
       final targetRace = pastRaces.firstWhere((r) => r.horseResults.any((h) => h.horseId == ctx.horse.horseId), orElse: () => pastRaces.first);
 
-      // [修正] 単純にraceIdを比較するのではなく、対象レース開催日より過去の最新レコードを取得するよう変更 (v.1.0)
       final prevRace = _getPreviousRaceRecord(records, targetRace.raceDate);
 
       if (prevRace != null) {

@@ -60,7 +60,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
         return;
       }
 
-      // [修正] 引数から totalBudget を削除 (v.2.0)
       final result = _engine.analyze(
         pastRaces: pastRaces,
         currentHorses: widget.horses,
@@ -137,8 +136,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
             MatrixTrapCard(result: _trapResult),
             const SizedBox(height: 24),
           ],
-
-          // [削除] 買い目リスト関連のウィジェット呼び出しを完全に削除 (v.2.0)
         ],
       ),
     );
@@ -311,8 +308,6 @@ class _DetailedAnalysisTabState extends State<DetailedAnalysisTab> {
       child: Text('$count回', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
     );
   }
-
-// [削除] _buildChaosOptionCard, _buildTicketList メソッドを完全に削除 (v.2.0)
 }
 
 class MatrixTrapCard extends StatelessWidget {

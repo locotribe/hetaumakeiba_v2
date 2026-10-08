@@ -28,7 +28,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart'; // [追加] CSVメモ入出力改善 (v.2026.9.24+26092401)
 
-// [追加] race_result_page.dartからViewModelへ移行 (v.13.41.0)
 /// 画面表示に必要な各種データ（馬券・レース結果・展開予測）をまとめて保持するクラス
 class PageData {
   final List<Map<String, dynamic>> parsedTickets;

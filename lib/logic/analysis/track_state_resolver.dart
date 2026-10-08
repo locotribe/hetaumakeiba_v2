@@ -82,7 +82,6 @@ class TrackStateResolver {
     final db = await _dbAccessor();
     final maps = await db.query(
       DbConstants.tableTrackConditions,
-      // [削除] 「下2桁00(前日データ)を除く」条件とその説明は、下2桁が01始まりの管理番号で何も除外していなかったため削除 (v.2026.10.6+26100604)
       where: 'SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) = ?',
       whereArgs: [venueCode],
     );

@@ -178,7 +178,7 @@ class OpenMeteoService {
           'current': currentData,
           'raceTime': raceTimeData,
           'timeline': timeline,
-          'daily': dailyData, // [追加] (v.3.0)
+          'daily': dailyData,
           'windAnalysis': _analyzeWindEffect(venue, raceTimeData['windDir']),
           'windDirText': _getWindDirectionText(raceTimeData['windDir']),
         };

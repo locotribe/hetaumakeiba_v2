@@ -5,7 +5,6 @@ import 'package:hetaumakeiba_v2/models/race_schedule_model.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
-// [追加] 状態管理・ビジネスロジックをViewModelへ分離 (v.13.41.0)
 import 'package:hetaumakeiba_v2/view_models/race_schedule_view_model.dart';
 
 class RaceSchedulePage extends StatefulWidget {
@@ -17,7 +16,6 @@ class RaceSchedulePage extends StatefulWidget {
 
 class RaceSchedulePageState extends State<RaceSchedulePage>
     with TickerProviderStateMixin {
-  // [修正] データ取得・加工ロジックをRaceScheduleViewModelへ移行 (v.13.41.0)
   late final RaceScheduleViewModel _viewModel;
 
   // TabControllerはvsync(TickerProviderStateMixin)が必要なためView側で保持・管理する
@@ -27,7 +25,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   @override
   void initState() {
     super.initState();
-    // [追加] ViewModelを生成し、画面の状態管理を委譲する (v.13.41.0)
     _viewModel = RaceScheduleViewModel();
     _viewModel.addListener(_onViewModelUpdate);
     _viewModel.loadInitialData();
@@ -37,13 +34,11 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
   void dispose() {
     _tabController?.removeListener(_handleTabSelection);
     _tabController?.dispose();
-    // [追加] ViewModelのリスナー解除と破棄を追加 (v.13.41.0)
     _viewModel.removeListener(_onViewModelUpdate);
     _viewModel.dispose();
     super.dispose();
   }
 
-  // [追加] ViewModelのnotifyListeners()を受けて再描画し、必要であればTabControllerを再構築する (v.13.41.0)
   void _onViewModelUpdate() {
     final error = _viewModel.tabErrorMessage;
     if (error != null) {
@@ -70,7 +65,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     }
   }
 
-  // [追加] availableDatesの変化に合わせてTabControllerを作り直す（旧_setupTabsのTabController生成部分） (v.13.41.0)
   void _syncTabController() {
     final dates = _viewModel.availableDates;
     _syncedAvailableDates = List.from(dates);
@@ -100,7 +94,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
     final index = tabController.index;
     if (index < 0 || index >= dates.length) return;
 
-    // [修正] データ未取得日の判定・取得トリガーをViewModelへ委譲 (v.13.41.0)
     _viewModel.ensureDataForDate(dates[index]);
   }
 
@@ -141,7 +134,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
 
     if (_viewModel.availableDates.isEmpty) {
       return RefreshIndicator(
-        // [修正] ViewModel.loadDataForWeek()を呼び出すよう変更 (v.13.41.0)
         onRefresh: () => _viewModel.loadDataForWeek(),
         child: LayoutBuilder(builder: (context, constraints) {
           return SingleChildScrollView(
@@ -194,7 +186,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         // 過去日付でも常に RefreshIndicator で包む
         // （当日中に結果確定が走るため必要）
         return RefreshIndicator(
-          // [修正] ViewModel.fetchDataForDate()を呼び出すよう変更 (v.13.41.0)
           onRefresh: () => _viewModel.fetchDataForDate(dateStr, forceRefresh: true),
           child: content,
         );
@@ -215,7 +206,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
         children: [
           IconButton(
             icon: const Icon(Icons.arrow_back_ios),
-            // [修正] ViewModel.calculateWeek()を呼び出すよう変更 (v.13.41.0)
             onPressed: _viewModel.isLoading || _viewModel.loadingTabs.isNotEmpty
                 ? null
                 : () => _viewModel.calculateWeek(
@@ -253,7 +243,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
           ),
           IconButton(
             icon: const Icon(Icons.arrow_forward_ios),
-            // [修正] ViewModel.calculateWeek()を呼び出すよう変更 (v.13.41.0)
             onPressed: _viewModel.isLoading || _viewModel.loadingTabs.isNotEmpty
                 ? null
                 : () => _viewModel.calculateWeek(
@@ -307,7 +296,6 @@ class RaceSchedulePageState extends State<RaceSchedulePage>
                               ),
                               ...venue.races.map((race) {
                                 bool isRaceSet = race.raceId.isNotEmpty;
-                                // [修正] ViewModel.raceStatusMapを参照するよう変更 (v.13.41.0)
                                 final isConfirmed =
                                     _viewModel.raceStatusMap[race.raceId] ?? false;
                                 return InkWell(

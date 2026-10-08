@@ -17,7 +17,6 @@ class FormationAnalysisResult {
   // オッズ分析データ
   final double standardOddsLine;
   final double maxOddsLine;
-  // [削除] chaosHorses を削除 (v.2.0)
   final int validHorseCount;
 
   // AI戦術メタデータ
@@ -25,8 +24,6 @@ class FormationAnalysisResult {
   final String strategyReason; // 例: "上位が拮抗..."
   final String betType;        // "3連単" or "3連複"
   final int estimatedPoints;   // 推定点数
-
-  // [削除] tickets, budgetAllocation を削除 (v.2.0)
 
   FormationAnalysisResult({
     required this.frequencyMatrix,
@@ -36,7 +33,6 @@ class FormationAnalysisResult {
     required this.strategyRank1,
     required this.strategyRank2,
     required this.strategyRank3,
-    // [修正] コンストラクタ引数から不要なプロパティを削除 (v.2.0)
     required this.standardOddsLine,
     required this.maxOddsLine,
     required this.validHorseCount,

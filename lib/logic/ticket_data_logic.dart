@@ -191,8 +191,6 @@ class TicketDataLogic {
           }
         }
 
-        // [削除] ステップ5（一覧読み込み中のWebスクレイピング）を廃止 (v.2026.9.17+26091701)
-
         // 日付フォーマットの正規化
         raceDate = _normalizeDate(raceDate);
 

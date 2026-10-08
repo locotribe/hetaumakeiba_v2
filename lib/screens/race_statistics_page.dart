@@ -370,7 +370,6 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   const Tab(text: 'ローテ'),
                   const Tab(text: '人気妙味'),
                   const Tab(text: '人気分析'),
-                  // [削除] 傾向分析タブは廃止し、ペース/馬場/血統/ローテ/人気妙味の各タブへ分割 (v.2026.9.5+26090506)
                   if (_showResultTab) const Tab(text: '結果分析'),
                   const Tab(text: '分析対象'),
                 ],

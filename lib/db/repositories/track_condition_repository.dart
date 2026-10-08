@@ -135,7 +135,6 @@ class TrackConditionRepository {
     final db = await _dbProvider.database;
     final List<Map<String, dynamic>> maps = await db.query(
       DbConstants.tableTrackConditions,
-      // [削除] 「下2桁00(前日データ)を除く」条件は、下2桁が01始まりの管理番号で何も除外していなかったため削除 (v.2026.10.6+26100604)
       where: 'CAST(track_condition_id AS TEXT) LIKE ?',
       whereArgs: ['$prefix10%'],
       // 複数ある場合は一番新しい(IDが大きい)ものを取得
@@ -184,7 +183,6 @@ class TrackConditionRepository {
     final db = await _dbProvider.database;
     final List<Map<String, dynamic>> maps = await db.query(
       DbConstants.tableTrackConditions,
-      // [削除] 「下2桁00(前日データ)を除く」条件は、下2桁が01始まりの管理番号で何も除外していなかったため削除 (v.2026.10.6+26100604)
       where: 'SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) = ?',
       whereArgs: [venueCode],
       orderBy: 'track_condition_id DESC',

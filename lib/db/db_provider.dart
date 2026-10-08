@@ -312,7 +312,6 @@ class DbProvider {
       )
     ''');
 
-    // [追加] horse_simulation_params テーブル作成 (v.13.43.0)
     await db.execute('''
       CREATE TABLE ${DbConstants.tableHorseSimulationParams}(
         horse_id        TEXT PRIMARY KEY,
@@ -568,14 +567,12 @@ class DbProvider {
     if (oldVersion < 13) {
       try {
         await db.execute('DROP TABLE IF EXISTS analytics_aggregates');
-        // [追加] horse_profilesテーブルにgenderカラムを追加 (v.13)
         await db.execute('ALTER TABLE ${DbConstants.tableHorseProfiles} ADD COLUMN gender TEXT');
       } catch (e) {
         debugPrint('Migration error (v12->v13): $e');
         rethrow;
       }
     }
-    // [追加] horse_simulation_params テーブル新設 (v.13.43.0)
     if (oldVersion < 14) {
       try {
         await db.execute('''

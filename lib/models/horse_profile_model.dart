@@ -3,7 +3,6 @@
 class HorseProfile {
   final String horseId;
   final String horseName;
-  // [追加] 性別プロパティを追加 (v.13)
   final String gender;
   final String birthday; // 生年月日
   final String ownerId; // 馬主ID
@@ -25,7 +24,6 @@ class HorseProfile {
   HorseProfile({
     required this.horseId,
     required this.horseName,
-    // [追加] コンストラクタに性別を追加 (v.13)
     required this.gender,
     required this.birthday,
     required this.ownerId,
@@ -49,7 +47,6 @@ class HorseProfile {
     return {
       'horseId': horseId,
       'horseName': horseName,
-      // [追加] toMapに性別を追加 (v.13)
       'gender': gender,
       'birthday': birthday,
       'ownerId': ownerId,
@@ -74,7 +71,6 @@ class HorseProfile {
     return HorseProfile(
       horseId: map['horseId'] as String,
       horseName: map['horseName'] as String? ?? '',
-      // [追加] fromMapに性別を追加 (v.13)
       gender: map['gender'] as String? ?? '',
       birthday: map['birthday'] as String? ?? '',
       ownerId: map['ownerId'] as String? ?? '',

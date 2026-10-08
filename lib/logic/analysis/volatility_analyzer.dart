@@ -261,7 +261,6 @@ class LegStyleAnalyzer {
 
 
 // 5. 馬体重 (勝ち馬の平均からの散布度合いと、増減別成績用)
-// [修正] 絶対値と増減の両方で汎用的に利用できるようクラス名を WeightChangeStats から WeightStats に変更 (v.1.1)
 class WeightStats {
   int total = 0;
   int win = 0;
@@ -273,9 +272,7 @@ class HorseWeightAnalysisResult {
   final List<double> winningWeights;
   final double averageWinningWeight;
   final double medianWinningWeight;
-  // [修正] 型を WeightStats に変更 (v.1.1)
   final Map<String, WeightStats> changeStats; // 増減別の集計データ
-  // [追加] 馬体重（絶対値）の階級別集計データを追加 (v.1.1)
   final Map<String, WeightStats> absoluteStats;
 
   HorseWeightAnalysisResult({
@@ -283,7 +280,6 @@ class HorseWeightAnalysisResult {
     required this.averageWinningWeight,
     required this.medianWinningWeight,
     required this.changeStats,
-    // [追加] コンストラクタ引数に追加 (v.1.1)
     required this.absoluteStats,
   });
 }
@@ -291,7 +287,6 @@ class HorseWeightAnalysisResult {
 class HorseWeightAnalyzer {
   HorseWeightAnalysisResult analyze(List<RaceResult> pastRaces) {
     final List<double> winningWeights = [];
-    // [修正] 型を WeightStats に変更 (v.1.1)
     final Map<String, WeightStats> changeStats = {
       '-10kg以下': WeightStats(),
       '-4~-8kg': WeightStats(),
@@ -391,14 +386,12 @@ class HorseWeightAnalyzer {
       averageWinningWeight: avg,
       medianWinningWeight: median,
       changeStats: changeStats,
-      // [追加] 戻り値に絶対値の集計結果を含める (v.1.1)
       absoluteStats: absoluteStats,
     );
   }
 }
 
 // 6. 過去上位3頭の抽出用
-// [修正] 過去上位3頭のデータ構造に性齢、タイム、上がり、コーナー通過順位を追加 (v.1.0)
 class PastTopHorse {
   final int rank;
   final String frameNumber;
@@ -447,7 +440,6 @@ class PastTopHorsesAnalyzer {
       for (final h in r.horseResults) {
         int rank = int.tryParse(h.rank ?? '') ?? 0;
         if (rank >= 1 && rank <= 3) {
-          // [追加] 抽出時に性齢、タイム、上がり、コーナー順位の値をセット (v.1.0)
           topHorses.add(PastTopHorse(
             rank: rank,
             frameNumber: h.frameNumber,

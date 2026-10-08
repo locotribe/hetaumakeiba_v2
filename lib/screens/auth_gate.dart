@@ -5,7 +5,6 @@ import 'package:hetaumakeiba_v2/main_scaffold.dart';
 import 'package:hetaumakeiba_v2/models/user_model.dart';
 import 'package:hetaumakeiba_v2/screens/login_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 
 class AuthGate extends StatefulWidget {
@@ -38,7 +37,6 @@ class _AuthGateState extends State<AuthGate> {
       debugPrint('[AUTH_GATE] User fetched from DB with UUID: ${user?.username}');
     }
 
-    // [修正] UserSession経由でlocalUserIdを設定 (v.13.40.4)
     UserSession().localUserId = user?.uuid;
 
     setState(() {
@@ -53,7 +51,6 @@ class _AuthGateState extends State<AuthGate> {
     await prefs.setString('logged_in_user_uuid', user.uuid);
     debugPrint('[AUTH_GATE] Saved UUID to SharedPreferences: ${user.uuid}');
 
-    // [修正] UserSession経由でlocalUserIdを更新 (v.13.40.4)
     UserSession().localUserId = user.uuid;
 
     setState(() {
@@ -65,7 +62,6 @@ class _AuthGateState extends State<AuthGate> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('logged_in_user_uuid'); // 保存されているセッション情報を削除
 
-    // [修正] UserSession経由でlocalUserIdをクリア (v.13.40.4)
     UserSession().localUserId = null;
 
     setState(() {

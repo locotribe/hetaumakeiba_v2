@@ -25,7 +25,6 @@ import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_reposito
 import 'package:hetaumakeiba_v2/db/repositories/horse_speed_index_repository.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
 import 'package:hetaumakeiba_v2/logic/race_info_parser.dart';
-// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -469,7 +468,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   }
 
   Future<void> _deleteMarkAndSaveInBackground(PredictionHorseDetail horse) async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
     final userId = UserSession().localUserId;
     if (userId == null) return;
 
@@ -565,7 +563,6 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   // 呼べるようにする。挙動は抽出前と完全に同一（計算式・条件分岐・呼び出し順序・
   // 引数を一切変更していない） (v.2026.9.5+26090504)
   Future<void> _applyAnalysisToRaceData(PredictionRaceData raceData) async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
     final userId = UserSession().localUserId;
     if (userId == null) {
       return;

@@ -18,7 +18,6 @@ class OddsPage extends StatefulWidget {
   State<OddsPage> createState() => _OddsPageState();
 }
 
-// [修正] 状態を保持するためにAutomaticKeepAliveClientMixinを追加 (v1.2)
 class _OddsPageState extends State<OddsPage> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late TabController _subTabController;
   final OddsCacheService _cacheService = OddsCacheService();
@@ -32,7 +31,6 @@ class _OddsPageState extends State<OddsPage> with TickerProviderStateMixin, Auto
     'b6': [], // 馬単
   };
 
-  // [追加] 状態保持を有効化 (v1.2)
   @override
   bool get wantKeepAlive => true;
 
@@ -154,7 +152,6 @@ class _OddsPageState extends State<OddsPage> with TickerProviderStateMixin, Auto
 
   @override
   Widget build(BuildContext context) {
-    // [追加] AutomaticKeepAliveClientMixinのためsuper.buildを呼び出す (v1.2)
     super.build(context);
 
     return Column(

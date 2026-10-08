@@ -111,7 +111,6 @@ String getPakaraWoodApiUrl() {
   return 'https://pakara-keiba.com/ajax/race/get_cyoukyou_wc.php';
 }
 
-// [修正] 日次データ(過去7日分と予報)のパラメータを追加 (v.3.0)
 String generateOpenMeteoUrl({
   required double latitude,
   required double longitude,

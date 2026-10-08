@@ -235,8 +235,6 @@ class NiigataCourse {
   static const RaceCourseData shibaStraight1000 = RaceCourseData(
     baseData: NiigataBase.shibaStraight,
     raceDistance: 1000,
-    // [削除] 誤認されていた approachPath を削除 (v.2.25)
-    // [追加] 直線コース専用のセクション定義に修正 (v.2.25)
     sections: const [
       CourseSection(name: 'straight', startDistance: 0.0, endDistance: 1000.0),
     ],

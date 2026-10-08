@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../models/race_data.dart';
 import '../../utils/gate_color_utils.dart';
 
-// [修正] 変数名の差し戻しと1番人気の特別分岐追加 (v9.0)
 class _MacroData {
   final int horseNumber;
   final int ninki;
@@ -416,7 +415,6 @@ class _OddsAnalysisTabState extends State<OddsAnalysisTab> {
     });
   }
 
-  // [修正] 1番人気の特別分岐を追加 (v9.0)
   String _getMacroEvaluationText(_MacroData data, double sTop3Pct, int totalDansou, bool isFirstFavIsolated) {
     String raceTier = 'C級';
     if (sTop3Pct >= 75.0) raceTier = 'A級';

@@ -9,7 +9,6 @@ import 'package:hetaumakeiba_v2/db/db_constants.dart';
 import 'package:hetaumakeiba_v2/db/db_provider.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
-// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/home_page.dart';
@@ -238,7 +237,6 @@ class _MainScaffoldState extends State<MainScaffold> {
 // （以降のコードは全く変更なしのため省略）
 
   Future<void> _loadUserInfoForDrawer() async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
     final localUserId = UserSession().localUserId;
     if (localUserId == null) return;
     final prefs = await SharedPreferences.getInstance();

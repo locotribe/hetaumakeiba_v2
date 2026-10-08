@@ -24,7 +24,6 @@ import 'package:hetaumakeiba_v2/services/training_data_service.dart';
 // [追加] 調教タブ改修Step3: netkeiba の最終追切・厩舎コメント (v.2026.9.22+26092212)
 import 'package:hetaumakeiba_v2/services/netkeiba_training_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
-// [削除] 陣営の本気度指数 過去走取り直しStep1: _needsPremiumRefresh の削除に伴い未使用になった import 3本を削除 (v.2026.10.2+26100201)
 // [追加] 個別ラップ取得: 前走の個別ラップ (v.2026.9.23+26092304)
 import 'package:hetaumakeiba_v2/services/horse_laptime_service.dart';
 

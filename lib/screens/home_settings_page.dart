@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/models/feed_model.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 
 class HomeSettingsPage extends StatefulWidget {
@@ -29,7 +28,6 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
     setState(() {
       _isLoading = true;
     });
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
     final userId = UserSession().localUserId;
     if (userId == null) {
       if (mounted) {
@@ -134,7 +132,6 @@ class _HomeSettingsPageState extends State<HomeSettingsPage> {
               TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('キャンセル')),
               TextButton(
                 onPressed: () async {
-                  // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
                   final userId = UserSession().localUserId;
                   if (userId == null) return;
 

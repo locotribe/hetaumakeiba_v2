@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/screens/debug/speed_index_backtest_page.dart';
-// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/user_model.dart';
 import 'package:hetaumakeiba_v2/services/local_auth_service.dart';
@@ -56,7 +55,6 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
   }
 
   Future<void> _loadUserInfo() async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
     final localUserId = UserSession().localUserId;
     if (localUserId == null) {
       setState(() {
@@ -120,7 +118,6 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
   }
 
   Future<void> _saveSettings() async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
     final localUserId = UserSession().localUserId;
     if (!_formKey.currentState!.validate() || localUserId == null) {
       return;

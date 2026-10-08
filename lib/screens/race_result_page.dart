@@ -11,7 +11,6 @@ import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/screens/bulk_review_edit_page.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
-// [追加] 状態管理・ビジネスロジックをViewModelへ分離 (v.13.41.0)
 import 'package:hetaumakeiba_v2/view_models/race_result_view_model.dart';
 import 'package:hetaumakeiba_v2/widgets/ticket/ticket_card_selector.dart';
 import 'package:hetaumakeiba_v2/widgets/race_header_card.dart';
@@ -32,7 +31,6 @@ class RaceResultPage extends StatefulWidget {
 }
 
 class _RaceResultPageState extends State<RaceResultPage> {
-  // [修正] データ取得・加工ロジックをRaceResultViewModelへ移行 (v.13.41.0)
   late final RaceResultViewModel _viewModel;
 
   late PageController _ticketPageController;
@@ -41,7 +39,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
   @override
   void initState() {
     super.initState();
-    // [追加] ViewModelを生成し、画面の状態管理を委譲する (v.13.41.0)
     _viewModel = RaceResultViewModel(raceId: widget.raceId);
   }
 
@@ -57,13 +54,11 @@ class _RaceResultPageState extends State<RaceResultPage> {
   @override
   void dispose() {
     _ticketPageController.dispose();
-    // [追加] ViewModelの破棄を追加 (v.13.41.0)
     _viewModel.dispose();
     super.dispose();
   }
 
   // 初期データ設定（RouteSettingsからの引数受け取り含む）
-  // [修正] _qrDataList/_pageDataFutureへの直接代入をやめ、ViewModel.initialize()へ委譲 (v.13.41.0)
   void _initializeData() {
     // 遷移元から渡された引数をチェック
     final args = ModalRoute.of(context)?.settings.arguments;
@@ -91,7 +86,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     _viewModel.initialize(initialQrDataList, initialIndex);
   }
 
-  // [修正] ViewModel.refreshData()へ処理を委譲し、結果メッセージをSnackBar表示する (v.13.41.0)
   Future<void> _handleRefresh() async {
     final result = await _viewModel.refreshData();
     if (mounted) {
@@ -116,7 +110,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     }
   }
 
-  // [修正] ViewModel.importReviewsFromCsv()へ処理を委譲し、競合解決ダイアログはコールバックとして渡す (v.13.41.0)
   Future<void> _importReviewsFromCsv() async {
     final result = await _viewModel.importReviewsFromCsv(_resolveConflictDialog);
     if (mounted && result.message.isNotEmpty) {
@@ -178,7 +171,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
   }
 
   Future<void> _showMemoDialog(HorseResult horse) async {
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.41.0)
     final userId = UserSession().localUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -297,7 +289,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     reviewMemo: finalMemo, // 結合したメモを保存
                     timestamp: DateTime.now(),
                   );
-                  // [修正] ViewModel.saveHorseMemo()へ保存処理を委譲 (v.13.41.0)
                   await _viewModel.saveHorseMemo(newMemo);
                   if (context.mounted) {
                     Navigator.of(context).pop();
@@ -312,7 +303,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  // [修正] FutureBuilderをListenableBuilderに置き換え、ViewModelの状態を監視する (v.13.41.0)
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -395,7 +385,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  // [修正] 収支計算・的中判定をViewModelのgetter経由で取得するよう変更 (v.13.41.0)
   Widget _buildTicketPageView(List<Map<String, dynamic>> parsedTickets, RaceResult? raceResult) {
     // 現在のチケットの収支計算
     final currentHitResult = _viewModel.currentHitResult;
@@ -416,7 +405,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
             controller: _ticketPageController,
             itemCount: parsedTickets.length,
             onPageChanged: (index) {
-              // [修正] setStateの代わりにViewModelへインデックス更新を委譲 (v.13.41.0)
               _viewModel.setCurrentTicketIndex(index);
             },
             itemBuilder: (context, index) {
@@ -642,7 +630,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton(
-                      // [修正] ViewModel.exportReviewsAsCsv()を直接呼び出すよう変更 (v.13.41.0)
                       onPressed: () => _viewModel.exportReviewsAsCsv(),
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
@@ -710,7 +697,6 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  // [修正] 引数からuserCombinationsByTypeを除去し、ViewModelのgetterから取得するよう変更 (v.13.41.0)
   Widget _buildRefundsCard(RaceResult raceResult) {
     final userCombinationsByType = _viewModel.userCombinationsByType;
 

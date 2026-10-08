@@ -30,7 +30,6 @@ class DbConstants {
   static const String tableTrainingTimes = 'training_times';
   // 統合レーステーブル
   static const String tableIntegratedRaces = 'integrated_races';
-  // [追加] シミュレーション用馬パラメータテーブル (v.13.43.0)
   static const String tableHorseSimulationParams = 'horse_simulation_params';
   // [追加] スピード指数保存用テーブル (v.2026.7.28+26072811)
   static const String tableHorseSpeedIndex = 'horse_speed_index';

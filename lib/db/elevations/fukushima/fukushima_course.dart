@@ -1,4 +1,3 @@
-// [追加] 福島競馬場 レース距離別データ (v.1.0)
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 import 'package:hetaumakeiba_v2/db/elevations/fukushima/fukushima_base.dart';
 

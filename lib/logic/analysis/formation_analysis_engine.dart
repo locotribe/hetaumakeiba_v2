@@ -7,7 +7,6 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 class FormationAnalysisEngine {
 
   /// 分析実行
-  // [修正] 引数から totalBudget を削除 (v.2.0)
   FormationAnalysisResult analyze({
     required List<RaceResult> pastRaces,
     required List<PredictionHorseDetail> currentHorses,
@@ -44,7 +43,6 @@ class FormationAnalysisEngine {
 
     // 3. 有効馬フィルタリング
     final Map<int, String> validHorseMap = {};
-    // [削除] chaosHorseNames の抽出ロジックを削除 (v.2.0)
 
     for (final horse in currentHorses) {
       int p = int.tryParse(horse.popularity?.toString() ?? '') ?? 0;
@@ -152,8 +150,6 @@ class FormationAnalysisEngine {
     }
 
     // 5. 点数計算
-    // [削除] 買い目の実体生成ループと資金配分ロジックを完全に削除 (v.2.0)
-    // [修正] 推定点数(estimatedPoints)のみを数学的に算出するロジックに変更 (v.2.0)
     int estimatedPts = 0;
 
     if (betType == "3連単") {
@@ -255,8 +251,6 @@ class FormationAnalysisEngine {
       }
     }
   }
-
-// [削除] _calcPlaceWeight, _allocateBudget ヘルパーメソッドを削除 (v.2.0)
 }
 
 class _PopScore {

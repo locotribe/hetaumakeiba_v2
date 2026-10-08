@@ -359,7 +359,6 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
     return _detailRow(label, "${(winRate * 100).toStringAsFixed(1)}% (${count.toInt()}走)");
   }
 
-  // [削除] 内部でのスコア閾値によるランク判定を全削除
   // [修正] 引数に `rankStr` を追加し、文字列に基づく色(Color)のマッピングのみを行う
   void _showScoreDetailsDialog(BuildContext context, {
     required String horseName,

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
-// [修正] main.dartのlocalUserIdグローバル変数からUserSessionサービスへ移行 (v.13.40.4)
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/screens/race_page.dart';
 import 'package:hetaumakeiba_v2/models/ticket_list_item.dart';
@@ -47,7 +46,6 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
       initialPage: _initialPage,
       viewportFraction: 0.33,
     );
-    // [削除] 起動時の自動再解析をやめ、タブ表示時のみ読み込むように変更 (v.2026.9.17+26091701)
   }
 
   @override
@@ -60,7 +58,6 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
     if (!mounted) return;
     setState(() { _isLoading = true; });
 
-    // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
     final userId = UserSession().localUserId;
     if (userId == null) {
       setState(() {
@@ -479,7 +476,6 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
                           ),
                         );
                         if (confirm == true) {
-                          // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
                           final userId = UserSession().localUserId;
                           if (userId != null) {
                             for (int id in _selectedTicketIds) {
@@ -516,7 +512,6 @@ class TabletSavedTicketsListPageState extends State<TabletSavedTicketsListPage> 
                         key: ValueKey('group_${group.first.raceId}_$index'),
                         direction: DismissDirection.endToStart,
                         onDismissed: (_) async {
-                          // [修正] UserSession経由でlocalUserIdを参照 (v.13.40.4)
                           final userId = UserSession().localUserId;
                           if (userId == null) return;
                           for (final item in group) {
