@@ -122,6 +122,10 @@ class RaceSimulationEngine {
   /// 少しずつ寄せ、前後に馬がいるレーンの手前で止める(馬を飛び越えない) (v.2026.10.9+26100906)
   static const double laneDriftProbeMeters = 0.25;
 
+  /// [追加] 展開シミュ骨格整理Step4 内ラチ側へ寄せるのは、ゲートを出た時点の横幅のうち、
+  /// 内側からこの割合の範囲に入るまで。0.5なら内側半分に入った馬はそれ以上寄らない (v.2026.10.10+26101002)
+  static const double laneDriftInnerShare = 0.5;
+
   /// [追加] 改善Phase6 累積の上り1mを何km相当の負荷とみなすかの係数。
   static const double climbToKmFactor = 0.15;
 
@@ -527,6 +531,9 @@ class RaceSimulationEngine {
     for (int h = 0; h < n; h++) {
       if (currentLanes[h] > laneOuterMax) laneOuterMax = currentLanes[h];
     }
+    // [追加] 展開シミュ骨格整理Step4 内側50%の境界のレーン。これより外にいる馬だけが内へ寄る (v.2026.10.10+26101002)
+    final double laneInnerTarget =
+        laneRailMin + (laneOuterMax - laneRailMin) * laneDriftInnerShare;
 
     for (int s = 0; s < sampleRefDistances.length; s++) {
       final refDistance = sampleRefDistances[s];
@@ -615,11 +622,19 @@ class RaceSimulationEngine {
             currentLanes: currentLanes,
             wantsToAdvance: wantsToAdvance,
             allowPushBack: !converging,
-            driftActive: distanceFromStart < driftPlan.endDistanceFromStart,
+            // [修正] 展開シミュ骨格整理Step4 直線で寄せ、コーナー通過中と最終直線では止める (v.2026.10.10+26101002)
+            driftActive: _isLaneDriftActive(
+              plan: driftPlan,
+              raceCourse: raceCourse,
+              distanceFromStart: distanceFromStart,
+              inFinalStraight: inFinalStraight,
+            ),
             driftDirection: driftPlan.direction,
             driftStepMeters:
                 laneDriftMetersPer100m * (snapshotIntervalMeters / 100.0),
             laneOuterMax: laneOuterMax,
+            // [追加] 展開シミュ骨格整理Step4 (v.2026.10.10+26101002)
+            laneInnerTarget: laneInnerTarget,
           );
         } else {
           _resolveFormationAtSample(
@@ -994,6 +1009,30 @@ class RaceSimulationEngine {
     }
   }
 
+  /// [追加] 展開シミュ骨格整理Step4 その地点で寄せを行うか。直線コース(外ラチ側へ寄せる)は
+  /// レース全体で寄せる。それ以外は、直線(スタート直後・引き込み線・向正面・コーナーとコーナーの
+  /// 間の直線)で寄せ、コーナー区間(名前が corner_ で始まる)の通過中と最終直線では寄せない。
+  /// コースデータが無いときは寄せの終点(距離の25%)まで寄せる (v.2026.10.10+26101002)
+  static bool _isLaneDriftActive({
+    required LaneDriftPlan plan,
+    required RaceCourseData? raceCourse,
+    required double distanceFromStart,
+    required bool inFinalStraight,
+  }) {
+    if (plan.direction == LaneDriftDirection.outward) return true;
+    if (raceCourse == null) {
+      return distanceFromStart < plan.endDistanceFromStart;
+    }
+    if (inFinalStraight) return false;
+    for (final section in raceCourse.sections) {
+      if (distanceFromStart >= section.startDistance &&
+          distanceFromStart < section.endDistance) {
+        return !section.name.startsWith('corner_');
+      }
+    }
+    return true;
+  }
+
   /// [追加] 展開シミュ骨格整理Step2 新方式の1サンプル地点の隊列整形。先頭の馬から順に置く。
   /// 寄せの終点の手前(driftActive)では、向き(内ラチ側/外ラチ側)へ最大 driftStepMeters だけ
   /// 寄る。laneDriftProbeMeters 刻みで確かめ、前後 horseLengthMeters 未満に馬がいるレーンの
@@ -1009,6 +1048,8 @@ class RaceSimulationEngine {
     required LaneDriftDirection driftDirection,
     required double driftStepMeters,
     required double laneOuterMax,
+    // [追加] 展開シミュ骨格整理Step4 内側50%の境界のレーン。内へ寄せるとき、これより内に入ったら止める (v.2026.10.10+26101002)
+    required double laneInnerTarget,
   }) {
     if (n == 0) return;
 
@@ -1029,6 +1070,8 @@ class RaceSimulationEngine {
         final bool inward = driftDirection == LaneDriftDirection.inward;
         double moved = 0.0;
         while (moved < driftStepMeters) {
+          // [追加] 展開シミュ骨格整理Step4 内側50%に入った馬はそれ以上内へ寄らない (v.2026.10.10+26101002)
+          if (inward && lane <= laneInnerTarget) break;
           final double remaining = driftStepMeters - moved;
           final double step = remaining < laneDriftProbeMeters
               ? remaining
