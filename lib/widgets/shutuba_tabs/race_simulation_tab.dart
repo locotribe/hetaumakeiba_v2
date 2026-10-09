@@ -14,6 +14,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
 // [追加] 展開シミュ一般論見直しStep2: 末脚の算出・ペース自動判定・実測定数 (v.2026.9.29+26092906)
 import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
+// [追加] 展開シミュ骨格整理Step3: 前に行く力(連続値) (v.2026.10.10+26101001)
+import 'package:hetaumakeiba_v2/logic/analysis/early_position_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/speed_index_calculator.dart';
@@ -74,6 +76,8 @@ class _CachedSimInputs {
   final Map<String, HorseJockeyFactor> jockeyFactorParams;
   // [追加] 展開シミュ一般論見直しStep2 割引き後の末脚(キーは馬番) (v.2026.9.29+26092906)
   final Map<String, HorseFinishKick> finishKickParams;
+  // [追加] 展開シミュ骨格整理Step3 前に行く力(キーは馬番) (v.2026.10.10+26101001)
+  final Map<String, HorseEarlyPosition> earlyPositionParams;
   // [追加] 展開シミュ一般論見直しStep2 面子から自動判定したペース(日本語ラベル) (v.2026.9.29+26092906)
   final String autoPace;
   final String? predictedPace;
@@ -103,6 +107,8 @@ class _CachedSimInputs {
     required this.jockeyFactorParams,
     // [追加] 展開シミュ一般論見直しStep2 (v.2026.9.29+26092906)
     required this.finishKickParams,
+    // [追加] 展開シミュ骨格整理Step3 (v.2026.10.10+26101001)
+    required this.earlyPositionParams,
     required this.autoPace,
     required this.predictedPace,
     required this.trackConditionText,
@@ -531,6 +537,18 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
           RaceFinishCalculator.calculateKick(
               allPastRecords[horse.horseId] ?? const []);
     }
+    // [追加] 展開シミュ骨格整理Step3 過去走の最初のコーナーの通過順位率から前に行く力を求める。
+    // 過去走が少ない馬は脚質割合と混ぜる。DB追加取得はしない (v.2026.10.10+26101001)
+    final earlyPositionParams = <String, HorseEarlyPosition>{};
+    for (final horse in horsesForSim) {
+      earlyPositionParams[horse.horseNumber.toString()] =
+          EarlyPositionCalculator.calculate(
+        allPastRecords[horse.horseId] ?? const [],
+        styleDistribution: horse.legStyleProfile?.styleDistribution ??
+            const <String, double>{},
+        primaryStyle: horse.legStyleProfile?.primaryStyle,
+      );
+    }
     final autoPace = RaceFinishCalculator.paceLabel(
       RaceFinishCalculator.predictPace(
         styleDistributions: horsesForSim
@@ -561,6 +579,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       jockeyFactorParams: jockeyFactorParams,
       // [追加] 展開シミュ一般論見直しStep2 (v.2026.9.29+26092906)
       finishKickParams: finishKickParams,
+      // [追加] 展開シミュ骨格整理Step3 (v.2026.10.10+26101001)
+      earlyPositionParams: earlyPositionParams,
       autoPace: autoPace,
       predictedPace: widget.predictionRaceData.racePacePrediction?.predictedPace,
       trackConditionText: widget.predictionRaceData.trackCondition,
@@ -631,6 +651,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       jockeyFactorParams: cached.jockeyFactorParams,
       // [追加] 展開シミュ一般論見直しStep2 選択中のペースと馬場から実測定数を引いて渡す (v.2026.9.29+26092906)
       finishKickParams: cached.finishKickParams,
+      // [追加] 展開シミュ骨格整理Step3 (v.2026.10.10+26101001)
+      earlyPositionParams: cached.earlyPositionParams,
       // [修正] 展開シミュ一般論見直しStep4 定数を今回の距離帯でも引く (v.2026.9.29+26092907)
       finishConstants: RaceFinishCalculator.constantsFor(
         cached.isDirt ? SimSurface.dirt : SimSurface.turf,

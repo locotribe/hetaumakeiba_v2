@@ -7,6 +7,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
 // [追加] 展開シミュ骨格整理Step2: 内ラチ側への寄せの終点 (v.2026.10.9+26100906)
 import 'package:hetaumakeiba_v2/logic/analysis/inward_drift_end_resolver.dart';
+// [追加] 展開シミュ骨格整理Step3: 前に行く力(型のみ使用) (v.2026.10.10+26101001)
+import 'package:hetaumakeiba_v2/logic/analysis/early_position_calculator.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
@@ -161,6 +163,8 @@ class RaceSimulationEngine {
     // 非nullのとき、直線を新方式にし、馬群の広がりを実測の目標に合わせ、
     // 消耗補正を道中(d1〜d5)だけに限定する。nullなら従来どおり (v.2026.9.29+26092906)
     RaceFinishConstants? finishConstants,
+    // [追加] 展開シミュ骨格整理Step3 各馬の前に行く力。内部のsimulateRaceDevelopmentへ転送するのみ (v.2026.10.10+26101001)
+    Map<String, HorseEarlyPosition> earlyPositionParams = const {},
   }) async {
     if (horses.isEmpty || raceDistance <= 0) return null;
 
@@ -185,6 +189,8 @@ class RaceSimulationEngine {
       jockeyFactorParams: jockeyFactorParams,
       finishKickParams: finishKickParams,
       finishConstants: finishConstants,
+      // [追加] 展開シミュ骨格整理Step3 (v.2026.10.10+26101001)
+      earlyPositionParams: earlyPositionParams,
     );
 
     // 「ゴールからの絶対残距離」(d0=raceDistance→d6=0, 単調減少)

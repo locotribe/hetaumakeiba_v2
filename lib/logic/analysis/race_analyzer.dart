@@ -11,6 +11,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
 // [追加] 展開シミュ一般論見直しStep2: ゴールの着差の新方式(実測定数・末脚) (v.2026.9.29+26092906)
 import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
+// [追加] 展開シミュ骨格整理Step3: 前に行く力(連続値) (v.2026.10.10+26101001)
+import 'package:hetaumakeiba_v2/logic/analysis/early_position_calculator.dart';
 import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
 // [追加] 展開シミュ コースプリセット内外回り対応Step2: 内外回り込みのID候補 (v.2026.9.30+26093002)
 import 'package:hetaumakeiba_v2/logic/analysis/course_preset_id_resolver.dart';
@@ -341,12 +343,17 @@ class RaceAnalyzer {
       // **非nullのときだけ**直線を新方式(位置×残る割合＋末脚＋能力)で計算する。
       // nullなら従来どおりの直線処理を行い、既存の呼び出しの挙動は変わらない (v.2026.9.29+26092906)
       RaceFinishConstants? finishConstants,
+      // [追加] 展開シミュ骨格整理Step3 各馬の前に行く力(キーは馬番)。新方式でのみ初期位置に使う (v.2026.10.10+26101001)
+      Map<String, HorseEarlyPosition> earlyPositionParams = const {},
       }
       ) async {
     // [追加] フェーズ6 §1: speedFactorOverride省略時は従来の2定数をそのまま使う (v.2026.9.4)
     final double effectiveSpeedFactor4c = speedFactorOverride ?? _kSpeedFactor4c;
     final double effectiveSpeedFactorStraight =
         speedFactorOverride ?? _kSpeedFactorStraight;
+    // [追加] 展開シミュ骨格整理Step3 新方式(finishConstantsあり)では、骨格を「前に行く力・
+    // 3角のスタミナ・直線」だけにする。総合適性・テン加速・4角の補正は使わない (v.2026.10.10+26101001)
+    final bool useSkeletonModel = finishConstants != null;
     final CoursePresetRepository coursePresetRepo = CoursePresetRepository();
     final venueCode = venueCodeMap[raceData.venue];
     String trackType = '';
@@ -444,10 +451,20 @@ class RaceAnalyzer {
         }
       }
 
+      // [追加] 展開シミュ骨格整理Step3 新方式は、前に行く力(過去走の最初のコーナーの通過順位率から
+      // 作る連続値)をそのまま初期位置にする。脚質割合・2角通過率・旧騎手補正・コースの枠補正は使わない (v.2026.10.10+26101001)
+      final HorseEarlyPosition? earlyPosition =
+          earlyPositionParams[horse.horseNumber.toString()];
+      if (useSkeletonModel && earlyPosition != null) {
+        initialPositionScore = earlyPosition.score;
+      }
 
       // [追加] 総合適性(能力)を展開実行時にその場算出 (v.2026.7.25)
-      final abilityScore = AptitudeAnalyzer.calculateOverallAptitudeScore(
-          horse, raceData, pastRecords);
+      // [修正] 展開シミュ骨格整理Step3 新方式では総合適性を呼ばない(骨格から外す。ロジックは残す) (v.2026.10.10+26101001)
+      final abilityScore = useSkeletonModel
+          ? 0.0
+          : AptitudeAnalyzer.calculateOverallAptitudeScore(
+              horse, raceData, pastRecords);
 
       // [追加] クラス(相手関係)補正: 経験クラスと今回クラスの差でabilityScoreを増減 (v.2026.7.25+26072502)
       final currentClass = _estimateClassLevel('${raceData.raceGrade} ${raceData.raceDetails1 ?? ''}');
@@ -639,8 +656,11 @@ class RaceAnalyzer {
       for (final horse in simHorses) {
         final params = simulationParams[horse.detail.horseNumber.toString()];
         final tenAccel = params?.tenAccelIndex ?? 0.5;
-        // tenAccelIndex>0.5の馬はpositionScoreを下げて前進、<0.5は後退
-        horse.positionScore -= (tenAccel - 0.5) * 0.6;
+        // [修正] 展開シミュ骨格整理Step3 新方式では前に行く力に含まれるため使わない (v.2026.10.10+26101001)
+        if (!useSkeletonModel) {
+          // tenAccelIndex>0.5の馬はpositionScoreを下げて前進、<0.5は後退
+          horse.positionScore -= (tenAccel - 0.5) * 0.6;
+        }
       }
       simHorses.sort((a, b) => a.positionScore.compareTo(b.positionScore));
       development['1コーナー'] = _formatTairetsu(simHorses);
@@ -681,6 +701,9 @@ class RaceAnalyzer {
       // 前方グループ判定(上位1/3・切り上げ)に置き換える (v.2026.9.18+26091802)
       final int frontGroupCount = (simHorses.length / 3).ceil();
       for (int i = 0; i < simHorses.length; i++) {
+        // [追加] 展開シミュ骨格整理Step3 新方式では4角で位置を動かさない(終い項・粘り/垂れ・総合適性・
+        // スピード指数・斤量・ペース前後バイアスを使わない)。並べ直して記録するだけ (v.2026.10.10+26101001)
+        if (useSkeletonModel) continue;
         final horse = simHorses[i];
         final bool isFrontGroup = i < frontGroupCount;
         // ペースによる影響
@@ -801,8 +824,11 @@ class RaceAnalyzer {
         }
 
         // [追加] 能力反映: 直線でも能力差を反映 (v.2026.7.25)
-        final abilityDeltaLast = (horse.abilityScore - meanAbility) / 100.0;
-        horse.positionScore -= abilityDeltaLast * _kAbilityFactorLast;
+        // [修正] 展開シミュ骨格整理Step3 新方式では総合適性を使わない (v.2026.10.10+26101001)
+        if (!useSkeletonModel) {
+          final abilityDeltaLast = (horse.abilityScore - meanAbility) / 100.0;
+          horse.positionScore -= abilityDeltaLast * _kAbilityFactorLast;
+        }
 
         // [追加] 展開シミュ騎手要素Step2: 騎手の強さ・相性・乗り替わり方向の合計(最大約5m相当)を能力の層に加える。
         // positionBiasは加算する値(負=前進)。jockeyFactorParams未指定なら0で挙動不変 (v.2026.9.29+26092902)
