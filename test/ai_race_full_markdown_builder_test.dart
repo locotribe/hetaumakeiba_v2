@@ -126,6 +126,15 @@ void main() {
           isTrue);
     });
 
+    // [追加] AIファイル名整理: 依頼文の保存ファイル名がインポート用の .txt になっている (v.2026.10.10+26101006)
+    test('依頼ブロックの保存ファイル名がインポート用の .txt になっている', () {
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: _bundle(), grain: AiExportGrain.standard);
+      expect(md, contains('インポート総評_(レース名)_(日付)_(raceId).txt'));
+      expect(md, contains('インポート予想メモ_(レース名)_(日付)_(raceId).txt'));
+      expect(md, isNot(contains('```csv')));
+    });
+
     test('馬柱に過去走の馬体重・騎手・頭数の列が出る', () {
       final rec = HorseRaceRecord(
         horseId: 'h1',

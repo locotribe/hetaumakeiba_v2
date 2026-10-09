@@ -290,12 +290,13 @@ class RaceResultViewModel extends ChangeNotifier {
 
     final String csv = const ListToCsvConverter().convert(rows);
 
-    // [修正] CSVメモ入出力改善: ファイル名を「レースID_日付_レース名_回顧メモ.csv」にする (v.2026.9.24+26092401)
-    final fileName = buildMemoCsvFileName(
-      raceId: raceId,
-      raceDate: raceResult.raceDate,
+    // [修正] AIファイル名整理: ファイル名を「テンプレ回顧メモ_レース名_日付_レースID.csv」にする (v.2026.10.10+26101006)
+    final fileName = buildPrefixedFileName(
+      prefix: kFilePrefixReviewTemplate,
       raceName: raceResult.raceTitle,
-      suffix: '回顧メモ',
+      raceDate: raceResult.raceDate,
+      raceId: raceId,
+      extension: 'csv',
     );
 
     final directory = await getTemporaryDirectory();

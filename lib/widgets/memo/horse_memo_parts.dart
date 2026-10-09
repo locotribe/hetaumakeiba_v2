@@ -192,12 +192,13 @@ Future<void> exportMemosAsCsv({
 
   final String csv = const ListToCsvConverter().convert(rows);
 
-  // [修正] CSVメモ入出力改善: ファイル名を「レースID_日付_レース名_予想メモ.csv」にする (v.2026.9.24+26092401)
-  final fileName = buildMemoCsvFileName(
-    raceId: raceId,
-    raceDate: raceData.raceDate,
+  // [修正] AIファイル名整理: ファイル名を「テンプレ予想メモ_レース名_日付_レースID.csv」にする (v.2026.10.10+26101006)
+  final fileName = buildPrefixedFileName(
+    prefix: kFilePrefixPredictionTemplate,
     raceName: raceData.raceName,
-    suffix: '予想メモ',
+    raceDate: raceData.raceDate,
+    raceId: raceId,
+    extension: 'csv',
   );
 
   final directory = await getTemporaryDirectory();
@@ -275,17 +276,20 @@ Future<void> exportAiRaceDataAsMarkdown(
   }
   final csv = const ListToCsvConverter().convert(rows);
 
-  final mdName = buildMemoCsvFileName(
-    raceId: raceId,
-    raceDate: raceData.raceDate,
+  // [修正] AIファイル名整理: 「レースデータ_…_レースID.md」と「テンプレ予想メモ_…_レースID.csv」にする (v.2026.10.10+26101006)
+  final mdName = buildPrefixedFileName(
+    prefix: kFilePrefixRaceData,
     raceName: raceData.raceName,
-    suffix: 'AI分析データ',
-  ).replaceAll(RegExp(r'\.csv$'), '.md');
-  final csvName = buildMemoCsvFileName(
-    raceId: raceId,
     raceDate: raceData.raceDate,
+    raceId: raceId,
+    extension: 'md',
+  );
+  final csvName = buildPrefixedFileName(
+    prefix: kFilePrefixPredictionTemplate,
     raceName: raceData.raceName,
-    suffix: '予想メモ',
+    raceDate: raceData.raceDate,
+    raceId: raceId,
+    extension: 'csv',
   );
 
   final directory = await getTemporaryDirectory();
