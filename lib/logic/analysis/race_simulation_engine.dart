@@ -122,8 +122,9 @@ class RaceSimulationEngine {
   /// 少しずつ寄せ、前後に馬がいるレーンの手前で止める(馬を飛び越えない) (v.2026.10.9+26100906)
   static const double laneDriftProbeMeters = 0.25;
 
-  /// [追加] 展開シミュ骨格整理Step4 内ラチ側へ寄せるのは、ゲートを出た時点の横幅のうち、
-  /// 内側からこの割合の範囲に入るまで。0.5なら内側半分に入った馬はそれ以上寄らない (v.2026.10.10+26101002)
+  /// [修正] 展開シミュ骨格整理Step5 内ラチ側への寄せは、馬群全体(いちばん外の馬まで)が
+  /// ゲートを出た時点の横幅のうち内側からこの割合の範囲に収まるまで続ける。
+  /// 0.5なら馬群全体が内側半分に収まった時点で、全馬の寄せを止める (v.2026.10.10+26101003)
   static const double laneDriftInnerShare = 0.5;
 
   /// [追加] 改善Phase6 累積の上り1mを何km相当の負荷とみなすかの係数。
@@ -531,9 +532,11 @@ class RaceSimulationEngine {
     for (int h = 0; h < n; h++) {
       if (currentLanes[h] > laneOuterMax) laneOuterMax = currentLanes[h];
     }
-    // [追加] 展開シミュ骨格整理Step4 内側50%の境界のレーン。これより外にいる馬だけが内へ寄る (v.2026.10.10+26101002)
+    // [修正] 展開シミュ骨格整理Step5 内側50%の境界のレーン。馬群全体がこれより内に収まったら、
+    // 以後は全馬の寄せを止める(一度収まったら再開しない) (v.2026.10.10+26101003)
     final double laneInnerTarget =
         laneRailMin + (laneOuterMax - laneRailMin) * laneDriftInnerShare;
+    bool laneFieldGathered = false;
 
     for (int s = 0; s < sampleRefDistances.length; s++) {
       final refDistance = sampleRefDistances[s];
@@ -616,6 +619,18 @@ class RaceSimulationEngine {
 
         // [修正] 展開シミュ骨格整理Step2 新方式は、寄せの終点までだけ寄せる整形を使う (v.2026.10.9+26100906)
         if (scoreBasedLayout) {
+          // [追加] 展開シミュ骨格整理Step5 内ラチ側へ寄せるコースでは、馬群全体(いちばん外の馬まで)が
+          // 内側50%に収まったら、以後は全馬の寄せを止める (v.2026.10.10+26101003)
+          if (!laneFieldGathered &&
+              driftPlan.direction == LaneDriftDirection.inward) {
+            double outermostLane = laneRailMin;
+            for (int h = 0; h < n; h++) {
+              if (currentLanes[h] > outermostLane) {
+                outermostLane = currentLanes[h];
+              }
+            }
+            if (outermostLane <= laneInnerTarget) laneFieldGathered = true;
+          }
           _resolveFormationScoreBased(
             n: n,
             currentGaps: currentGaps,
@@ -623,18 +638,18 @@ class RaceSimulationEngine {
             wantsToAdvance: wantsToAdvance,
             allowPushBack: !converging,
             // [修正] 展開シミュ骨格整理Step4 直線で寄せ、コーナー通過中と最終直線では止める (v.2026.10.10+26101002)
-            driftActive: _isLaneDriftActive(
-              plan: driftPlan,
-              raceCourse: raceCourse,
-              distanceFromStart: distanceFromStart,
-              inFinalStraight: inFinalStraight,
-            ),
+            // [修正] 展開シミュ骨格整理Step5 馬群全体が内側50%に収まった後は寄せない (v.2026.10.10+26101003)
+            driftActive: !laneFieldGathered &&
+                _isLaneDriftActive(
+                  plan: driftPlan,
+                  raceCourse: raceCourse,
+                  distanceFromStart: distanceFromStart,
+                  inFinalStraight: inFinalStraight,
+                ),
             driftDirection: driftPlan.direction,
             driftStepMeters:
                 laneDriftMetersPer100m * (snapshotIntervalMeters / 100.0),
             laneOuterMax: laneOuterMax,
-            // [追加] 展開シミュ骨格整理Step4 (v.2026.10.10+26101002)
-            laneInnerTarget: laneInnerTarget,
           );
         } else {
           _resolveFormationAtSample(
@@ -1048,8 +1063,6 @@ class RaceSimulationEngine {
     required LaneDriftDirection driftDirection,
     required double driftStepMeters,
     required double laneOuterMax,
-    // [追加] 展開シミュ骨格整理Step4 内側50%の境界のレーン。内へ寄せるとき、これより内に入ったら止める (v.2026.10.10+26101002)
-    required double laneInnerTarget,
   }) {
     if (n == 0) return;
 
@@ -1070,8 +1083,6 @@ class RaceSimulationEngine {
         final bool inward = driftDirection == LaneDriftDirection.inward;
         double moved = 0.0;
         while (moved < driftStepMeters) {
-          // [追加] 展開シミュ骨格整理Step4 内側50%に入った馬はそれ以上内へ寄らない (v.2026.10.10+26101002)
-          if (inward && lane <= laneInnerTarget) break;
           final double remaining = driftStepMeters - moved;
           final double step = remaining < laneDriftProbeMeters
               ? remaining
