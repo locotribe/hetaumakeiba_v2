@@ -42,8 +42,6 @@ class RaceSimulationLayer2Painter extends CustomPainter {
   // 走路の幅を実寸より広く描くのは競馬中継や俯瞰図でも一般的な表現。
   // 内外の位置関係そのものは変わらない (v.2026.9.18+26091802)
   static const double lateralExaggeration = 2.0;
-  // [追加] 候補A: 4コーナー入口→ゴールの一体化展開係数。finishingPower×外側度合いで広がり量が決まる (v2026.6.25)
-  static const double _finalSpreadFactor = 0.20;
 
   const RaceSimulationLayer2Painter({
     required this.coords,
@@ -150,43 +148,16 @@ class RaceSimulationLayer2Painter extends CustomPainter {
     final sortedForDraw = List<RaceSimFrame>.from(frames)
       ..sort((a, b) => b.laneRank.compareTo(a.laneRank));
 
-    // [追加] 候補A: 4コーナー入口→ゴールの一体化スムーズ展開 (v2026.6.25)
-    final corner4StartDfg = raceCourse != null
-        ? _corner4StartDfg(raceCourse!.sections, raceDistance)
-        : null;
-
+    // [削除] 展開シミュ骨格整理Step6 4コーナー入口からゴールにかけて外へ広げる見た目だけの処理
+    // (終い瞬発力で広がり量を決めていた)を外し、エンジンが当たり判定済みのレーンだけで描く (v.2026.10.10+26101004)
     for (final frame in sortedForDraw) {
       final screenX = screenXByHorse[frame.horseNumber]!;
       final laneFromInner = frame.laneRank - minLaneRank;
 
-      // 4コーナー入口→ゴールを一体のプログレスで外側に広げる。
-      // 遠心力で徐々に外に振られ、直線でも広がり続ける自然な流れを実現する。
-      double spreadOffset = 0.0;
-      if (corner4StartDfg != null &&
-          corner4StartDfg > 0 &&
-          frame.distanceFromGoal <= corner4StartDfg) {
-        final fp = simulationParams[frame.horseNumber]?.finishingPower ?? 0.5;
-        final progress =
-            (1.0 - frame.distanceFromGoal / corner4StartDfg).clamp(0.0, 1.0);
-        spreadOffset = laneFromInner * fp * progress * _finalSpreadFactor;
-      }
-
-      final screenY =
-          (topY + (laneFromInner + spreadOffset) * effectiveSpacingY)
-              .clamp(topY, bottomY);
+      final screenY = (topY + laneFromInner * effectiveSpacingY)
+          .clamp(topY, bottomY);
       _drawHorseMarker(canvas, Offset(screenX, screenY), frame);
     }
-  }
-
-  // [追加] 候補A: 最後のcorner_4入口のdistanceFromGoalを返す (v2026.6.25)
-  static double? _corner4StartDfg(
-      List<CourseSection> sections, double raceDistance) {
-    double? lastCorner4Start;
-    for (final sec in sections) {
-      if (sec.name == 'corner_4') lastCorner4Start = sec.startDistance;
-    }
-    if (lastCorner4Start == null) return null;
-    return raceDistance - lastCorner4Start;
   }
 
   void _drawHorseMarker(Canvas canvas, Offset pos, RaceSimFrame frame) {

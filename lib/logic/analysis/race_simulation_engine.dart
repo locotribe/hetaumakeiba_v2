@@ -517,6 +517,8 @@ class RaceSimulationEngine {
     final currentGaps = List<double>.filled(n, 0.0);
     final targetGaps = List<double>.filled(n, 0.0);
     final wantsToAdvance = List<bool>.filled(n, false);
+    // [追加] 展開シミュ骨格整理Step6 新方式の追い越し判定用。前の地点(当たり判定後)の各馬の遅れ (v.2026.10.10+26101004)
+    final passPreviousGaps = List<double>.filled(n, 0.0);
     final previousDistances = List<double>.filled(n, double.infinity);
     final snapshotsByHorse =
         List<List<RaceSimSnapshot>>.generate(n, (_) => <RaceSimSnapshot>[]);
@@ -584,6 +586,8 @@ class RaceSimulationEngine {
         if (scoreBasedLayout) {
           wantsToAdvance[h] =
               currentGaps[h] - targetGaps[h] >= gainThresholdMeters;
+          // [追加] 展開シミュ骨格整理Step6 追い越し判定のため、置き換える前の遅れを残す (v.2026.10.10+26101004)
+          passPreviousGaps[h] = currentGaps[h];
           currentGaps[h] = targetGaps[h];
           continue;
         }
@@ -650,6 +654,8 @@ class RaceSimulationEngine {
             driftStepMeters:
                 laneDriftMetersPer100m * (snapshotIntervalMeters / 100.0),
             laneOuterMax: laneOuterMax,
+            // [追加] 展開シミュ骨格整理Step6 (v.2026.10.10+26101004)
+            previousGaps: passPreviousGaps,
           );
         } else {
           _resolveFormationAtSample(
@@ -1063,6 +1069,8 @@ class RaceSimulationEngine {
     required LaneDriftDirection driftDirection,
     required double driftStepMeters,
     required double laneOuterMax,
+    // [追加] 展開シミュ骨格整理Step6 前の地点(当たり判定後)の各馬の遅れ。追い越しの判定に使う (v.2026.10.10+26101004)
+    required List<double> previousGaps,
   }) {
     if (n == 0) return;
 
@@ -1101,6 +1109,23 @@ class RaceSimulationEngine {
         }
       }
 
+      // [追加] 展開シミュ骨格整理Step6 追い越し: 前の地点では自分より前にいた同じレーンの馬を、
+      // この地点で抜く場合は、抜く前に内外のうち空いている方へ1レーン移る。
+      // 同じレーンのまま馬が馬をすり抜けて見えるのを防ぐ (v.2026.10.10+26101004)
+      for (int q = 0; q < n; q++) {
+        if (q == h) continue;
+        final bool passing =
+            previousGaps[q] < previousGaps[h] && currentGaps[q] > gap;
+        if (!passing) continue;
+        if ((currentLanes[q] - lane).abs() >= sideBySideLaneGap) continue;
+        lane = _passingLane(
+          blockerLane: currentLanes[q],
+          gap: gap,
+          placedLanes: placedLanes,
+          placedGaps: placedGaps,
+        );
+      }
+
       // 2) 今のレーンで前が詰まっている場合だけ解決する
       for (int attempt = 0; attempt < 16; attempt++) {
         final conflict = _findConflictIndex(
@@ -1130,6 +1155,52 @@ class RaceSimulationEngine {
       placedLanes.add(lane);
       placedGaps.add(gap);
     }
+  }
+
+  /// [追加] 展開シミュ骨格整理Step6 追い越すときに移るレーンを返す。抜かれる馬の1レーン内側と
+  /// 1レーン外側のうち、配置済みの馬と当たらない方を選ぶ。両方空いていれば、前後の空きが広い方
+  /// (同じなら外側)。内側が最内より内になる・当たる場合は外側 (v.2026.10.10+26101004)
+  static double _passingLane({
+    required double blockerLane,
+    required double gap,
+    required List<double> placedLanes,
+    required List<double> placedGaps,
+  }) {
+    final double inner = blockerLane - sideBySideLaneGap;
+    final double outer = blockerLane + sideBySideLaneGap;
+    final bool innerFree = inner >= laneRailMin &&
+        _findConflictIndex(
+                inner, gap, placedLanes, placedGaps, horseLengthMeters) <
+            0;
+    final bool outerFree = _findConflictIndex(
+            outer, gap, placedLanes, placedGaps, horseLengthMeters) <
+        0;
+    if (innerFree && outerFree) {
+      return _laneRoom(inner, gap, placedLanes, placedGaps) >
+              _laneRoom(outer, gap, placedLanes, placedGaps)
+          ? inner
+          : outer;
+    }
+    if (innerFree) return inner;
+    return outer;
+  }
+
+  /// [追加] 展開シミュ骨格整理Step6 そのレーン(横の差が sideBySideLaneGap 未満)にいる配置済みの馬との
+  /// 前後の最小距離(m)。そのレーンに馬がいなければ double.infinity (v.2026.10.10+26101004)
+  static double _laneRoom(
+    double lane,
+    double gap,
+    List<double> placedLanes,
+    List<double> placedGaps,
+  ) {
+    double room = double.infinity;
+    for (int p = 0; p < placedLanes.length; p++) {
+      if ((lane - placedLanes[p]).abs() < sideBySideLaneGap) {
+        final double distance = (gap - placedGaps[p]).abs();
+        if (distance < room) room = distance;
+      }
+    }
+    return room;
   }
 
   /// [追加] 改善Phase10 配置済みの馬と重なるかを判定する。
