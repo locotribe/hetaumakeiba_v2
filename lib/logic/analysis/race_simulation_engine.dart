@@ -5,6 +5,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
 // [追加] 展開シミュ一般論見直しStep2: ゴールの着差の新方式(実測定数・末脚・広がりの倍率) (v.2026.9.29+26092906)
 import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
+// [追加] 展開シミュ骨格整理Step2: 内ラチ側への寄せの終点 (v.2026.10.9+26100906)
+import 'package:hetaumakeiba_v2/logic/analysis/inward_drift_end_resolver.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
@@ -109,6 +111,14 @@ class RaceSimulationEngine {
 
   /// [追加] 改善Phase6 ペース圧(前にいる馬の消耗)の強さ(m / km)。
   static const double paceMeterFactor = 10.0;
+
+  /// [追加] 展開シミュ骨格整理Step2 寄せの終点までに、100mあたり内ラチ側(直線コースは
+  /// 外ラチ側)へ寄る最大量(m=レーン)。全馬同じ量。正解の無い値のため、実機を見て調整する (v.2026.10.9+26100906)
+  static const double laneDriftMetersPer100m = 3.0;
+
+  /// [追加] 展開シミュ骨格整理Step2 寄せるときに1回で確かめる横の刻み(m)。この刻みで
+  /// 少しずつ寄せ、前後に馬がいるレーンの手前で止める(馬を飛び越えない) (v.2026.10.9+26100906)
+  static const double laneDriftProbeMeters = 0.25;
 
   /// [追加] 改善Phase6 累積の上り1mを何km相当の負荷とみなすかの係数。
   static const double climbToKmFactor = 0.15;
@@ -352,9 +362,9 @@ class RaceSimulationEngine {
     final cumulativeClimbs =
         _cumulativeClimbAtKeyframes(raceCourse, distances, raceDistance);
 
-    // [修正] 展開シミュ一般論見直しStep2 新方式では、ゴールでの消耗は「残る割合」に
-    // 含まれているため二重になる。消耗補正は道中(d1〜d5)にだけ掛ける (v.2026.9.29+26092906)
-    final int fatigueEndIndex = finishConstants != null ? 6 : 7;
+    // [修正] 展開シミュ骨格整理Step2 新方式では消耗補正を使わない(位置はスコアどおり)。
+    // ループを1回も回さないよう終わりの番号を1にする。旧方式は従来どおり (v.2026.10.9+26100906)
+    final int fatigueEndIndex = finishConstants != null ? 1 : 7;
     for (int i = 1; i < fatigueEndIndex; i++) {
       final travelled = raceDistance - distances[i];
       if (travelled <= 0) continue;
@@ -500,6 +510,18 @@ class RaceSimulationEngine {
     final snapshotsByHorse =
         List<List<RaceSimSnapshot>>.generate(n, (_) => <RaceSimSnapshot>[]);
 
+    // [追加] 展開シミュ骨格整理Step2 新方式では、位置をスコアどおりに置き、寄せの終点まで
+    // 内ラチ側(直線コースは外ラチ側)へ寄せる。外ラチ側の上限はゲートのいちばん外のレーン (v.2026.10.9+26100906)
+    final bool scoreBasedLayout = finishConstants != null;
+    final LaneDriftPlan driftPlan = InwardDriftEndResolver.resolve(
+      raceCourse,
+      raceDistance: raceDistance,
+    );
+    double laneOuterMax = laneRailMin;
+    for (int h = 0; h < n; h++) {
+      if (currentLanes[h] > laneOuterMax) laneOuterMax = currentLanes[h];
+    }
+
     for (int s = 0; s < sampleRefDistances.length; s++) {
       final refDistance = sampleRefDistances[s];
 
@@ -540,6 +562,16 @@ class RaceSimulationEngine {
       }
 
       for (int h = 0; h < n; h++) {
+        // [追加] 展開シミュ骨格整理Step2 新方式は動きの制限をかけず、目標の遅れ(キーフレーム間を
+        // なめらかにつないだスコアどおりの位置)をそのまま使う。進出中かどうかは、
+        // 前の地点からの遅れの縮み量で決める (v.2026.10.9+26100906)
+        if (scoreBasedLayout) {
+          wantsToAdvance[h] =
+              currentGaps[h] - targetGaps[h] >= gainThresholdMeters;
+          currentGaps[h] = targetGaps[h];
+          continue;
+        }
+
         final targetRatio =
             targetSpread > 0.0 ? targetGaps[h] / targetSpread : 0.0;
         final currentRatio =
@@ -569,16 +601,32 @@ class RaceSimulationEngine {
         final bool inFinalStraight = finalStraightStart != null &&
             distanceFromStart >= finalStraightStart;
 
-        _resolveFormationAtSample(
-          n: n,
-          horses: horses,
-          simulationParams: simulationParams,
-          currentGaps: currentGaps,
-          currentLanes: currentLanes,
-          wantsToAdvance: wantsToAdvance,
-          allowPushBack: !converging,
-          allowInward: !inFinalStraight,
-        );
+        // [修正] 展開シミュ骨格整理Step2 新方式は、寄せの終点までだけ寄せる整形を使う (v.2026.10.9+26100906)
+        if (scoreBasedLayout) {
+          _resolveFormationScoreBased(
+            n: n,
+            currentGaps: currentGaps,
+            currentLanes: currentLanes,
+            wantsToAdvance: wantsToAdvance,
+            allowPushBack: !converging,
+            driftActive: distanceFromStart < driftPlan.endDistanceFromStart,
+            driftDirection: driftPlan.direction,
+            driftStepMeters:
+                laneDriftMetersPer100m * (snapshotIntervalMeters / 100.0),
+            laneOuterMax: laneOuterMax,
+          );
+        } else {
+          _resolveFormationAtSample(
+            n: n,
+            horses: horses,
+            simulationParams: simulationParams,
+            currentGaps: currentGaps,
+            currentLanes: currentLanes,
+            wantsToAdvance: wantsToAdvance,
+            allowPushBack: !converging,
+            allowInward: !inFinalStraight,
+          );
+        }
       }
 
       for (int h = 0; h < n; h++) {
@@ -921,6 +969,90 @@ class RaceSimulationEngine {
 
         if (wantsToAdvance[h] && outerCandidate <= laneCeilings[h]) {
           // 進出中の馬は外へ持ち出して抜く(まくり・進出)
+          lane = outerCandidate;
+          continue;
+        }
+        if (allowPushBack) {
+          // 同じレーンの後ろに並ぶ(自分が後方なので自分が下がる)
+          gap = blockerGap + horseLengthMeters;
+          continue;
+        }
+        // ゴール前は下げずに横へ逃がす
+        lane = outerCandidate;
+      }
+
+      currentLanes[h] = lane;
+      currentGaps[h] = gap;
+      placedLanes.add(lane);
+      placedGaps.add(gap);
+    }
+  }
+
+  /// [追加] 展開シミュ骨格整理Step2 新方式の1サンプル地点の隊列整形。先頭の馬から順に置く。
+  /// 寄せの終点の手前(driftActive)では、向き(内ラチ側/外ラチ側)へ最大 driftStepMeters だけ
+  /// 寄る。laneDriftProbeMeters 刻みで確かめ、前後 horseLengthMeters 未満に馬がいるレーンの
+  /// 手前で止める(馬を飛び越えない)。寄れなかった馬は縦に進むだけで、次の地点でまた試す。
+  /// 前が詰まったときの処理は _resolveFormationAtSample と同じ (v.2026.10.9+26100906)
+  static void _resolveFormationScoreBased({
+    required int n,
+    required List<double> currentGaps,
+    required List<double> currentLanes,
+    required List<bool> wantsToAdvance,
+    required bool allowPushBack,
+    required bool driftActive,
+    required LaneDriftDirection driftDirection,
+    required double driftStepMeters,
+    required double laneOuterMax,
+  }) {
+    if (n == 0) return;
+
+    // 先頭(遅れが小さい馬)から順に置く
+    final order = List<int>.generate(n, (h) => h)
+      ..sort((a, b) => currentGaps[a].compareTo(currentGaps[b]));
+
+    final placedLanes = <double>[];
+    final placedGaps = <double>[];
+
+    for (final h in order) {
+      double lane = currentLanes[h];
+      double gap = currentGaps[h];
+      final double laneCeiling = lane + outwardStepPer100m;
+
+      // 1) 寄せの終点の手前では、向きへ少しずつ寄る
+      if (driftActive) {
+        final bool inward = driftDirection == LaneDriftDirection.inward;
+        double moved = 0.0;
+        while (moved < driftStepMeters) {
+          final double remaining = driftStepMeters - moved;
+          final double step = remaining < laneDriftProbeMeters
+              ? remaining
+              : laneDriftProbeMeters;
+          double candidate = inward ? lane - step : lane + step;
+          if (inward && candidate < laneRailMin) candidate = laneRailMin;
+          if (!inward && candidate > laneOuterMax) candidate = laneOuterMax;
+          if (candidate == lane) break;
+          if (_findConflictIndex(
+                  candidate, gap, placedLanes, placedGaps, horseLengthMeters) >=
+              0) {
+            break;
+          }
+          lane = candidate;
+          moved += step;
+        }
+      }
+
+      // 2) 今のレーンで前が詰まっている場合だけ解決する
+      for (int attempt = 0; attempt < 16; attempt++) {
+        final conflict = _findConflictIndex(
+            lane, gap, placedLanes, placedGaps, horseLengthMeters);
+        if (conflict < 0) break;
+
+        final blockerLane = placedLanes[conflict];
+        final blockerGap = placedGaps[conflict];
+        final outerCandidate = blockerLane + sideBySideLaneGap;
+
+        if (wantsToAdvance[h] && outerCandidate <= laneCeiling) {
+          // 進出中の馬は外へ持ち出して抜く
           lane = outerCandidate;
           continue;
         }
