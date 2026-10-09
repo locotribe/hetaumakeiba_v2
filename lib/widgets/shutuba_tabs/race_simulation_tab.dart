@@ -8,6 +8,8 @@ import 'package:hetaumakeiba_v2/db/repositories/horse_speed_index_repository.dar
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
+// [追加] 展開シミュ骨格整理Step7: 棒グラフ「スタ」に3角と同じスタミナを使う (v.2026.10.10+26101005)
+import 'package:hetaumakeiba_v2/logic/analysis/aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
@@ -78,6 +80,8 @@ class _CachedSimInputs {
   final Map<String, HorseFinishKick> finishKickParams;
   // [追加] 展開シミュ骨格整理Step3 前に行く力(キーは馬番) (v.2026.10.10+26101001)
   final Map<String, HorseEarlyPosition> earlyPositionParams;
+  // [追加] 展開シミュ骨格整理Step7 棒グラフの値(キーは馬番) (v.2026.10.10+26101005)
+  final Map<String, HorseSimBarValues> barValues;
   // [追加] 展開シミュ一般論見直しStep2 面子から自動判定したペース(日本語ラベル) (v.2026.9.29+26092906)
   final String autoPace;
   final String? predictedPace;
@@ -109,6 +113,8 @@ class _CachedSimInputs {
     required this.finishKickParams,
     // [追加] 展開シミュ骨格整理Step3 (v.2026.10.10+26101001)
     required this.earlyPositionParams,
+    // [追加] 展開シミュ骨格整理Step7 (v.2026.10.10+26101005)
+    required this.barValues,
     required this.autoPace,
     required this.predictedPace,
     required this.trackConditionText,
@@ -549,6 +555,24 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         primaryStyle: horse.legStyleProfile?.primaryStyle,
       );
     }
+    // [追加] 展開シミュ骨格整理Step7 棒グラフ「テン」「終い」「スタ」の値を、動きに使う値と同じものにする。
+    // テン=前に行く力 / 終い=0.5＋割引き後の末脚(秒) / スタ=3角で使うスタミナ÷100。いずれも0〜1に丸める (v.2026.10.10+26101005)
+    final barValues = <String, HorseSimBarValues>{};
+    for (final horse in horsesForSim) {
+      final key = horse.horseNumber.toString();
+      final double staminaScore = AptitudeAnalyzer.evaluateStaminaFit(
+        horse,
+        widget.predictionRaceData,
+        allPastRecords[horse.horseId] ?? const [],
+      );
+      barValues[key] = HorseSimBarValues(
+        ten: earlyPositionParams[key]?.barValue ?? 0.0,
+        kick: (0.5 + (finishKickParams[key]?.kickSeconds ?? 0.0))
+            .clamp(0.0, 1.0)
+            .toDouble(),
+        stamina: (staminaScore / 100.0).clamp(0.0, 1.0).toDouble(),
+      );
+    }
     final autoPace = RaceFinishCalculator.paceLabel(
       RaceFinishCalculator.predictPace(
         styleDistributions: horsesForSim
@@ -581,6 +605,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       finishKickParams: finishKickParams,
       // [追加] 展開シミュ骨格整理Step3 (v.2026.10.10+26101001)
       earlyPositionParams: earlyPositionParams,
+      // [追加] 展開シミュ骨格整理Step7 (v.2026.10.10+26101005)
+      barValues: barValues,
       autoPace: autoPace,
       predictedPace: widget.predictionRaceData.racePacePrediction?.predictedPace,
       trackConditionText: widget.predictionRaceData.trackCondition,
@@ -730,6 +756,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
                 horses: result.horses,
                 // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
                 jockeyFactorParams: result.jockeyFactorParams,
+                // [追加] 展開シミュ骨格整理Step7 (v.2026.10.10+26101005)
+                barValues: cached.barValues,
                 predictedPace: result.predictedPace,
                 trackConditionText: result.trackConditionText,
                 cushionValue: result.cushionValue,

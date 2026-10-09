@@ -19,6 +19,25 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_painter.dar
 // [修正] 0-9b-3 自由入力(manual)を廃止し実測/予測/過去平均の3種に (v.2026.7.27+26072707)
 enum TrackBiasSource { actual, predicted, trend }
 
+/// [追加] 展開シミュ骨格整理Step7 棒グラフ「テン」「終い」「スタ」の値(0.0〜1.0)。
+/// 動きに使う値と同じものを入れる (v.2026.10.10+26101005)
+class HorseSimBarValues {
+  /// テン: 前に行く力(前に行く馬ほど大きい)
+  final double ten;
+
+  /// 終い: 0.5 ＋ 割引き後の末脚(秒)を0〜1に丸めたもの(直線で伸びる馬ほど大きい)
+  final double kick;
+
+  /// スタ: 3角で使うスタミナ(evaluateStaminaFit ÷ 100)
+  final double stamina;
+
+  const HorseSimBarValues({
+    required this.ten,
+    required this.kick,
+    required this.stamina,
+  });
+}
+
 /// 展開予想アニメーションのデュアルビュー表示ウィジェット。
 ///
 /// 上部に全体俯瞰マップ（コース平面図＋先頭馬の光るドット）、
@@ -35,6 +54,8 @@ class RaceSimulationView extends StatefulWidget {
   final List<PredictionHorseDetail> horses;
   // [追加] 展開シミュ騎手要素Step3 騎手の強さ・相性・乗り替わり方向(キーは馬番) (v.2026.9.29+26092903)
   final Map<String, HorseJockeyFactor> jockeyFactorParams;
+  // [追加] 展開シミュ骨格整理Step7 棒グラフの値(キーは馬番)。空なら従来どおりの値で描く (v.2026.10.10+26101005)
+  final Map<String, HorseSimBarValues> barValues;
   // [追加] 0-9(b) 使用データカード表示用 (v.2026.7.27+26072703)
   final String? predictedPace;
   final String? trackConditionText;   // 馬場状態(良/稍重/重/不良)
@@ -65,6 +86,8 @@ class RaceSimulationView extends StatefulWidget {
     this.horses = const [],
     // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
     this.jockeyFactorParams = const {},
+    // [追加] 展開シミュ骨格整理Step7 (v.2026.10.10+26101005)
+    this.barValues = const {},
     this.predictedPace,
     this.trackConditionText,
     this.cushionValue,
@@ -507,7 +530,9 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
                   // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
                   final jockeyFactor =
                       widget.jockeyFactorParams[horse.horseNumber.toString()];
-                  return _buildStatusRow(horse, params, jockeyFactor);
+                  // [修正] 展開シミュ骨格整理Step7 棒の値を渡す (v.2026.10.10+26101005)
+                  return _buildStatusRow(horse, params, jockeyFactor,
+                      widget.barValues[horse.horseNumber.toString()]);
                 }),
                 // [追加] 展開シミュ騎手要素Step3: 騎手・相性の反映の強さと、乗替の印の意味 (v.2026.9.29+26092903)
                 const Padding(
@@ -566,7 +591,8 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
 
   Widget _buildStatusRow(
       PredictionHorseDetail horse, HorseSimulationParams? params,
-      [HorseJockeyFactor? jockeyFactor]) {
+      // [修正] 展開シミュ骨格整理Step7 棒の値を受け取る(無ければ従来どおり) (v.2026.10.10+26101005)
+      [HorseJockeyFactor? jockeyFactor, HorseSimBarValues? barValue]) {
     const numStyle =
         TextStyle(fontSize: 10, fontWeight: FontWeight.bold);
     const nameStyle = TextStyle(fontSize: 10);
@@ -590,15 +616,21 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
                   style: legStyleTextStyle, textAlign: TextAlign.center)),
           // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
           _buildRideMark(jockeyFactor),
+          // [修正] 展開シミュ骨格整理Step7 棒の値があれば、動きに使う値(テン=前に行く力・
+          // 終い=割引き後の末脚・スタ=3角のスタミナ)で描く (v.2026.10.10+26101005)
           Expanded(
               flex: 2,
-              child: _buildBar(params?.tenAccelIndex ?? 0, Colors.orange)),
+              child: _buildBar(
+                  barValue?.ten ?? params?.tenAccelIndex ?? 0, Colors.orange)),
           Expanded(
               flex: 2,
-              child: _buildBar(params?.finishingPower ?? 0, Colors.blue)),
+              child: _buildBar(
+                  barValue?.kick ?? params?.finishingPower ?? 0, Colors.blue)),
           Expanded(
               flex: 2,
-              child: _buildBar(params?.staminaIndex ?? 0, Colors.green)),
+              child: _buildBar(
+                  barValue?.stamina ?? params?.staminaIndex ?? 0,
+                  Colors.green)),
           // [追加] 展開シミュ騎手要素Step3: 騎手の強さ・相性の棒（統計なし・サンプル少は薄く表示） (v.2026.9.29+26092903)
           Expanded(
               flex: 2,
