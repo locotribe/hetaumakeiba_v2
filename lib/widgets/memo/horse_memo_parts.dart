@@ -333,9 +333,10 @@ Future<int?> importMemosFromCsv(
     final picked = result.files.single;
     final ext = (picked.extension ?? '').toLowerCase();
     final filePath = picked.path!;
-    if (ext != 'csv' && !filePath.toLowerCase().endsWith('.csv')) {
+    // [修正] AIファイル名整理: 取り込みはテキストファイル(.txt)だけにする。CSVの取り込みは廃止 (v.2026.10.10+26101007)
+    if (ext != 'txt' && !isTxtFileName(filePath)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('CSVファイルを選択してください。')),
+        const SnackBar(content: Text('テキストファイル（.txt）を選択してください。')),
       );
       return null;
     }
@@ -348,13 +349,14 @@ Future<int?> importMemosFromCsv(
     final List<List<dynamic>> rows =
         const CsvToListConverter(eol: '\n').convert(csvString);
 
+    // [修正] AIファイル名整理: エラーの案内からCSVを外し、取り込むファイル名を示す (v.2026.10.10+26101007)
     if (rows.length < 2) {
-      throw Exception('CSVファイルにデータがありません。');
+      throw Exception('ファイルにデータがありません。');
     }
     // [修正] CSVメモ入出力改善: 予想メモCSV専用のヘッダー。回顧メモCSVや旧形式は弾く (v.2026.9.24+26092401)
     final header = rows.first.map((e) => e.toString().trim()).toList();
     if (header.join(',') != 'raceId,horseId,horseNumber,horseName,predictionMemo') {
-      throw Exception('予想メモ用のCSVを選択してください。（回顧メモCSVや旧形式は取り込めません）');
+      throw Exception('予想メモ用のファイル（インポート予想メモ_….txt）を選択してください。（回顧メモや総評のファイルは取り込めません）');
     }
 
     // [修正] CSVメモ入出力改善: 既存メモを取得し、回顧メモ・odds・人気・idを保持したまま予想メモだけ更新する (v.2026.9.24+26092401)
@@ -368,7 +370,7 @@ Future<int?> importMemosFromCsv(
       final csvRaceId = row[0].toString();
 
       if (csvRaceId != raceId) {
-        throw Exception('CSVファイルのレースIDが、現在表示しているレースと一致しません。');
+        throw Exception('ファイルのレースIDが、現在表示しているレースと一致しません。');
       }
 
       final horseId = row[1].toString();

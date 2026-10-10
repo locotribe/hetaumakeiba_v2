@@ -27,6 +27,7 @@ import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart';
+import 'package:hetaumakeiba_v2/logic/ai_export/citation_sanitizer.dart'; // [追加] AIファイル名整理: 回顧メモの引用記号除去 (v.2026.10.10+26101007)
 
 /// 画面表示に必要な各種データ（馬券・レース結果・展開予測）をまとめて保持するクラス
 class PageData {
@@ -327,20 +328,23 @@ class RaceResultViewModel extends ChangeNotifier {
       final picked = result.files.single;
       final ext = (picked.extension ?? '').toLowerCase();
       final filePath = picked.path!;
-      if (ext != 'csv' && !filePath.toLowerCase().endsWith('.csv')) {
-        return const ImportCsvResult(success: false, message: 'CSVファイルを選択してください。');
+      // [修正] AIファイル名整理: 取り込みはテキストファイル(.txt)だけにする。CSVの取り込みは廃止 (v.2026.10.10+26101007)
+      if (ext != 'txt' && !isTxtFileName(filePath)) {
+        return const ImportCsvResult(success: false, message: 'テキストファイル（.txt）を選択してください。');
       }
 
       final file = File(filePath);
-      final csvString = await file.readAsString();
-      final List<List<dynamic>> rows = const CsvToListConverter().convert(csvString);
+      // [修正] AIファイル名整理: AIが出力したテキストの表記揺れ(BOM/改行LF/見出し/コードフェンス)を吸収してからLF区切りで読む (v.2026.10.10+26101007)
+      final csvString = normalizeImportedReviewCsv(await file.readAsString());
+      final List<List<dynamic>> rows = const CsvToListConverter(eol: '\n').convert(csvString);
 
       if (rows.length < 2) throw Exception('データがありません');
 
       // [修正] CSVメモ入出力改善: 回顧メモCSV専用のヘッダー。予想メモCSVや旧形式は弾く (v.2026.9.24+26092401)
       final header = rows.first.map((e) => e.toString().trim()).toList();
       if (header.join(',') != 'raceId,horseId,horseNumber,horseName,reviewMemo,raceMemo') {
-        throw Exception('回顧メモ用のCSVを選択してください。（予想メモCSVや旧形式は取り込めません）');
+        // [修正] AIファイル名整理: エラーの案内からCSVを外し、取り込むファイル名を示す (v.2026.10.10+26101007)
+        throw Exception('回顧メモ用のファイル（インポート回顧メモ_….txt）を選択してください。（予想メモや総評のファイルは取り込めません）');
       }
 
       final raceTitle = pageData?.raceResult?.raceTitle ?? '';
@@ -364,7 +368,8 @@ class RaceResultViewModel extends ChangeNotifier {
 
         final horseId = row[1].toString();
         final horseName = row.length > 3 ? row[3].toString() : '馬番不明';
-        final csvReview = row.length > 4 ? row[4].toString() : '';
+        // [修正] AIファイル名整理: AI出力の引用記号([cite: n]等)を除去する (v.2026.10.10+26101007)
+        final csvReview = stripCitations(row.length > 4 ? row[4].toString() : '');
 
         final existingHorse = existingHorseMemosMap[horseId];
         String finalReview = existingHorse?.reviewMemo ?? '';
@@ -407,7 +412,8 @@ class RaceResultViewModel extends ChangeNotifier {
 
         // レース総評の競合判定（回顧メモCSVは6列目=raceMemo）
         if (row.length > 5) {
-          final csvRaceMemo = row[5].toString().trim();
+          // [修正] AIファイル名整理: AI出力の引用記号([cite: n]等)を除去する (v.2026.10.10+26101007)
+          final csvRaceMemo = stripCitations(row[5].toString()).trim();
           if (csvRaceMemo.isNotEmpty) {
             final raceMerge = MemoImportLogic.determineMergeAction(finalRaceMemo, csvRaceMemo);
             if (raceMerge.action == MemoMergeAction.overwrite) {

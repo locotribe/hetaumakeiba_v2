@@ -18,6 +18,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/citation_sanitizer.dart';
+import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart'; // [追加] AIファイル名整理: 総評ファイル名の照合 (v.2026.10.10+26101007)
 
 class RaceInfoTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
@@ -89,6 +90,19 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     try {
       final result = await FilePicker.platform.pickFiles(type: FileType.any);
       if (result == null || result.files.single.path == null) return;
+      // [追加] AIファイル名整理: 「インポート総評_…_このレースのID.txt」だけを取り込む（別のレース・別の種別のファイルの取り違え防止） (v.2026.10.10+26101007)
+      final pickedName = result.files.single.name;
+      if (!isImportSummaryFileNameFor(
+          pickedName, widget.predictionRaceData.raceId)) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'このレースの総評ファイル（インポート総評_…_${widget.predictionRaceData.raceId}.txt）を選択してください。'),
+          ),
+        );
+        return;
+      }
       final content = await File(result.files.single.path!).readAsString();
       // [追加] T8: AI出力の引用記号([cite: n]等)を除去してから保存 (v.2026.9.27+26092713)
       final text = stripCitations(content).trim();
