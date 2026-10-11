@@ -49,6 +49,7 @@ String _grainLabel(AiExportGrain g) {
 /// [追加] T1: AI分析資料の先頭に置く「AIへの依頼・用語・出力フォーマット」ブロック（純粋・固定文言）。ユーザーが「添付データで分析して」だけで所定のCSVまで返せるようにする。粒度に依らず常に付与する (v.2026.9.27+26092706)
 // [修正] AIファイル名整理: 出力フォーマットの保存ファイル名を「インポート総評_／インポート予想メモ_…_raceId.txt」にし、予想メモも ```text ブロックで出させる (v.2026.10.10+26101006)
 // [修正] AI分析データ 文章・ラベル除外: 資料の読み方に「脚質の内訳」と「予測含水率の根拠」の説明を追加 (v.2026.10.12+26101201)
+// [修正] 過去レースの印・メモ Step2: 資料の読み方に「過去走の印・メモ／過去レースのAI予想・レース総評」の説明を追加 (v.2026.10.12+26101204)
 String _aiInstructionHeader() {
   return '''# この資料の使い方（AIへの依頼）
 
@@ -66,6 +67,7 @@ String _aiInstructionHeader() {
 - コース情報: 周長・区間の距離（スタートからのm）・標高。標高はコースデータ上の相対値(m)で、勾配は区間内の平均。
 - 開催中の馬場推移: 同じ開催のJRA発表値（クッション値と、含水率 G=ゴール前/4C=4コーナー）を古い順に並べたもの。
 - 天気・馬場予測: 取得時刻の時点の天気予報と、それを使ったアプリの推定（予測含水率など）。確定値ではない。風速は m/s（元データの km/h を換算）。粒度「全部」では「予測含水率の根拠」（起点の測定・当日の加水と乾燥・地盤補正の内訳）も出す。
+- 過去走の印・メモ／過去レースのAI予想・レース総評: 過去のレースで、ユーザーやAIがレース前・レース後に書いた見立て（事実ではない）。着順と照らして当たり外れを判断の材料にする。今回のレースのものは含まない。AI予想・レース総評は粒度「標準」「全部」だけで、本文の各行の先頭に「> 」を付けて全文を載せる。
 
 ## 出力フォーマット（保存できる2つのテキストファイルを、この順で出力）
 
@@ -256,7 +258,68 @@ String buildRaceFullAiMarkdown({
     );
   }
 
+  // [追加] 過去レースの印・メモ Step2: 過去レースのAIの予想・レース総評（標準・全部のみ） (v.2026.10.12+26101204)
+  if (grain != AiExportGrain.summary && bundle.pastRaceMemos.isNotEmpty) {
+    _renderPastRaceMemos(buf, raceData, byId, bundle.pastRaceMemos, pastLimit);
+  }
+
   return buf.toString();
+}
+
+// [追加] 過去レースの印・メモ Step2: 過去レースのAIの予想・レース総評の節。各馬の馬柱の範囲に入るレースだけを、レースごとに1回、日付の新しい順に出す。今回のレースは出さない (v.2026.10.12+26101204)
+void _renderPastRaceMemos(
+  StringBuffer buf,
+  PredictionRaceData raceData,
+  Map<String, AiHorseData> byId,
+  Map<String, AiPastRaceMemo> memos,
+  int pastLimit,
+) {
+  final order = <String>[];
+  final titles = <String, String>{};
+  final dates = <String, String>{};
+  final runners = <String, List<String>>{};
+  for (final h in raceData.horses) {
+    final perf = byId[h.horseId]?.performance ?? const <HorseRaceRecord>[];
+    for (final r in _take(perf, pastLimit)) {
+      if (r.raceId == raceData.raceId) continue;
+      if (!memos.containsKey(r.raceId)) continue;
+      if (!titles.containsKey(r.raceId)) {
+        order.add(r.raceId);
+        titles[r.raceId] = '${_cell(_t(r.date))} ${_cell(_t(r.raceName))}';
+        dates[r.raceId] = r.date;
+        runners[r.raceId] = <String>[];
+      }
+      runners[r.raceId]!.add(
+          '${h.horseNumber}番 ${_cell(_t(h.horseName))} ${_cell(_t(r.popularity))}人気${_cell(_t(r.rank))}着');
+    }
+  }
+  if (order.isEmpty) return;
+  order.sort((a, b) {
+    final byDate = dates[b]!.compareTo(dates[a]!);
+    return byDate != 0 ? byDate : b.compareTo(a);
+  });
+
+  buf.writeln();
+  buf.writeln('## 過去レースのAI予想・レース総評（過去のレースの見立て）');
+  for (final rid in order) {
+    final memo = memos[rid]!;
+    buf.writeln();
+    buf.writeln('### ${titles[rid]}（raceId: $rid）');
+    buf.writeln('- 今回の出走馬: ${runners[rid]!.join(' / ')}');
+    _writeQuotedText(buf, '**AIの予想（レース前に取り込んだもの）**', memo.aiPrediction);
+    _writeQuotedText(buf, '**レース総評（レース後に書いたもの）**', memo.review);
+  }
+}
+
+/// 見出しの下に本文を全文、各行の先頭に「> 」を付けて書く（空行は「>」だけ）。本文が無ければ何も書かない。
+void _writeQuotedText(StringBuffer buf, String title, String? text) {
+  if (text == null || text.trim().isEmpty) return;
+  buf.writeln();
+  buf.writeln(title);
+  for (final line in text.trim().split(RegExp(r'\r?\n'))) {
+    final trimmed = line.trimRight();
+    buf.writeln(trimmed.trim().isEmpty ? '>' : '> $trimmed');
+  }
 }
 
 void _renderHorse(
@@ -375,6 +438,33 @@ void _renderHorse(
           '${_cell(_t(r.distance))}${_cell(_t(r.trackCondition))}$trackTag';
       buf.writeln(
           '| ${_cell(_t(r.date))} | ${_cell(_t(r.raceName))} | $track | ${_cell(_t(r.numberOfHorses))} | ${_cell(_t(r.frameNumber))}-${_cell(_t(r.horseNumber))} | ${_cell(_t(r.popularity))}人${_cell(_t(r.rank))}着 | ${_cell(_t(r.horseWeight))} | ${_cell(_t(r.jockey))} | ${_cell(_t(r.time))}(${_cell(_t(r.margin))}) | ${_cell(_t(r.cornerPassage))}/${_cell(_t(r.agari))} | $pace | $index | ${formatAiPrizeMan(parsePrizeInThousandYen(r.prizeMoney))} |');
+    }
+  }
+
+  // [追加] 過去レースの印・メモ Step2: 馬柱と同じ範囲の過去走で、そのレースで付けた印・予想メモ・回顧メモを出す。今回のレースのものは収集で除いてある (v.2026.10.12+26101204)
+  final noteLines = <String>[];
+  for (final r in _take(perf, pastLimit)) {
+    final note = d?.pastNotesByRaceId[r.raceId];
+    if (note == null) continue;
+    final noteParts = <String>[];
+    if ((note.mark ?? '').trim().isNotEmpty) {
+      noteParts.add('印 ${_cell(note.mark!)}');
+    }
+    if ((note.predictionMemo ?? '').trim().isNotEmpty) {
+      noteParts.add('予想メモ: ${_cell(note.predictionMemo!)}');
+    }
+    if ((note.reviewMemo ?? '').trim().isNotEmpty) {
+      noteParts.add('回顧メモ: ${_cell(note.reviewMemo!)}');
+    }
+    if (noteParts.isEmpty) continue;
+    noteLines.add(
+        '- ${_cell(_t(r.date))} ${_cell(_t(r.raceName))} ${_cell(_t(r.popularity))}人気${_cell(_t(r.rank))}着: ${noteParts.join(' / ')}');
+  }
+  if (noteLines.isNotEmpty) {
+    buf.writeln();
+    buf.writeln('#### 過去走の印・メモ（そのレースで付けたもの）');
+    for (final l in noteLines) {
+      buf.writeln(l);
     }
   }
 

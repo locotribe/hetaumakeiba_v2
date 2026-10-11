@@ -586,5 +586,150 @@ void main() {
           raceData: _race(), bundle: _bundle(), grain: AiExportGrain.standard);
       expect(none, isNot(contains('- 脚質の内訳: 逃げ')));
     });
+
+    // [追加] 過去レースの印・メモ Step2: 各馬の過去走の印・メモと、過去レースのAI予想・レース総評 (v.2026.10.12+26101204)
+    HorseRaceRecord pastRec(String raceId, String date, String raceName) =>
+        HorseRaceRecord(
+          horseId: 'h1',
+          raceId: raceId,
+          date: date,
+          venue: '2中山3',
+          weather: '晴',
+          raceNumber: '11',
+          raceName: raceName,
+          numberOfHorses: '16',
+          frameNumber: '3',
+          horseNumber: '5',
+          odds: '4.5',
+          popularity: '2',
+          rank: '1',
+          jockey: '武豊',
+          jockeyId: 'j1',
+          carriedWeight: '57',
+          distance: '芝1200',
+          trackCondition: '良',
+          time: '1:08.0',
+          margin: '0.0',
+          cornerPassage: '3-3',
+          pace: '33.0-34.0',
+          agari: '33.5',
+          horseWeight: '502(+4)',
+          winnerOrSecondHorse: 'テスト2着馬',
+          prizeMoney: '5000',
+        );
+
+    AiRaceExportBundle pastBundle({
+      Map<String, AiPastRaceNote> notes = const {},
+      Map<String, AiPastRaceMemo> raceMemos = const {},
+    }) =>
+        AiRaceExportBundle(
+          raceId: '202606040911',
+          raceName: 'スプリンターズS',
+          raceDate: '2026年9月27日',
+          horses: [
+            AiHorseData(
+              horseId: 'h1',
+              performance: [
+                pastRec('202606040911', '2026/09/27', 'スプリンターズS(GI)'),
+                pastRec('p1', '2026/06/01', 'テスト重賞(GII)'),
+                pastRec('p2', '2026/05/01', '過去レース2'),
+                pastRec('p3', '2026/04/01', '過去レース3'),
+                pastRec('p4', '2026/03/01', '過去レース4'),
+                pastRec('p5', '2026/02/01', '過去レース5'),
+              ],
+              extrasByRaceId: const {},
+              trainingSessions: const [],
+              trainingReview: null,
+              profile: null,
+              speedIndex: null,
+              simulationParams: null,
+              trainingTimes: const [],
+              pastNotesByRaceId: notes,
+            ),
+          ],
+          raceStatistics: null,
+          trackCondition: null,
+          raceMemoText: null,
+          pastRaceMemos: raceMemos,
+        );
+
+    test('過去走の印・メモ: 馬柱の直後に出し、馬柱の範囲外は出さない', () {
+      final bundle = pastBundle(notes: {
+        'p1': const AiPastRaceNote(
+            mark: '◎', predictionMemo: '先行有利\n内枠', reviewMemo: '完勝'),
+        'p5': const AiPastRaceNote(reviewMemo: '出遅れ'),
+      });
+      final summary = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.summary);
+      final standard = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
+      expect(summary, contains('#### 過去走の印・メモ（そのレースで付けたもの）'));
+      expect(
+          summary,
+          contains(
+              '- 2026/06/01 テスト重賞(GII) 2人気1着: 印 ◎ / 予想メモ: 先行有利 内枠 / 回顧メモ: 完勝'));
+      expect(summary, isNot(contains('出遅れ')));
+      expect(standard, contains('- 2026/02/01 過去レース5 2人気1着: 回顧メモ: 出遅れ'));
+      expect(
+          standard.indexOf('#### 馬柱（過去成績）') <
+              standard.indexOf('#### 過去走の印・メモ（そのレースで付けたもの）'),
+          isTrue);
+      expect(
+          standard.indexOf('#### 過去走の印・メモ（そのレースで付けたもの）') <
+              standard.indexOf('#### 調教'),
+          isTrue);
+    });
+
+    test('過去走の印・メモ: 無ければ節を出さない', () {
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: pastBundle(), grain: AiExportGrain.full);
+      expect(md, isNot(contains('#### 過去走の印・メモ')));
+      expect(md, isNot(contains('## 過去レースのAI予想・レース総評')));
+    });
+
+    test('過去レースのAI予想・レース総評: 標準以上で全文を「> 」付きで出し、今回のレースと範囲外は出さない', () {
+      final bundle = pastBundle(raceMemos: {
+        '202606040911': const AiPastRaceMemo(aiPrediction: '今回のAI予想'),
+        'p1': const AiPastRaceMemo(
+            aiPrediction: '【レース総論】スロー\n\n【買い目】単勝1番',
+            review: '内が止まらない'),
+        'p2': const AiPastRaceMemo(review: '外差し決着'),
+        'p9': const AiPastRaceMemo(aiPrediction: '出ていないレース'),
+      });
+      final standard = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
+      final summary = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.summary);
+
+      expect(standard,
+          contains('## 過去レースのAI予想・レース総評（過去のレースの見立て）'));
+      expect(standard, contains('### 2026/06/01 テスト重賞(GII)（raceId: p1）'));
+      expect(standard, contains('- 今回の出走馬: 1番 テスト馬 2人気1着'));
+      expect(
+          standard,
+          contains(
+              '**AIの予想（レース前に取り込んだもの）**\n> 【レース総論】スロー\n>\n> 【買い目】単勝1番\n'));
+      expect(standard,
+          contains('**レース総評（レース後に書いたもの）**\n> 内が止まらない\n'));
+      expect(standard, contains('### 2026/05/01 過去レース2（raceId: p2）'));
+      expect(
+          standard.indexOf('（raceId: p1）') < standard.indexOf('（raceId: p2）'),
+          isTrue);
+      expect(standard, isNot(contains('今回のAI予想')));
+      expect(standard, isNot(contains('（raceId: 202606040911）')));
+      expect(standard, isNot(contains('出ていないレース')));
+      expect(
+          standard.indexOf('## 各馬詳細') <
+              standard.indexOf('## 過去レースのAI予想・レース総評'),
+          isTrue);
+      expect(summary, isNot(contains('## 過去レースのAI予想・レース総評')));
+    });
+
+    test('依頼文に過去レースの印・メモの読み方がある', () {
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: _bundle(), grain: AiExportGrain.summary);
+      expect(md,
+          contains('- 過去走の印・メモ／過去レースのAI予想・レース総評: 過去のレースで'));
+    });
   });
 }
