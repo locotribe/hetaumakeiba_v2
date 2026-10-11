@@ -8,6 +8,10 @@ import 'package:hetaumakeiba_v2/models/horse_speed_index_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/db/elevations/tokyo/tokyo_course.dart';
+import 'package:hetaumakeiba_v2/logic/ai_export/ai_course_profile.dart';
+import 'package:hetaumakeiba_v2/logic/ai_export/ai_weather_snapshot.dart';
+import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 
 PredictionRaceData _race() => PredictionRaceData(
       raceId: '202606040911',
@@ -255,6 +259,264 @@ void main() {
       final md = buildRaceFullAiMarkdown(
           raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
       expect(md, contains('芝1200良(ク9.20)'));
+    });
+
+    // [追加] AI分析データ 天気・コース追加 Step4: 総合スコア・期待値の削除、賞金、馬場詳細の補完、コース・馬場推移・天気の節 (v.2026.10.11+26101104)
+    test('総合スコア・期待値を出さず、馬場適性だけを出す', () {
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: _bundle(), grain: AiExportGrain.standard);
+      expect(md, isNot(contains('総合スコア')));
+      expect(md, isNot(contains('期待値')));
+      expect(md, contains('- アプリ評価: 馬場適性 -'));
+      expect(
+          md,
+          contains(
+              '| 馬番 | 枠 | 馬名 | 性齢 | 騎手(斤量) | 単勝 | 人気 | 馬体重 | 出否 |'));
+    });
+
+    test('馬柱に賞金列、各馬に通算獲得賞金が出る', () {
+      HorseRaceRecord rec(String raceId, String prizeMoney) => HorseRaceRecord(
+            horseId: 'h1',
+            raceId: raceId,
+            date: '2026/06/01',
+            venue: '2中山3',
+            weather: '晴',
+            raceNumber: '11',
+            raceName: 'テスト重賞(GII)',
+            numberOfHorses: '16',
+            frameNumber: '3',
+            horseNumber: '5',
+            odds: '4.5',
+            popularity: '2',
+            rank: '1',
+            jockey: '武豊',
+            jockeyId: 'j1',
+            carriedWeight: '57',
+            distance: '芝1200',
+            trackCondition: '良',
+            time: '1:08.0',
+            margin: '0.0',
+            cornerPassage: '3-3',
+            pace: '33.0-34.0',
+            agari: '33.5',
+            horseWeight: '502(+4)',
+            winnerOrSecondHorse: 'テスト2着馬',
+            prizeMoney: prizeMoney,
+          );
+      final bundle = AiRaceExportBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年9月27日',
+        horses: [
+          AiHorseData(
+            horseId: 'h1',
+            performance: [rec('pr1', '5000'), rec('pr2', '')],
+            extrasByRaceId: const {},
+            trainingSessions: const [],
+            trainingReview: null,
+            profile: null,
+            speedIndex: null,
+            simulationParams: null,
+            trainingTimes: const [],
+          ),
+        ],
+        raceStatistics: null,
+        trackCondition: null,
+        raceMemoText: null,
+      );
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
+      expect(md, contains('| 指数/馬場 | 賞金(万円) |'));
+      expect(md, contains('| 5,000.0 |'));
+      expect(md, contains('- 通算獲得賞金: 5,000.0万円（賞金のある1走／成績2件）'));
+    });
+
+    test('当日の測定が無ければ、その競馬場の最新の測定を馬場詳細に出す', () {
+      final bundle = AiRaceExportBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年9月27日',
+        horses: const [],
+        raceStatistics: null,
+        trackCondition: null,
+        raceMemoText: null,
+        latestVenueTrackCondition: TrackConditionRecord(
+          trackConditionId: 202606040401,
+          date: '2026-09-26',
+          weekDay: 'sa',
+          cushionValue: 9.6,
+          moistureTurfGoal: 13.3,
+        ),
+      );
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
+      expect(md, contains('- 馬場詳細（当日の測定なし・最新測定 2026-09-26）: クッション値 9.6'));
+    });
+
+    test('コース情報: 区間表は全粒度、100mごとの標高は標準以上', () {
+      final profile = buildAiCourseProfile(TokyoCourse.shiba1800);
+      final preset = CoursePreset(
+        id: '05_shiba_1800',
+        venueCode: '05',
+        venueName: '東京',
+        distance: '芝1800',
+        direction: '左回り',
+        straightLength: 526,
+        courseLayout: 'テストのレイアウト',
+        keyPoints: 'テストのポイント',
+      );
+      final bundle = AiRaceExportBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年9月27日',
+        horses: const [],
+        raceStatistics: null,
+        trackCondition: null,
+        raceMemoText: null,
+        courseProfile: profile,
+        coursePreset: preset,
+      );
+      final standard = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
+      final summary = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.summary);
+      expect(standard, contains('## コース情報'));
+      expect(standard, contains('/ 左回り / 1周 2083.1m'));
+      expect(standard, contains('- ゴール前直線（プリセット）: 526m'));
+      expect(standard, contains('- コースの特徴: テストのレイアウト'));
+      expect(standard, contains('| ゴール前直線 | 1274.1〜1800m | 525.9m |'));
+      expect(standard, contains('**100mごとの標高**'));
+      expect(standard, contains('| 1800m | 0m | 0.00 |'));
+      expect(summary, contains('| ゴール前直線 | 1274.1〜1800m | 525.9m |'));
+      expect(summary, isNot(contains('**100mごとの標高**')));
+    });
+
+    test('開催中の馬場推移: 古い順・当日の印・前回との差、要約は直近3件', () {
+      TrackConditionRecord r(int id, String date, String weekDay,
+              double cushion, double turfGoal) =>
+          TrackConditionRecord(
+            trackConditionId: id,
+            date: date,
+            weekDay: weekDay,
+            cushionValue: cushion,
+            moistureTurfGoal: turfGoal,
+          );
+      final bundle = AiRaceExportBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年9月27日',
+        horses: const [],
+        raceStatistics: null,
+        trackCondition: null,
+        raceMemoText: null,
+        meetingTrackHistory: [
+          r(202606040101, '2026-09-12', 'sa', 10.1, 12.0),
+          r(202606040201, '2026-09-13', 'su', 9.9, 12.4),
+          r(202606040401, '2026-09-26', 'sa', 9.7, 13.0),
+          r(202606040501, '2026-09-27', 'su', 9.5, 13.4),
+        ],
+      );
+      final standard = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
+      final summary = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.summary);
+      expect(standard, contains('## 開催中の馬場推移（JRA発表・同じ開催）'));
+      expect(standard, contains('| 2026-09-12(土) | 10.1（やや硬め） | 12.0/- | -/- |'));
+      expect(standard, contains('| 2026-09-27(日)（レース当日） | 9.5（標準） |'));
+      expect(
+          standard,
+          contains(
+              '- 最新(2026-09-27)と前回(2026-09-26)の差: クッション値 -0.2、芝含水率(G) +0.4%'));
+      expect(summary, isNot(contains('2026-09-12')));
+      expect(summary, contains('| 2026-09-13(日) |'));
+    });
+
+    test('天気: 取れないときは理由を出す', () {
+      final bundle = AiRaceExportBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年9月27日',
+        horses: const [],
+        raceStatistics: null,
+        trackCondition: null,
+        raceMemoText: null,
+        weatherUnavailableReason: '未取得（レース情報タブの🔄で取得）',
+      );
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
+      expect(md, contains('- 天気: 未取得（レース情報タブの🔄で取得）'));
+    });
+
+    test('天気: 予報と馬場予測。インサイトは標準以上、根拠は全部だけ', () {
+      final snapshot = buildAiWeatherSnapshot(
+        pinpoint: {
+          'current': {'time': '10/10 12:15'},
+          'raceTime': {
+            'temp': 25.5,
+            'humidity': 51,
+            'pop': 0,
+            'precipitation': 0.0,
+            'windSpeed': 5.4,
+            'weatherCode': 0,
+            'apparentTemp': 26.2,
+            'radiation': 453.0,
+            'evap': 0.3,
+            'gusts': 28.8,
+            'visibility': 24.1,
+            'soilMoisture': 0.258,
+          },
+          'timeline': [
+            {'time': '15:00', 'temp': 25.5, 'pop': 0, 'precipitation': 0.0, 'windSpeed': 5.4, 'weatherCode': 0},
+          ],
+          'daily': [
+            {'date': '2026-10-11', 'weatherCode': 0, 'tempMax': 25.6, 'tempMin': 16.0, 'precipitationSum': 0.0},
+          ],
+          'windAnalysis': '💨 直線は【追い風】の傾向（逃げ・先行馬が止まりにくい）',
+          'windDirText': '北東',
+        },
+        baseline: TrackConditionRecord(
+          trackConditionId: 202605040201,
+          date: '2026-10-10',
+          weekDay: 'sa',
+          cushionValue: 9.6,
+          moistureTurfGoal: 13.3,
+        ),
+        venueCode: '05',
+        trackType: '芝',
+        raceDate: '2026年10月11日',
+      )!;
+      final bundle = AiRaceExportBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年9月27日',
+        horses: const [],
+        raceStatistics: null,
+        trackCondition: null,
+        raceMemoText: null,
+        weatherSnapshot: snapshot,
+      );
+      final summary = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.summary);
+      final standard = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.standard);
+      final full = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: bundle, grain: AiExportGrain.full);
+
+      expect(summary, contains('- 取得時刻: 10/10 12:15'));
+      expect(summary, contains('風 北東 1.5m/s（5.4km/h）'));
+      expect(summary, contains('| 15:00 | 晴れ | 25.5℃ | 0% | 0.0mm | 1.5m/s |'));
+      expect(
+          summary,
+          contains(
+              '- 馬場予測: JRA基準で 良 / 予測含水率 11.6%（芝） / 予測クッション値 9.6（起点: 2026-10-10 の測定）'));
+      expect(summary, isNot(contains('- インサイト')));
+
+      expect(standard, contains('- 直線の風: 直線は【追い風】の傾向（逃げ・先行馬が止まりにくい）'));
+      expect(standard, contains('- インサイト 標準 (乾いた良)（予測含水率: 11.6%）'));
+      expect(standard, contains('**開催週の日別（予報・実績）**'));
+      expect(standard, isNot(contains('  - 根拠:')));
+
+      expect(full, contains('  - 根拠: 【予測シミュレーションの根拠】'));
     });
   });
 }

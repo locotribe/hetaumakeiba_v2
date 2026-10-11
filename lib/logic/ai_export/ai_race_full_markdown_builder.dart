@@ -1,10 +1,16 @@
 // lib/logic/ai_export/ai_race_full_markdown_builder.dart
 // [追加] AI分析データエクスポート Step3: 出馬表(PredictionRaceData)と収集バンドル(AiRaceExportBundle)から全部入りのAI分析用Markdownを組み立てる純粋関数。DB/I/Oなし。粒度(要約/標準/全部)で情報量を切り替える。Step1の buildRaceAiMarkdown には手を触れない (v.2026.9.27+26092703)
+// [修正] AI分析データ 天気・コース追加 Step4: コース情報・開催中の馬場推移・天気/馬場予測の節、馬柱の賞金列と通算獲得賞金を追加。計算処理の無い総合スコア・期待値を外し、当日の測定が無いときは最新の測定を馬場詳細に出す (v.2026.10.11+26101104)
 
 import 'dart:convert';
 
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/ai_export/ai_race_export_bundle.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+import 'package:hetaumakeiba_v2/logic/ai_export/ai_prize_summary.dart';
+import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';
+import 'package:hetaumakeiba_v2/utils/track_constants.dart';
 
 /// 出力の粒度。要約=直近5走/最終追切1本、標準=直近10走/直近5本、全部=全走/全本＋個別ラップ・旧調教・統計JSON。
 enum AiExportGrain { summary, standard, full }
@@ -49,11 +55,15 @@ String _aiInstructionHeader() {
 
 ## 資料の読み方（列・用語）
 - レース概要: コース（芝/ダ・距離・回り・内外）、馬場、天候、頭数、1着賞金、過去10年統計の有無。
-- 出走馬一覧: 馬番・枠・騎手(斤量)・単勝・人気・馬体重・総合スコア・期待値。「-」は未算出/未発表。
+- 出走馬一覧: 馬番・枠・騎手(斤量)・単勝・人気・馬体重。「-」は未発表。
 - スピード指数: ベスト/近走平均/トレンド(正=上昇,負=下降)/信頼度(0-1)(サンプル走数)。
 - 展開指数: テン加速/末脚/スタミナ(各0-1)/脚質(逃げ・先行・差し・追込・自在 等)。
-- 馬柱の各列: 日付 / レース(格) / 距離馬場 / 枠-馬番 / 人気-着順 / タイム(着差) / 通過(コーナー順)-上り3F / ペース(前半-後半 と [S/M/H]=スロー/ミドル/ハイ) / 指数(タイム指数, 大きいほど優秀)。
+- 馬柱の各列: 日付 / レース(格) / 距離馬場 / 枠-馬番 / 人気-着順 / タイム(着差) / 通過(コーナー順)-上り3F / ペース(前半-後半 と [S/M/H]=スロー/ミドル/ハイ) / 指数(タイム指数, 大きいほど優秀) / 賞金(万円。netkeibaの賞金列で重賞は付加賞込み、外国のレースは空)。
 - 調教: 日付 追切場所 時計(6F-5F-4F-3F-2F-1Fの順・空欄は-) 脚色 評価 併せ馬。
+- 通算獲得賞金: 過去成績の賞金列の合計（中央＋地方。外国は含まない）。JRAの収得賞金（クラス判定用）とは別の値。
+- コース情報: 周長・区間の距離（スタートからのm）・標高。標高はコースデータ上の相対値(m)で、勾配は区間内の平均。
+- 開催中の馬場推移: 同じ開催のJRA発表値（クッション値と、含水率 G=ゴール前/4C=4コーナー）を古い順に並べたもの。
+- 天気・馬場予測: 取得時刻の時点の天気予報と、それを使ったアプリの推定（予測含水率など）。確定値ではない。風速は m/s（元データの km/h を換算）。
 
 ## 出力フォーマット（保存できる2つのテキストファイルを、この順で出力）
 
@@ -193,9 +203,13 @@ String buildRaceFullAiMarkdown({
       '- 頭数: ${_i(raceData.horseCount)} / 発走: ${_t(raceData.startTime)} / 1着賞金: ${_i(raceData.basePrize1st)}');
 
   final tc = bundle.trackCondition;
+  // [修正] AI分析データ 天気・コース追加 Step4: 当日の測定が無いときは、その競馬場の最新の測定を日付付きで出す (v.2026.10.11+26101104)
+  final latestTc = bundle.latestVenueTrackCondition;
   if (tc != null) {
+    buf.writeln('- 馬場詳細: ${_trackDetailText(tc)}');
+  } else if (latestTc != null) {
     buf.writeln(
-        '- 馬場詳細: クッション値 ${_d(tc.cushionValue)} / 芝含水率(ゴール前/4角) ${_d(tc.moistureTurfGoal)}/${_d(tc.moistureTurf4c)} / ダート含水率(ゴール前/4角) ${_d(tc.moistureDirtGoal)}/${_d(tc.moistureDirt4c)}');
+        '- 馬場詳細（当日の測定なし・最新測定 ${latestTc.date}）: ${_trackDetailText(latestTc)}');
   }
   final rs = bundle.raceStatistics;
   buf.writeln(
@@ -205,6 +219,11 @@ String buildRaceFullAiMarkdown({
       '- レースメモ: ${(memo == null || memo.trim().isEmpty) ? '（未記入）' : _cell(memo)}');
   buf.writeln();
 
+  // [追加] AI分析データ 天気・コース追加 Step4: コース情報・開催中の馬場推移・天気/馬場予測 (v.2026.10.11+26101104)
+  _renderCourseSection(buf, raceData, bundle, grain);
+  _renderMeetingTrackSection(buf, raceData, bundle, grain);
+  _renderWeatherSection(buf, raceData, bundle, grain);
+
   // [修正] T2: 過去10年統計(縦の比較)を生JSONではなく整形テーブルで出力。要約粒度では省略 (v.2026.9.27+26092708)
   if (grain != AiExportGrain.summary) {
     _renderRaceStatistics(buf, rs?.statisticsJson);
@@ -212,13 +231,14 @@ String buildRaceFullAiMarkdown({
 
   // 出走馬一覧
   buf.writeln('## 出走馬一覧');
+  // [修正] AI分析データ 天気・コース追加 Step4: 計算処理の無い総合スコア・期待値の列を外した (v.2026.10.11+26101104)
   buf.writeln(
-      '| 馬番 | 枠 | 馬名 | 性齢 | 騎手(斤量) | 単勝 | 人気 | 馬体重 | 総合スコア | 期待値 | 出否 |');
-  buf.writeln('|---|---|---|---|---|---|---|---|---|---|---|');
+      '| 馬番 | 枠 | 馬名 | 性齢 | 騎手(斤量) | 単勝 | 人気 | 馬体重 | 出否 |');
+  buf.writeln('|---|---|---|---|---|---|---|---|---|');
   for (final h in raceData.horses) {
     final jockey = '${_cell(_t(h.jockey))}(${_d(h.carriedWeight)})';
     buf.writeln(
-        '| ${h.horseNumber} | ${h.gateNumber} | ${_cell(_t(h.horseName))} | ${_cell(_t(h.sexAndAge))} | $jockey | ${_d(h.odds)} | ${_i(h.popularity)} | ${_cell(_t(h.horseWeight))} | ${_d(h.overallScore)} | ${_d(h.expectedValue)} | ${h.isScratched ? '取消' : '出走'} |');
+        '| ${h.horseNumber} | ${h.gateNumber} | ${_cell(_t(h.horseName))} | ${_cell(_t(h.sexAndAge))} | $jockey | ${_d(h.odds)} | ${_i(h.popularity)} | ${_cell(_t(h.horseWeight))} | ${h.isScratched ? '取消' : '出走'} |');
   }
   buf.writeln();
 
@@ -260,8 +280,9 @@ void _renderHorse(
   buf.writeln('- 単勝/人気: ${_d(h.odds)} / ${_i(h.popularity)}');
   buf.writeln(
       '- 馬体重: ${_t(h.horseWeight)}（前走: ${_t(h.previousHorseWeight)}）/ 前走騎手: ${_t(h.previousJockey)}');
-  buf.writeln(
-      '- アプリ評価: 総合スコア ${_d(h.overallScore)} / 期待値 ${_d(h.expectedValue)} / 馬場適性 ${_t(h.trackAptitudeLabel)}');
+  // [修正] AI分析データ 天気・コース追加 Step4: 総合スコア・期待値を外し、通算獲得賞金を追加 (v.2026.10.11+26101104)
+  buf.writeln('- アプリ評価: 馬場適性 ${_t(h.trackAptitudeLabel)}');
+  buf.writeln(_prizeLine(d?.performance ?? const []));
 
   final marks = <String>[];
   if (h.isBlinker) marks.add('ブリンカー');
@@ -301,9 +322,10 @@ void _renderHorse(
   if (perf.isEmpty) {
     buf.writeln('（過去成績データなし）');
   } else {
+    // [修正] AI分析データ 天気・コース追加 Step4: 末尾に賞金(万円)の列を追加 (v.2026.10.11+26101104)
     buf.writeln(
-        '| 日付 | レース | 距離馬場 | 頭数 | 枠馬番 | 人気着 | 馬体重 | 騎手 | タイム(着差) | 通過/上り | ペース | 指数/馬場 |');
-    buf.writeln('|---|---|---|---|---|---|---|---|---|---|---|---|');
+        '| 日付 | レース | 距離馬場 | 頭数 | 枠馬番 | 人気着 | 馬体重 | 騎手 | タイム(着差) | 通過/上り | ペース | 指数/馬場 | 賞金(万円) |');
+    buf.writeln('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (final r in _take(perf, pastLimit)) {
       final ex = d?.extrasByRaceId[r.raceId];
       final pace =
@@ -320,7 +342,7 @@ void _renderHorse(
       final track =
           '${_cell(_t(r.distance))}${_cell(_t(r.trackCondition))}$trackTag';
       buf.writeln(
-          '| ${_cell(_t(r.date))} | ${_cell(_t(r.raceName))} | $track | ${_cell(_t(r.numberOfHorses))} | ${_cell(_t(r.frameNumber))}-${_cell(_t(r.horseNumber))} | ${_cell(_t(r.popularity))}人${_cell(_t(r.rank))}着 | ${_cell(_t(r.horseWeight))} | ${_cell(_t(r.jockey))} | ${_cell(_t(r.time))}(${_cell(_t(r.margin))}) | ${_cell(_t(r.cornerPassage))}/${_cell(_t(r.agari))} | $pace | $index |');
+          '| ${_cell(_t(r.date))} | ${_cell(_t(r.raceName))} | $track | ${_cell(_t(r.numberOfHorses))} | ${_cell(_t(r.frameNumber))}-${_cell(_t(r.horseNumber))} | ${_cell(_t(r.popularity))}人${_cell(_t(r.rank))}着 | ${_cell(_t(r.horseWeight))} | ${_cell(_t(r.jockey))} | ${_cell(_t(r.time))}(${_cell(_t(r.margin))}) | ${_cell(_t(r.cornerPassage))}/${_cell(_t(r.agari))} | $pace | $index | ${formatAiPrizeMan(parsePrizeInThousandYen(r.prizeMoney))} |');
     }
   }
 
@@ -379,4 +401,252 @@ void _renderHorse(
   final pm = h.userMemo?.predictionMemo?.trim() ?? '';
   buf.writeln(
       '- 予想メモ: ${pm.isEmpty ? '（未記入）' : pm.replaceAll(RegExp(r'[\r\n]+'), ' ')}');
+}
+
+// [追加] AI分析データ 天気・コース追加 Step4: コース情報・開催中の馬場推移・天気/馬場予測・獲得賞金の描画ヘルパー (v.2026.10.11+26101104)
+
+/// 符号つきの小数（0 は ±）。
+String _signed(double v, int digits) {
+  final rounded = double.parse(v.toStringAsFixed(digits));
+  if (rounded == 0) return '±${0.toStringAsFixed(digits)}';
+  return rounded > 0
+      ? '+${rounded.toStringAsFixed(digits)}'
+      : rounded.toStringAsFixed(digits);
+}
+
+/// 小数の固定桁（null は '-'）。
+String _f(double? v, int digits) => v == null ? '-' : v.toStringAsFixed(digits);
+
+/// 距離(m)の表記。整数ならそのまま、そうでなければ小数1桁。
+String _meters(double v) =>
+    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+
+/// 'YYYY年M月D日' などから 'YYYY-MM-DD' を作る（読めなければ null）。
+String? _isoDate(String raceDate) {
+  final m = RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(raceDate);
+  if (m == null) return null;
+  return '${m.group(1)}-${m.group(2)!.padLeft(2, '0')}-${m.group(3)!.padLeft(2, '0')}';
+}
+
+const Map<String, String> _weekDayLabels = {
+  'mo': '月',
+  'tu': '火',
+  'we': '水',
+  'th': '木',
+  'fr': '金',
+  'sa': '土',
+  'su': '日',
+};
+
+/// 馬場の測定1件の「クッション値 / 芝含水率 / ダート含水率」の文。
+String _trackDetailText(TrackConditionRecord tc) =>
+    'クッション値 ${_d(tc.cushionValue)} / 芝含水率(ゴール前/4角) ${_d(tc.moistureTurfGoal)}/${_d(tc.moistureTurf4c)} / ダート含水率(ゴール前/4角) ${_d(tc.moistureDirtGoal)}/${_d(tc.moistureDirt4c)}';
+
+String _courseTypeLabel(String trackType) {
+  switch (trackType) {
+    case 'shiba':
+      return '芝';
+    case 'shiba_inner':
+      return '芝・内回り';
+    case 'shiba_outer':
+      return '芝・外回り';
+    case 'shiba_straight':
+      return '芝・直線';
+    case 'dirt':
+      return 'ダート';
+    default:
+      return trackType;
+  }
+}
+
+void _renderCourseSection(StringBuffer buf, PredictionRaceData raceData,
+    AiRaceExportBundle bundle, AiExportGrain grain) {
+  buf.writeln('## コース情報');
+  final profile = bundle.courseProfile;
+  final preset = bundle.coursePreset;
+
+  if (profile == null) {
+    buf.writeln('- コースデータ: なし（障害、またはデータの無いコース）');
+  } else {
+    final direction = profile.isStraightCourse
+        ? '直線'
+        : (profile.isLeftHanded ? '左回り' : '右回り');
+    buf.writeln(
+        '- コース: ${_cell(_t(raceData.venue))} ${_courseTypeLabel(profile.trackType)} ${profile.raceDistance}m / $direction / 1周 ${_meters(profile.lapDistance)}m');
+  }
+  if (preset != null) {
+    buf.writeln('- ゴール前直線（プリセット）: ${preset.straightLength}m');
+    buf.writeln('- コースの特徴: ${_cell(preset.courseLayout)}');
+    buf.writeln('- ポイント: ${_cell(preset.keyPoints)}');
+  }
+  if (profile == null) {
+    buf.writeln();
+    return;
+  }
+
+  buf.writeln(
+      '- 標高: スタート ${_f(profile.startElevation, 2)}m → ゴール ${_f(profile.goalElevation, 2)}m / 最高 ${_f(profile.maxElevation, 2)}m（スタートから${profile.maxElevationFromStart}m）/ 最低 ${_f(profile.minElevation, 2)}m（スタートから${profile.minElevationFromStart}m）/ 高低差 ${_f(profile.elevationRange, 2)}m');
+  final straight = profile.finalStraight;
+  if (straight != null) {
+    final grade = straight.averageGradePercent;
+    buf.writeln(
+        '- ゴール前直線（コースデータ）: ${_meters(straight.lengthMeters)}m / 標高変化 ${_signed(straight.elevationChange, 2)}m${grade == null ? '' : '（平均勾配 ${_signed(grade, 2)}%）'}');
+  }
+  buf.writeln('- 標高はコースデータ上の相対値（m）。距離はスタートからのm。');
+
+  buf.writeln();
+  buf.writeln('| 区間 | 距離(スタートから) | 長さ | 標高(始→終) | 標高変化 | 平均勾配 | 路面 |');
+  buf.writeln('|---|---|---|---|---|---|---|');
+  for (final s in profile.sections) {
+    final grade = s.averageGradePercent;
+    buf.writeln(
+        '| ${_cell(s.label)} | ${_meters(s.startMeters)}〜${_meters(s.endMeters)}m | ${_meters(s.lengthMeters)}m | ${_f(s.startElevation, 2)}→${_f(s.endElevation, 2)} | ${_signed(s.elevationChange, 2)} | ${grade == null ? '-' : '${_signed(grade, 2)}%'} | ${s.surface ?? '-'} |');
+  }
+
+  if (grain != AiExportGrain.summary) {
+    buf.writeln();
+    buf.writeln('**100mごとの標高**');
+    buf.writeln('| スタートから | 残り | 標高(m) |');
+    buf.writeln('|---|---|---|');
+    for (final p in profile.samples) {
+      buf.writeln(
+          '| ${p.fromStartMeters}m | ${p.remainingMeters}m | ${_f(p.elevation, 2)} |');
+    }
+  }
+  buf.writeln();
+}
+
+void _renderMeetingTrackSection(StringBuffer buf, PredictionRaceData raceData,
+    AiRaceExportBundle bundle, AiExportGrain grain) {
+  buf.writeln('## 開催中の馬場推移（JRA発表・同じ開催）');
+  final history = bundle.meetingTrackHistory;
+  if (history.isEmpty) {
+    buf.writeln('- 測定データなし（馬場状態ページで更新）');
+    buf.writeln();
+    return;
+  }
+
+  final rows = grain == AiExportGrain.summary && history.length > 3
+      ? history.sublist(history.length - 3)
+      : history;
+  final raceDay = _isoDate(raceData.raceDate);
+
+  buf.writeln('| 日付 | クッション値 | 芝含水率 G/4C | ダ含水率 G/4C |');
+  buf.writeln('|---|---|---|---|');
+  for (final r in rows) {
+    final week = _weekDayLabels[r.weekDay];
+    final dateLabel =
+        '${r.date}${week == null ? '' : '($week)'}${r.date == raceDay ? '（レース当日）' : ''}';
+    final cushion = r.cushionValue == null
+        ? '-'
+        : '${_f(r.cushionValue, 1)}（${TrackConstants.getCushionEvaluation(r.cushionValue!)}）';
+    buf.writeln(
+        '| $dateLabel | $cushion | ${_f(r.moistureTurfGoal, 1)}/${_f(r.moistureTurf4c, 1)} | ${_f(r.moistureDirtGoal, 1)}/${_f(r.moistureDirt4c, 1)} |');
+  }
+
+  if (history.length >= 2) {
+    final latest = history[history.length - 1];
+    final previous = history[history.length - 2];
+    final diffs = <String>[];
+    if (latest.cushionValue != null && previous.cushionValue != null) {
+      diffs.add(
+          'クッション値 ${_signed(latest.cushionValue! - previous.cushionValue!, 1)}');
+    }
+    if (latest.moistureTurfGoal != null && previous.moistureTurfGoal != null) {
+      diffs.add(
+          '芝含水率(G) ${_signed(latest.moistureTurfGoal! - previous.moistureTurfGoal!, 1)}%');
+    }
+    if (latest.moistureDirtGoal != null && previous.moistureDirtGoal != null) {
+      diffs.add(
+          'ダ含水率(G) ${_signed(latest.moistureDirtGoal! - previous.moistureDirtGoal!, 1)}%');
+    }
+    if (diffs.isNotEmpty) {
+      buf.writeln(
+          '- 最新(${latest.date})と前回(${previous.date})の差: ${diffs.join('、')}');
+    }
+  }
+  buf.writeln();
+}
+
+void _renderWeatherSection(StringBuffer buf, PredictionRaceData raceData,
+    AiRaceExportBundle bundle, AiExportGrain grain) {
+  buf.writeln('## 天気・馬場予測（予報とアプリの推定）');
+  final w = bundle.weatherSnapshot;
+  if (w == null) {
+    buf.writeln('- 天気: ${bundle.weatherUnavailableReason ?? '未取得'}');
+    buf.writeln();
+    return;
+  }
+
+  final rt = w.raceTime;
+  buf.writeln('- 取得時刻: ${_t(w.fetchedAt)}（予報・推定はこの時点のもの）');
+  buf.writeln(
+      '- 発走時刻(${_t(raceData.startTime)})の予報: ${rt.weatherText} / 気温 ${_f(rt.temperature, 1)}℃ / 湿度 ${_i(rt.humidity)}% / 降水確率 ${_i(rt.precipitationProbability)}% / 降水量 ${_f(rt.precipitation, 1)}mm / 風 ${_t(rt.windDirectionText)} ${_f(rt.windSpeedMs, 1)}m/s（${_f(rt.windSpeedKmh, 1)}km/h）/ 突風 ${_f(rt.gustsMs, 1)}m/s / 体感 ${_f(rt.apparentTemperature, 1)}℃ / 日射 ${_f(rt.radiation, 0)}W/m² / 視程 ${_f(rt.visibilityKm, 1)}km');
+
+  if (w.timeline.isNotEmpty) {
+    buf.writeln();
+    buf.writeln('**午後の時系列（予報）**');
+    buf.writeln('| 時刻 | 天気 | 気温 | 降水確率 | 降水量 | 風速 |');
+    buf.writeln('|---|---|---|---|---|---|');
+    for (final h in w.timeline) {
+      buf.writeln(
+          '| ${_cell(h.time)} | ${h.weatherText} | ${_f(h.temperature, 1)}℃ | ${_i(h.precipitationProbability)}% | ${_f(h.precipitation, 1)}mm | ${_f(h.windSpeedMs, 1)}m/s |');
+    }
+    buf.writeln();
+  }
+
+  final isDirt = (raceData.trackType ?? '').contains('ダ');
+  final moisture = w.predictedMoisture;
+  if (moisture == null) {
+    buf.writeln('- 馬場予測: 起点となる馬場の測定が無いため計算できない');
+  } else {
+    final leaning = (w.jraLeaning == null || w.jraLeaning!.isEmpty)
+        ? ''
+        : w.jraLeaning!;
+    final cushion = !isDirt && w.predictedCushion != null
+        ? ' / 予測クッション値 ${_f(w.predictedCushion, 1)}'
+        : '';
+    final base = w.baseline == null ? '' : '（起点: ${w.baseline!.date} の測定）';
+    buf.writeln(
+        '- 馬場予測: JRA基準で ${_t(w.jraCondition)}$leaning / 予測含水率 ${_f(moisture, 1)}%（${isDirt ? 'ダート' : '芝'}）$cushion$base');
+  }
+
+  if (grain != AiExportGrain.summary) {
+    if (w.windAnalysis != null && w.windAnalysis!.isNotEmpty) {
+      buf.writeln('- 直線の風: ${_cell(w.windAnalysis!)}');
+    }
+    for (final insight in w.insights) {
+      buf.writeln(
+          '- インサイト ${_cell(insight.label)}（${_cell(insight.value)}）: ${_cell(insight.summary)}');
+      if (grain == AiExportGrain.full && insight.basis != null) {
+        final lines = insight.basis!
+            .split('\n')
+            .map((l) => l.trim())
+            .where((l) => l.isNotEmpty)
+            .toList();
+        buf.writeln('  - 根拠: ${_cell(lines.join(' / '))}');
+      }
+    }
+    if (w.daily.isNotEmpty) {
+      buf.writeln();
+      buf.writeln('**開催週の日別（予報・実績）**');
+      buf.writeln('| 日付 | 天気 | 最高/最低 | 降水量 |');
+      buf.writeln('|---|---|---|---|');
+      for (final d in w.daily) {
+        buf.writeln(
+            '| ${_cell(d.date)} | ${d.weatherText} | ${_f(d.tempMax, 1)}/${_f(d.tempMin, 1)}℃ | ${_f(d.precipitationSum, 1)}mm |');
+      }
+    }
+  }
+  buf.writeln();
+}
+
+/// 通算獲得賞金の行（過去成績の賞金列の合計）。
+String _prizeLine(List<HorseRaceRecord> performance) {
+  if (performance.isEmpty) return '- 通算獲得賞金: -（過去成績データなし）';
+  final summary = summarizeAiPrize(performance);
+  if (summary.totalThousandYen == null) {
+    return '- 通算獲得賞金: -（賞金のある走なし／成績${summary.totalRuns}件）';
+  }
+  return '- 通算獲得賞金: ${formatAiPrizeMan(summary.totalThousandYen)}万円（賞金のある${summary.runsWithPrize}走／成績${summary.totalRuns}件）';
 }
