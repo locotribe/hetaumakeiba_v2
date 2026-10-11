@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/db/elevations/tokyo/tokyo_course.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_course_profile.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
+import 'package:hetaumakeiba_v2/models/ai_export/ai_race_export_bundle.dart';
 
 void main() {
   group('AiRaceDataCollector.composeBundle', () {
@@ -195,6 +196,83 @@ void main() {
       expect(bundle.latestVenueTrackCondition?.cushionValue, 9.6);
       expect(bundle.weatherSnapshot, isNull);
       expect(bundle.weatherUnavailableReason, '未取得（レース情報タブの🔄で取得）');
+    });
+
+    // [追加] 過去レースの印・メモ Step1: 今回のレースと中身の無いものを取り除く (v.2026.10.12+26101203)
+    test('過去走の印・メモ: 今回のレースと中身の無いものは入れない', () {
+      final bundle = AiRaceDataCollector.composeBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年10月11日',
+        horseIds: ['a', 'b'],
+        performanceByHorse: {},
+        extrasByHorse: {},
+        sessionsByHorse: {},
+        reviewByHorse: {},
+        profileByHorse: {},
+        speedIndexByHorse: {},
+        simParamsByHorse: {},
+        trainingTimesByHorse: {},
+        pastNotesByHorse: {
+          'a': {
+            'r1': const AiPastRaceNote(mark: '◎', predictionMemo: '今回の予想'),
+            'p1': const AiPastRaceNote(mark: '○', predictionMemo: '先行有利'),
+            'p2': const AiPastRaceNote(reviewMemo: '出遅れ'),
+            'p3': const AiPastRaceNote(mark: ' ', predictionMemo: ''),
+          },
+        },
+      );
+      final a = bundle.horses.first;
+      expect(a.pastNotesByRaceId.keys.toList(), ['p1', 'p2']);
+      expect(a.pastNotesByRaceId['p1']?.mark, '○');
+      expect(a.pastNotesByRaceId['p1']?.predictionMemo, '先行有利');
+      expect(a.pastNotesByRaceId['p2']?.reviewMemo, '出遅れ');
+      expect(bundle.horses[1].pastNotesByRaceId, isEmpty);
+    });
+
+    test('過去レースのAIの予想・レース総評: 今回のレースと中身の無いものは入れない', () {
+      final bundle = AiRaceDataCollector.composeBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年10月11日',
+        horseIds: [],
+        performanceByHorse: {},
+        extrasByHorse: {},
+        sessionsByHorse: {},
+        reviewByHorse: {},
+        profileByHorse: {},
+        speedIndexByHorse: {},
+        simParamsByHorse: {},
+        trainingTimesByHorse: {},
+        pastRaceMemos: {
+          'r1': const AiPastRaceMemo(aiPrediction: '今回のAI予想'),
+          'p1': const AiPastRaceMemo(aiPrediction: '【レース総論】スロー', review: ''),
+          'p2': const AiPastRaceMemo(review: '内が止まらない馬場'),
+          'p3': const AiPastRaceMemo(aiPrediction: '  ', review: '\n'),
+        },
+      );
+      expect(bundle.pastRaceMemos.keys.toList(), ['p1', 'p2']);
+      expect(bundle.pastRaceMemos['p1']?.aiPrediction, '【レース総論】スロー');
+      expect(bundle.pastRaceMemos['p2']?.review, '内が止まらない馬場');
+    });
+
+    test('過去レースの印・メモを省略すると空', () {
+      final bundle = AiRaceDataCollector.composeBundle(
+        raceId: 'r1',
+        raceName: 'テスト',
+        raceDate: '2026年10月11日',
+        horseIds: ['a'],
+        performanceByHorse: {},
+        extrasByHorse: {},
+        sessionsByHorse: {},
+        reviewByHorse: {},
+        profileByHorse: {},
+        speedIndexByHorse: {},
+        simParamsByHorse: {},
+        trainingTimesByHorse: {},
+      );
+      expect(bundle.horses.single.pastNotesByRaceId, isEmpty);
+      expect(bundle.pastRaceMemos, isEmpty);
     });
   });
 }

@@ -10,6 +10,7 @@ import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_reposito
 import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_statistics_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_course_profile.dart';
@@ -69,6 +70,8 @@ class AiRaceDataCollector {
   final TrainingRepository _trainingTimeRepository;
   final RaceStatisticsRepository _raceStatisticsRepository;
   final RaceMemoRepository _raceMemoRepository;
+  // [追加] 過去レースの印・メモ Step1: 過去レースの印（user_marks）を読む (v.2026.10.12+26101203)
+  final UserRepository _userRepository;
   final TrackConditionRepository _trackConditionRepository;
   final CoursePresetRepository _coursePresetRepository;
   final AiPinpointWeatherFetcher _weatherFetcher;
@@ -83,6 +86,7 @@ class AiRaceDataCollector {
     TrainingRepository? trainingTimeRepository,
     RaceStatisticsRepository? raceStatisticsRepository,
     RaceMemoRepository? raceMemoRepository,
+    UserRepository? userRepository,
     TrackConditionRepository? trackConditionRepository,
     CoursePresetRepository? coursePresetRepository,
     AiPinpointWeatherFetcher? weatherFetcher,
@@ -100,6 +104,7 @@ class AiRaceDataCollector {
         _raceStatisticsRepository =
             raceStatisticsRepository ?? RaceStatisticsRepository(),
         _raceMemoRepository = raceMemoRepository ?? RaceMemoRepository(),
+        _userRepository = userRepository ?? UserRepository(),
         _trackConditionRepository =
             trackConditionRepository ?? TrackConditionRepository(),
         _coursePresetRepository =
@@ -130,6 +135,11 @@ class AiRaceDataCollector {
     // [追加] T4a: 過去走ごとの馬場を prefix10 で収集（キャッシュで重複クエリ回避）
     final trackByPrefix10 = <String, TrackConditionRecord?>{};
     final pastTrackByHorse = <String, Map<String, TrackConditionRecord>>{};
+    // [追加] 過去レースの印・メモ Step1: 過去走ごとの印・メモと、レースごとのAIの予想・レース総評（同じレースは1回だけ読む） (v.2026.10.12+26101203)
+    final pastNotesByHorse = <String, Map<String, AiPastRaceNote>>{};
+    final pastRaceMemos = <String, AiPastRaceMemo>{};
+    final marksByRaceId = <String, Map<String, String>>{};
+    final checkedRaceMemoIds = <String>{};
 
     for (final horseId in horseIds) {
       final performance =
@@ -156,6 +166,36 @@ class AiRaceDataCollector {
         if (tc != null) pastTrack[rid] = tc;
       }
       pastTrackByHorse[horseId] = pastTrack;
+
+      // [追加] 過去レースの印・メモ Step1: 今回のレースを除いた過去走について、印・予想メモ・回顧メモと、レースのAIの予想・レース総評を集める (v.2026.10.12+26101203)
+      final pastRaceIds = raceIds.where((rid) => rid != raceId).toList();
+      final horseMemos = await _horseRepository.getMemosForHorseByRaceIds(
+          userId, horseId, pastRaceIds);
+      final horseMemoByRaceId = {for (final m in horseMemos) m.raceId: m};
+      final notes = <String, AiPastRaceNote>{};
+      for (final rid in pastRaceIds) {
+        if (!marksByRaceId.containsKey(rid)) {
+          final raceMarks =
+              await _userRepository.getAllUserMarksForRace(userId, rid);
+          marksByRaceId[rid] = {for (final mk in raceMarks) mk.horseId: mk.mark};
+        }
+        if (checkedRaceMemoIds.add(rid)) {
+          final pastRaceMemo = await _raceMemoRepository.getRaceMemo(userId, rid);
+          if (pastRaceMemo != null) {
+            pastRaceMemos[rid] = AiPastRaceMemo(
+              aiPrediction: pastRaceMemo.aiPredictionMemo,
+              review: pastRaceMemo.memo,
+            );
+          }
+        }
+        final horseMemo = horseMemoByRaceId[rid];
+        notes[rid] = AiPastRaceNote(
+          mark: marksByRaceId[rid]![horseId],
+          predictionMemo: horseMemo?.predictionMemo,
+          reviewMemo: horseMemo?.reviewMemo,
+        );
+      }
+      pastNotesByHorse[horseId] = notes;
 
       sessionsByHorse[horseId] =
           await _trainingRepository.getSessionsForHorse(horseId);
@@ -261,6 +301,9 @@ class AiRaceDataCollector {
       // [修正] レースメモ用途分離: エクスポートはAI予想・買い目(aiPredictionMemo)を読む (v.2026.9.28+26092802)
       raceMemoText: raceMemo?.aiPredictionMemo,
       pastTrackByHorse: pastTrackByHorse,
+      // [追加] 過去レースの印・メモ Step1 (v.2026.10.12+26101203)
+      pastNotesByHorse: pastNotesByHorse,
+      pastRaceMemos: pastRaceMemos,
       courseProfile: courseProfile,
       coursePreset: coursePreset,
       meetingTrackHistory: meetingTrackHistory,
@@ -338,6 +381,9 @@ class AiRaceDataCollector {
     TrackConditionRecord? latestVenueTrackCondition,
     AiWeatherSnapshot? weatherSnapshot,
     String? weatherUnavailableReason,
+    // [追加] 過去レースの印・メモ Step1: 今回のレース（[raceId]）のものと中身の無いものは、ここで取り除く (v.2026.10.12+26101203)
+    Map<String, Map<String, AiPastRaceNote>> pastNotesByHorse = const {},
+    Map<String, AiPastRaceMemo> pastRaceMemos = const {},
   }) {
     final horses = <AiHorseData>[];
     for (final horseId in horseIds) {
@@ -352,6 +398,13 @@ class AiRaceDataCollector {
         simulationParams: simParamsByHorse[horseId],
         trainingTimes: trainingTimesByHorse[horseId] ?? const [],
         pastTrackByRaceId: pastTrackByHorse[horseId] ?? const {},
+        pastNotesByRaceId: {
+          for (final entry
+              in (pastNotesByHorse[horseId] ?? const <String, AiPastRaceNote>{})
+                  .entries)
+            if (entry.key != raceId && !entry.value.isEmpty)
+              entry.key: entry.value,
+        },
       ));
     }
     return AiRaceExportBundle(
@@ -368,6 +421,11 @@ class AiRaceDataCollector {
       latestVenueTrackCondition: latestVenueTrackCondition,
       weatherSnapshot: weatherSnapshot,
       weatherUnavailableReason: weatherUnavailableReason,
+      pastRaceMemos: {
+        for (final entry in pastRaceMemos.entries)
+          if (entry.key != raceId && !entry.value.isEmpty)
+            entry.key: entry.value,
+      },
     );
   }
 }

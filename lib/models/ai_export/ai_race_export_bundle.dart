@@ -15,6 +15,41 @@ import 'package:hetaumakeiba_v2/logic/ai_export/ai_course_profile.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_weather_snapshot.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 
+// [追加] 過去レースの印・メモ Step1: 過去レースで付けた印・メモの入れ物。今回のレースのものは入れない (v.2026.10.12+26101203)
+bool _aiBlank(String? v) => v == null || v.trim().isEmpty;
+
+/// 過去レースで、その馬に付けた印・予想メモ・回顧メモ（1頭・1レースぶん）。
+class AiPastRaceNote {
+  /// 印（◎○▲△など。無ければ null）
+  final String? mark;
+
+  /// 予想メモ（horse_memos.predictionMemo）
+  final String? predictionMemo;
+
+  /// 回顧メモ（horse_memos.reviewMemo）
+  final String? reviewMemo;
+
+  const AiPastRaceNote({this.mark, this.predictionMemo, this.reviewMemo});
+
+  /// 印もメモも無い（空白だけを含む）なら true。
+  bool get isEmpty =>
+      _aiBlank(mark) && _aiBlank(predictionMemo) && _aiBlank(reviewMemo);
+}
+
+/// 過去レースのレース単位のメモ（AIの予想・レース総評）。
+class AiPastRaceMemo {
+  /// AIの予想・買い目（race_memos.aiPredictionMemo。レース前に取り込んだもの）
+  final String? aiPrediction;
+
+  /// レース総評（race_memos.memo。レース後に書いたもの）
+  final String? review;
+
+  const AiPastRaceMemo({this.aiPrediction, this.review});
+
+  /// どちらも無い（空白だけを含む）なら true。
+  bool get isEmpty => _aiBlank(aiPrediction) && _aiBlank(review);
+}
+
 /// 競走馬1頭ぶんの収集データ。
 class AiHorseData {
   final String horseId;
@@ -46,6 +81,9 @@ class AiHorseData {
   /// [追加] T4a: 過去走ごとの馬場(クッション値・含水率)。キー=過去走のraceId。prefix10で照合して収集 (v.2026.9.27+26092709)
   final Map<String, TrackConditionRecord> pastTrackByRaceId;
 
+  // [追加] 過去レースの印・メモ Step1: 過去走ごとの印・予想メモ・回顧メモ。キー=過去走のraceId。今回のレースと中身の無いものは入れない (v.2026.10.12+26101203)
+  final Map<String, AiPastRaceNote> pastNotesByRaceId;
+
   const AiHorseData({
     required this.horseId,
     required this.performance,
@@ -57,6 +95,7 @@ class AiHorseData {
     required this.simulationParams,
     required this.trainingTimes,
     this.pastTrackByRaceId = const {},
+    this.pastNotesByRaceId = const {},
   });
 }
 
@@ -97,6 +136,9 @@ class AiRaceExportBundle {
   /// 天気が取れなかった理由（取れたときは null）。
   final String? weatherUnavailableReason;
 
+  // [追加] 過去レースの印・メモ Step1: 出走馬の過去走のレースごとの、AIの予想・レース総評。キー=過去走のraceId。今回のレースと中身の無いものは入れない (v.2026.10.12+26101203)
+  final Map<String, AiPastRaceMemo> pastRaceMemos;
+
   const AiRaceExportBundle({
     required this.raceId,
     required this.raceName,
@@ -111,5 +153,6 @@ class AiRaceExportBundle {
     this.latestVenueTrackCondition,
     this.weatherSnapshot,
     this.weatherUnavailableReason,
+    this.pastRaceMemos = const {},
   });
 }
