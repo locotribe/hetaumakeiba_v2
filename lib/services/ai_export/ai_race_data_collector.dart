@@ -1,5 +1,6 @@
 // lib/services/ai_export/ai_race_data_collector.dart
 // [追加] AI分析データエクスポート Step2: レースID・競走馬IDに紐づく実データを既存リポジトリから収集し AiRaceExportBundle へ束ねるサービス。新規スクレイピングはせずDB読み出しのみ。composeBundle は純粋関数でDB非依存(テスト対象) (v.2026.9.27+26092702)
+// [修正] AI分析データ 天気・コース追加 Step3: コース（高低差）・コースプリセット・開催中の馬場推移・その競馬場の最新測定・天気（レース情報タブと同じ OpenMeteoService のキャッシュ優先の取得）を収集に加えた。追加の引数はすべて省略可 (v.2026.10.11+26101103)
 
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_past_race_extra_repository.dart';
@@ -10,7 +11,13 @@ import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_statistics_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
+import 'package:hetaumakeiba_v2/logic/ai_export/ai_course_profile.dart';
+import 'package:hetaumakeiba_v2/logic/ai_export/ai_weather_snapshot.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/course_preset_id_resolver.dart';
+import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
 import 'package:hetaumakeiba_v2/models/ai_export/ai_race_export_bundle.dart';
+import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_past_race_extra_model.dart';
 import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
@@ -21,9 +28,36 @@ import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 
+/// ピンポイント天気を取る関数（テストで差し替える）。
+/// 既定は [OpenMeteoService.fetchDetailedWeather]（キャッシュ優先。[isPastRace] が true ならキャッシュのみ）。
+typedef AiPinpointWeatherFetcher = Future<Map<String, dynamic>?> Function({
+  required String venue,
+  required String raceDate,
+  required String startTime,
+  required String raceId,
+  required bool isPastRace,
+});
+
+Future<Map<String, dynamic>?> _defaultPinpointWeatherFetcher({
+  required String venue,
+  required String raceDate,
+  required String startTime,
+  required String raceId,
+  required bool isPastRace,
+}) {
+  return OpenMeteoService.fetchDetailedWeather(
+    venue,
+    raceDate,
+    startTime,
+    raceId,
+    isPastRace: isPastRace,
+  );
+}
+
 /// 取得済みDBから、レース1本ぶんのAI分析用データを収集するサービス。
 ///
 /// - 新規スクレイピングはしない（すでに保存済みのデータのみを読む）。
+/// - 天気だけは、レース情報タブと同じくキャッシュが無く発走前なら取得する。
 /// - 各リポジトリはコンストラクタで差し替え可能（テスト用）。既定は実リポジトリ。
 /// - 実際のバンドル組み立ては純粋関数 [composeBundle] に切り出してある（DB非依存・テスト対象）。
 class AiRaceDataCollector {
@@ -36,6 +70,9 @@ class AiRaceDataCollector {
   final RaceStatisticsRepository _raceStatisticsRepository;
   final RaceMemoRepository _raceMemoRepository;
   final TrackConditionRepository _trackConditionRepository;
+  final CoursePresetRepository _coursePresetRepository;
+  final AiPinpointWeatherFetcher _weatherFetcher;
+  final DateTime Function() _now;
 
   AiRaceDataCollector({
     HorseRepository? horseRepository,
@@ -47,6 +84,9 @@ class AiRaceDataCollector {
     RaceStatisticsRepository? raceStatisticsRepository,
     RaceMemoRepository? raceMemoRepository,
     TrackConditionRepository? trackConditionRepository,
+    CoursePresetRepository? coursePresetRepository,
+    AiPinpointWeatherFetcher? weatherFetcher,
+    DateTime Function()? now,
   })  : _horseRepository = horseRepository ?? HorseRepository(),
         _extraRepository = extraRepository ?? HorsePastRaceExtraRepository(),
         _trainingRepository =
@@ -61,15 +101,26 @@ class AiRaceDataCollector {
             raceStatisticsRepository ?? RaceStatisticsRepository(),
         _raceMemoRepository = raceMemoRepository ?? RaceMemoRepository(),
         _trackConditionRepository =
-            trackConditionRepository ?? TrackConditionRepository();
+            trackConditionRepository ?? TrackConditionRepository(),
+        _coursePresetRepository =
+            coursePresetRepository ?? CoursePresetRepository(),
+        _weatherFetcher = weatherFetcher ?? _defaultPinpointWeatherFetcher,
+        _now = now ?? (() => DateTime.now());
 
   /// 取得済みDBからレース1本ぶんのデータを収集して束ねる。新規スクレイピングはしない。
+  /// [venue]〜[courseInOut] は出馬表（PredictionRaceData）の値。省略するとコース・天気は出さない。
   Future<AiRaceExportBundle> collect({
     required String raceId,
     required String raceName,
     required String raceDate,
     required String userId,
     required List<String> horseIds,
+    String? venue,
+    String? startTime,
+    String? trackType,
+    int? distanceValue,
+    String? direction,
+    String? courseInOut,
   }) async {
     final performanceByHorse = <String, List<HorseRaceRecord>>{};
     final extrasByHorse = <String, Map<String, HorsePastRaceExtra>>{};
@@ -129,6 +180,69 @@ class AiRaceDataCollector {
         .getTrackConditionForRace(raceId: raceId, raceDate: raceDate);
     final raceMemo = await _raceMemoRepository.getRaceMemo(userId, raceId);
 
+    // [追加] AI分析データ 天気・コース追加 Step3: コース（高低差）とコースプリセット (v.2026.10.11+26101103)
+    final courseData = findAiRaceCourse(
+      raceId: raceId,
+      distance: distanceValue,
+      trackType: trackType,
+      direction: direction,
+      courseInOut: courseInOut,
+    );
+    final courseProfile =
+        courseData == null ? null : buildAiCourseProfile(courseData);
+    final coursePreset = await _findCoursePreset(
+      raceId: raceId,
+      trackType: trackType,
+      distanceValue: distanceValue,
+      direction: direction,
+      courseInOut: courseInOut,
+    );
+
+    // [追加] AI分析データ 天気・コース追加 Step3: 同じ開催の馬場の測定と、その競馬場の最新の測定 (v.2026.10.11+26101103)
+    final meetingTrackHistory = raceId.length >= 8
+        ? await _trackConditionRepository
+            .getTrackConditionsByMeeting(raceId.substring(0, 8))
+        : <TrackConditionRecord>[];
+    final latestVenueTrackCondition =
+        await _findLatestVenueTrackCondition(raceId);
+
+    // [追加] AI分析データ 天気・コース追加 Step3: 天気（レース情報タブと同じ取得・同じ起点で馬場予測） (v.2026.10.11+26101103)
+    AiWeatherSnapshot? weatherSnapshot;
+    String? weatherUnavailableReason;
+    if (venue == null || venue.isEmpty || raceId.length < 6) {
+      weatherUnavailableReason = '未取得（開催場が不明）';
+    } else {
+      final locked = isAiWeatherLocked(
+        raceDate: raceDate,
+        startTime: startTime,
+        now: _now(),
+      );
+      Map<String, dynamic>? pinpoint;
+      try {
+        pinpoint = await _weatherFetcher(
+          venue: venue,
+          raceDate: raceDate,
+          startTime: startTime ?? '15:00',
+          raceId: raceId,
+          isPastRace: locked,
+        );
+      } catch (_) {
+        pinpoint = null;
+      }
+      weatherSnapshot = buildAiWeatherSnapshot(
+        pinpoint: pinpoint,
+        baseline: latestVenueTrackCondition,
+        venueCode: raceId.substring(4, 6),
+        trackType: trackType,
+        raceDate: raceDate,
+      );
+      if (weatherSnapshot == null) {
+        weatherUnavailableReason = locked
+            ? '未取得（発走後で保存データなし）'
+            : '未取得（レース情報タブの🔄で取得）';
+      }
+    }
+
     return composeBundle(
       raceId: raceId,
       raceName: raceName,
@@ -147,7 +261,54 @@ class AiRaceDataCollector {
       // [修正] レースメモ用途分離: エクスポートはAI予想・買い目(aiPredictionMemo)を読む (v.2026.9.28+26092802)
       raceMemoText: raceMemo?.aiPredictionMemo,
       pastTrackByHorse: pastTrackByHorse,
+      courseProfile: courseProfile,
+      coursePreset: coursePreset,
+      meetingTrackHistory: meetingTrackHistory,
+      latestVenueTrackCondition: latestVenueTrackCondition,
+      weatherSnapshot: weatherSnapshot,
+      weatherUnavailableReason: weatherUnavailableReason,
     );
+  }
+
+  /// コースプリセットを探す。ID候補は展開シミュ（race_analyzer.dart）と同じ CoursePresetIdResolver の順。
+  Future<CoursePreset?> _findCoursePreset({
+    required String raceId,
+    required String? trackType,
+    required int? distanceValue,
+    required String? direction,
+    required String? courseInOut,
+  }) async {
+    if (raceId.length < 6 || distanceValue == null) return null;
+    final tt = trackType ?? '';
+    final presetTrackType =
+        tt.contains('障') ? 'obstacle' : (tt.contains('ダ') ? 'dirt' : 'shiba');
+    for (final candidateId in CoursePresetIdResolver.candidates(
+      venueCode: raceId.substring(4, 6),
+      trackType: presetTrackType,
+      distance: distanceValue.toString(),
+      direction: direction,
+      courseInOut: courseInOut,
+    )) {
+      final preset = await _coursePresetRepository.getCoursePreset(candidateId);
+      if (preset != null) return preset;
+    }
+    return null;
+  }
+
+  /// その競馬場の最新の測定。レース情報タブ（shutuba_table_page.dart の _loadTrackCondition）と同じ選び方。
+  Future<TrackConditionRecord?> _findLatestVenueTrackCondition(
+      String raceId) async {
+    if (raceId.length < 6) return null;
+    final venueCode = raceId.substring(4, 6);
+    final records =
+        await _trackConditionRepository.getLatestTrackConditionsForEachCourse();
+    for (final record in records) {
+      final idStr = record.trackConditionId.toString();
+      if (idStr.length >= 6 && idStr.substring(4, 6) == venueCode) {
+        return record;
+      }
+    }
+    return null;
   }
 
   /// 取得済みデータを [AiRaceExportBundle] へ組み立てる純粋関数（DB非依存・テスト対象）。
@@ -171,6 +332,12 @@ class AiRaceDataCollector {
     TrackConditionRecord? trackCondition,
     String? raceMemoText,
     Map<String, Map<String, TrackConditionRecord>> pastTrackByHorse = const {},
+    AiCourseProfile? courseProfile,
+    CoursePreset? coursePreset,
+    List<TrackConditionRecord> meetingTrackHistory = const [],
+    TrackConditionRecord? latestVenueTrackCondition,
+    AiWeatherSnapshot? weatherSnapshot,
+    String? weatherUnavailableReason,
   }) {
     final horses = <AiHorseData>[];
     for (final horseId in horseIds) {
@@ -195,6 +362,12 @@ class AiRaceDataCollector {
       raceStatistics: raceStatistics,
       trackCondition: trackCondition,
       raceMemoText: raceMemoText,
+      courseProfile: courseProfile,
+      coursePreset: coursePreset,
+      meetingTrackHistory: meetingTrackHistory,
+      latestVenueTrackCondition: latestVenueTrackCondition,
+      weatherSnapshot: weatherSnapshot,
+      weatherUnavailableReason: weatherUnavailableReason,
     );
   }
 }

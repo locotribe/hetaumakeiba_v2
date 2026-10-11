@@ -255,6 +255,13 @@ Future<void> exportAiRaceDataAsMarkdown(
     raceDate: raceData.raceDate,
     userId: userId,
     horseIds: raceData.horses.map((h) => h.horseId).toList(),
+    // [追加] AI分析データ 天気・コース追加 Step3: コース・天気の収集に使う出馬表の値 (v.2026.10.11+26101103)
+    venue: raceData.venue,
+    startTime: raceData.startTime,
+    trackType: raceData.trackType,
+    distanceValue: raceData.distanceValue,
+    direction: raceData.direction,
+    courseInOut: raceData.courseInOut,
   );
   final markdown = buildRaceFullAiMarkdown(
     raceData: raceData,

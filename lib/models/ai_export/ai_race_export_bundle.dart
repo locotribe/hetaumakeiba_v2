@@ -10,6 +10,10 @@ import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+// [追加] AI分析データ 天気・コース追加 Step3: コース・プリセット・天気の要約の型 (v.2026.10.11+26101103)
+import 'package:hetaumakeiba_v2/logic/ai_export/ai_course_profile.dart';
+import 'package:hetaumakeiba_v2/logic/ai_export/ai_weather_snapshot.dart';
+import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 
 /// 競走馬1頭ぶんの収集データ。
 class AiHorseData {
@@ -74,6 +78,25 @@ class AiRaceExportBundle {
   /// レース単位メモの本文（無ければ null）。
   final String? raceMemoText;
 
+  // [追加] AI分析データ 天気・コース追加 Step3: コース・開催中の馬場推移・最新測定・天気。既存の呼び出しが変わらないよう、すべて省略可 (v.2026.10.11+26101103)
+  /// コースの要約（障害・データ無しは null）。
+  final AiCourseProfile? courseProfile;
+
+  /// コースプリセット（直線の長さ・特徴文。見つからなければ null）。
+  final CoursePreset? coursePreset;
+
+  /// 同じ開催（raceId先頭8桁）の馬場の測定（古い順）。
+  final List<TrackConditionRecord> meetingTrackHistory;
+
+  /// その競馬場の最新の測定（レース情報タブの馬場予測の起点と同じ。無ければ null）。
+  final TrackConditionRecord? latestVenueTrackCondition;
+
+  /// 天気・馬場予測の要約（取れなければ null）。
+  final AiWeatherSnapshot? weatherSnapshot;
+
+  /// 天気が取れなかった理由（取れたときは null）。
+  final String? weatherUnavailableReason;
+
   const AiRaceExportBundle({
     required this.raceId,
     required this.raceName,
@@ -82,5 +105,11 @@ class AiRaceExportBundle {
     required this.raceStatistics,
     required this.trackCondition,
     required this.raceMemoText,
+    this.courseProfile,
+    this.coursePreset,
+    this.meetingTrackHistory = const [],
+    this.latestVenueTrackCondition,
+    this.weatherSnapshot,
+    this.weatherUnavailableReason,
   });
 }
