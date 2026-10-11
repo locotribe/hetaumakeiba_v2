@@ -12,6 +12,7 @@ import 'package:hetaumakeiba_v2/db/elevations/tokyo/tokyo_course.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_course_profile.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_weather_snapshot.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 
 PredictionRaceData _race() => PredictionRaceData(
       raceId: '202606040911',
@@ -88,14 +89,17 @@ AiRaceExportBundle _bundle() => AiRaceExportBundle(
 
 void main() {
   group('buildRaceFullAiMarkdown', () {
-    test('標準: 概要・馬場詳細・スピード指数・メモを含み、統計JSONは埋め込まない', () {
+    // [修正] AI分析データ 文章・ラベル除外: レースメモ・予想メモは出さない (v.2026.10.12+26101201)
+    test('標準: 概要・馬場詳細・スピード指数を含み、メモは出さず、統計JSONは埋め込まない', () {
       final md = buildRaceFullAiMarkdown(
           raceData: _race(), bundle: _bundle(), grain: AiExportGrain.standard);
       expect(md, contains('AI分析資料（標準）'));
       expect(md, contains('raceId: 202606040911'));
       expect(md, contains('クッション値 9.5'));
       expect(md, contains('スピード指数: ベスト 88'));
-      expect(md, contains('レースメモ: 重い馬場想定'));
+      expect(md, isNot(contains('レースメモ')));
+      expect(md, isNot(contains('重い馬場想定')));
+      expect(md, isNot(contains('- 予想メモ:')));
       expect(md, contains('過去10年統計: 登録あり'));
       expect(md, contains('（過去成績データなし）'));
       expect(md, contains('## 過去10年傾向（縦の比較）'));
@@ -262,12 +266,13 @@ void main() {
     });
 
     // [追加] AI分析データ 天気・コース追加 Step4: 総合スコア・期待値の削除、賞金、馬場詳細の補完、コース・馬場推移・天気の節 (v.2026.10.11+26101104)
-    test('総合スコア・期待値を出さず、馬場適性だけを出す', () {
+    // [修正] AI分析データ 文章・ラベル除外: 馬場適性のラベル（アプリ評価）も出さない (v.2026.10.12+26101201)
+    test('総合スコア・期待値・馬場適性のラベルを出さない', () {
       final md = buildRaceFullAiMarkdown(
           raceData: _race(), bundle: _bundle(), grain: AiExportGrain.standard);
       expect(md, isNot(contains('総合スコア')));
       expect(md, isNot(contains('期待値')));
-      expect(md, contains('- アプリ評価: 馬場適性 -'));
+      expect(md, isNot(contains('アプリ評価')));
       expect(
           md,
           contains(
@@ -383,7 +388,10 @@ void main() {
       expect(standard, contains('## コース情報'));
       expect(standard, contains('/ 左回り / 1周 2083.1m'));
       expect(standard, contains('- ゴール前直線（プリセット）: 526m'));
-      expect(standard, contains('- コースの特徴: テストのレイアウト'));
+      // [修正] AI分析データ 文章・ラベル除外: プリセットの解説文は出さない (v.2026.10.12+26101201)
+      expect(standard, isNot(contains('コースの特徴')));
+      expect(standard, isNot(contains('テストのレイアウト')));
+      expect(standard, isNot(contains('テストのポイント')));
       expect(standard, contains('| ゴール前直線 | 1274.1〜1800m | 525.9m |'));
       expect(standard, contains('**100mごとの標高**'));
       expect(standard, contains('| 1800m | 0m | 0.00 |'));
@@ -447,7 +455,8 @@ void main() {
       expect(md, contains('- 天気: 未取得（レース情報タブの🔄で取得）'));
     });
 
-    test('天気: 予報と馬場予測。インサイトは標準以上、根拠は全部だけ', () {
+    // [修正] AI分析データ 文章・ラベル除外: 直線の風・インサイトは出さず、根拠は馬場予測の直後（全部だけ） (v.2026.10.12+26101201)
+    test('天気: 予報と馬場予測。直線の風・インサイトは出さず、根拠は全部だけ', () {
       final snapshot = buildAiWeatherSnapshot(
         pinpoint: {
           'current': {'time': '10/10 12:15'},
@@ -510,13 +519,72 @@ void main() {
           contains(
               '- 馬場予測: JRA基準で 良 / 予測含水率 11.6%（芝） / 予測クッション値 9.6（起点: 2026-10-10 の測定）'));
       expect(summary, isNot(contains('- インサイト')));
+      expect(summary, isNot(contains('- 予測含水率の根拠')));
 
-      expect(standard, contains('- 直線の風: 直線は【追い風】の傾向（逃げ・先行馬が止まりにくい）'));
-      expect(standard, contains('- インサイト 標準 (乾いた良)（予測含水率: 11.6%）'));
+      expect(standard, isNot(contains('直線の風')));
+      expect(standard, isNot(contains('【追い風】')));
+      expect(standard, isNot(contains('- インサイト')));
+      expect(standard, isNot(contains('乾いた良')));
       expect(standard, contains('**開催週の日別（予報・実績）**'));
-      expect(standard, isNot(contains('  - 根拠:')));
+      expect(standard, isNot(contains('- 予測含水率の根拠')));
 
-      expect(full, contains('  - 根拠: 【予測シミュレーションの根拠】'));
+      expect(full, isNot(contains('直線の風')));
+      expect(full, isNot(contains('- インサイト')));
+      expect(full, isNot(contains('実力通りの決着')));
+      expect(full, isNot(contains('  - 根拠:')));
+      expect(
+          full,
+          contains(
+              '- 予測含水率の根拠: 【予測シミュレーションの根拠】 / ・起点 (今回公式): 13.3% / ・当日加水 (降水予報 0.0mm): +0.0%'));
+      expect(full.indexOf('- 馬場予測:') < full.indexOf('- 予測含水率の根拠:'),
+          isTrue);
+      expect(
+          full.indexOf('- 予測含水率の根拠:') <
+              full.indexOf('**開催週の日別（予報・実績）**'),
+          isTrue);
+    });
+
+    // [追加] AI分析データ 文章・ラベル除外: 脚質の内訳（脚質詳細ダイアログと同じ数値）を出す (v.2026.10.12+26101201)
+    test('脚質の内訳: 4脚質の割合・着度数・勝率、マクリは回数で別記', () {
+      final race = _race();
+      race.horses.first.legStyleProfile = LegStyleProfile(
+        primaryStyle: '先行',
+        styleDistribution: {'逃げ': 0.2, '先行': 0.6, '差し': 0.2, '追込': 0.0},
+        styleWinRates: {'逃げ': 1.0, '先行': 1 / 3, '差し': 0.0, 'マクリ': 0.0},
+        styleRecordCounts: {
+          '逃げ': [1, 0, 0, 0],
+          '先行': [1, 1, 0, 1],
+          '差し': [0, 0, 0, 1],
+          '追込': [0, 0, 0, 0],
+          'マクリ': [0, 1, 0, 1],
+        },
+      );
+      final md = buildRaceFullAiMarkdown(
+          raceData: race, bundle: _bundle(), grain: AiExportGrain.summary);
+      expect(
+          md,
+          contains(
+              '- 脚質の内訳: 逃げ 20.0%（1-0-0-0, 勝率100.0%）/ 先行 60.0%（1-1-0-1, 勝率33.3%）/ 差し 20.0%（0-0-0-1, 勝率0.0%）/ 追込 0.0%（0-0-0-0, 勝率0.0%）（マクリ 2回: 0-1-0-1, 勝率0.0%）'));
+      expect(md, contains('- 脚質の内訳: 過去走の脚質ごとの割合'));
+    });
+
+    test('脚質の内訳: 着度数の無い古い保存は割合だけ、脚質データが無ければ行を出さない', () {
+      final race = _race();
+      race.horses.first.legStyleProfile = LegStyleProfile(
+        primaryStyle: '逃げ',
+        styleDistribution: {'逃げ': 0.5, '先行': 0.5},
+      );
+      final md = buildRaceFullAiMarkdown(
+          raceData: race, bundle: _bundle(), grain: AiExportGrain.standard);
+      expect(
+          md,
+          contains(
+              '- 脚質の内訳: 逃げ 50.0% / 先行 50.0% / 差し 0.0% / 追込 0.0%（着度数・勝率は未計算）'));
+      expect(md, isNot(contains('マクリ 0回')));
+
+      final none = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: _bundle(), grain: AiExportGrain.standard);
+      expect(none, isNot(contains('- 脚質の内訳: 逃げ')));
     });
   });
 }

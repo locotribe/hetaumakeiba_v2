@@ -48,6 +48,7 @@ String _grainLabel(AiExportGrain g) {
 
 /// [追加] T1: AI分析資料の先頭に置く「AIへの依頼・用語・出力フォーマット」ブロック（純粋・固定文言）。ユーザーが「添付データで分析して」だけで所定のCSVまで返せるようにする。粒度に依らず常に付与する (v.2026.9.27+26092706)
 // [修正] AIファイル名整理: 出力フォーマットの保存ファイル名を「インポート総評_／インポート予想メモ_…_raceId.txt」にし、予想メモも ```text ブロックで出させる (v.2026.10.10+26101006)
+// [修正] AI分析データ 文章・ラベル除外: 資料の読み方に「脚質の内訳」と「予測含水率の根拠」の説明を追加 (v.2026.10.12+26101201)
 String _aiInstructionHeader() {
   return '''# この資料の使い方（AIへの依頼）
 
@@ -58,12 +59,13 @@ String _aiInstructionHeader() {
 - 出走馬一覧: 馬番・枠・騎手(斤量)・単勝・人気・馬体重。「-」は未発表。
 - スピード指数: ベスト/近走平均/トレンド(正=上昇,負=下降)/信頼度(0-1)(サンプル走数)。
 - 展開指数: テン加速/末脚/スタミナ(各0-1)/脚質(逃げ・先行・差し・追込・自在 等)。
+- 脚質の内訳: 過去走の脚質ごとの割合（逃げ・先行・差し・追込の4つで100%）・着度数(1着-2着-3着-着外)・勝率。マクリは割合に含めず、回数と着度数・勝率を末尾の括弧に別に書く（マクリの無い馬は省略）。
 - 馬柱の各列: 日付 / レース(格) / 距離馬場 / 枠-馬番 / 人気-着順 / タイム(着差) / 通過(コーナー順)-上り3F / ペース(前半-後半 と [S/M/H]=スロー/ミドル/ハイ) / 指数(タイム指数, 大きいほど優秀) / 賞金(万円。netkeibaの賞金列で重賞は付加賞込み、外国のレースは空)。
 - 調教: 日付 追切場所 時計(6F-5F-4F-3F-2F-1Fの順・空欄は-) 脚色 評価 併せ馬。
 - 通算獲得賞金: 過去成績の賞金列の合計（中央＋地方。外国は含まない）。JRAの収得賞金（クラス判定用）とは別の値。
 - コース情報: 周長・区間の距離（スタートからのm）・標高。標高はコースデータ上の相対値(m)で、勾配は区間内の平均。
 - 開催中の馬場推移: 同じ開催のJRA発表値（クッション値と、含水率 G=ゴール前/4C=4コーナー）を古い順に並べたもの。
-- 天気・馬場予測: 取得時刻の時点の天気予報と、それを使ったアプリの推定（予測含水率など）。確定値ではない。風速は m/s（元データの km/h を換算）。
+- 天気・馬場予測: 取得時刻の時点の天気予報と、それを使ったアプリの推定（予測含水率など）。確定値ではない。風速は m/s（元データの km/h を換算）。粒度「全部」では「予測含水率の根拠」（起点の測定・当日の加水と乾燥・地盤補正の内訳）も出す。
 
 ## 出力フォーマット（保存できる2つのテキストファイルを、この順で出力）
 
@@ -214,9 +216,7 @@ String buildRaceFullAiMarkdown({
   final rs = bundle.raceStatistics;
   buf.writeln(
       '- 過去10年統計: ${rs != null ? '登録あり（${_cell(rs.raceName)}）' : '未取得'}');
-  final memo = bundle.raceMemoText;
-  buf.writeln(
-      '- レースメモ: ${(memo == null || memo.trim().isEmpty) ? '（未記入）' : _cell(memo)}');
+  // [削除] AI分析データ 文章・ラベル除外: 今回のレースのレースメモ（AI予想・買い目）は出さない。予想中の印・メモはデータとして渡さない (v.2026.10.12+26101201)
   buf.writeln();
 
   // [追加] AI分析データ 天気・コース追加 Step4: コース情報・開催中の馬場推移・天気/馬場予測 (v.2026.10.11+26101104)
@@ -281,7 +281,7 @@ void _renderHorse(
   buf.writeln(
       '- 馬体重: ${_t(h.horseWeight)}（前走: ${_t(h.previousHorseWeight)}）/ 前走騎手: ${_t(h.previousJockey)}');
   // [修正] AI分析データ 天気・コース追加 Step4: 総合スコア・期待値を外し、通算獲得賞金を追加 (v.2026.10.11+26101104)
-  buf.writeln('- アプリ評価: 馬場適性 ${_t(h.trackAptitudeLabel)}');
+  // [削除] AI分析データ 文章・ラベル除外: アプリが判定した馬場適性のラベル（アプリ評価）は出さない (v.2026.10.12+26101201)
   buf.writeln(_prizeLine(d?.performance ?? const []));
 
   final marks = <String>[];
@@ -307,6 +307,38 @@ void _renderHorse(
   if (sim != null) {
     buf.writeln(
         '- 展開指数: テン加速 ${_d(sim.tenAccelIndex)} / 末脚 ${_d(sim.finishingPower)} / スタミナ ${_d(sim.staminaIndex)} / 脚質 ${_t(sim.legStyle)}');
+  }
+
+  // [追加] AI分析データ 文章・ラベル除外: 出馬表の「脚質詳細」と同じ数値（4脚質の割合・着度数・勝率、マクリは回数で別記）を出す (v.2026.10.12+26101201)
+  final legProfile = h.legStyleProfile;
+  if (legProfile != null) {
+    const legStylesOrder = ['逃げ', '先行', '差し', '追込'];
+    final hasRecords = legProfile.styleRecordCounts.isNotEmpty;
+    final legParts = <String>[];
+    for (final style in legStylesOrder) {
+      final percentage = (legProfile.styleDistribution[style] ?? 0.0) * 100;
+      if (!hasRecords) {
+        legParts.add('$style ${percentage.toStringAsFixed(1)}%');
+        continue;
+      }
+      final record = legProfile.styleRecordCounts[style] ?? const [0, 0, 0, 0];
+      final winRate = (legProfile.styleWinRates[style] ?? 0.0) * 100;
+      legParts.add(
+          '$style ${percentage.toStringAsFixed(1)}%（${record[0]}-${record[1]}-${record[2]}-${record[3]}, 勝率${winRate.toStringAsFixed(1)}%）');
+    }
+    var legTail = '';
+    if (!hasRecords) {
+      legTail = '（着度数・勝率は未計算）';
+    } else {
+      final makuri = legProfile.styleRecordCounts['マクリ'] ?? const [0, 0, 0, 0];
+      final makuriCount = makuri[0] + makuri[1] + makuri[2] + makuri[3];
+      if (makuriCount > 0) {
+        final makuriWinRate = (legProfile.styleWinRates['マクリ'] ?? 0.0) * 100;
+        legTail =
+            '（マクリ $makuriCount回: ${makuri[0]}-${makuri[1]}-${makuri[2]}-${makuri[3]}, 勝率${makuriWinRate.toStringAsFixed(1)}%）';
+      }
+    }
+    buf.writeln('- 脚質の内訳: ${legParts.join(' / ')}$legTail');
   }
 
   final rev = d?.trainingReview;
@@ -398,9 +430,7 @@ void _renderHorse(
   }
 
   // 予想メモ
-  final pm = h.userMemo?.predictionMemo?.trim() ?? '';
-  buf.writeln(
-      '- 予想メモ: ${pm.isEmpty ? '（未記入）' : pm.replaceAll(RegExp(r'[\r\n]+'), ' ')}');
+  // [削除] AI分析データ 文章・ラベル除外: 今回のレースの予想メモは出さない。予想中の印・メモはデータとして渡さない (v.2026.10.12+26101201)
 }
 
 // [追加] AI分析データ 天気・コース追加 Step4: コース情報・開催中の馬場推移・天気/馬場予測・獲得賞金の描画ヘルパー (v.2026.10.11+26101104)
@@ -476,8 +506,7 @@ void _renderCourseSection(StringBuffer buf, PredictionRaceData raceData,
   }
   if (preset != null) {
     buf.writeln('- ゴール前直線（プリセット）: ${preset.straightLength}m');
-    buf.writeln('- コースの特徴: ${_cell(preset.courseLayout)}');
-    buf.writeln('- ポイント: ${_cell(preset.keyPoints)}');
+    // [削除] AI分析データ 文章・ラベル除外: プリセットの解説文（コースの特徴・ポイント）は出さない (v.2026.10.12+26101201)
   }
   if (profile == null) {
     buf.writeln();
@@ -611,22 +640,22 @@ void _renderWeatherSection(StringBuffer buf, PredictionRaceData raceData,
         '- 馬場予測: JRA基準で ${_t(w.jraCondition)}$leaning / 予測含水率 ${_f(moisture, 1)}%（${isDirt ? 'ダート' : '芝'}）$cushion$base');
   }
 
-  if (grain != AiExportGrain.summary) {
-    if (w.windAnalysis != null && w.windAnalysis!.isNotEmpty) {
-      buf.writeln('- 直線の風: ${_cell(w.windAnalysis!)}');
-    }
+  // [追加] AI分析データ 文章・ラベル除外: 予測含水率の根拠（計算の内訳）を馬場予測の直後に出す。全部の粒度のみ。根拠が複数あれば全部出し、乖離アラートの文章は出さない (v.2026.10.12+26101201)
+  if (grain == AiExportGrain.full) {
     for (final insight in w.insights) {
-      buf.writeln(
-          '- インサイト ${_cell(insight.label)}（${_cell(insight.value)}）: ${_cell(insight.summary)}');
-      if (grain == AiExportGrain.full && insight.basis != null) {
-        final lines = insight.basis!
-            .split('\n')
-            .map((l) => l.trim())
-            .where((l) => l.isNotEmpty)
-            .toList();
-        buf.writeln('  - 根拠: ${_cell(lines.join(' / '))}');
-      }
+      if (insight.basis == null) continue;
+      final lines = insight.basis!
+          .split('\n')
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty && !l.contains('【乖離アラート】'))
+          .toList();
+      if (lines.isEmpty) continue;
+      buf.writeln('- 予測含水率の根拠: ${_cell(lines.join(' / '))}');
     }
+  }
+
+  // [削除] AI分析データ 文章・ラベル除外: 直線の風の文章とインサイト（見出し・説明文）は出さない (v.2026.10.12+26101201)
+  if (grain != AiExportGrain.summary) {
     if (w.daily.isNotEmpty) {
       buf.writeln();
       buf.writeln('**開催週の日別（予報・実績）**');
