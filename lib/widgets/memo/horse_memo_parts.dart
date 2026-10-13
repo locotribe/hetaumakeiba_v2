@@ -211,6 +211,7 @@ Future<void> exportMemosAsCsv({
 
 /// [追加] AI分析データエクスポート Step4: AI分析用データ(Markdown)を予想メモCSVと一緒に共有する (v.2026.9.27+26092704)
 /// Markdown は buildRaceFullAiMarkdown（既定=標準粒度）、CSV は現行の予想メモCSVと同一フォーマット。
+// [修正] AI分析データ 過去データ分離 Step2: 「追加データを共有」。追加データ(Markdown)だけを共有し、予想メモのひな形(CSV)は付けない（「メモをエクスポート」で出す） (v.2026.10.14+26101402)
 Future<void> exportAiRaceDataAsMarkdown(
   BuildContext context, {
   required String raceId,
@@ -263,54 +264,31 @@ Future<void> exportAiRaceDataAsMarkdown(
     direction: raceData.direction,
     courseInOut: raceData.courseInOut,
   );
+  // [修正] AI分析データ 過去データ分離 Step2: 先頭に出力日時を書く (v.2026.10.14+26101402)
   final markdown = buildRaceFullAiMarkdown(
     raceData: raceData,
     bundle: bundle,
     grain: selectedGrain,
+    exportedAt: DateTime.now(),
   );
 
-  // 予想メモCSV（現行と同一フォーマット）
-  final List<List<dynamic>> rows = [];
-  rows.add(['raceId', 'horseId', 'horseNumber', 'horseName', 'predictionMemo']);
-  for (final horse in raceData.horses) {
-    rows.add([
-      raceId,
-      horse.horseId,
-      horse.horseNumber,
-      horse.horseName,
-      horse.userMemo?.predictionMemo ?? '',
-    ]);
-  }
-  final csv = const ListToCsvConverter().convert(rows);
-
-  // [修正] AIファイル名整理: 「レースデータ_…_レースID.md」と「テンプレ予想メモ_…_レースID.csv」にする (v.2026.10.10+26101006)
-  final mdName = buildPrefixedFileName(
-    prefix: kFilePrefixRaceData,
-    raceName: raceData.raceName,
+  // [修正] AI分析データ 過去データ分離 Step2: 「追加データ_日付_レース名.md」だけを共有する（予想メモのひな形は付けない） (v.2026.10.14+26101402)
+  final mdName = buildExportFileName(
+    prefix: kFilePrefixAddData,
     raceDate: raceData.raceDate,
-    raceId: raceId,
+    raceName: raceData.raceName,
     extension: 'md',
-  );
-  final csvName = buildPrefixedFileName(
-    prefix: kFilePrefixPredictionTemplate,
-    raceName: raceData.raceName,
-    raceDate: raceData.raceDate,
-    raceId: raceId,
-    extension: 'csv',
   );
 
   final directory = await getTemporaryDirectory();
   final mdFile = File('${directory.path}/$mdName');
   await mdFile.writeAsString(markdown);
-  final csvFile = File('${directory.path}/$csvName');
-  await csvFile.writeAsString(csv);
 
   await Share.shareXFiles(
     [
       XFile(mdFile.path, name: mdName),
-      XFile(csvFile.path, name: csvName),
     ],
-    text: '${raceData.raceName} のAI分析用データ（Markdown）＋予想メモ（CSV）',
+    text: '${raceData.raceName} の追加データ（AI分析用データ）',
   );
 }
 

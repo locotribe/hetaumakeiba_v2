@@ -2,8 +2,7 @@
 // [追加] AI分析データエクスポート Step3: 出馬表(PredictionRaceData)と収集バンドル(AiRaceExportBundle)から全部入りのAI分析用Markdownを組み立てる純粋関数。DB/I/Oなし。粒度(要約/標準/全部)で情報量を切り替える。Step1の buildRaceAiMarkdown には手を触れない (v.2026.9.27+26092703)
 // [修正] AI分析データ 天気・コース追加 Step4: コース情報・開催中の馬場推移・天気/馬場予測の節、馬柱の賞金列と通算獲得賞金を追加。計算処理の無い総合スコア・期待値を外し、当日の測定が無いときは最新の測定を馬場詳細に出す (v.2026.10.11+26101104)
 
-import 'dart:convert';
-
+// [削除] AI分析データ 過去データ分離 Step2: 過去10年傾向の集計表を出さなくなり JSON を読まなくなったため dart:convert の import を外した (v.2026.10.14+26101402)
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/ai_export/ai_race_export_bundle.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -46,17 +45,25 @@ String _grainLabel(AiExportGrain g) {
   }
 }
 
+// [追加] AI分析データ 過去データ分離 Step2: 出力日時の書式。追加データと過去データの先頭に書く (v.2026.10.14+26101402)
+/// 出力日時を「2026-10-14 06:58」の形（月・日・時・分は2桁）にする。
+String formatAiExportedAt(DateTime t) {
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
+}
+
 /// [追加] T1: AI分析資料の先頭に置く「AIへの依頼・用語・出力フォーマット」ブロック（純粋・固定文言）。ユーザーが「添付データで分析して」だけで所定のCSVまで返せるようにする。粒度に依らず常に付与する (v.2026.9.27+26092706)
 // [修正] AIファイル名整理: 出力フォーマットの保存ファイル名を「インポート総評_／インポート予想メモ_…_raceId.txt」にし、予想メモも ```text ブロックで出させる (v.2026.10.10+26101006)
 // [修正] AI分析データ 文章・ラベル除外: 資料の読み方に「脚質の内訳」と「予測含水率の根拠」の説明を追加 (v.2026.10.12+26101201)
 // [修正] 過去レースの印・メモ Step2: 資料の読み方に「過去走の印・メモ／過去レースのAI予想・レース総評」の説明を追加 (v.2026.10.12+26101204)
+// [修正] AI分析データ 過去データ分離 Step2: 一次情報に「過去データ」（別ファイル）を加え、資料の読み方に過去データと出力日時の説明を追加 (v.2026.10.14+26101402)
 String _aiInstructionHeader() {
   return '''# この資料の使い方（AIへの依頼）
 
-この資料（Markdown）だけを一次情報として、以下のレースを分析してください。ネット検索や資料に無い事実の創作はせず、資料内のデータと、そこから導ける推論だけで判断してください。「-」「未取得」は「不明」として扱います。引用記号（[cite: n] などの角括弧付き出典表記）は一切出力しないでください。
+この資料（追加データ）と、同じレースの「過去データ」（別のMarkdown。過去の同じレースの結果）だけを一次情報として、以下のレースを分析してください。ネット検索や資料に無い事実の創作はせず、資料内のデータと、そこから導ける推論だけで判断してください。「-」「未取得」は「不明」として扱います。引用記号（[cite: n] などの角括弧付き出典表記）は一切出力しないでください。
 
 ## 資料の読み方（列・用語）
-- レース概要: コース（芝/ダ・距離・回り・内外）、馬場、天候、頭数、1着賞金、過去10年統計の有無。
+- レース概要: コース（芝/ダ・距離・回り・内外）、馬場、天候、頭数、1着賞金、過去10年統計の有無（各年の結果は過去データにある）。
 - 出走馬一覧: 馬番・枠・騎手(斤量)・単勝・人気・馬体重。「-」は未発表。
 - スピード指数: ベスト/近走平均/トレンド(正=上昇,負=下降)/信頼度(0-1)(サンプル走数)。
 - 展開指数: テン加速/末脚/スタミナ(各0-1)/脚質(逃げ・先行・差し・追込・自在 等)。
@@ -68,6 +75,8 @@ String _aiInstructionHeader() {
 - 開催中の馬場推移: 同じ開催のJRA発表値（クッション値と、含水率 G=ゴール前/4C=4コーナー）を古い順に並べたもの。
 - 天気・馬場予測: 取得時刻の時点の天気予報と、それを使ったアプリの推定（予測含水率など）。確定値ではない。風速は m/s（元データの km/h を換算）。粒度「全部」では「予測含水率の根拠」（起点の測定・当日の加水と乾燥・地盤補正の内訳）も出す。
 - 過去走の印・メモ／過去レースのAI予想・レース総評: 過去のレースで、ユーザーやAIがレース前・レース後に書いた見立て（事実ではない）。着順と照らして当たり外れを判断の材料にする。今回のレースのものは含まない。AI予想・レース総評は粒度「標準」「全部」だけで、本文の各行の先頭に「> 」を付けて全文を載せる。
+- 過去データ（別ファイル）: アプリに取り込んだ過去の同じレースの結果（取り込んだ年だけ。新しい順）。各年のコース・天候・馬場、ラップ、コーナー通過順、全着順（着順・枠・馬番・馬名・性齢・斤量・騎手・タイム・着差・通過・上り・単勝・人気・馬体重・調教師）、払戻。
+- 出力日時: この資料（追加データ）を出した時刻（資料の先頭）。単勝・人気・馬体重・調教・天気予報などはこの時点の値。
 
 ## 出力フォーマット（保存できる2つのテキストファイルを、この順で出力）
 
@@ -88,85 +97,14 @@ raceId,horseId,horseNumber,horseName,predictionMemo
 ''';
 }
 
-/// [追加] T2: 過去10年統計(statisticsJson)を整形テーブルで描画するヘルパー群 (v.2026.9.27+26092708)
-int _numAwareCompare(String a, String b) {
-  final na = int.tryParse(a);
-  final nb = int.tryParse(b);
-  if (na != null && nb != null) return na.compareTo(nb);
-  return a.compareTo(b);
-}
-
-Map<String, dynamic>? _asStatMap(dynamic v) {
-  if (v is Map<String, dynamic>) return v;
-  if (v is Map) return v.map((k, val) => MapEntry(k.toString(), val));
-  return null;
-}
-
-void _renderStatTable(StringBuffer buf, String title,
-    Map<String, dynamic>? stats, List<String> order) {
-  if (stats == null || stats.isEmpty) return;
-  buf.writeln();
-  buf.writeln('**$title**');
-  buf.writeln('| 区分 | 該当 | 勝 | 連対 | 複勝 | 勝率 | 複勝率 |');
-  buf.writeln('|---|---|---|---|---|---|---|');
-  final keys = <String>[];
-  for (final k in order) {
-    if (stats.containsKey(k)) keys.add(k);
-  }
-  final rest = stats.keys.where((k) => !order.contains(k)).toList()
-    ..sort(_numAwareCompare);
-  keys.addAll(rest);
-  for (final k in keys) {
-    final v = stats[k];
-    if (v is! Map) continue;
-    final total = (v['total'] as num?)?.toInt() ?? 0;
-    final win = (v['win'] as num?)?.toInt() ?? 0;
-    final place = (v['place'] as num?)?.toInt() ?? 0;
-    final show = (v['show'] as num?)?.toInt() ?? 0;
-    final wr = total > 0 ? (win * 100 / total).round().toString() : '-';
-    final sr = total > 0 ? (show * 100 / total).round().toString() : '-';
-    buf.writeln('| ${_cell(k)} | $total | $win | $place | $show | $wr% | $sr% |');
-  }
-}
-
-void _renderRaceStatistics(StringBuffer buf, String? statisticsJson) {
-  if (statisticsJson == null || statisticsJson.trim().isEmpty) return;
-  Map<String, dynamic>? data;
-  try {
-    final decoded = jsonDecode(statisticsJson);
-    if (decoded is Map<String, dynamic>) data = decoded;
-  } catch (_) {
-    data = null;
-  }
-  if (data == null) return;
-  buf.writeln();
-  buf.writeln('## 過去10年傾向（縦の比較）');
-  final years = data['analyzedYears'];
-  if (years is List && years.isNotEmpty) {
-    buf.writeln('- 対象年: ${years.join('、')}（${years.length}年）');
-  }
-  final avgW = data['avgWinningHorseWeight'];
-  if (avgW is num && avgW > 0) {
-    buf.writeln('- 勝ち馬の平均馬体重: ${avgW.round()}kg');
-  }
-  _renderStatTable(buf, '枠番別', _asStatMap(data['frameStats']),
-      const ['1', '2', '3', '4', '5', '6', '7', '8']);
-  _renderStatTable(buf, '脚質別', _asStatMap(data['legStyleStats']),
-      const ['逃げ', '先行', '差し', '追込']);
-  _renderStatTable(
-      buf, '人気別', _asStatMap(data['popularityStats']), const <String>[]);
-  _renderStatTable(
-      buf, '性別別', _asStatMap(data['genderStats']), const ['牡', '牝', 'セ']);
-  _renderStatTable(buf, '馬体重増減別', _asStatMap(data['horseWeightChangeStats']),
-      const ['-10kg以下', '-4~-8kg', '-2~+2kg', '+4~+8kg', '+10kg以上']);
-  buf.writeln();
-}
-
+// [削除] AI分析データ 過去データ分離 Step2: 過去10年傾向（アプリの集計表）を出さなくなったため、集計表を描くヘルパー群（_numAwareCompare・_asStatMap・_renderStatTable・_renderRaceStatistics）を削除した。過去の結果は「過去データ」で出す (v.2026.10.14+26101402)
 /// PredictionRaceData と AiRaceExportBundle から全部入りのAI分析用Markdownを組み立てる（純粋関数・副作用なし）。
 String buildRaceFullAiMarkdown({
   required PredictionRaceData raceData,
   required AiRaceExportBundle bundle,
   AiExportGrain grain = AiExportGrain.standard,
+  // [追加] AI分析データ 過去データ分離 Step2: 出力日時。渡したときだけ資料の先頭に書く (v.2026.10.14+26101402)
+  DateTime? exportedAt,
 }) {
   final int pastLimit = grain == AiExportGrain.summary
       ? 5
@@ -182,6 +120,11 @@ String buildRaceFullAiMarkdown({
   };
 
   final buf = StringBuffer();
+  // [追加] AI分析データ 過去データ分離 Step2: 先頭に出力日時を書く（どの時点の資料か分かるように） (v.2026.10.14+26101402)
+  if (exportedAt != null) {
+    buf.writeln('出力日時: ${formatAiExportedAt(exportedAt)}');
+    buf.writeln();
+  }
   // [追加] T1: AIへの依頼・用語・出力フォーマットのフロントマターを先頭に出力 (v.2026.9.27+26092706)
   buf.write(_aiInstructionHeader());
   final grade = raceData.raceGrade.trim();
@@ -226,10 +169,7 @@ String buildRaceFullAiMarkdown({
   _renderMeetingTrackSection(buf, raceData, bundle, grain);
   _renderWeatherSection(buf, raceData, bundle, grain);
 
-  // [修正] T2: 過去10年統計(縦の比較)を生JSONではなく整形テーブルで出力。要約粒度では省略 (v.2026.9.27+26092708)
-  if (grain != AiExportGrain.summary) {
-    _renderRaceStatistics(buf, rs?.statisticsJson);
-  }
+  // [削除] AI分析データ 過去データ分離 Step2: 過去10年傾向（アプリの集計表）は出さない。過去の結果は「過去データ」で出す (v.2026.10.14+26101402)
 
   // 出走馬一覧
   buf.writeln('## 出走馬一覧');

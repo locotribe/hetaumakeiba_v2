@@ -102,16 +102,19 @@ void main() {
       expect(md, isNot(contains('- 予想メモ:')));
       expect(md, contains('過去10年統計: 登録あり'));
       expect(md, contains('（過去成績データなし）'));
-      expect(md, contains('## 過去10年傾向（縦の比較）'));
+      // [修正] AI分析データ 過去データ分離 Step2: 過去10年傾向（集計表）は出さない (v.2026.10.14+26101402)
+      expect(md, isNot(contains('## 過去10年傾向（縦の比較）')));
     });
 
-    test('全部: 統計JSONを埋め込む', () {
+    // [修正] AI分析データ 過去データ分離 Step2: 全部でも過去10年傾向（集計表）は出さない。統計の登録の有無は概要に残す (v.2026.10.14+26101402)
+    test('全部: 過去10年傾向（集計表）は出さない', () {
       final md = buildRaceFullAiMarkdown(
           raceData: _race(), bundle: _bundle(), grain: AiExportGrain.full);
       expect(md, contains('AI分析資料（全部）'));
-      expect(md, contains('## 過去10年傾向（縦の比較）'));
-      expect(md, contains('**枠番別**'));
-      expect(md, contains('勝ち馬の平均馬体重: 486kg'));
+      expect(md, contains('過去10年統計: 登録あり'));
+      expect(md, isNot(contains('## 過去10年傾向（縦の比較）')));
+      expect(md, isNot(contains('**枠番別**')));
+      expect(md, isNot(contains('勝ち馬の平均馬体重')));
     });
 
     test('要約: 見出しと各馬詳細を含む', () {
@@ -730,6 +733,32 @@ void main() {
           raceData: _race(), bundle: _bundle(), grain: AiExportGrain.summary);
       expect(md,
           contains('- 過去走の印・メモ／過去レースのAI予想・レース総評: 過去のレースで'));
+    });
+
+    // [追加] AI分析データ 過去データ分離 Step2: 出力日時と、依頼文の過去データの説明 (v.2026.10.14+26101402)
+    test('出力日時を渡すと資料の先頭に書き、渡さなければ書かない', () {
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(),
+          bundle: _bundle(),
+          grain: AiExportGrain.standard,
+          exportedAt: DateTime(2026, 10, 14, 6, 58));
+      expect(md.startsWith('出力日時: 2026-10-14 06:58\n'), isTrue);
+      final none = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: _bundle(), grain: AiExportGrain.standard);
+      expect(none.startsWith('# この資料の使い方（AIへの依頼）'), isTrue);
+      expect(none, isNot(contains('出力日時: 20')));
+    });
+
+    test('formatAiExportedAt は月・日・時・分を2桁にする', () {
+      expect(formatAiExportedAt(DateTime(2026, 1, 2, 3, 4)), '2026-01-02 03:04');
+    });
+
+    test('依頼文に過去データ（別ファイル）と出力日時の読み方がある', () {
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: _bundle(), grain: AiExportGrain.summary);
+      expect(md, contains('同じレースの「過去データ」（別のMarkdown'));
+      expect(md, contains('- 過去データ（別ファイル）: '));
+      expect(md, contains('- 出力日時: この資料（追加データ）を出した時刻'));
     });
   });
 }

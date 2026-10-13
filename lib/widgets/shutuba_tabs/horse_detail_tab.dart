@@ -426,9 +426,10 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
                 child: Text('メモをエクスポート'),
               ),
               // [追加] AI分析データエクスポート Step4 (v.2026.9.27+26092704)
+              // [修正] AI分析データ 過去データ分離 Step2: 文言を「追加データを共有」にする (v.2026.10.14+26101402)
               PopupMenuItem(
                 value: _HorseDetailMenuAction.exportAiData,
-                child: Text('AI分析用データを共有'),
+                child: Text('追加データを共有'),
               ),
             ],
           ),
