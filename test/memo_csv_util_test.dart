@@ -84,6 +84,66 @@ void main() {
     });
   });
 
+  // [追加] AI分析データ 過去データ分離 Step1: アプリから出すファイル名（種別_日付_レース名、レースIDなし） (v.2026.10.14+26101401)
+  group('buildExportFileName', () {
+    test('種別_日付_レース名.拡張子 の順で作り、レースIDは付けない', () {
+      final name = buildExportFileName(
+        prefix: kFilePrefixPastData,
+        raceDate: '2026年10月12日',
+        raceName: 'スワンS',
+        extension: 'md',
+      );
+      expect(name, '過去データ_2026年10月12日_スワンS.md');
+    });
+
+    test('追加データ・テンプレ予想メモ・テンプレ回顧メモも同じ並び', () {
+      expect(
+          buildExportFileName(
+            prefix: kFilePrefixAddData,
+            raceDate: '2026年10月12日',
+            raceName: 'スワンS',
+            extension: 'md',
+          ),
+          '追加データ_2026年10月12日_スワンS.md');
+      expect(
+          buildExportFileName(
+            prefix: kFilePrefixPredictionTemplate,
+            raceDate: '2026年10月12日',
+            raceName: 'スワンS',
+            extension: 'csv',
+          ),
+          'テンプレ予想メモ_2026年10月12日_スワンS.csv');
+      expect(
+          buildExportFileName(
+            prefix: kFilePrefixReviewTemplate,
+            raceDate: '2026年10月12日',
+            raceName: '第69回スワンステークス(GII)',
+            extension: 'csv',
+          ),
+          'テンプレ回顧メモ_2026年10月12日_第69回スワンステークス(GII).csv');
+    });
+
+    test('禁止文字を除き、レース名は40文字で切る', () {
+      final name = buildExportFileName(
+        prefix: kFilePrefixPredictionTemplate,
+        raceDate: '2026年10月12日',
+        raceName: 'A/B${'あ' * 50}',
+        extension: 'csv',
+      );
+      expect(name, 'テンプレ予想メモ_2026年10月12日_AB${'あ' * 38}.csv');
+    });
+
+    test('空の要素は詰める', () {
+      final name = buildExportFileName(
+        prefix: kFilePrefixReviewTemplate,
+        raceDate: '2026年10月12日',
+        raceName: '',
+        extension: 'csv',
+      );
+      expect(name, 'テンプレ回顧メモ_2026年10月12日.csv');
+    });
+  });
+
   group('isTxtFileName', () {
     test('.txt だけ true（大文字も可）', () {
       expect(isTxtFileName('インポート予想メモ_X_2026年10月10日_1.txt'), isTrue);

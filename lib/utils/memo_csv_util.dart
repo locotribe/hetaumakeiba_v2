@@ -98,6 +98,37 @@ const String kFilePrefixImportPrediction = 'インポート予想メモ';
 /// AI → アプリ: 回顧メモ（中身はカンマ区切りのテキスト）
 const String kFilePrefixImportReview = 'インポート回顧メモ';
 
+// [追加] AI分析データ 過去データ分離 Step1: アプリから出すファイルの種別と名前。アプリから出すファイルはアプリに取り込まないので、名前にレースIDを付けない (v.2026.10.14+26101401)
+
+/// アプリ → AI: 過去の同じレースの結果（Markdown）
+const String kFilePrefixPastData = '過去データ';
+
+/// アプリ → AI: 今回のレースのAI分析資料（Markdown）
+const String kFilePrefixAddData = '追加データ';
+
+/// アプリから出すファイルの名前を「種別_日付_レース名.拡張子」で作る（レースIDは付けない）。
+/// [raceDate] は和文（例: 2026年10月12日）をそのまま使う（禁止文字だけ除去）。
+/// [raceName] は禁止文字を除いたうえで、長すぎる場合は40文字で切る。
+/// 空になった要素は詰めてアンダースコアが連続しないようにする。
+String buildExportFileName({
+  required String prefix,
+  required String raceDate,
+  required String raceName,
+  required String extension,
+}) {
+  var name = sanitizeForFileName(raceName);
+  if (name.length > 40) {
+    name = name.substring(0, 40);
+  }
+  final date = sanitizeForFileName(raceDate);
+  final parts = <String>[
+    prefix,
+    date,
+    name,
+  ].where((e) => e.isNotEmpty).toList();
+  return '${parts.join('_')}.$extension';
+}
+
 /// 入出力ファイル名を「種別_レース名_日付_レースID.拡張子」で作る。
 /// [raceName] は禁止文字を除いたうえで、長すぎる場合は40文字で切る。
 /// [raceDate] は和文（例: 2026年10月10日）をそのまま使う（禁止文字だけ除去）。

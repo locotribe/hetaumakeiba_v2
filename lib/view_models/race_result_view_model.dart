@@ -292,11 +292,11 @@ class RaceResultViewModel extends ChangeNotifier {
     final String csv = const ListToCsvConverter().convert(rows);
 
     // [修正] AIファイル名整理: ファイル名を「テンプレ回顧メモ_レース名_日付_レースID.csv」にする (v.2026.10.10+26101006)
-    final fileName = buildPrefixedFileName(
+    // [修正] AI分析データ 過去データ分離 Step1: ファイル名を「テンプレ回顧メモ_日付_レース名.csv」にする（レースIDは付けない） (v.2026.10.14+26101401)
+    final fileName = buildExportFileName(
       prefix: kFilePrefixReviewTemplate,
-      raceName: raceResult.raceTitle,
       raceDate: raceResult.raceDate,
-      raceId: raceId,
+      raceName: raceResult.raceTitle,
       extension: 'csv',
     );
 
