@@ -16,6 +16,9 @@ import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart'; // [追加] CSVメモ
 import 'package:hetaumakeiba_v2/services/ai_export/ai_race_data_collector.dart'; // [追加] AI分析データエクスポート Step4 (v.2026.9.27+26092704)
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_race_full_markdown_builder.dart'; // [追加] AI分析データエクスポート Step4 (v.2026.9.27+26092704)
 import 'package:hetaumakeiba_v2/logic/ai_export/citation_sanitizer.dart'; // [追加] T8: 引用記号除去
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart'; // [追加] AI分析データ 過去データ分離 Step3 (v.2026.10.14+26101403)
+import 'package:hetaumakeiba_v2/db/repositories/race_statistics_repository.dart'; // [追加] AI分析データ 過去データ分離 Step3 (v.2026.10.14+26101403)
+import 'package:hetaumakeiba_v2/logic/ai_export/ai_past_race_markdown_builder.dart'; // [追加] AI分析データ 過去データ分離 Step3 (v.2026.10.14+26101403)
 
 // [追加] 馬詳細タブStep2: メモタブ（memo_tab.dart）のメモ入力ダイアログ・過去メモ・CSV入出力をここへ移した。
 // 見た目・文言・処理内容は移す前と同じ。馬詳細タブ（Step3）からも使う (v.2026.9.23+26092307)
@@ -221,7 +224,8 @@ Future<void> exportAiRaceDataAsMarkdown(
   final selectedGrain = await showDialog<AiExportGrain>(
     context: context,
     builder: (ctx) => SimpleDialog(
-      title: const Text('AI分析用データの粒度'),
+      // [修正] AI分析データ 過去データ分離 Step3: 見出しを「追加データの粒度」にする（メニューの「追加データを共有」に揃える） (v.2026.10.14+26101403)
+      title: const Text('追加データの粒度'),
       children: [
         SimpleDialogOption(
           onPressed: () => Navigator.pop(ctx, AiExportGrain.summary),
@@ -289,6 +293,73 @@ Future<void> exportAiRaceDataAsMarkdown(
       XFile(mdFile.path, name: mdName),
     ],
     text: '${raceData.raceName} の追加データ（AI分析用データ）',
+  );
+}
+
+// [追加] AI分析データ 過去データ分離 Step3: 「過去データを共有」。「過去分析」タブで取り込んだ過去の同じレースの結果をDBから読み、「過去データ_日付_レース名.md」で共有する。1件も無いときは知らせて出さない (v.2026.10.14+26101403)
+/// 過去の同じレースの結果（過去データ）を Markdown にして共有する。
+/// 対象は、このレースの過去10年統計に登録された過去レースのうち、結果がアプリに保存されているもの。
+Future<void> exportPastRaceDataAsMarkdown(
+  BuildContext context, {
+  required String raceId,
+  required PredictionRaceData raceData,
+}) async {
+  final stats = await RaceStatisticsRepository().getRaceStatistics(raceId);
+  final pastIds = <String>[];
+  if (stats != null) {
+    for (final e in stats.analyzedRacesList) {
+      final id = e['raceId'];
+      if (id is String && id.trim().isNotEmpty && id.trim() != raceId) {
+        pastIds.add(id.trim());
+      }
+    }
+  }
+  final resultsById = await RaceRepository().getMultipleRaceResults(pastIds);
+  final pastResults =
+      resultsById.values.where((r) => r.horseResults.isNotEmpty).toList();
+
+  if (!context.mounted) return;
+  if (pastResults.isEmpty) {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('過去データ'),
+        content: const Text('過去のデータがありません。\n「過去分析」タブで過去のレースを取得してから共有してください。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
+
+  final markdown = buildPastRaceMarkdown(
+    raceId: raceId,
+    raceName: raceData.raceName,
+    raceDate: raceData.raceDate,
+    pastResults: pastResults,
+    exportedAt: DateTime.now(),
+  );
+
+  final mdName = buildExportFileName(
+    prefix: kFilePrefixPastData,
+    raceDate: raceData.raceDate,
+    raceName: raceData.raceName,
+    extension: 'md',
+  );
+
+  final directory = await getTemporaryDirectory();
+  final mdFile = File('${directory.path}/$mdName');
+  await mdFile.writeAsString(markdown);
+
+  await Share.shareXFiles(
+    [
+      XFile(mdFile.path, name: mdName),
+    ],
+    text: '${raceData.raceName} の過去データ（過去のレース結果）',
   );
 }
 

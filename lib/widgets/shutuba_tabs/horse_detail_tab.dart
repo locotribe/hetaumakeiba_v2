@@ -32,7 +32,8 @@ import 'package:hetaumakeiba_v2/widgets/horse_detail/entry_meaning_section.dart'
 // 項目の開閉行をやめ、見出しの下の4つのボタン（情報・血統／最終追切／中間追切／メモ）で表示を切り替える (v.2026.9.23+26092309)
 
 // [追加] AI分析データエクスポート Step4: exportAiData を追加 (v.2026.9.27+26092704)
-enum _HorseDetailMenuAction { fetchTraining, bulkEditMemos, importMemos, exportMemos, exportAiData }
+// [修正] AI分析データ 過去データ分離 Step3: exportPastData（過去データを共有）を追加 (v.2026.10.14+26101403)
+enum _HorseDetailMenuAction { fetchTraining, bulkEditMemos, importMemos, exportMemos, exportAiData, exportPastData }
 
 /// 馬のページに表示する内容（ボタンで切り替え、馬を変えても保つ）
 enum _HorseDetailView { info, finalTraining, interimTraining, memo, condition }
@@ -316,6 +317,14 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
           raceData: widget.predictionRaceData,
         );
         break;
+      // [追加] AI分析データ 過去データ分離 Step3 (v.2026.10.14+26101403)
+      case _HorseDetailMenuAction.exportPastData:
+        await exportPastRaceDataAsMarkdown(
+          context,
+          raceId: widget.raceId,
+          raceData: widget.predictionRaceData,
+        );
+        break;
     }
   }
 
@@ -424,6 +433,11 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
               PopupMenuItem(
                 value: _HorseDetailMenuAction.exportMemos,
                 child: Text('メモをエクスポート'),
+              ),
+              // [追加] AI分析データ 過去データ分離 Step3: 過去の同じレースの結果を出す (v.2026.10.14+26101403)
+              PopupMenuItem(
+                value: _HorseDetailMenuAction.exportPastData,
+                child: Text('過去データを共有'),
               ),
               // [追加] AI分析データエクスポート Step4 (v.2026.9.27+26092704)
               // [修正] AI分析データ 過去データ分離 Step2: 文言を「追加データを共有」にする (v.2026.10.14+26101402)
