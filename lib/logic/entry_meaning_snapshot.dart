@@ -117,6 +117,77 @@ String entryMeaningGroupLabel(EntryMeaningKind kind) {
   }
 }
 
+// [追加] 馬詳細タブ 表示項目変更 Step4: 馬名の下に出すバッジ1つ。group は色分けに使う左端のラベル（entryMeaningGroupLabel） (v.2026.10.15+26101503)
+class EntryMeaningBadge {
+  final String label;
+  final String group;
+
+  const EntryMeaningBadge({required this.label, required this.group});
+}
+
+// [追加] 馬詳細タブ 表示項目変更 Step4: 出走の意味の1行からバッジの文字を決める。バッジにしない種類は null。
+// 文ではなく種類で決めるので、保存分（レース結果後）にも付く。数字は保存した文から取り出し、取れなければ数字なしの文字にする (v.2026.10.15+26101503)
+String? entryMeaningBadgeLabel(EntryMeaningLine line) {
+  switch (line.kind) {
+    case EntryMeaningKind.classPromotionFirstStart:
+      return '昇級初戦';
+    case EntryMeaningKind.classChallenge:
+      return '格上挑戦';
+    case EntryMeaningKind.maidenDeadline:
+      return '未勝利期限';
+    case EntryMeaningKind.expedition:
+      return '遠征';
+    case EntryMeaningKind.longLayoff:
+      return '長休明け';
+    case EntryMeaningKind.longishLayoff:
+    case EntryMeaningKind.layoff:
+      return '休み明け';
+    case EntryMeaningKind.startsAfterLayoff:
+      {
+        final count = RegExp(r'休み明けから(\d+)戦目').firstMatch(line.fact);
+        return count == null ? '叩き' : '叩き${count.group(1)}戦目';
+      }
+    case EntryMeaningKind.tightInterval:
+      {
+        final interval = RegExp(r'（([^・）]+)').firstMatch(line.fact);
+        final text = interval?.group(1)?.trim() ?? '';
+        return (text.isEmpty || text == '--') ? '間隔詰め' : text;
+      }
+    case EntryMeaningKind.jockeyChange:
+      return '乗替';
+    case EntryMeaningKind.sameOwner:
+      return '同馬主';
+    case EntryMeaningKind.sameStable:
+      return '同厩舎';
+    case EntryMeaningKind.unjudged:
+    case EntryMeaningKind.classStay:
+    case EntryMeaningKind.gradedSecondPromotion:
+    case EntryMeaningKind.prizeRank:
+    case EntryMeaningKind.classNeedsCheck:
+    case EntryMeaningKind.maidenStartCount:
+    case EntryMeaningKind.previousJockeyOnOtherHorse:
+    case EntryMeaningKind.mainJockey:
+    case EntryMeaningKind.firstBlinker:
+    case EntryMeaningKind.raceClassChallengeCount:
+    case EntryMeaningKind.raceUnjudgedCount:
+      return null;
+  }
+}
+
+// [追加] 馬詳細タブ 表示項目変更 Step4: その馬のバッジの列（行の順。同じ文字は1つにまとめる）。計算前・取消・該当なしは空 (v.2026.10.15+26101503)
+List<EntryMeaningBadge> entryMeaningBadgesOf(HorseEntryMeaning? meaning) {
+  if (meaning == null || meaning.isScratched) return const <EntryMeaningBadge>[];
+  final seen = <String>{};
+  final badges = <EntryMeaningBadge>[];
+  for (final line in meaning.lines) {
+    final label = entryMeaningBadgeLabel(line);
+    if (label == null || !seen.add(label)) continue;
+    badges.add(EntryMeaningBadge(
+        label: label, group: entryMeaningGroupLabel(line.kind)));
+  }
+  return badges;
+}
+
 /// 名前から列挙の値を探す。見つからなければ null。
 T? _enumByName<T extends Enum>(List<T> values, Object? name) {
   for (final value in values) {

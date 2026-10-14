@@ -496,8 +496,52 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     );
   }
 
+  // [追加] 馬詳細タブ 表示項目変更 Step4: 出走の意味のバッジ1つ。色は左端のラベルのグループごと
+  // （クラス=青・遠征=紫・間隔=緑・騎手=橙・同陣営=青灰） (v.2026.10.15+26101503)
+  Widget _buildMeaningBadge(EntryMeaningBadge badge) {
+    final Color color;
+    switch (badge.group) {
+      case 'クラス':
+        color = Colors.blue.shade700;
+        break;
+      case '遠征':
+        color = Colors.purple.shade600;
+        break;
+      case '間隔':
+        color = Colors.green.shade700;
+        break;
+      case '騎手':
+        color = Colors.orange.shade800;
+        break;
+      case '同陣営':
+        color = Colors.blueGrey.shade600;
+        break;
+      default:
+        color = Colors.grey.shade700;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        border: Border.all(color: color),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Text(
+        badge.label,
+        style: TextStyle(
+            fontSize: 10,
+            height: 1.2,
+            color: color,
+            fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
   Widget _buildHeader(PredictionHorseDetail horse) {
     final hasGate = horse.gateNumber > 0;
+    // [追加] 馬詳細タブ 表示項目変更 Step4: 馬名の下（騎手・斤量・人気の行の下）に出走の意味のバッジ。無ければ行を出さない (v.2026.10.15+26101503)
+    final badges = entryMeaningBadgesOf(
+        widget.entryMeaningSnapshot?.horseOf(horse.horseId));
     final subLine = '${horse.jockey} ${horse.carriedWeight.toStringAsFixed(1)}'
         '  ${horse.popularity ?? '--'}人気 ${horse.odds?.toString() ?? '--'}倍';
     return Container(
@@ -567,6 +611,17 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
                 ),
+                if (badges.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 2,
+                      children: [
+                        for (final badge in badges) _buildMeaningBadge(badge),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),

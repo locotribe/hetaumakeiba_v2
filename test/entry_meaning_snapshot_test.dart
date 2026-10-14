@@ -329,4 +329,61 @@ void main() {
       isNull,
     );
   });
+
+  EntryMeaningLine line(EntryMeaningKind kind, String fact) =>
+      EntryMeaningLine(
+        kind: kind,
+        fact: fact,
+        interpretation: null,
+        basis: EntryMeaningBasis.fact,
+      );
+
+  test('バッジの文字: 対象の種類だけ・数字は文から取り出す', () {
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.classPromotionFirstStart, '昇級初戦（2勝クラスに上がって初めての出走）')), '昇級初戦');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.classChallenge, '格上挑戦（収得賞金では1勝クラス・今回は2勝クラス）')), '格上挑戦');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.expedition, '栗東から東京へ遠征')), '遠征');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.longLayoff, '長期休養明け（7ヶ月・217日ぶり）')), '長休明け');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.layoff, '休み明け（2ヶ月・70日ぶり）')), '休み明け');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.startsAfterLayoff, '休み明けから3戦目')), '叩き3戦目');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.startsAfterLayoff, '読めない文')), '叩き');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.tightInterval, '間隔が詰まっている（中1週・休み明けから5戦目）')), '中1週');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.tightInterval, '間隔が詰まっている（連闘）')), '連闘');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.tightInterval, '間隔が詰まっている（）')), '間隔詰め');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.jockeyChange, '乗り替わり（前走 A → 今回 B・この馬に初騎乗）')), '乗替');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.sameStable, '同じ厩舎（栗東・X）の1番Yも出走')), '同厩舎');
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.classStay, '1勝クラスで今回3走目')), isNull);
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.prizeRank, '出走馬決定賞金 1,000万円（14頭中1位）')), isNull);
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.firstBlinker, 'ブリンカー初装着')), isNull);
+    expect(entryMeaningBadgeLabel(line(EntryMeaningKind.mainJockey, '主戦騎手の継続騎乗（この馬に3回目）')), isNull);
+  });
+
+  test('バッジの列: 行の順・同じ文字は1つ・グループ付き・取消と null は空', () {
+    final meaning = HorseEntryMeaning(
+      horseId: 'h',
+      horseNumber: 1,
+      horseName: 'X',
+      isScratched: false,
+      lines: [
+        line(EntryMeaningKind.expedition, '栗東から東京へ遠征'),
+        line(EntryMeaningKind.longishLayoff, '長めの休み明け（5ヶ月・174日ぶり）'),
+        line(EntryMeaningKind.layoff, '休み明け（2ヶ月・70日ぶり）'),
+        line(EntryMeaningKind.prizeRank, '出走馬決定賞金 1,000万円（14頭中1位）'),
+        line(EntryMeaningKind.jockeyChange, '乗り替わり（前走 A → 今回 B・この馬に初騎乗）'),
+      ],
+    );
+    final badges = entryMeaningBadgesOf(meaning);
+    expect(badges.map((b) => b.label).toList(), ['遠征', '休み明け', '乗替']);
+    expect(badges.map((b) => b.group).toList(), ['遠征', '間隔', '騎手']);
+    expect(entryMeaningBadgesOf(null), isEmpty);
+    expect(
+      entryMeaningBadgesOf(HorseEntryMeaning(
+        horseId: 'h',
+        horseNumber: 1,
+        horseName: 'X',
+        isScratched: true,
+        lines: [line(EntryMeaningKind.expedition, '栗東から東京へ遠征')],
+      )),
+      isEmpty,
+    );
+  });
 }

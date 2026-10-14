@@ -78,9 +78,7 @@ class EntryMeaningSection extends StatelessWidget {
         ),
       ));
     }
-    if (current.meanings.raceNotes.isNotEmpty) {
-      children.add(_buildRaceNotes(current.meanings.raceNotes));
-    }
+    // [削除] 馬詳細タブ 表示項目変更 Step4: 「レース全体」の灰色の帯（全馬に同じ内容）を出さない。計算・保存は変えない (v.2026.10.15+26101503)
     children.add(_buildHorseLines(current.horseOf(horse.horseId)));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -109,25 +107,7 @@ class EntryMeaningSection extends StatelessWidget {
     }
   }
 
-  /// レース全体の注記（灰色の帯。ラベルは最初の行だけ）
-  Widget _buildRaceNotes(List<EntryMeaningLine> notes) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < notes.length; i++)
-            _buildLine(i == 0 ? entryMeaningGroupLabel(notes[i].kind) : '',
-                notes[i]),
-        ],
-      ),
-    );
-  }
+  // [削除] 馬詳細タブ 表示項目変更 Step4: レース全体の注記（灰色の帯）の部品 _buildRaceNotes を削除 (v.2026.10.15+26101503)
 
   /// その馬の行
   Widget _buildHorseLines(HorseEntryMeaning? meaning) {
