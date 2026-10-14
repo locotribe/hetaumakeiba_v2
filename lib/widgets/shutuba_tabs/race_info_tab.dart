@@ -786,7 +786,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                   _buildTrackConditionItem('気温', '${current['temp']}℃'),
                   _buildTrackConditionItem('湿度', '${current['humidity']}%'),
                   _buildTrackConditionItem('降水量', '${current['precipitation']} mm'),
-                  _buildTrackConditionItem('風速', '${current['windSpeed']} m/s'),
+                  // [修正] 風速表示・回顧メモ文言: Open-Meteo の風速は km/h なので 3.6 で割って m/s で表示（小数1桁） (v.2026.10.14+26101405)
+                  _buildTrackConditionItem('風速', '${(((current['windSpeed'] as num?)?.toDouble() ?? 0.0) / 3.6).toStringAsFixed(1)} m/s'),
                   _buildTrackConditionItem('風向き', current['windDirText']),
                 ],
               ),
@@ -802,7 +803,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                   _buildTrackConditionItem('湿度', '${raceTime['humidity']}%'),
                   _buildTrackConditionItem('降水確率', '${raceTime['pop']}%'),
                   _buildTrackConditionItem('降水量', '${raceTime['precipitation']} mm'),
-                  _buildTrackConditionItem('風速', '${raceTime['windSpeed']} m/s'),
+                  // [修正] 風速表示・回顧メモ文言: km/h を m/s に換算して表示（小数1桁） (v.2026.10.14+26101405)
+                  _buildTrackConditionItem('風速', '${(((raceTime['windSpeed'] as num?)?.toDouble() ?? 0.0) / 3.6).toStringAsFixed(1)} m/s'),
                   _buildTrackConditionItem('風向き', data['windDirText']),
                 ],
               ),
@@ -917,7 +919,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                           Text('${t['pop']}%', style: const TextStyle(fontSize: 10, color: Colors.blue)),
                           if (precip > 0)
                             Text('${precip}mm', style: const TextStyle(fontSize: 10, color: Colors.lightBlue)),
-                          Text('${t['windSpeed']}m', style: const TextStyle(fontSize: 10, color: Colors.teal)),
+                          // [修正] 風速表示・回顧メモ文言: km/h を m/s に換算し、単位を「m/s」にする（小数1桁） (v.2026.10.14+26101405)
+                          Text('${(((t['windSpeed'] as num?)?.toDouble() ?? 0.0) / 3.6).toStringAsFixed(1)}m/s', style: const TextStyle(fontSize: 10, color: Colors.teal)),
                         ],
                       ),
                     );

@@ -159,7 +159,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, conflict.newText),
-            child: const Text('CSVで上書き', style: TextStyle(color: Colors.red)),
+            // [修正] 風速表示・回顧メモ文言: 取り込みは .txt なので「CSVで上書き」を「インポートで上書き」にする (v.2026.10.14+26101405)
+            child: const Text('インポートで上書き', style: TextStyle(color: Colors.red)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, '${conflict.existingText}\n\n${conflict.newText}'),
@@ -609,7 +610,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
                       onPressed: () => _openBulkReviewEdit(raceResult),
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        // [修正] 風速表示・回顧メモ文言: 文言が長くなり見出しの行が14pxはみ出したため、左右の余白を12→6にする (v.2026.10.14+26101405)
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(4.0), // 少し角丸のカード風
                         ),
@@ -621,24 +623,28 @@ class _RaceResultPageState extends State<RaceResultPage> {
                       onPressed: _importReviewsFromCsv,
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        // [修正] 風速表示・回顧メモ文言: 文言が長くなり見出しの行が14pxはみ出したため、左右の余白を12→6にする (v.2026.10.14+26101405)
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(4.0),
                         ),
                       ),
-                      child: const Text('CSV入力', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      // [修正] 風速表示・回顧メモ文言: 「CSV入力」を「インポート」にする（馬詳細タブの「メモをインポート」に揃える） (v.2026.10.14+26101405)
+                      child: const Text('インポート', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton(
                       onPressed: () => _viewModel.exportReviewsAsCsv(),
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        // [修正] 風速表示・回顧メモ文言: 文言が長くなり見出しの行が14pxはみ出したため、左右の余白を12→6にする (v.2026.10.14+26101405)
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(4.0),
                         ),
                       ),
-                      child: const Text('CSV出力', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      // [修正] 風速表示・回顧メモ文言: 「CSV出力」を「エクスポート」にする（馬詳細タブの「メモをエクスポート」に揃える） (v.2026.10.14+26101405)
+                      child: const Text('エクスポート', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
