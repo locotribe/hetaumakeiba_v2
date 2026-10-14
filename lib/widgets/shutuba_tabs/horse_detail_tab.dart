@@ -92,6 +92,9 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   String? _currentHorseId;
   _HorseDetailView _view = _HorseDetailView.finalTraining;
 
+  // [追加] 基本情報整理と本賞金照合 Step1: 「情報・血統」の基本情報と血統の開閉（全馬共通・初期は開。馬を切り替えても保つ） (v.2026.10.15+26101504)
+  bool _basicInfoExpanded = true;
+
   // [削除] 馬詳細タブ 表示項目変更 Step3: 成長曲線の期間スイッチを廃止したので、表示期間の状態（_growthRange）を削除 (v.2026.10.15+26101502)
 
   /// ページを表示したときに1頭1回だけ読む（通信なし）
@@ -480,18 +483,22 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     );
   }
 
-  Widget _buildBlinkerChip(bool isRed) {
+  // [修正] 基本情報整理と本賞金照合 Step1: B だけの印から、馬柱（starters_tab の _buildNewspaperMarkChip）と同じ見た目の印（外・地・B）にした (v.2026.10.15+26101504)
+  Widget _buildMarkChip(String label, {bool isRed = false}) {
     return Container(
-      margin: const EdgeInsets.only(left: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 2),
       padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
       decoration: BoxDecoration(
         color: isRed ? Colors.red : Colors.black,
         borderRadius: BorderRadius.circular(3),
       ),
-      child: const Text(
-        'B',
-        style: TextStyle(
-            fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 9,
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -598,11 +605,14 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
                         ),
                       ),
                     ),
+                    // [修正] 基本情報整理と本賞金照合 Step1: 馬柱と同じ並び（馬名の後ろにB、性齢の後ろに外・地） (v.2026.10.15+26101504)
+                    if (horse.isBlinker)
+                      _buildMarkChip('B', isRed: horse.isFirstBlinker),
                     const SizedBox(width: 6),
                     Text(horse.sexAndAge,
                         style: const TextStyle(fontSize: 12)),
-                    if (horse.isBlinker)
-                      _buildBlinkerChip(horse.isFirstBlinker),
+                    if (horse.isMaruGai) _buildMarkChip('外'),
+                    if (horse.isMaruChi) _buildMarkChip('地'),
                   ],
                 ),
                 Text(
@@ -716,17 +726,42 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     );
   }
 
+  // [追加] 基本情報整理と本賞金照合 Step1: 「基本情報」の見出し。行全体のタップで基本情報と血統を開閉する（右端に開閉の矢印） (v.2026.10.15+26101504)
+  Widget _buildBasicInfoHeader() {
+    return InkWell(
+      onTap: () => setState(() => _basicInfoExpanded = !_basicInfoExpanded),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 4),
+        child: Row(
+          children: [
+            const Text('基本情報',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            Icon(
+              _basicInfoExpanded ? Icons.expand_less : Icons.expand_more,
+              size: 20,
+              color: Colors.grey.shade700,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildInfoView(PredictionHorseDetail horse) {
     return FutureBuilder<HorseProfile?>(
       future: _profileFor(horse.horseId),
       builder: (context, snapshot) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _sectionLabel('基本情報'),
-          BasicInfoSection(horse: horse, profile: snapshot.data),
-          const SizedBox(height: 12),
-          _sectionLabel('血統'),
-          PedigreeSection(horse: horse, profile: snapshot.data),
+          // [修正] 基本情報整理と本賞金照合 Step1: 基本情報（netkeibaの馬ページと同じ項目）と血統をまとめて折りたためるようにした (v.2026.10.15+26101504)
+          _buildBasicInfoHeader(),
+          if (_basicInfoExpanded) ...[
+            BasicInfoSection(horse: horse, profile: snapshot.data),
+            const SizedBox(height: 8),
+            _sectionLabel('血統'),
+            PedigreeSection(horse: horse, profile: snapshot.data),
+          ],
           // [追加] 馬体重成長曲線 Step2: 血統表の下に成長曲線（馬体重の推移＋人気・着順） (v.2026.10.1+26100102)
           const SizedBox(height: 12),
           _sectionLabel('成長曲線（馬体重・人気・着順）'),
