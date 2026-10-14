@@ -341,7 +341,8 @@ class WeatherAnalyzer {
           "・当日加水 (降水予報 ${expectedPrecipitation}mm): +${addedMoisture.toStringAsFixed(1)}%\n"
           "・当日乾燥 (日射・風予報): -${reducedMoisture.toStringAsFixed(1)}%\n"
           "・地盤補正 (気象API ${soilPercent.toStringAsFixed(1)}%): $soilAdjSign${soilAdjustment.toStringAsFixed(1)}%\n"
-          "➡ 予測含水率: ${predictedMoisture.toStringAsFixed(1)}%$limitNote\n"
+          // [修正] レース情報ヘッダー整理 Step1: 行頭の記号を矢印から「・」にして、ほかの行とそろえた (v.2026.10.15+26101509)
+          "・予測含水率: ${predictedMoisture.toStringAsFixed(1)}%$limitNote\n"
           "$cushionText";
 
       return _SimulationResult(
@@ -362,7 +363,8 @@ class WeatherAnalyzer {
       if (prevResult != null) results.add(prevResult.insight);
     }
 
-    _SimulationResult? currentResult = buildInsight(currentRecord, cachedRecord != null ? "🎯[今回確定] " : "", "今回");
+    // [修正] レース情報ヘッダー整理 Step1: 見出しの先頭の絵文字（的のマーク）を外した (v.2026.10.15+26101509)
+    _SimulationResult? currentResult = buildInsight(currentRecord, cachedRecord != null ? "[今回確定] " : "", "今回");
     JraConditionPrediction? latestPrediction;
 
     if (currentResult != null) {
