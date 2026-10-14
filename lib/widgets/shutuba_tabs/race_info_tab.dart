@@ -19,6 +19,10 @@ import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/citation_sanitizer.dart';
 import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart'; // [追加] AIファイル名整理: 総評ファイル名の照合 (v.2026.10.10+26101007)
+// [追加] レース情報ヘッダー整理 Step2: 見出しの文字の組み立て・クッション値の評価・開閉状態の保存 (v.2026.10.15+26101510)
+import 'package:hetaumakeiba_v2/logic/race_header_format.dart';
+import 'package:hetaumakeiba_v2/utils/track_constants.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class RaceInfoTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
@@ -64,6 +68,34 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
   void initState() {
     super.initState();
     _loadAiRaceComment();
+    // [追加] レース情報ヘッダー整理 Step2: 折りたたみの開閉状態を端末から読む (v.2026.10.15+26101510)
+    _loadExpandedStates();
+  }
+
+  // [追加] レース情報ヘッダー整理 Step2: 折りたたみの開閉（コース図・高低差／気象庁 広域天気概況／ピンポイント詳細）。キーごとに端末へ保存し、別のレースを開いても同じ状態にする。初期は開 (v.2026.10.15+26101510)
+  static const String _courseExpandedKey = 'race_info_course_expanded';
+  static const String _jmaExpandedKey = 'race_info_jma_expanded';
+  static const String _pinpointExpandedKey = 'race_info_pinpoint_expanded';
+  static final Map<String, bool> _expandedCache = {};
+
+  bool _isExpanded(String key) => _expandedCache[key] ?? true;
+
+  Future<void> _loadExpandedStates() async {
+    const keys = [_courseExpandedKey, _jmaExpandedKey, _pinpointExpandedKey];
+    if (keys.every(_expandedCache.containsKey)) return;
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in keys) {
+      _expandedCache[key] = prefs.getBool(key) ?? true;
+    }
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _toggleExpanded(String key) async {
+    final next = !_isExpanded(key);
+    setState(() => _expandedCache[key] = next);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, next);
   }
 
   Future<void> _loadAiRaceComment() async {
@@ -278,36 +310,241 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               ]
             ],
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12.0,
-            runSpacing: 4.0,
-            children: [
-              Text('発走: ${widget.predictionRaceData.startTime ?? "-"}'),
-              Text('${widget.predictionRaceData.trackType ?? ""}${widget.predictionRaceData.distanceValue ?? ""}m (${widget.predictionRaceData.direction ?? ""} ${widget.predictionRaceData.courseInOut ?? ""})'),
-              Text('天候: ${widget.predictionRaceData.weather ?? "-"}'),
-              Text('馬場: ${widget.predictionRaceData.trackCondition ?? "-"}'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${widget.predictionRaceData.venue} ${widget.predictionRaceData.holdingTimes ?? ""} ${widget.predictionRaceData.holdingDays ?? ""} / ${widget.predictionRaceData.raceCategory ?? ""} / ${widget.predictionRaceData.horseCount ?? ""}頭',
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '本賞金: ${widget.predictionRaceData.basePrize1st ?? "-"}, ${widget.predictionRaceData.basePrize2nd ?? "-"}, ${widget.predictionRaceData.basePrize3rd ?? "-"}, ${widget.predictionRaceData.basePrize4th ?? "-"}, ${widget.predictionRaceData.basePrize5th ?? "-"}万円',
-            style: const TextStyle(fontSize: 12, color: Colors.black54),
-          ),
-          // [追加] コース平面図表示 (v.1.0)
-          _buildCourseDiagramSection(),
-          _buildElevationChartSection(),
+          // [修正] レース情報ヘッダー整理 Step2: 取得した文字をそのまま並べるのをやめ、日付・開催・発走の行、コース・天候・馬場のタイル、条件のチップ、本賞金の行に整理した。馬場計測値は本賞金の下に常に出し、コース平面図と高低差グラフは「コース図・高低差」で折りたためるようにした (v.2026.10.15+26101510)
+          const SizedBox(height: 6),
+          _buildRaceDateLine(),
+          const SizedBox(height: 10),
+          _buildRaceSummaryTiles(),
+          const SizedBox(height: 10),
+          _buildRaceCategoryChips(),
+          _buildBasePrizeRow(),
           _buildDetailedTrackCondition(),
+          _buildCourseSectionHeader(),
+          if (_isExpanded(_courseExpandedKey)) ...[
+            // [追加] コース平面図表示 (v.1.0)
+            _buildCourseDiagramSection(),
+            _buildElevationChartSection(),
+          ],
           const SizedBox(height: 12),
           _buildJmaWeather(),
           const SizedBox(height: 12),
           _buildPinpointWeather(),
         ],
+      ),
+    );
+  }
+
+  // [追加] レース情報ヘッダー整理 Step2: 日付・開催・発走時刻の行 (v.2026.10.15+26101510)
+  Widget _buildRaceDateLine() {
+    final data = widget.predictionRaceData;
+    final dateText = formatMonthDayWithWeekday(data.raceDate) ?? data.raceDate;
+    final holdingText = buildHoldingLabel(data.venue, data.holdingTimes, data.holdingDays);
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 4.0,
+      runSpacing: 2.0,
+      children: [
+        const Icon(Icons.calendar_today, size: 13, color: Colors.black54),
+        Text('$dateText $holdingText', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+        const SizedBox(width: 8),
+        const Icon(Icons.schedule, size: 13, color: Colors.black54),
+        Text(
+          data.startTime != null ? '${data.startTime} 発走' : '発走時刻 未定',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+        ),
+      ],
+    );
+  }
+
+  // [追加] レース情報ヘッダー整理 Step2: コース・天候・馬場のタイル。天候・馬場が未発表なら「当日発表」と出す (v.2026.10.15+26101510)
+  Widget _buildRaceSummaryTiles() {
+    final data = widget.predictionRaceData;
+    final Color trackColor = (data.trackType ?? '').contains('ダ') ? Colors.brown.shade700 : Colors.green.shade700;
+    final distanceText = data.distanceValue != null ? ' ${data.distanceValue}m' : '';
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _buildInfoTile(
+              label: 'コース',
+              value: Text.rich(
+                TextSpan(children: [
+                  TextSpan(text: buildTrackTypeLabel(data.trackType), style: TextStyle(color: trackColor)),
+                  TextSpan(text: distanceText),
+                ]),
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
+              ),
+              sub: buildCourseSubLabel(data.direction, data.courseInOut),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _buildInfoTile(label: '天候', value: _buildAnnouncedValue(normalizeAnnouncedValue(data.weather))),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _buildInfoTile(label: '馬場', value: _buildAnnouncedValue(normalizeAnnouncedValue(data.trackCondition))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnnouncedValue(String? value) {
+    if (value == null) {
+      return const Text('当日発表', style: TextStyle(fontSize: 13, color: Colors.black45));
+    }
+    return Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87));
+  }
+
+  Widget _buildInfoTile({required String label, required Widget value, String sub = ''}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10, color: Colors.black54)),
+          const SizedBox(height: 2),
+          value,
+          if (sub.isNotEmpty)
+            Text(sub, style: const TextStyle(fontSize: 10, color: Colors.black54)),
+        ],
+      ),
+    );
+  }
+
+  // [追加] レース情報ヘッダー整理 Step2: 競走条件と頭数のチップ（例: 3歳以上・オープン・国際・指定・別定・14頭） (v.2026.10.15+26101510)
+  Widget _buildRaceCategoryChips() {
+    final data = widget.predictionRaceData;
+    final chips = <String>[
+      ...buildRaceCategoryChips(data.raceCategory),
+      if (data.horseCount != null) '${data.horseCount}頭',
+    ];
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      spacing: 4.0,
+      runSpacing: 4.0,
+      children: chips
+          .map((chip) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Text(chip, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+              ))
+          .toList(),
+    );
+  }
+
+  // [追加] レース情報ヘッダー整理 Step2: 本賞金の行。1着を太字で出し、2着以下を小さく並べる。1着が無いときは出さない (v.2026.10.15+26101510)
+  Widget _buildBasePrizeRow() {
+    final data = widget.predictionRaceData;
+    if ((data.basePrize1st ?? 0) <= 0) return const SizedBox.shrink();
+    final others = [data.basePrize2nd, data.basePrize3rd, data.basePrize4th, data.basePrize5th]
+        .map(formatPrizeMan)
+        .join(' ／ ');
+    return Container(
+      margin: const EdgeInsets.only(top: 8.0),
+      padding: const EdgeInsets.only(top: 8.0),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          const Text('本賞金', style: TextStyle(fontSize: 11, color: Colors.black54)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                  text: '1着 ${formatPrizeMan(data.basePrize1st)}万',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+                TextSpan(
+                  text: ' ／ $others',
+                  style: const TextStyle(fontSize: 11, color: Colors.black54),
+                ),
+              ]),
+              textAlign: TextAlign.right,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // [追加] レース情報ヘッダー整理 Step2: 数値のタイル（馬場計測値と、ピンポイント詳細の要約で使う）。dimmed は今回のレースに関係の薄い値を薄く出す (v.2026.10.15+26101510)
+  Widget _buildMeasureTile({
+    required String label,
+    required List<String> lines,
+    bool big = false,
+    String note = '',
+    Color? noteColor,
+    bool dimmed = false,
+  }) {
+    final Color valueColor = dimmed ? Colors.black38 : Colors.black87;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10, color: Colors.black54)),
+          const SizedBox(height: 2),
+          ...lines.map((line) => Text(
+                line,
+                style: TextStyle(fontSize: big ? 20 : 13, fontWeight: FontWeight.bold, color: valueColor),
+              )),
+          if (note.isNotEmpty)
+            Text(
+              note,
+              style: TextStyle(fontSize: 10, color: dimmed ? Colors.black38 : (noteColor ?? Colors.black54)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // [追加] レース情報ヘッダー整理 Step2: 「コース図・高低差」の見出し。行全体のタップで平面図と高低差グラフを開閉する。平面図・グラフと同じく、レースIDか距離が読めないときは出さない (v.2026.10.15+26101510)
+  Widget _buildCourseSectionHeader() {
+    final distance = int.tryParse(widget.predictionRaceData.distanceValue?.toString() ?? '');
+    if (widget.predictionRaceData.raceId.length < 6 || distance == null) return const SizedBox.shrink();
+    final expanded = _isExpanded(_courseExpandedKey);
+    return Container(
+      margin: const EdgeInsets.only(top: 12.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _toggleExpanded(_courseExpandedKey),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.map_outlined, size: 16, color: Colors.green.shade700),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text('コース図・高低差', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87)),
+              ),
+              Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 20, color: Colors.grey.shade700),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -541,16 +778,16 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           return const SizedBox.shrink();
         }
         final record = snapshot.data!;
-        final dateStr = record.date.replaceAll('-', '/');
-        final venueName = '${widget.predictionRaceData.venue}競馬場';
+        // [修正] レース情報ヘッダー整理 Step2: 見出しを「馬場計測値」＋右端に計測日にし、3つの値をタイルで並べた。今回のレースに関係の薄い方（芝なら ダ含水率、ダートなら クッション値と芝含水率）は薄く出す (v.2026.10.15+26101510)
+        final dateText = formatMonthDayWithWeekday(record.date) ?? record.date.replaceAll('-', '/');
+        final isDirt = (widget.predictionRaceData.trackType ?? '').contains('ダ');
+        final cushionEval = record.cushionValue != null ? TrackConstants.getCushionEvaluation(record.cushionValue!) : '';
 
         return Container(
           margin: const EdgeInsets.only(top: 12.0),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.only(top: 10.0),
           decoration: BoxDecoration(
-            color: Colors.blueGrey.shade50,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.blueGrey.shade100),
+            border: Border(top: BorderSide(color: Colors.grey.shade300)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -559,18 +796,44 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                 children: [
                   const Icon(Icons.grass, size: 16, color: Colors.green),
                   const SizedBox(width: 4),
-                  Text('$venueName ($dateStr)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  const Text('馬場計測値', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  const Spacer(),
+                  Text('$dateText 計測', style: const TextStyle(fontSize: 11, color: Colors.black54)),
                 ],
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 16.0,
-                runSpacing: 8.0,
-                children: [
-                  _buildTrackConditionItem('クッション値', '${record.cushionValue ?? "-"}'),
-                  _buildTrackConditionItem('芝含水率 (G / 4C)', '${record.moistureTurfGoal ?? "-"}% / ${record.moistureTurf4c ?? "-"}%'),
-                  _buildTrackConditionItem('ダ含水率 (G / 4C)', '${record.moistureDirtGoal ?? "-"}% / ${record.moistureDirt4c ?? "-"}%'),
-                ],
+              const SizedBox(height: 6),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _buildMeasureTile(
+                        label: 'クッション値',
+                        lines: ['${record.cushionValue ?? "-"}'],
+                        big: true,
+                        note: cushionEval,
+                        noteColor: Colors.green.shade700,
+                        dimmed: isDirt,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: _buildMeasureTile(
+                        label: '芝含水率',
+                        lines: ['G ${record.moistureTurfGoal ?? "-"}%', '4C ${record.moistureTurf4c ?? "-"}%'],
+                        dimmed: isDirt,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: _buildMeasureTile(
+                        label: 'ダ含水率',
+                        lines: ['G ${record.moistureDirtGoal ?? "-"}%', '4C ${record.moistureDirt4c ?? "-"}%'],
+                        dimmed: !isDirt,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
