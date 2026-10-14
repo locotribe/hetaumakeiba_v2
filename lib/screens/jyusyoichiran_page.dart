@@ -1,3 +1,5 @@
+// [追加] 重賞一覧の文字化け修正: UTF-8 で読むため (v.2026.10.15+26101508)
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as parser;
@@ -72,6 +74,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
   /// データをロードするメインフロー
   Future<void> _loadDataForYear(int year) async {
     setState(() => _isLoading = true);
+    // [追加] 重賞一覧の文字化け修正: 文字化けして保存された年は、その年の行をすべて消して下の流れで取り直す (v.2026.10.15+26101508)
+    await _jyusyoRepo.deleteJyusyoRacesByYearIfGarbled(year);
 
     List<JyusyoRace> dbRaces = (await _jyusyoRepo.getJyusyoRacesByYear(year)).map((m) => JyusyoRace.fromMap(m)).toList();
 
@@ -236,6 +240,19 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     );
   }
 
+  // [追加] 重賞一覧の文字化け修正: netkeiba の HTML を UTF-8 で厳密に読み、UTF-8 として不正なら EUC-JP、それも失敗したら response.body を返す (v.2026.10.15+26101508)
+  Future<String> _decodeNetkeibaHtml(http.Response response) async {
+    try {
+      return utf8.decode(response.bodyBytes);
+    } on FormatException {
+      try {
+        return await CharsetConverter.decode('EUC-JP', response.bodyBytes);
+      } catch (e) {
+        return response.body;
+      }
+    }
+  }
+
   /// スクレイピングしてDBに保存
   Future<void> _fetchAndSaveScheduleData(int year) async {
     if (!mounted) return;
@@ -248,12 +265,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
-        String htmlBody;
-        try {
-          htmlBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
-        } catch (e) {
-          htmlBody = response.body;
-        }
+        // [修正] 重賞一覧の文字化け修正: EUC-JP 固定をやめ、UTF-8 優先で読む (v.2026.10.15+26101508)
+        String htmlBody = await _decodeNetkeibaHtml(response);
 
         var document = parser.parse(htmlBody);
         List<JyusyoRace> fetchedRaces = [];
@@ -399,12 +412,8 @@ class _JyusyoIchiranPageState extends State<JyusyoIchiranPage> {
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
-        String htmlBody;
-        try {
-          htmlBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
-        } catch (e) {
-          htmlBody = response.body;
-        }
+        // [修正] 重賞一覧の文字化け修正: EUC-JP 固定をやめ、UTF-8 優先で読む (v.2026.10.15+26101508)
+        String htmlBody = await _decodeNetkeibaHtml(response);
         var document = parser.parse(htmlBody);
 
         final links = document.querySelectorAll('a');

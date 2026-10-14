@@ -78,4 +78,23 @@ class JyusyoRaceRepository {
       whereArgs: [raceName, year],
     );
   }
+
+  // [追加] 重賞一覧の文字化け修正: その年の行の文字列列に U+FFFD（文字化け）が1件でもあれば、その年の行をすべて削除する。戻り値は削除件数 (v.2026.10.15+26101508)
+  Future<int> deleteJyusyoRacesByYearIfGarbled(int year) async {
+    final db = await _dbProvider.database;
+    const garbled = '%\uFFFD%';
+    final List<Map<String, dynamic>> found = await db.query(
+      DbConstants.tableJyusyoRaces,
+      columns: ['id'],
+      where: 'year = ? AND (date LIKE ? OR race_name LIKE ? OR grade LIKE ? OR venue LIKE ? OR distance LIKE ? OR conditions LIKE ? OR weight LIKE ?)',
+      whereArgs: [year, garbled, garbled, garbled, garbled, garbled, garbled, garbled],
+      limit: 1,
+    );
+    if (found.isEmpty) return 0;
+    return await db.delete(
+      DbConstants.tableJyusyoRaces,
+      where: 'year = ?',
+      whereArgs: [year],
+    );
+  }
 }
