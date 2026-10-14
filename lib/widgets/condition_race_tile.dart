@@ -3,7 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/condition_presentation_model.dart';
 import 'package:hetaumakeiba_v2/widgets/condition_match_chips.dart';
-import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
+// [修正] 基本情報整理と本賞金照合 Step2追補: 脚質は旧方式（RaceDataParser.getSimpleLegStyle）をやめ、好走条件と同じ判定にする (v.2026.10.15+26101505)
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 // [追加] 馬詳細タブ 表示項目変更 Step2: 4行目の馬場データ（クッション値・含水率）と芝/ダの判定 (v.2026.10.15+26101501)
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
@@ -62,8 +63,8 @@ class ConditionRaceTile extends StatelessWidget {
       }
     }
 
-    final legStyle =
-        RaceDataParser.getSimpleLegStyle(record.cornerPassage, record.numberOfHorses);
+    // [修正] 基本情報整理と本賞金照合 Step2追補: 好走条件・脚質詳細・馬柱と同じ判定（道中で先頭なら逃げ、ほかは最終コーナーの3グループ。4コーナーはマクリ判定あり） (v.2026.10.15+26101505)
+    final legStyle = LegStyleAnalyzer.analyzeSingleRaceStyle(record);
 
     String extractedGrade = '';
     final gradePattern = RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false);

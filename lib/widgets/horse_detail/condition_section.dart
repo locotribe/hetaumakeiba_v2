@@ -8,6 +8,8 @@ import 'package:hetaumakeiba_v2/models/condition_presentation_model.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_aptitude_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_match_engine.dart';
+// [追加] 基本情報整理と本賞金照合 Step2: 脚質の割合（脚質詳細と同じ計算） (v.2026.10.15+26101505)
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/widgets/condition_race_tile.dart';
 
 // [追加] 好走条件 馬詳細移植 StepA-2: 馬詳細タブ「好走条件」ビュー。条件カテゴリ主軸（得意条件）で1頭ぶんを縦に表示 (v.2026.9.25+26092506)
@@ -105,7 +107,9 @@ class ConditionSection extends StatelessWidget {
         const Divider(height: 8),
 
         // カテゴリ一覧
-        for (final cat in aptitude.categories) _buildCategoryBlock(cat),
+        // [修正] 基本情報整理と本賞金照合 Step2: 脚質だけは主脚質・割合・マクリの内訳つきの部品で出す (v.2026.10.15+26101505)
+        for (final cat in aptitude.categories)
+          cat.name == '脚質' ? _buildLegStyleBlock(cat, records) : _buildCategoryBlock(cat),
 
         const SizedBox(height: 8),
         const Text('出典レース（新しい順）',
@@ -162,7 +166,53 @@ class ConditionSection extends StatelessWidget {
     );
   }
 
-  Widget _buildValueRow(AptitudeValue v) {
+  // [追加] 基本情報整理と本賞金照合 Step2: 脚質のカテゴリ。各行の右端に割合（マクリは回数）、
+  // マクリと判定した走があれば、その競馬場と距離を新しい順に1行で出す。割合は脚質詳細と同じ（マクリを除いた4脚質の中の割合） (v.2026.10.15+26101505)
+  Widget _buildLegStyleBlock(AptitudeCategory cat, List<HorseRaceRecord> records) {
+    final profile = LegStyleAnalyzer.getRunningStyle(records);
+    final makuriRecords = records
+        .where((r) => ConditionAptitudeAnalyzer.legStyleOf(r) == 'マクリ')
+        .toList()
+      ..sort((a, b) => _parseDate(b.date).compareTo(_parseDate(a.date)));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 6.0, bottom: 2.0),
+          child: Text(cat.name,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+        ),
+        for (final v in cat.values)
+          _buildValueRow(
+            v,
+            extraText: v.label == 'マクリ'
+                ? '${v.tally.total}回'
+                : '割合${((profile.styleDistribution[v.label] ?? 0.0) * 100).round()}%',
+          ),
+        if (makuriRecords.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2.0),
+            child: Text(
+              'マクリ: ${makuriRecords.map(_courseLabelOf).join(' / ')}',
+              style: const TextStyle(fontSize: 10.5, color: Colors.black54),
+            ),
+          ),
+        const SizedBox(height: 2),
+      ],
+    );
+  }
+
+  // [追加] 基本情報整理と本賞金照合 Step2: 「中山 芝2000m」（開催場は数字を除く。読めない部分は「--」。デビュー戦の行と同じ書き方） (v.2026.10.15+26101505)
+  String _courseLabelOf(HorseRaceRecord r) {
+    final venue = r.venue.replaceAll(RegExp(r'\d'), '');
+    final surface = ConditionAptitudeAnalyzer.surfaceOf(r.distance);
+    final meters = ConditionAptitudeAnalyzer.distanceMetersOf(r.distance);
+    final course = (surface != null && meters != null) ? '$surface${meters}m' : '--';
+    return '${venue.isEmpty ? '--' : venue} $course';
+  }
+
+  // [修正] 基本情報整理と本賞金照合 Step2: 右端に出す文字（extraText。脚質の割合・マクリの回数）を任意で受け取る。無ければ今までどおり (v.2026.10.15+26101505)
+  Widget _buildValueRow(AptitudeValue v, {String? extraText}) {
     final t = v.tally;
     final winPct = (t.winRate * 100).round();
 
@@ -209,6 +259,13 @@ class ConditionSection extends StatelessWidget {
                 fontWeight: FontWeight.bold,
                 color: v.isBest ? Colors.red.shade700 : Colors.black87,
               )),
+          // [追加] 基本情報整理と本賞金照合 Step2: 脚質の割合（マクリは回数）。他のカテゴリは extraText が無いので出ない (v.2026.10.15+26101505)
+          if (extraText != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Text(extraText,
+                  style: const TextStyle(fontSize: 10, color: Colors.black54)),
+            ),
           if (v.isReference)
             const Padding(
               padding: EdgeInsets.only(left: 4),

@@ -8,6 +8,8 @@ import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
+// [追加] 基本情報整理と本賞金照合 Step2追補: 過去走カードの脚質を好走条件と同じ判定にする (v.2026.10.15+26101505)
+import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/horse_past_race_extra_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -456,7 +458,8 @@ class PerformanceTabWidget extends StatelessWidget {
       if (rankInt == 3) backgroundColor = Colors.yellow.withAlpha(80);
     }
 
-    final legStyle = RaceDataParser.getSimpleLegStyle(record.cornerPassage, record.numberOfHorses);
+    // [修正] 基本情報整理と本賞金照合 Step2追補: 旧方式（1コーナーの位置を4分割）をやめ、好走条件・脚質詳細・馬柱と同じ判定にする (v.2026.10.15+26101505)
+    final legStyle = LegStyleAnalyzer.analyzeSingleRaceStyle(record);
 
     String extractedGrade = '';
     final gradePattern = RegExp(r'\((J\.?G[I]{1,3}|G[I]{1,3})\)', caseSensitive: false);
