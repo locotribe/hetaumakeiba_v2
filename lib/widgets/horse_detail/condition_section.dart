@@ -17,12 +17,18 @@ class ConditionSection extends StatelessWidget {
   final List<PredictionHorseDetail> currentRaceHorses;
   final Map<String, TrackConditionRecord?> trackConditions;
 
+  // [追加] 馬詳細タブ 表示項目変更 Step2: 今回レースの芝/ダ（'芝'/'ダ'/'障'）と当日の馬場データ。「今回」印に使う。無ければ印なし (v.2026.10.15+26101501)
+  final String? currentSurface;
+  final TrackConditionRecord? currentTrackCondition;
+
   const ConditionSection({
     super.key,
     required this.horse,
     required this.allPastRecords,
     required this.currentRaceHorses,
     this.trackConditions = const {},
+    this.currentSurface,
+    this.currentTrackCondition,
   });
 
   // 1着=赤 / 2着=青 / 3着=橙 / 着外=灰
@@ -52,8 +58,18 @@ class ConditionSection extends StatelessWidget {
       );
     }
 
-    final aptitude = ConditionAptitudeAnalyzer.analyze(records, trackConditions: trackConditions);
+    // [修正] 馬詳細タブ 表示項目変更 Step2: 今回レースの芝/ダ・クッション値・含水率・騎手を渡して「今回」印を付ける (v.2026.10.15+26101501)
+    final aptitude = ConditionAptitudeAnalyzer.analyze(
+      records,
+      trackConditions: trackConditions,
+      currentSurface: currentSurface,
+      currentCushionValue: currentTrackCondition?.cushionValue,
+      currentMoistureDirtGoal: currentTrackCondition?.moistureDirtGoal,
+      currentJockeyId: horse.jockeyId,
+      currentJockeyName: horse.jockey,
+    );
     final o = aptitude.overall;
+    final debut = ConditionAptitudeAnalyzer.debutRecordOf(records);
 
     // 出典レース（新しい順）
     final sortedRecords = List<HorseRaceRecord>.of(records)
@@ -65,6 +81,11 @@ class ConditionSection extends StatelessWidget {
         // ヘッダー（総成績）
         Text('${horse.horseNumber}番 ${horse.horseName}',
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        // [追加] 馬詳細タブ 表示項目変更 Step2: デビュー戦の1行（表題は「メイクデビュー」で固定） (v.2026.10.15+26101501)
+        if (debut != null) ...[
+          const SizedBox(height: 2),
+          _buildDebutRow(debut),
+        ],
         const SizedBox(height: 2),
         Row(
           children: [
@@ -94,6 +115,35 @@ class ConditionSection extends StatelessWidget {
         // 出典レースの明細（対戦成績つき）
         for (final r in sortedRecords) _buildRaceTile(r),
       ],
+    );
+  }
+
+  // [追加] 馬詳細タブ 表示項目変更 Step2: 「メイクデビュー 開催場 芝1600m 脚質 1着(2人気)」。読めない項目は「--」 (v.2026.10.15+26101501)
+  Widget _buildDebutRow(HorseRaceRecord debut) {
+    final venue = debut.venue.replaceAll(RegExp(r'\d'), '');
+    final surface = ConditionAptitudeAnalyzer.surfaceOf(debut.distance);
+    final meters = ConditionAptitudeAnalyzer.distanceMetersOf(debut.distance);
+    final course = (surface != null && meters != null) ? '$surface${meters}m' : '--';
+    final legStyle = ConditionAptitudeAnalyzer.legStyleOf(debut) ?? '--';
+    final rankText = debut.rank.trim();
+    final rankLabel = rankText.isEmpty
+        ? '--'
+        : (RegExp(r'^\d').hasMatch(rankText) ? '$rankText着' : rankText);
+    final popularity = debut.popularity.trim();
+    final result = popularity.isEmpty ? rankLabel : '$rankLabel($popularity人気)';
+    return Text.rich(
+      TextSpan(
+        children: [
+          const TextSpan(
+            text: 'メイクデビュー',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+          ),
+          TextSpan(text: '  ${venue.isEmpty ? '--' : venue} $course $legStyle  $result'),
+        ],
+      ),
+      style: const TextStyle(fontSize: 12, color: Colors.black87),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 
@@ -164,6 +214,19 @@ class ConditionSection extends StatelessWidget {
               padding: EdgeInsets.only(left: 4),
               child: Text('参考', style: TextStyle(fontSize: 9, color: Colors.black38)),
             ),
+          // [追加] 馬詳細タブ 表示項目変更 Step2: 今回レースの条件に当たる値（クッション値・含水率の段、今回の騎手）に「今回」 (v.2026.10.15+26101501)
+          if (v.isCurrent)
+            Container(
+              margin: const EdgeInsets.only(left: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                border: Border.all(color: Colors.blue.shade400),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Text('今回',
+                  style: TextStyle(fontSize: 8, color: Colors.blue.shade800, fontWeight: FontWeight.bold)),
+            ),
         ],
       ),
     );
@@ -199,8 +262,10 @@ class ConditionSection extends StatelessWidget {
       currentRaceMembers: currentRaceHorses,
       allHorsesPastRecords: allPastRecords,
     );
+    // [修正] 馬詳細タブ 表示項目変更 Step2: その過去走の馬場データ（クッション値・含水率）をタイルに渡す (v.2026.10.15+26101501)
     return ConditionRaceTile(
       pastRace: PastRaceWithMatchup(record: r, matchupContext: matchup),
+      trackCondition: trackConditions[r.raceId],
     );
   }
 }

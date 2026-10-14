@@ -5,16 +5,41 @@ import 'package:hetaumakeiba_v2/models/condition_presentation_model.dart';
 import 'package:hetaumakeiba_v2/widgets/condition_match_chips.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
+// [追加] 馬詳細タブ 表示項目変更 Step2: 4行目の馬場データ（クッション値・含水率）と芝/ダの判定 (v.2026.10.15+26101501)
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/condition_aptitude_analyzer.dart';
 
 // [追加] 好走条件 馬詳細移植 StepA-2: 出典レース1件の明細タイル（今回メンバーとの対戦成績つき）。
 // 現行 ConditionHorseRow._buildDetailedRaceTile 相当を公開ウィジェット化（現行タブは不変。統合はStep B） (v.2026.9.25+26092506)
 class ConditionRaceTile extends StatelessWidget {
   final PastRaceWithMatchup pastRace;
 
+  // [追加] 馬詳細タブ 表示項目変更 Step2: その過去走の馬場データ。渡されたときだけ4行目の右にクッション値・含水率を出す（ヒートマップは渡さない） (v.2026.10.15+26101501)
+  final TrackConditionRecord? trackCondition;
+
   const ConditionRaceTile({
     super.key,
     required this.pastRace,
+    this.trackCondition,
   });
+
+  // [追加] 馬詳細タブ 表示項目変更 Step2: 小数1桁。無ければ「-」（馬柱の表記に合わせる） (v.2026.10.15+26101501)
+  static String _num1(double? v) => v == null ? '-' : v.toStringAsFixed(1);
+
+  // [追加] 馬詳細タブ 表示項目変更 Step2: 4行目の右の文字。馬柱と同じ表記で、芝=「C:クッション値 G:芝含水率ゴール前 4c:芝含水率4コーナー」、
+  // ダ=「G:ダート含水率ゴール前 4c:ダート含水率4コーナー」。データ無し・障害は null (v.2026.10.15+26101501)
+  String? _trackConditionText(String distance) {
+    final tc = trackCondition;
+    if (tc == null) return null;
+    final surface = ConditionAptitudeAnalyzer.surfaceOf(distance);
+    if (surface == '芝') {
+      return 'C:${_num1(tc.cushionValue)} G:${_num1(tc.moistureTurfGoal)} 4c:${_num1(tc.moistureTurf4c)}';
+    }
+    if (surface == 'ダ') {
+      return 'G:${_num1(tc.moistureDirtGoal)} 4c:${_num1(tc.moistureDirt4c)}';
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,11 +71,16 @@ class ConditionRaceTile extends StatelessWidget {
     if (match != null) extractedGrade = match.group(1)!;
     final gradeColor = getGradeColor(extractedGrade);
 
-    const detailTextStyle = TextStyle(fontSize: 11, color: Colors.black87);
-    const detailBoldStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87);
+    // [修正] 馬詳細タブ 表示項目変更 Step2: 1行増やした分、行の高さを詰める（文字サイズは変えない） (v.2026.10.15+26101501)
+    const detailTextStyle = TextStyle(fontSize: 11, color: Colors.black87, height: 1.15);
+    const detailBoldStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87, height: 1.15);
+
+    final corner = record.cornerPassage.trim();
+    final trackText = _trackConditionText(record.distance);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      // [修正] 馬詳細タブ 表示項目変更 Step2: 上下の余白 4→2 (v.2026.10.15+26101501)
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
         color: Colors.white,
@@ -72,7 +102,8 @@ class ConditionRaceTile extends StatelessWidget {
                       right: BorderSide(color: Colors.grey.shade200),
                     ),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  // [修正] 馬詳細タブ 表示項目変更 Step2: 上下の余白 8→4 (v.2026.10.15+26101501)
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -90,7 +121,8 @@ class ConditionRaceTile extends StatelessWidget {
                 // --- 右列 (レース詳細情報) ---
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.only(left: 8.0, top: 4.0, bottom: 4.0),
+                    // [修正] 馬詳細タブ 表示項目変更 Step2: 上下の余白 4→2 (v.2026.10.15+26101501)
+                    padding: const EdgeInsets.only(left: 8.0, top: 2.0, bottom: 2.0),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
@@ -131,6 +163,19 @@ class ConditionRaceTile extends StatelessWidget {
                               ),
                             ),
                             Text(record.margin, style: detailBoldStyle),
+                          ],
+                        ),
+                        // [追加] 馬詳細タブ 表示項目変更 Step2: 4行目: コーナー通過順 | クッション値・含水率（馬場データを渡されたときだけ） (v.2026.10.15+26101501)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '通過 ${corner.isEmpty ? '--' : corner}',
+                                style: detailTextStyle,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (trackText != null) Text(trackText, style: detailTextStyle),
                           ],
                         ),
                       ],

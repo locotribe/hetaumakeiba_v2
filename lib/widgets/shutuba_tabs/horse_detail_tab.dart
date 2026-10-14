@@ -20,6 +20,8 @@ import 'package:hetaumakeiba_v2/widgets/horse_detail/condition_section.dart';
 // [追加] 好走条件 馬詳細移植 StepA-3: 馬場データ取得（クッション値/含水率） (v.2026.9.25+26092507)
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
+// [追加] 馬詳細タブ 表示項目変更 Step2: 今回レースの芝/ダ（ヒートマップと同じ判定） (v.2026.10.15+26101501)
+import 'package:hetaumakeiba_v2/logic/analysis/condition_ranking_builder.dart';
 // [追加] 馬体重成長曲線 Step2: 情報・血統の最下部の成長曲線（期間の種類とセクション部品） (v.2026.10.1+26100102)
 import 'package:hetaumakeiba_v2/logic/growth_curve_builder.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/growth_curve_section.dart';
@@ -211,6 +213,16 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       }
       return map;
     });
+  }
+
+  // [追加] 馬詳細タブ 表示項目変更 Step2: 今回レースの当日の馬場データ（クッション値/含水率）を1回だけ引く。当日の測定が無ければ null (v.2026.10.15+26101501)
+  Future<TrackConditionRecord?>? _currentTrackConditionFuture;
+
+  Future<TrackConditionRecord?> _currentTrackCondition() {
+    return _currentTrackConditionFuture ??= _trackConditionRepo.getTrackConditionForRace(
+      raceId: widget.raceId,
+      raceDate: widget.predictionRaceData.raceDate,
+    );
   }
 
   void _goToPage(int page, {bool animate = true}) {
@@ -735,11 +747,26 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
-                return ConditionSection(
-                  horse: horse,
-                  allPastRecords: all,
-                  currentRaceHorses: _horses,
-                  trackConditions: tcSnapshot.data ?? const {},
+                // [修正] 馬詳細タブ 表示項目変更 Step2: 今回レースの当日の馬場データも読んでから表示し、今回の芝/ダと一緒に渡す (v.2026.10.15+26101501)
+                return FutureBuilder<TrackConditionRecord?>(
+                  future: _currentTrackCondition(),
+                  builder: (context, currentSnapshot) {
+                    if (currentSnapshot.connectionState != ConnectionState.done) {
+                      return const Padding(
+                        padding: EdgeInsets.all(24.0),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    return ConditionSection(
+                      horse: horse,
+                      allPastRecords: all,
+                      currentRaceHorses: _horses,
+                      trackConditions: tcSnapshot.data ?? const {},
+                      currentSurface:
+                          ConditionRankingBuilder.conditionsOf(widget.predictionRaceData).surface,
+                      currentTrackCondition: currentSnapshot.data,
+                    );
+                  },
                 );
               },
             );
