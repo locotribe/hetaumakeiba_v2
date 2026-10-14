@@ -760,5 +760,16 @@ void main() {
       expect(md, contains('- 過去データ（別ファイル）: '));
       expect(md, contains('- 出力日時: この資料（追加データ）を出した時刻'));
     });
+
+    // [追加] AI分析データ 過去データ馬場・読み方: 依頼文の用語の行と、過去データの説明の追記 (v.2026.10.14+26101406)
+    test('依頼文に馬柱・調教・馬場の用語と、過去データの当日の馬場・読み方の説明がある', () {
+      final md = buildRaceFullAiMarkdown(
+          raceData: _race(), bundle: _bundle(), grain: AiExportGrain.summary);
+      expect(md, contains('- 馬柱の用語: '));
+      expect(md, contains('- 調教の用語: '));
+      expect(md, contains('- 馬場の用語: '));
+      expect(md, contains('レース当日のJRA発表の馬場（クッション値・含水率。古い年は測定データなし）'));
+      expect(md, contains('読み方は過去データの先頭にある'));
+    });
   });
 }

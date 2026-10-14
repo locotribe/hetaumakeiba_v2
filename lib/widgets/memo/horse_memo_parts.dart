@@ -19,6 +19,7 @@ import 'package:hetaumakeiba_v2/logic/ai_export/citation_sanitizer.dart'; // [�
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart'; // [追加] AI分析データ 過去データ分離 Step3 (v.2026.10.14+26101403)
 import 'package:hetaumakeiba_v2/db/repositories/race_statistics_repository.dart'; // [追加] AI分析データ 過去データ分離 Step3 (v.2026.10.14+26101403)
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_past_race_markdown_builder.dart'; // [追加] AI分析データ 過去データ分離 Step3 (v.2026.10.14+26101403)
+import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart'; // [追加] AI分析データ 過去データ馬場・読み方 (v.2026.10.14+26101406)
 
 // [追加] 馬詳細タブStep2: メモタブ（memo_tab.dart）のメモ入力ダイアログ・過去メモ・CSV入出力をここへ移した。
 // 見た目・文言・処理内容は移す前と同じ。馬詳細タブ（Step3）からも使う (v.2026.9.23+26092307)
@@ -336,12 +337,22 @@ Future<void> exportPastRaceDataAsMarkdown(
     return;
   }
 
+  // [追加] AI分析データ 過去データ馬場・読み方: 各年のレース当日のJRA発表の馬場（競馬場コード＋開催日で照合）。無い年は null (v.2026.10.14+26101406)
+  final trackRepository = TrackConditionRepository();
+  final trackByRaceId = {
+    for (final r in pastResults)
+      r.raceId: await trackRepository.getTrackConditionForRace(
+          raceId: r.raceId, raceDate: r.raceDate),
+  };
+
   final markdown = buildPastRaceMarkdown(
     raceId: raceId,
     raceName: raceData.raceName,
     raceDate: raceData.raceDate,
     pastResults: pastResults,
     exportedAt: DateTime.now(),
+    // [追加] AI分析データ 過去データ馬場・読み方 (v.2026.10.14+26101406)
+    trackByRaceId: trackByRaceId,
   );
 
   final mdName = buildExportFileName(
