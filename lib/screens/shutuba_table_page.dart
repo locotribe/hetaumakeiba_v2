@@ -46,6 +46,8 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/horse_detail_tab.dart';
 // [追加] 陣営の本気度指数 実施順6: 出走の意味の計算・保存 (v.2026.10.3+26100308)
 import 'package:hetaumakeiba_v2/logic/entry_meaning_snapshot.dart';
 import 'package:hetaumakeiba_v2/services/entry_meaning_service.dart';
+// [追加] 基本情報整理と本賞金照合 Step4: 本賞金が無い過去の重賞の出馬表を、スクレイピングの順番待ちで1件ずつ取る (v.2026.10.15+26101507)
+import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/user_mark_dropdown.dart';
 import 'package:hetaumakeiba_v2/widgets/themed_tab_bar.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_info_tab.dart'; // ▼ 追加
@@ -119,6 +121,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   bool _entryMeaningLoaded = false;
   bool _entryMeaningRunning = false;
   bool _entryMeaningRerun = false;
+
+  // [追加] 基本情報整理と本賞金照合 Step4: この画面で本賞金の取得を積んだレースID（失敗しても同じ画面では積み直さない） (v.2026.10.15+26101507)
+  final Set<String> _basePrizeRequestedRaceIds = {};
 
   @override
   bool get wantKeepAlive => true;
@@ -819,9 +824,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         if (data == null) return;
         EntryMeaningSnapshot? snapshot;
         try {
+          // [修正] 基本情報整理と本賞金照合 Step4: 本賞金が無いレースを知らされたら、その出馬表の取得を積む (v.2026.10.15+26101507)
           snapshot = widget.raceResult != null
               ? await _entryMeaningService.loadSaved(widget.raceId)
-              : await _entryMeaningService.computeAndSave(data);
+              : await _entryMeaningService.computeAndSave(data,
+                  onMissingBasePrizes: _requestBasePrizes);
         } catch (e) {
           debugPrint('出走の意味の計算に失敗: $e');
           snapshot = _entryMeaningSnapshot;
@@ -834,6 +841,31 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       } while (_entryMeaningRerun);
     } finally {
       _entryMeaningRunning = false;
+    }
+  }
+
+  // [追加] 基本情報整理と本賞金照合 Step4: 本賞金が無いレース（レースID → レース名）の出馬表を ScrapingManager に1件ずつ積む。
+  // 取得は既存の scrapeAllData（成功すると出馬表キャッシュに本賞金ごと保存される）。取れたら出走の意味を計算し直す。
+  // 失敗はログだけで、同じ画面では積み直さない (v.2026.10.15+26101507)
+  void _requestBasePrizes(Map<String, String> missingRaceNames) {
+    for (final entry in missingRaceNames.entries) {
+      final raceId = entry.key;
+      if (!_basePrizeRequestedRaceIds.add(raceId)) continue;
+      ScrapingManager().addRequest(
+        '本賞金取得: ${entry.value}',
+        () async {
+          try {
+            await _scraperService.scrapeAllData(raceId);
+          } catch (e) {
+            debugPrint('本賞金の取得に失敗: $raceId $e');
+            return;
+          }
+          if (mounted) {
+            _refreshEntryMeanings();
+          }
+        },
+        key: 'basePrize:$raceId',
+      );
     }
   }
 
