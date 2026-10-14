@@ -7,6 +7,7 @@ import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 
 HorseRaceRecord rec({
   String raceId = 'r',
+  String date = '2025/01/01',
   String rank = '5',
   String distance = '芝1600',
   String venue = '5東京8',
@@ -18,11 +19,13 @@ HorseRaceRecord rec({
   String cornerPassage = '5-5',
   String numberOfHorses = '16',
   String agari = '34.0',
+  String jockey = 'J',
+  String jockeyId = 'jid',
 }) {
   return HorseRaceRecord(
     horseId: 'h',
     raceId: raceId,
-    date: '2025/01/01',
+    date: date,
     venue: venue,
     weather: weather,
     raceNumber: '11',
@@ -33,8 +36,8 @@ HorseRaceRecord rec({
     odds: '5.0',
     popularity: popularity,
     rank: rank,
-    jockey: 'J',
-    jockeyId: 'jid',
+    jockey: jockey,
+    jockeyId: jockeyId,
     carriedWeight: '55',
     distance: distance,
     trackCondition: trackCondition,
@@ -54,6 +57,20 @@ AptitudeCategory? catOf(ConditionAptitude a, String name) {
     if (c.name == name) return c;
   }
   return null;
+}
+
+int catIndex(ConditionAptitude a, String name) {
+  return a.categories.indexWhere((c) => c.name == name);
+}
+
+TrackConditionRecord tcRec(int id, {double? cushion, double? dirtGoal}) {
+  return TrackConditionRecord(
+    trackConditionId: id,
+    date: '2025-01-01',
+    weekDay: 'sa',
+    cushionValue: cushion,
+    moistureDirtGoal: dirtGoal,
+  );
 }
 
 void main() {
@@ -81,10 +98,17 @@ void main() {
       expect(ConditionAptitudeAnalyzer.distanceBandLabel(2500), '2500〜');
     });
 
-    test('distanceLabelOf skips 障', () {
+    test('distanceLabelOf skips 障（ヒートマップ用の距離帯は従来どおり）', () {
       expect(ConditionAptitudeAnalyzer.distanceLabelOf(rec(distance: '芝1600')), '芝1400-1600');
       expect(ConditionAptitudeAnalyzer.distanceLabelOf(rec(distance: 'ダ1200')), 'ダ〜1300');
       expect(ConditionAptitudeAnalyzer.distanceLabelOf(rec(distance: '障3380')), isNull);
+    });
+
+    test('distanceExactLabelOf: 経験距離のラベル・障と不明は null', () {
+      expect(ConditionAptitudeAnalyzer.distanceExactLabelOf(rec(distance: '芝1600')), '芝1600');
+      expect(ConditionAptitudeAnalyzer.distanceExactLabelOf(rec(distance: 'ダ1200')), 'ダ1200');
+      expect(ConditionAptitudeAnalyzer.distanceExactLabelOf(rec(distance: '障3380')), isNull);
+      expect(ConditionAptitudeAnalyzer.distanceExactLabelOf(rec(distance: '1600')), isNull);
     });
 
     test('weightDeltaOf / weightDeltaBand', () {
@@ -139,10 +163,22 @@ void main() {
       expect(t.winRate, closeTo(0.2, 1e-9));
       expect(t.showRate, closeTo(0.6, 1e-9));
     });
+
+    test('debutRecordOf: 日付がいちばん古い走・読めない日付は除く・空なら null', () {
+      final records = <HorseRaceRecord>[
+        rec(raceId: 'b', date: '2025/03/01'),
+        rec(raceId: 'a', date: '2024/06/09'),
+        rec(raceId: 'x', date: '不明'),
+        rec(raceId: 'c', date: '2025/10/01'),
+      ];
+      expect(ConditionAptitudeAnalyzer.debutRecordOf(records)!.raceId, 'a');
+      expect(ConditionAptitudeAnalyzer.debutRecordOf(<HorseRaceRecord>[]), isNull);
+      expect(ConditionAptitudeAnalyzer.debutRecordOf([rec(date: '不明')]), isNull);
+    });
   });
 
   group('analyze', () {
-    test('distance category: sort by winRate, best flag, reference', () {
+    test('distance category: 経験距離ごと・芝→ダの距離順・得意と参考', () {
       final records = <HorseRaceRecord>[
         rec(distance: '芝1600', rank: '1'),
         rec(distance: '芝1600', rank: '1'),
@@ -150,20 +186,21 @@ void main() {
         rec(distance: 'ダ1200', rank: '1'),
         rec(distance: 'ダ1200', rank: '2'),
         rec(distance: '芝2400', rank: '1'),
+        rec(distance: '芝1200', rank: '5'),
+        rec(distance: '芝1200', rank: '6'),
+        rec(distance: '障3380', rank: '1'),
       ];
       final a = ConditionAptitudeAnalyzer.analyze(records);
       final dist = catOf(a, '距離')!;
-      // main: 芝1400-1600 (win .667) → best, ダ〜1300 (win .5)
-      expect(dist.values[0].label, '芝1400-1600');
-      expect(dist.values[0].isBest, isTrue);
+      expect(dist.values.map((v) => v.label).toList(), ['芝1200', '芝1600', '芝2400', 'ダ1200']);
+      // 得意は2走以上で勝率最上位（芝1600 = 2/3）
+      expect(dist.values[1].isBest, isTrue);
+      expect(dist.values.where((v) => v.isBest).length, 1);
+      // 1走だけの芝2400は並びはそのまま・参考
+      expect(dist.values[2].isReference, isTrue);
+      expect(dist.values[2].isBest, isFalse);
       expect(dist.values[0].isReference, isFalse);
-      expect(dist.values[1].label, 'ダ〜1300');
-      expect(dist.values[1].isBest, isFalse);
-      // reference last: 芝2100-2400 (1走)
-      final last = dist.values.last;
-      expect(last.label, '芝2100-2400');
-      expect(last.isReference, isTrue);
-      expect(last.isBest, isFalse);
+      expect(dist.values[3].tally.total, 2);
     });
 
     test('best requires a win in the top value', () {
@@ -176,6 +213,10 @@ void main() {
       final a = ConditionAptitudeAnalyzer.analyze(records);
       final baba = catOf(a, '馬場')!;
       for (final v in baba.values) {
+        expect(v.isBest, isFalse);
+      }
+      final dist = catOf(a, '距離')!;
+      for (final v in dist.values) {
         expect(v.isBest, isFalse);
       }
     });
@@ -198,12 +239,52 @@ void main() {
     });
   });
 
-  group('track condition categories (StepA-3)', () {
-    test('cushionBand / moistureBand', () {
-      expect(ConditionAptitudeAnalyzer.cushionBand(9.5), '9.5以上');
-      expect(ConditionAptitudeAnalyzer.cushionBand(10.2), '9.5以上');
-      expect(ConditionAptitudeAnalyzer.cushionBand(9.4), '9.4以下');
-      expect(ConditionAptitudeAnalyzer.cushionBand(8.0), '9.4以下');
+  group('jockey category', () {
+    final records = <HorseRaceRecord>[
+      rec(date: '2025/01/01', rank: '1', jockeyId: 'A', jockey: '戸崎'),
+      rec(date: '2025/03/01', rank: '4', jockeyId: 'A', jockey: '戸崎圭'),
+      rec(date: '2024/12/01', rank: '2', jockeyId: 'A', jockey: '戸崎'),
+      rec(date: '2025/02/01', rank: '1', jockeyId: 'B', jockey: 'ルメール'),
+      rec(date: '2025/02/15', rank: '1', jockeyId: 'B', jockey: 'ルメール'),
+      rec(date: '2025/04/01', rank: '3', jockeyId: '', jockey: '武豊'),
+    ];
+
+    test('騎乗回数の多い順・表示名は最新の騎乗・得意と参考・脚質の直後', () {
+      final a = ConditionAptitudeAnalyzer.analyze(records);
+      final j = catOf(a, '騎手')!;
+      expect(j.values.map((v) => v.label).toList(), ['戸崎圭', 'ルメール', '武豊']);
+      expect(j.values[0].tally.total, 3);
+      expect(j.values[1].isBest, isTrue);
+      expect(j.values[0].isBest, isFalse);
+      expect(j.values[2].isReference, isTrue);
+      for (final v in j.values) {
+        expect(v.isCurrent, isFalse);
+      }
+      expect(catIndex(a, '騎手'), catIndex(a, '脚質') + 1);
+    });
+
+    test('今回の騎手に今回印（IDで照合、IDが空なら名前で照合）', () {
+      final byId = catOf(ConditionAptitudeAnalyzer.analyze(records, currentJockeyId: 'B', currentJockeyName: 'ルメール'), '騎手')!;
+      expect(byId.values.where((v) => v.isCurrent).map((v) => v.label).toList(), ['ルメール']);
+      final byName = catOf(ConditionAptitudeAnalyzer.analyze(records, currentJockeyId: '', currentJockeyName: '武豊'), '騎手')!;
+      expect(byName.values.where((v) => v.isCurrent).map((v) => v.label).toList(), ['武豊']);
+    });
+  });
+
+  group('track condition categories', () {
+    test('cushionBand 6段の境界 / moistureBand', () {
+      expect(ConditionAptitudeAnalyzer.cushionBand(10.1), '10以上');
+      expect(ConditionAptitudeAnalyzer.cushionBand(10.0), '10以上');
+      expect(ConditionAptitudeAnalyzer.cushionBand(9.9), '9.9-9.5');
+      expect(ConditionAptitudeAnalyzer.cushionBand(9.5), '9.9-9.5');
+      expect(ConditionAptitudeAnalyzer.cushionBand(9.4), '9.4-9');
+      expect(ConditionAptitudeAnalyzer.cushionBand(9.0), '9.4-9');
+      expect(ConditionAptitudeAnalyzer.cushionBand(8.9), '8.9-8.5');
+      expect(ConditionAptitudeAnalyzer.cushionBand(8.5), '8.9-8.5');
+      expect(ConditionAptitudeAnalyzer.cushionBand(8.4), '8.4-8');
+      expect(ConditionAptitudeAnalyzer.cushionBand(8.0), '8.4-8');
+      expect(ConditionAptitudeAnalyzer.cushionBand(7.9), '7.9以下');
+      expect(ConditionAptitudeAnalyzer.cushionBand(7.0), '7.9以下');
       expect(ConditionAptitudeAnalyzer.moistureBand(5), '6%以下');
       expect(ConditionAptitudeAnalyzer.moistureBand(6.9), '6%以下');
       expect(ConditionAptitudeAnalyzer.moistureBand(7), '7〜10%');
@@ -214,51 +295,91 @@ void main() {
       expect(ConditionAptitudeAnalyzer.moistureBand(20), '14%以上');
     });
 
-    test('no trackConditions → no track categories', () {
-      final a = ConditionAptitudeAnalyzer.analyze([rec(distance: '芝1600', rank: '1')]);
+    test('芝・ダの出走が無い馬（障害のみ）は馬場データのカテゴリを出さない', () {
+      final a = ConditionAptitudeAnalyzer.analyze([rec(distance: '障3380', rank: '1')]);
       expect(catOf(a, 'クッション値(芝)'), isNull);
       expect(catOf(a, '含水率(ダ・ゴール前)'), isNull);
     });
 
-    test('turf → cushion category (fixed order, no best/reference)', () {
+    test('芝の出走があれば馬場データが無くてもクッション値6段を着度数0で出す', () {
+      final a = ConditionAptitudeAnalyzer.analyze([rec(distance: '芝1600', rank: '1')]);
+      final cat = catOf(a, 'クッション値(芝)')!;
+      expect(cat.values.map((v) => v.label).toList(), ConditionAptitudeAnalyzer.cushionBandOrder);
+      for (final v in cat.values) {
+        expect(v.tally.total, 0);
+      }
+      expect(catOf(a, '含水率(ダ・ゴール前)'), isNull);
+      expect(catIndex(a, 'クッション値(芝)'), catIndex(a, '馬場') + 1);
+    });
+
+    test('turf → クッション値6段（固定順・出走の無い段は0・得意/参考なし）', () {
       final records = <HorseRaceRecord>[
         rec(raceId: 'a', distance: '芝1600', rank: '1'),
         rec(raceId: 'b', distance: '芝1600', rank: '3'),
         rec(raceId: 'c', distance: '芝2000', rank: '5'),
+        rec(raceId: 'd', distance: '芝2000', rank: '2'),
       ];
       final tc = <String, TrackConditionRecord?>{
-        'a': TrackConditionRecord(trackConditionId: 1, date: '2025-01-01', weekDay: 'sa', cushionValue: 9.8),
-        'b': TrackConditionRecord(trackConditionId: 2, date: '2025-01-02', weekDay: 'su', cushionValue: 9.0),
-        'c': TrackConditionRecord(trackConditionId: 3, date: '2025-01-03', weekDay: 'mo', cushionValue: 10.1),
+        'a': tcRec(1, cushion: 9.8),
+        'b': tcRec(2, cushion: 9.0),
+        'c': tcRec(3, cushion: 10.1),
+        'd': null,
       };
       final a = ConditionAptitudeAnalyzer.analyze(records, trackConditions: tc);
       final cat = catOf(a, 'クッション値(芝)')!;
-      expect(cat.values[0].label, '9.5以上');
-      expect(cat.values[0].tally.total, 2);
-      expect(cat.values[0].tally.first, 1);
-      expect(cat.values[1].label, '9.4以下');
-      expect(cat.values[1].tally.total, 1);
+      expect(cat.values.length, 6);
+      expect(cat.values[0].label, '10以上');
+      expect(cat.values[0].tally.out, 1);
+      expect(cat.values[1].label, '9.9-9.5');
+      expect(cat.values[1].tally.first, 1);
+      expect(cat.values[2].label, '9.4-9');
+      expect(cat.values[2].tally.third, 1);
+      expect(cat.values[3].tally.total, 0);
+      expect(cat.values[4].tally.total, 0);
+      expect(cat.values[5].tally.total, 0);
       for (final v in cat.values) {
         expect(v.isBest, isFalse);
         expect(v.isReference, isFalse);
+        expect(v.isCurrent, isFalse);
       }
       expect(catOf(a, '含水率(ダ・ゴール前)'), isNull);
     });
 
-    test('dirt → moisture category (goal-front)', () {
+    test('dirt → 含水率4段（出走の無い段も0）', () {
       final records = <HorseRaceRecord>[
         rec(raceId: 'a', distance: 'ダ1200', rank: '1'),
         rec(raceId: 'b', distance: 'ダ1200', rank: '4'),
       ];
       final tc = <String, TrackConditionRecord?>{
-        'a': TrackConditionRecord(trackConditionId: 1, date: '2025-01-01', weekDay: 'sa', moistureDirtGoal: 15.0),
-        'b': TrackConditionRecord(trackConditionId: 2, date: '2025-01-02', weekDay: 'su', moistureDirtGoal: 5.0),
+        'a': tcRec(1, dirtGoal: 15.0),
+        'b': tcRec(2, dirtGoal: 5.0),
       };
       final a = ConditionAptitudeAnalyzer.analyze(records, trackConditions: tc);
       final cat = catOf(a, '含水率(ダ・ゴール前)')!;
-      expect(cat.values.first.label, '6%以下');
-      expect(cat.values.last.label, '14%以上');
+      expect(cat.values.map((v) => v.label).toList(), ConditionAptitudeAnalyzer.moistureBandOrder);
+      expect(cat.values[0].tally.out, 1);
+      expect(cat.values[1].tally.total, 0);
+      expect(cat.values[2].tally.total, 0);
+      expect(cat.values[3].tally.first, 1);
       expect(catOf(a, 'クッション値(芝)'), isNull);
+    });
+
+    test('今回印: 今回が芝ならクッション値の段、ダートなら含水率の段', () {
+      final records = <HorseRaceRecord>[
+        rec(raceId: 'a', distance: '芝1600', rank: '1'),
+        rec(raceId: 'b', distance: 'ダ1400', rank: '2'),
+      ];
+      final turf = ConditionAptitudeAnalyzer.analyze(records,
+          currentSurface: '芝', currentCushionValue: 9.6, currentMoistureDirtGoal: 8.0);
+      expect(catOf(turf, 'クッション値(芝)')!.values.where((v) => v.isCurrent).map((v) => v.label).toList(),
+          ['9.9-9.5']);
+      expect(catOf(turf, '含水率(ダ・ゴール前)')!.values.where((v) => v.isCurrent), isEmpty);
+
+      final dirt = ConditionAptitudeAnalyzer.analyze(records,
+          currentSurface: 'ダ', currentCushionValue: 9.6, currentMoistureDirtGoal: 8.0);
+      expect(catOf(dirt, 'クッション値(芝)')!.values.where((v) => v.isCurrent), isEmpty);
+      expect(catOf(dirt, '含水率(ダ・ゴール前)')!.values.where((v) => v.isCurrent).map((v) => v.label).toList(),
+          ['7〜10%']);
     });
   });
 }
