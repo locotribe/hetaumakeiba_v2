@@ -295,4 +295,58 @@ void main() {
       expect(p(3, null).rankVsPopularity, isNull);
     });
   });
+
+  group('棒の高さと横幅（馬詳細タブ 表示項目変更 Step3）', () {
+    test('頭数の棒: 頭数÷18・18頭超は1・0以下は0', () {
+      expect(GrowthCurveBuilder.fieldBarFraction(18), 1.0);
+      expect(GrowthCurveBuilder.fieldBarFraction(9), closeTo(0.5, 1e-9));
+      expect(GrowthCurveBuilder.fieldBarFraction(20), 1.0);
+      expect(GrowthCurveBuilder.fieldBarFraction(0), 0.0);
+    });
+
+    test('人気・着順の棒: 18頭1人気1着は3本とも満杯、2人気3着は一段ずつ下がる', () {
+      expect(GrowthCurveBuilder.fieldBarFraction(18), 1.0);
+      expect(GrowthCurveBuilder.positionBarFraction(1, 18), 1.0);
+      expect(GrowthCurveBuilder.positionBarFraction(2, 18), closeTo(17 / 18, 1e-9));
+      expect(GrowthCurveBuilder.positionBarFraction(3, 18), closeTo(16 / 18, 1e-9));
+    });
+
+    test('人気・着順の棒: 少頭数は低くなる・頭数不明は18頭・頭数より下は0', () {
+      expect(GrowthCurveBuilder.fieldBarFraction(10), closeTo(10 / 18, 1e-9));
+      expect(GrowthCurveBuilder.positionBarFraction(1, 10), closeTo(10 / 18, 1e-9));
+      expect(GrowthCurveBuilder.positionBarFraction(1, null), 1.0);
+      expect(GrowthCurveBuilder.positionBarFraction(12, 10), 0.0);
+    });
+
+    test('横幅: 365日以内は表示枠の幅、それより長ければ期間に比例', () {
+      final start = DateTime(2024, 1, 1);
+      expect(
+          GrowthCurveBuilder.chartWidth(
+              viewportWidth: 300, start: start, end: DateTime(2024, 12, 30)),
+          300);
+      expect(
+          GrowthCurveBuilder.chartWidth(
+              viewportWidth: 300, start: start, end: start),
+          300);
+      expect(
+          GrowthCurveBuilder.chartWidth(
+              viewportWidth: 300,
+              start: start,
+              end: start.add(const Duration(days: 730))),
+          closeTo(600, 1e-9));
+    });
+
+    test('レース全体の縦軸: 全馬の最小−10〜最大+10を10kg単位・体重の無い馬は無視', () {
+      final w = GrowthCurveBuilder.raceWeightWindow([
+        [_point(DateTime(2025, 1, 1), 452), _point(DateTime(2025, 6, 1), 470)],
+        [_point(DateTime(2025, 3, 1), 516), _point(DateTime(2025, 9, 1), null)],
+        [],
+      ]);
+      expect(w.min, 440);
+      expect(w.max, 530);
+      final empty = GrowthCurveBuilder.raceWeightWindow([[], []]);
+      expect(empty.min, GrowthCurveBuilder.emptyWindow.min);
+      expect(empty.max, GrowthCurveBuilder.emptyWindow.max);
+    });
+  });
 }

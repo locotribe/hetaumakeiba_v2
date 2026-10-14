@@ -23,7 +23,9 @@ import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 // [追加] 馬詳細タブ 表示項目変更 Step2: 今回レースの芝/ダ（ヒートマップと同じ判定） (v.2026.10.15+26101501)
 import 'package:hetaumakeiba_v2/logic/analysis/condition_ranking_builder.dart';
 // [追加] 馬体重成長曲線 Step2: 情報・血統の最下部の成長曲線（期間の種類とセクション部品） (v.2026.10.1+26100102)
+// [修正] 馬詳細タブ 表示項目変更 Step3追補: 成長曲線の縦軸をレース全体で決めるため、growth_curve_builder とレース日の読み取りを使う (v.2026.10.15+26101502)
 import 'package:hetaumakeiba_v2/logic/growth_curve_builder.dart';
+import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/growth_curve_section.dart';
 // [追加] 陣営の本気度指数 実施順6: 情報・血統のいちばん下の「出走の意味」 (v.2026.10.3+26100308)
 import 'package:hetaumakeiba_v2/logic/entry_meaning_snapshot.dart';
@@ -90,8 +92,7 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   String? _currentHorseId;
   _HorseDetailView _view = _HorseDetailView.finalTraining;
 
-  // [追加] 馬体重成長曲線 Step2: 成長曲線の表示期間（馬を切り替えても保つ） (v.2026.10.1+26100102)
-  GrowthRange _growthRange = GrowthRange.all;
+  // [削除] 馬詳細タブ 表示項目変更 Step3: 成長曲線の期間スイッチを廃止したので、表示期間の状態（_growthRange）を削除 (v.2026.10.15+26101502)
 
   /// ページを表示したときに1頭1回だけ読む（通信なし）
   final Map<String, Future<HorseProfile?>> _profileFutures = {};
@@ -178,6 +179,21 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       }
       return records;
     });
+  }
+
+  // [追加] 馬詳細タブ 表示項目変更 Step3追補: 成長曲線の縦軸をレース全体で1つに決める。取消の馬を除く全出走馬の
+  // 全期間の体重（レース日より前の走＋発表済みなら当日体重）の最小−10kg〜最大+10kg。出馬表を更新して取消が変われば計算し直される (v.2026.10.15+26101502)
+  GrowthWeightWindow _raceWeightWindow(Map<String, List<HorseRaceRecord>> all) {
+    final raceDate = parseRaceDateForSpeedIndex(widget.predictionRaceData.raceDate);
+    return GrowthCurveBuilder.raceWeightWindow([
+      for (final h in _horses)
+        if (!h.isScratched)
+          GrowthCurveBuilder.buildPoints(
+            records: all[h.horseId] ?? const <HorseRaceRecord>[],
+            raceDate: raceDate,
+            currentHorseWeight: h.horseWeight,
+          ),
+    ]);
   }
 
   // [追加] 好走条件 馬詳細移植 StepA-2: 全馬の過去走を1回だけ読む（対戦成績用。好走条件を初めて開いたときに実行） (v.2026.9.25+26092506)
@@ -659,22 +675,42 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
           // [追加] 馬体重成長曲線 Step2: 血統表の下に成長曲線（馬体重の推移＋人気・着順） (v.2026.10.1+26100102)
           const SizedBox(height: 12),
           _sectionLabel('成長曲線（馬体重・人気・着順）'),
-          FutureBuilder<List<HorseRaceRecord>>(
-            future: _recordsFor(horse.horseId),
-            builder: (context, recordSnapshot) {
-              if (recordSnapshot.connectionState != ConnectionState.done) {
+          // [修正] 馬詳細タブ 表示項目変更 Step3追補: 全馬の過去走（好走条件と同じ読み込み）も読んで、レース全体の縦軸を渡す。
+          // 取消の馬を開いたときは、その馬の体重だけで縦軸を決める (v.2026.10.15+26101502)
+          FutureBuilder<Map<String, List<HorseRaceRecord>>>(
+            future: _allPastRecords(),
+            builder: (context, allSnapshot) {
+              if (allSnapshot.connectionState != ConnectionState.done) {
                 return const Padding(
                   padding: EdgeInsets.all(16.0),
                   child: Center(child: CircularProgressIndicator()),
                 );
               }
-              return GrowthCurveSection(
-                horse: horse,
-                records: recordSnapshot.data ?? const <HorseRaceRecord>[],
-                raceDate: widget.predictionRaceData.raceDate,
-                range: _growthRange,
-                onRangeChanged: (range) =>
-                    setState(() => _growthRange = range),
+              final all = allSnapshot.data ??
+                  const <String, List<HorseRaceRecord>>{};
+              return FutureBuilder<List<HorseRaceRecord>>(
+                future: _recordsFor(horse.horseId),
+                builder: (context, recordSnapshot) {
+                  if (recordSnapshot.connectionState != ConnectionState.done) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  return GrowthCurveSection(
+                    horse: horse,
+                    records: recordSnapshot.data ?? const <HorseRaceRecord>[],
+                    raceDate: widget.predictionRaceData.raceDate,
+                    // 全馬の読み込みが空でも、この馬の過去走は必ず縦軸に入れる
+                    window: horse.isScratched
+                        ? null
+                        : _raceWeightWindow({
+                            ...all,
+                            horse.horseId: recordSnapshot.data ??
+                                const <HorseRaceRecord>[],
+                          }),
+                  );
+                },
               );
             },
           ),
@@ -815,6 +851,9 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
         Expanded(
           child: PageView.builder(
             controller: _pageController,
+            // [追加] 馬詳細タブ 表示項目変更 Step3: 横スワイプで馬を切り替えない（成長曲線の横スクロールとぶつけない）。
+            // 馬の切り替えは馬番チップ・◀ ▶・全頭一覧のカードで行う (v.2026.10.15+26101502)
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: _horses.length + 1,
             onPageChanged: _onPageChanged,
             itemBuilder: (context, page) => page == 0

@@ -318,4 +318,47 @@ class GrowthCurveBuilder {
       runCount: runs,
     );
   }
+
+  // [追加] 馬詳細タブ 表示項目変更 Step3: 棒の高さの基準。18頭立てで満杯 (v.2026.10.15+26101502)
+  static const int barFullFieldSize = 18;
+
+  // [追加] 馬詳細タブ 表示項目変更 Step3: 頭数の棒の高さ（0〜1）。頭数 ÷ 18（18頭を超えたら1、0以下なら0） (v.2026.10.15+26101502)
+  static double fieldBarFraction(int fieldSize) {
+    if (fieldSize <= 0) return 0.0;
+    final v = fieldSize > barFullFieldSize ? barFullFieldSize : fieldSize;
+    return v / barFullFieldSize;
+  }
+
+  // [追加] 馬詳細タブ 表示項目変更 Step3: 人気・着順の棒の高さ（0〜1）。(頭数 − 順位 + 1) ÷ 18。
+  // 頭数が不明なら18頭として計算。0未満は0、1を超えたら1 (v.2026.10.15+26101502)
+  static double positionBarFraction(int position, int? fieldSize) {
+    final n = fieldSize ?? barFullFieldSize;
+    final raw = (n - position + 1) / barFullFieldSize;
+    if (raw <= 0) return 0.0;
+    if (raw >= 1) return 1.0;
+    return raw;
+  }
+
+  // [追加] 馬詳細タブ 表示項目変更 Step3: 表示枠の幅に入れる日数（画面の幅＝1年） (v.2026.10.15+26101502)
+  static const int chartViewportDays = 365;
+
+  // [追加] 馬詳細タブ 表示項目変更 Step3: グラフ本体の横幅。点の期間が365日以下なら表示枠の幅、
+  // それより長ければ期間に比例して広げる（横スクロール） (v.2026.10.15+26101502)
+  static double chartWidth({
+    required double viewportWidth,
+    required DateTime start,
+    required DateTime end,
+  }) {
+    final days = end.difference(start).inDays;
+    if (days <= chartViewportDays) return viewportWidth;
+    return viewportWidth * days / chartViewportDays;
+  }
+
+  // [追加] 馬詳細タブ 表示項目変更 Step3追補: レース全体で1つの縦軸。渡した全馬の点（全期間＋今回の当日体重）の
+  // 最小−10kg〜最大+10kg を10kg単位にそろえる（考え方は weightWindow と同じ）。どの馬を開いても目盛りが変わらない (v.2026.10.15+26101502)
+  static GrowthWeightWindow raceWeightWindow(List<List<GrowthPoint>> pointsByHorse) {
+    return weightWindow([
+      for (final points in pointsByHorse) ...points,
+    ]);
+  }
 }

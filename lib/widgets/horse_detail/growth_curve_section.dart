@@ -3,6 +3,8 @@
 // [追加] 馬体重成長曲線 Step2: 馬詳細タブ「情報・血統」の最下部に出す成長曲線。
 // 見出し（1行目: デビュー体重→最新、2行目: 最高・最低・走数）、期間スイッチ（直近1年／3年／全期間）、
 // グラフ（タップした点の詳細を下に表示）、凡例を並べる。データは受け取るだけで、読み込みはしない (v.2026.10.1+26100102)
+// [修正] 馬詳細タブ 表示項目変更 Step3: 期間スイッチを廃止し、全期間を「画面の幅＝1年」の横スクロールで表示（開いたときは右端＝最新）。
+// 左の体重目盛りはスクロールさせない。縦軸は全期間で固定。凡例は 馬体重・頭数・人気・着順 の4つ (v.2026.10.15+26101502)
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/growth_curve_builder.dart';
@@ -20,17 +22,15 @@ class GrowthCurveSection extends StatefulWidget {
   /// 今回レースの日付（PredictionRaceData.raceDate の文字列）
   final String raceDate;
 
-  /// 表示期間（馬を切り替えても保つため、親が持つ）
-  final GrowthRange range;
-  final ValueChanged<GrowthRange> onRangeChanged;
+  // [追加] 馬詳細タブ 表示項目変更 Step3追補: レース全体で決めた縦軸（GrowthCurveBuilder.raceWeightWindow）。null ならこの馬の体重だけで決める (v.2026.10.15+26101502)
+  final GrowthWeightWindow? window;
 
   const GrowthCurveSection({
     super.key,
     required this.horse,
     required this.records,
     required this.raceDate,
-    required this.range,
-    required this.onRangeChanged,
+    this.window,
   });
 
   @override
@@ -38,16 +38,26 @@ class GrowthCurveSection extends StatefulWidget {
 }
 
 class _GrowthCurveSectionState extends State<GrowthCurveSection> {
-  /// タップで選んだ点（表示中の期間の中での番号）。null なら最後の点
+  /// タップで選んだ点（全期間の中での番号）。null なら最後の点
   int? _selectedIndex;
+
+  // [追加] 馬詳細タブ 表示項目変更 Step3: グラフ本体の横スクロール。開いたとき・馬が変わったときに右端（最新）へ移す (v.2026.10.15+26101502)
+  final ScrollController _scrollController = ScrollController();
+  bool _scrollToEndPending = true;
 
   @override
   void didUpdateWidget(covariant GrowthCurveSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.range != widget.range ||
-        oldWidget.horse.horseId != widget.horse.horseId) {
+    if (oldWidget.horse.horseId != widget.horse.horseId) {
       _selectedIndex = null;
+      _scrollToEndPending = true;
     }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   static String _signed(int v) {
@@ -83,81 +93,62 @@ class _GrowthCurveSectionState extends State<GrowthCurveSection> {
     );
   }
 
-  Widget _buildRangeButtons() {
-    const labels = {
-      GrowthRange.oneYear: '直近1年',
-      GrowthRange.threeYears: '3年',
-      GrowthRange.all: '全期間',
-    };
+  // [修正] 馬詳細タブ 表示項目変更 Step3: 左に固定の体重目盛り、右に横スクロールする本体（幅は GrowthCurveBuilder.chartWidth） (v.2026.10.15+26101502)
+  Widget _buildChart(
+      List<GrowthPoint> points, GrowthWeightWindow window, int selected) {
+    if (_scrollToEndPending) {
+      _scrollToEndPending = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      });
+    }
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final range in GrowthRange.values)
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: InkWell(
-                onTap: () => widget.onRangeChanged(range),
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  height: 26,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: widget.range == range
-                        ? Colors.green.shade100
-                        : Colors.white,
-                    border: Border.all(
-                      color: widget.range == range
-                          ? Colors.green.shade700
-                          : Colors.grey.shade400,
-                    ),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    labels[range]!,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: widget.range == range
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                      color: widget.range == range
-                          ? Colors.green.shade900
-                          : Colors.black87,
+        SizedBox(
+          width: GrowthCurveLayout.leftAxisWidth,
+          height: GrowthCurveLayout.totalHeight,
+          child: CustomPaint(
+            painter: GrowthCurveAxisPainter(window: window),
+          ),
+        ),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = GrowthCurveBuilder.chartWidth(
+                viewportWidth: constraints.maxWidth,
+                start: points.first.date,
+                end: points.last.date,
+              );
+              final size = Size(width, GrowthCurveLayout.totalHeight);
+              return SingleChildScrollView(
+                controller: _scrollController,
+                scrollDirection: Axis.horizontal,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (details) {
+                    final layout = GrowthCurveLayout(
+                        size: size, points: points, window: window);
+                    final index = layout.nearestIndex(details.localPosition);
+                    if (index != null) {
+                      setState(() => _selectedIndex = index);
+                    }
+                  },
+                  child: CustomPaint(
+                    size: size,
+                    painter: GrowthCurvePainter(
+                      points: points,
+                      window: window,
+                      selectedIndex: selected,
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
+        ),
       ],
-    );
-  }
-
-  Widget _buildChart(
-      List<GrowthPoint> shown, GrowthWeightWindow window, int selected) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size =
-            Size(constraints.maxWidth, GrowthCurveLayout.totalHeight);
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapUp: (details) {
-            final layout = GrowthCurveLayout(
-                size: size, points: shown, window: window);
-            final index = layout.nearestIndex(details.localPosition);
-            if (index != null) {
-              setState(() => _selectedIndex = index);
-            }
-          },
-          child: CustomPaint(
-            size: size,
-            painter: GrowthCurvePainter(
-              points: shown,
-              window: window,
-              selectedIndex: selected,
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -227,6 +218,7 @@ class _GrowthCurveSectionState extends State<GrowthCurveSection> {
     return Container(width: 8, height: 10, color: color);
   }
 
+  // [修正] 馬詳細タブ 表示項目変更 Step3: 凡例は 馬体重・頭数・人気・着順 の4つだけ (v.2026.10.15+26101502)
   Widget _buildLegend() {
     return Padding(
       padding: const EdgeInsets.only(top: 6),
@@ -238,19 +230,14 @@ class _GrowthCurveSectionState extends State<GrowthCurveSection> {
             runSpacing: 4,
             children: [
               _legendItem(_lineMark(GrowthCurvePainter.weightColor), '馬体重'),
-              _legendItem(_lineMark(GrowthCurvePainter.referenceColor),
-                  '${GrowthCurveBuilder.referenceWeight}kg'),
+              _legendItem(_boxMark(GrowthCurvePainter.fieldColor), '頭数'),
               _legendItem(_boxMark(GrowthCurvePainter.popularityColor), '人気'),
-              _legendItem(
-                  _boxMark(GrowthCurvePainter.betterColor), '着順（人気より上）'),
-              _legendItem(
-                  _boxMark(GrowthCurvePainter.worseColor), '着順（人気より下）'),
-              _legendItem(_boxMark(GrowthCurvePainter.evenColor), '着順（人気どおり）'),
+              _legendItem(_boxMark(GrowthCurvePainter.rankColor), '着順'),
             ],
           ),
           const SizedBox(height: 2),
           Text(
-            '棒は上ほど上位（頭数で正規化）。破線は計不をはさむ区間と今回の当日体重。点をタップで詳細',
+            '棒は高いほど上位（18頭立てを満杯）。破線は計不をはさむ区間と今回の当日体重。点をタップで詳細',
             style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
           ),
         ],
@@ -276,32 +263,27 @@ class _GrowthCurveSectionState extends State<GrowthCurveSection> {
       raceDate: raceDate,
       currentHorseWeight: widget.horse.horseWeight,
     );
-    final base =
-        GrowthCurveBuilder.baseDate(raceDate: raceDate, today: DateTime.now());
-    final shown = GrowthCurveBuilder.pointsInRange(all, widget.range, base);
-    final window = GrowthCurveBuilder.weightWindow(shown);
+    // [修正] 馬詳細タブ 表示項目変更 Step3: 期間で絞らず全期間を描く。縦軸も全期間で1回だけ決める (v.2026.10.15+26101502)
+    // [修正] 馬詳細タブ 表示項目変更 Step3追補: レース全体の縦軸を渡されたらそれを使う（グラフの高さは同じで、10kgの間隔がレースごとに変わる） (v.2026.10.15+26101502)
+    final window = widget.window ?? GrowthCurveBuilder.weightWindow(all);
     final summary = GrowthCurveBuilder.summarize(all);
     final selectedIndex = _selectedIndex;
-    final selected = shown.isEmpty
+    final selected = all.isEmpty
         ? -1
-        : (selectedIndex != null && selectedIndex < shown.length
+        : (selectedIndex != null && selectedIndex < all.length
             ? selectedIndex
-            : shown.length - 1);
+            : all.length - 1);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildSummary(summary),
         const SizedBox(height: 6),
-        _buildRangeButtons(),
-        const SizedBox(height: 4),
         if (all.isEmpty)
           _message('戦績がありません')
-        else if (shown.isEmpty)
-          _message('この期間の出走はありません')
         else ...[
-          _buildChart(shown, window, selected),
-          _buildSelectedInfo(shown[selected]),
+          _buildChart(all, window, selected),
+          _buildSelectedInfo(all[selected]),
           _buildLegend(),
         ],
       ],

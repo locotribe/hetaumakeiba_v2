@@ -3,6 +3,9 @@
 // [追加] 馬体重成長曲線 Step2: 成長曲線の描画（馬体重の折れ線＋450kgの水準線＋人気・着順の棒＋日付の目盛り）。
 // 棒をレースの実際の日付の位置に立て、その上に折れ線を重ねるため、fl_chart ではなく CustomPainter で描く。
 // レース名はグラフに描かない（点をタップすると下に表示される） (v.2026.10.1+26100102)
+// [修正] 馬詳細タブ 表示項目変更 Step3: 棒を「頭数（薄いグレー）・人気（緑）・着順（赤）」の3本に（18頭立てを満杯とする高さ）。
+// 450kgの水準線を廃止。横スクロールのため、体重の目盛りは別の描画（GrowthCurveAxisPainter）に分け、本体は左端0から描く。
+// 日付の目盛りは1・4・7・10月の頭に統一 (v.2026.10.15+26101502)
 
 import 'dart:math' as math;
 
@@ -11,13 +14,14 @@ import 'package:hetaumakeiba_v2/logic/growth_curve_builder.dart';
 
 /// 成長曲線の座標計算（描画とタップ判定で共用する）
 class GrowthCurveLayout {
-  /// 左の体重目盛りの幅
+  /// 左の体重目盛りの幅（目盛りは本体の左に固定で置く）
   static const double leftAxisWidth = 34;
   static const double rightPadding = 10;
   static const double topPadding = 10;
 
   /// 折れ線と棒を描く領域の高さ
-  static const double plotHeight = 200;
+  // [修正] 馬詳細タブ 表示項目変更 Step3追補: グラフ全体の高さを 226 → 180 にする（描画領域 200 → 154。上の余白10・日付の目盛り16は同じ） (v.2026.10.15+26101502)
+  static const double plotHeight = 154;
 
   /// 日付の目盛りの高さ
   static const double dateAxisHeight = 16;
@@ -26,10 +30,8 @@ class GrowthCurveLayout {
   static const double innerPadding = 12;
 
   /// 人気・着順の棒が使う高さの割合（描画領域の下から）
-  static const double barZoneRatio = 0.5;
-
-  /// 頭数が分からないときに使う頭数
-  static const int defaultFieldSize = 18;
+  // [修正] 馬詳細タブ 表示項目変更 Step3追補: 棒の領域を下50%から80%へ広げる（体重の線と重なってもよい） (v.2026.10.15+26101502)
+  static const double barZoneRatio = 0.8;
 
   static const double totalHeight = topPadding + plotHeight + dateAxisHeight;
 
@@ -45,10 +47,11 @@ class GrowthCurveLayout {
     required this.points,
     required this.window,
   }) {
+    // [修正] 馬詳細タブ 表示項目変更 Step3: 目盛りを別に描くので、描画領域は左端0から (v.2026.10.15+26101502)
     plot = Rect.fromLTWH(
-      leftAxisWidth,
+      0,
       topPadding,
-      math.max(0.0, size.width - leftAxisWidth - rightPadding),
+      math.max(0.0, size.width - rightPadding),
       plotHeight,
     );
     if (points.isEmpty) {
@@ -83,14 +86,13 @@ class GrowthCurveLayout {
     return plot.bottom - plot.height * ((kg - window.min) / range);
   }
 
-  /// 棒の領域の上端（1位の棒の頂点）
+  /// 棒の領域の上端（満杯の棒の頂点）
   double get barZoneTop => plot.bottom - plot.height * barZoneRatio;
 
-  /// 順位の棒の頂点。1位が一番高く、最下位が一番低い（頭数で正規化）
-  double barTopFor(int position, int? fieldSize) {
-    final n = math.max(fieldSize ?? defaultFieldSize, position);
-    final fraction = (n - position + 1) / n;
-    return plot.bottom - (plot.bottom - barZoneTop) * fraction;
+  // [修正] 馬詳細タブ 表示項目変更 Step3: 棒の頂点を高さの割合（0〜1。GrowthCurveBuilder の fieldBarFraction / positionBarFraction）から求める (v.2026.10.15+26101502)
+  double barTopForFraction(double fraction) {
+    final f = fraction.clamp(0.0, 1.0).toDouble();
+    return plot.bottom - (plot.bottom - barZoneTop) * f;
   }
 
   /// 隣り合う点の横の間隔の最小値（棒の幅を決める）
@@ -119,6 +121,55 @@ class GrowthCurveLayout {
   }
 }
 
+/// 色・文字の共通部品
+class _GrowthCurveText {
+  static TextPainter text(String text,
+      {double fontSize = 10,
+      Color color = GrowthCurvePainter.axisTextColor,
+      FontWeight fontWeight = FontWeight.normal}) {
+    return TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+            fontSize: fontSize, color: color, fontWeight: fontWeight),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+  }
+}
+
+// [追加] 馬詳細タブ 表示項目変更 Step3: 左の体重目盛り（横スクロールしない帯）。本体と同じ縦の位置に目盛りの文字を描く (v.2026.10.15+26101502)
+class GrowthCurveAxisPainter extends CustomPainter {
+  final GrowthWeightWindow window;
+
+  GrowthCurveAxisPainter({required this.window});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final layout = GrowthCurveLayout(
+        size: size, points: const <GrowthPoint>[], window: window);
+    final lineCount =
+        (window.max - window.min) ~/ GrowthCurveBuilder.gridStep;
+    final labelStep = lineCount > 10
+        ? GrowthCurveBuilder.gridStep * 2
+        : GrowthCurveBuilder.gridStep;
+    for (var kg = window.min;
+        kg <= window.max;
+        kg += GrowthCurveBuilder.gridStep) {
+      if ((kg - window.min) % labelStep != 0) continue;
+      final y = layout.yOfWeight(kg);
+      final tp = _GrowthCurveText.text('$kg');
+      tp.paint(canvas, Offset(size.width - tp.width - 4, y - tp.height / 2));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant GrowthCurveAxisPainter oldDelegate) {
+    return oldDelegate.window != window;
+  }
+}
+
 class GrowthCurvePainter extends CustomPainter {
   final List<GrowthPoint> points;
   final GrowthWeightWindow window;
@@ -127,11 +178,10 @@ class GrowthCurvePainter extends CustomPainter {
   final int? selectedIndex;
 
   static const Color weightColor = Color(0xFF5D4037);
-  static const Color referenceColor = Color(0xFF1E88E5);
-  static const Color popularityColor = Color(0xFFB0BEC5);
-  static const Color betterColor = Color(0xFF43A047);
-  static const Color worseColor = Color(0xFFE53935);
-  static const Color evenColor = Color(0xFF78909C);
+  // [修正] 馬詳細タブ 表示項目変更 Step3: 棒の色は 頭数=薄いグレー・人気=緑・着順=赤 の3色（着順の上/下/同じの色分けと450kg線の色は廃止） (v.2026.10.15+26101502)
+  static const Color fieldColor = Color(0xFFB0BEC5);
+  static const Color popularityColor = Color(0xFF43A047);
+  static const Color rankColor = Color(0xFFE53935);
   static const Color gridColor = Color(0xFFE0E0E0);
   static const Color axisTextColor = Color(0xFF757575);
 
@@ -150,48 +200,22 @@ class GrowthCurvePainter extends CustomPainter {
     _drawGrid(canvas, layout);
     _drawSelectedGuide(canvas, layout);
     _drawBars(canvas, layout);
-    _drawReferenceLine(canvas, layout);
     _drawWeightLine(canvas, layout);
     _drawDateAxis(canvas, layout);
     canvas.restore();
   }
 
-  TextPainter _text(String text,
-      {double fontSize = 10,
-      Color color = axisTextColor,
-      FontWeight fontWeight = FontWeight.normal}) {
-    return TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-            fontSize: fontSize, color: color, fontWeight: fontWeight),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout();
-  }
-
-  /// 10kgごとの横線と左の目盛り（線が多いときは目盛りの文字を20kgごとにする）
+  /// 10kgごとの横線（目盛りの文字は GrowthCurveAxisPainter が描く）
   void _drawGrid(Canvas canvas, GrowthCurveLayout layout) {
     final plot = layout.plot;
     final gridPaint = Paint()
       ..color = gridColor
       ..strokeWidth = 1;
-    final lineCount =
-        (window.max - window.min) ~/ GrowthCurveBuilder.gridStep;
-    final labelStep = lineCount > 10
-        ? GrowthCurveBuilder.gridStep * 2
-        : GrowthCurveBuilder.gridStep;
     for (var kg = window.min;
         kg <= window.max;
         kg += GrowthCurveBuilder.gridStep) {
       final y = layout.yOfWeight(kg);
       canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), gridPaint);
-      if ((kg - window.min) % labelStep == 0) {
-        final tp = _text('$kg');
-        tp.paint(canvas,
-            Offset(plot.left - tp.width - 4, y - tp.height / 2));
-      }
     }
     final borderPaint = Paint()
       ..color = axisTextColor
@@ -212,32 +236,47 @@ class GrowthCurvePainter extends CustomPainter {
         Offset(x, layout.plot.bottom), paint);
   }
 
-  /// 人気（灰）と着順（緑=人気より上・赤=人気より下・青灰=同じ/比べられない）の棒。
-  /// 中止・除外・取消は棒の代わりに「中」「除」「取」を描く
+  // [修正] 馬詳細タブ 表示項目変更 Step3: 左から 頭数・人気・着順 の3本。高さは18頭立てを満杯とする。
+  // 頭数が分からないレースは頭数の棒を描かない（人気・着順は18頭として計算）。中止・除外・取消は着順の棒の代わりに「中」「除」「取」 (v.2026.10.15+26101502)
   void _drawBars(Canvas canvas, GrowthCurveLayout layout) {
     final plot = layout.plot;
-    final barWidth = (layout.minGap * 0.3).clamp(1.5, 7.0).toDouble();
+    final barWidth = (layout.minGap * 0.22).clamp(1.5, 6.0).toDouble();
+    const gap = 0.5;
     for (final p in points) {
       if (p.isCurrent) continue;
       final x = layout.xOf(p.date);
-      final popularity = p.popularity;
-      if (popularity != null) {
-        final top = layout.barTopFor(popularity, p.fieldSize);
+      final fieldLeft = x - barWidth * 1.5 - gap;
+      final popularityLeft = x - barWidth / 2;
+      final rankLeft = x + barWidth / 2 + gap;
+
+      final fieldSize = p.fieldSize;
+      if (fieldSize != null) {
+        final top = layout.barTopForFraction(
+            GrowthCurveBuilder.fieldBarFraction(fieldSize));
         canvas.drawRect(
-          Rect.fromLTRB(x - barWidth - 0.5, top, x - 0.5, plot.bottom),
-          Paint()..color = popularityColor.withValues(alpha: 0.85),
+          Rect.fromLTRB(fieldLeft, top, fieldLeft + barWidth, plot.bottom),
+          Paint()..color = fieldColor.withValues(alpha: 0.9),
         );
       }
+
+      final popularity = p.popularity;
+      if (popularity != null) {
+        final top = layout.barTopForFraction(
+            GrowthCurveBuilder.positionBarFraction(popularity, fieldSize));
+        canvas.drawRect(
+          Rect.fromLTRB(
+              popularityLeft, top, popularityLeft + barWidth, plot.bottom),
+          Paint()..color = popularityColor.withValues(alpha: 0.8),
+        );
+      }
+
       final rank = p.rank;
       if (rank != null) {
-        final top = layout.barTopFor(rank, p.fieldSize);
-        final vs = p.rankVsPopularity;
-        final color = vs == 1
-            ? betterColor
-            : (vs == -1 ? worseColor : evenColor);
+        final top = layout.barTopForFraction(
+            GrowthCurveBuilder.positionBarFraction(rank, fieldSize));
         canvas.drawRect(
-          Rect.fromLTRB(x + 0.5, top, x + 0.5 + barWidth, plot.bottom),
-          Paint()..color = color.withValues(alpha: 0.75),
+          Rect.fromLTRB(rankLeft, top, rankLeft + barWidth, plot.bottom),
+          Paint()..color = rankColor.withValues(alpha: 0.8),
         );
       } else {
         final String? mark = switch (p.finishKind) {
@@ -248,32 +287,11 @@ class GrowthCurvePainter extends CustomPainter {
           GrowthFinishKind.unknown => null,
         };
         if (mark != null) {
-          final tp = _text(mark, fontSize: 9, color: worseColor);
+          final tp = _GrowthCurveText.text(mark, fontSize: 9, color: rankColor);
           tp.paint(canvas,
               Offset(x - tp.width / 2, plot.bottom - tp.height - 1));
         }
       }
-    }
-  }
-
-  /// 450kgの水準線。窓の外なら右上に「450kgは上方 ↑」「450kgは下方 ↓」
-  void _drawReferenceLine(Canvas canvas, GrowthCurveLayout layout) {
-    final plot = layout.plot;
-    const ref = GrowthCurveBuilder.referenceWeight;
-    if (window.contains(ref)) {
-      final y = layout.yOfWeight(ref);
-      final paint = Paint()
-        ..color = referenceColor
-        ..strokeWidth = 1.5;
-      canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), paint);
-      final tp = _text('${ref}kg',
-          fontSize: 9, color: referenceColor, fontWeight: FontWeight.bold);
-      tp.paint(canvas, Offset(plot.right - tp.width - 2, y - tp.height - 1));
-    } else {
-      final label = ref > window.max ? '${ref}kgは上方 ↑' : '${ref}kgは下方 ↓';
-      final tp = _text(label,
-          fontSize: 9, color: referenceColor, fontWeight: FontWeight.bold);
-      tp.paint(canvas, Offset(plot.right - tp.width - 2, plot.top + 1));
     }
   }
 
@@ -337,7 +355,7 @@ class GrowthCurvePainter extends CustomPainter {
     }
   }
 
-  /// 日付の目盛り。期間が約13か月以内なら1・4・7・10月の頭（'25/10'）、それより長ければ各年の1月1日（'2026'）。
+  /// 日付の目盛り。1・4・7・10月の頭（'25/10'）。
   /// 目盛りが1つも入らないときは最初と最後のレースの日付を出す
   void _drawDateAxis(Canvas canvas, GrowthCurveLayout layout) {
     final plot = layout.plot;
@@ -346,32 +364,18 @@ class GrowthCurvePainter extends CustomPainter {
     final tickPaint = Paint()
       ..color = axisTextColor
       ..strokeWidth = 1;
-    final spanDays = end.difference(start).inDays;
     final ticks = <DateTime>[];
-    if (spanDays <= 400) {
-      var t = DateTime(start.year, start.month, 1);
-      while (!t.isAfter(end)) {
-        if (!t.isBefore(start) && (t.month - 1) % 3 == 0) ticks.add(t);
-        t = DateTime(t.year, t.month + 1, 1);
-      }
-    } else {
-      var year = start.year;
-      while (!DateTime(year, 1, 1).isAfter(end)) {
-        final t = DateTime(year, 1, 1);
-        if (!t.isBefore(start)) ticks.add(t);
-        year++;
-      }
+    var t = DateTime(start.year, start.month, 1);
+    while (!t.isAfter(end)) {
+      if (!t.isBefore(start) && (t.month - 1) % 3 == 0) ticks.add(t);
+      t = DateTime(t.year, t.month + 1, 1);
     }
 
-    String label(DateTime t) {
-      if (spanDays <= 400) {
-        return "'${(t.year % 100).toString().padLeft(2, '0')}/${t.month}";
-      }
-      return '${t.year}';
-    }
+    String label(DateTime d) =>
+        "'${(d.year % 100).toString().padLeft(2, '0')}/${d.month}";
 
     void drawLabel(String text, double x) {
-      final tp = _text(text, fontSize: 9);
+      final tp = _GrowthCurveText.text(text, fontSize: 9);
       final left = (x - tp.width / 2)
           .clamp(plot.left, math.max(plot.left, plot.right - tp.width))
           .toDouble();
@@ -392,11 +396,11 @@ class GrowthCurvePainter extends CustomPainter {
       }
       return;
     }
-    for (final t in ticks) {
-      final x = layout.xOf(t);
+    for (final tick in ticks) {
+      final x = layout.xOf(tick);
       canvas.drawLine(
           Offset(x, plot.bottom), Offset(x, plot.bottom + 3), tickPaint);
-      drawLabel(label(t), x);
+      drawLabel(label(tick), x);
     }
   }
 
