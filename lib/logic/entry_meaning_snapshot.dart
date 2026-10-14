@@ -18,16 +18,19 @@ import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
 ///
 /// classifyRace → buildRaceCircumstances → buildCampSignals → buildEntryMeanings の順に呼ぶだけ。
 /// JRAの平地で開催日が読めないレースは isSupported=false になる。
+// [修正] 基本情報整理と本賞金照合 Step3: 重賞の本賞金の表（レースID → [1着, 2着]・万円）を任意で受け取り、事情の組み立てへ渡す (v.2026.10.15+26101506)
 RaceEntryMeanings buildEntryMeaningsForRace({
   required PredictionRaceData race,
   required Map<String, List<HorseRaceRecord>> recordsByHorseId,
   Map<String, HorseProfile> profilesByHorseId = const {},
+  Map<String, List<int>> basePrizeManByRaceId = const {},
 }) {
   final classification = classifyRace(race);
   final circumstances = buildRaceCircumstances(
     race: classification,
     horses: race.horses,
     recordsByHorseId: recordsByHorseId,
+    basePrizeManByRaceId: basePrizeManByRaceId,
   );
   final raceDate = classification.date;
   final List<HorseCampSignals> campSignals;

@@ -264,10 +264,14 @@ class _Work {
 /// [horses] 出馬表の出走馬（取消を含む）。
 /// [recordsByHorseId] 馬ID → その馬の過去走（horse_performance の行・順不同）。
 ///   レース当日以降の走は数えない（収得賞金の計算と同じ）。
+/// [basePrizeManByRaceId] レースID → [1着の本賞金, 2着の本賞金]（万円）。重賞の半額をこの値から求める。
+///   無いレースは今までどおり賞金列から推定する。
+// [修正] 基本情報整理と本賞金照合 Step3: 重賞の本賞金の表を任意で受け取り、収得賞金の計算へ渡す (v.2026.10.15+26101506)
 RaceCircumstances buildRaceCircumstances({
   required RaceClassification race,
   required List<PredictionHorseDetail> horses,
   required Map<String, List<HorseRaceRecord>> recordsByHorseId,
+  Map<String, List<int>> basePrizeManByRaceId = const {},
 }) {
   final asOf = race.date;
   if (asOf == null || !race.isJra || race.isJump) {
@@ -308,10 +312,12 @@ RaceCircumstances buildRaceCircumstances({
     }
 
     final birthYear = birthYearOfHorseId(horse.horseId);
+    // [修正] 基本情報整理と本賞金照合 Step3: 重賞の本賞金の表を渡す (v.2026.10.15+26101506)
     final prize = calculateEarnedPrize(
       records: records,
       asOf: asOf,
       birthYear: birthYear,
+      basePrizeManByRaceId: basePrizeManByRaceId,
     );
     final horseClass = prize.classAtAsOf;
     final classGap = raceStep == null ? null : raceStep - horseClass.index;
