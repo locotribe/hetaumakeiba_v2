@@ -195,7 +195,8 @@ class ConditionRankingBuilder {
         case kVenue:
           return _venueName(r.venue) == todayValue;
         case kClass:
-          return ConditionAptitudeAnalyzer.gradeClassOf(r.raceName) == todayValue;
+          // [修正] クラス判定の共通化 Step3: 過去走は過去走用の判定（主催も見る）にした (v.2026.10.16+26101603)
+          return ConditionAptitudeAnalyzer.gradeClassOfRecord(r) == todayValue;
       }
       return false;
     }

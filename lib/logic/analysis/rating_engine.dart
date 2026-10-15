@@ -1,6 +1,7 @@
 // lib/logic/analysis/rating_engine.dart
 import 'dart:math';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 
 class RatingAnalyzedResult {
   final HorseRaceRecord record;
@@ -76,6 +77,33 @@ class AdvancedRatingEngine {
     return 80.0;
   }
 
+  // [追加] クラス判定の共通化 Step3: 過去走の基準値を共通の区分から返す。Jpn交流重賞が 80（最低）、地方のOPが 106（中央のOP扱い）になっていたのを直す。基準値は getBaseRating と同じ (v.2026.10.16+26101603)
+  static double baseRatingOfClass(RaceClassGrade grade) {
+    switch (grade) {
+      case RaceClassGrade.g1:
+        return 115.0;
+      case RaceClassGrade.g2:
+        return 112.0;
+      case RaceClassGrade.g3:
+        return 109.0;
+      case RaceClassGrade.listed:
+      case RaceClassGrade.open:
+        return 106.0;
+      case RaceClassGrade.win3:
+        return 102.0;
+      case RaceClassGrade.win2:
+        return 97.0;
+      case RaceClassGrade.win1:
+        return 92.0;
+      case RaceClassGrade.newcomer:
+      case RaceClassGrade.maiden:
+        return 87.0;
+      case RaceClassGrade.local:
+      case RaceClassGrade.unknown:
+        return 80.0;
+    }
+  }
+
   static HorseRatingProfile analyze(List<HorseRaceRecord> history, String horseId, String gender, String currentRaceName) {
     if (history.isEmpty) {
       return HorseRatingProfile(horseId: horseId, history: [], latestTrend: 0, stabilityRank: 'C', momentumStatus: 'データなし', isClassCleared: false, bestRatingWeight: 0, bestRatingMonth: 0);
@@ -97,7 +125,8 @@ class AdvancedRatingEngine {
     int bestMonth = 1;
 
     for (var record in sortedHistory) {
-      double base = getBaseRating(record.raceName);
+      // [修正] クラス判定の共通化 Step3: 過去走は共通の区分（raceClassGradeOfRecord）で基準値を決める (v.2026.10.16+26101603)
+      double base = baseRatingOfClass(raceClassGradeOfRecord(record));
       int rank = int.tryParse(record.rank) ?? 10;
       int total = int.tryParse(record.numberOfHorses) ?? 12;
 

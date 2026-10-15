@@ -6,6 +6,7 @@ import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 // [追加] 馬詳細タブ 表示項目変更 Step1: デビュー戦と騎手の最新騎乗を日付で決める (v.2026.10.14+26101407)
 import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 
 // [追加] 好走条件 馬詳細移植 StepA-1: 各馬の好走条件（得意条件）を条件カテゴリ主軸で集計する純粋ロジック (v.2026.9.25+26092505)
 
@@ -131,12 +132,36 @@ class ConditionAptitudeAnalyzer {
     return '右';
   }
 
+  // [修正] クラス判定の共通化 Step3: レース名だけの判定を共通の区分（raceClassGradeOfName）からの表示に替えた。Jpn交流重賞は G1〜G3 になる (v.2026.10.16+26101603)
   static String gradeClassOf(String raceName) {
-    if (raceName.contains('(GI)')) return 'G1';
-    if (raceName.contains('(GII)')) return 'G2';
-    if (raceName.contains('(GIII)')) return 'G3';
-    if (raceName.contains('OP') || raceName.contains('L)')) return 'OP';
-    return '条件';
+    return _gradeLabelOf(raceClassGradeOfName(raceName));
+  }
+
+  // [追加] クラス判定の共通化 Step3: 過去走用。主催も見るので、地方の重賞以外（地方のOP・地方の条件戦）は「条件」、Jpn交流重賞は G1〜G3 になる (v.2026.10.16+26101603)
+  static String gradeClassOfRecord(HorseRaceRecord r) {
+    return _gradeLabelOf(raceClassGradeOfRecord(r));
+  }
+
+  static String _gradeLabelOf(RaceClassGrade grade) {
+    switch (grade) {
+      case RaceClassGrade.g1:
+        return 'G1';
+      case RaceClassGrade.g2:
+        return 'G2';
+      case RaceClassGrade.g3:
+        return 'G3';
+      case RaceClassGrade.listed:
+      case RaceClassGrade.open:
+        return 'OP';
+      case RaceClassGrade.win3:
+      case RaceClassGrade.win2:
+      case RaceClassGrade.win1:
+      case RaceClassGrade.newcomer:
+      case RaceClassGrade.maiden:
+      case RaceClassGrade.local:
+      case RaceClassGrade.unknown:
+        return '条件';
+    }
   }
 
   static String? legStyleOf(HorseRaceRecord r) {
@@ -341,7 +366,8 @@ class ConditionAptitudeAnalyzer {
     MapEntry('芝/ダ', (r) => surfaceOf(r.distance)),
     MapEntry('回り', (r) => directionOf(r.venue)),
     MapEntry('馬場', (r) => r.trackCondition.isEmpty ? null : r.trackCondition),
-    MapEntry('クラス', (r) => gradeClassOf(r.raceName)),
+    // [修正] クラス判定の共通化 Step3: 過去走用の判定（主催も見る）に替えた (v.2026.10.16+26101603)
+    MapEntry('クラス', gradeClassOfRecord),
     MapEntry('脚質', legStyleOf),
     MapEntry('開催地', venueLabelOf),
     MapEntry('人気', (r) => popularityBand(r.popularity)),
