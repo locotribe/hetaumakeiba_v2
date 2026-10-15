@@ -1,10 +1,8 @@
 // lib/screens/user_settings_page.dart
 
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
-import 'package:hetaumakeiba_v2/screens/debug/speed_index_backtest_page.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/models/user_model.dart';
 import 'package:hetaumakeiba_v2/services/local_auth_service.dart';
@@ -401,28 +399,7 @@ class _UserSettingsPageState extends State<UserSettingsPage> {
                 alignment: Alignment.centerLeft,
                 child: NetkeibaLoginSection(),
               ),
-              // [追加] フェーズ6 スピード指数バックテスト・ハーネスへの導線。
-              // 開発ビルド専用(kDebugMode)で、通常UIには一切露出しない (v.2026.9.4)
-              if (kDebugMode) ...[
-                const Divider(height: 48),
-                TextButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SpeedIndexBacktestPage(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.bug_report, color: Colors.grey),
-                  label: const Text(
-                    '[Debug] スピード指数バックテスト',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.grey.shade700,
-                  ),
-                ),
-              ],
+              // [削除] スピード指数バックテスト画面（開発ビルド専用の導線）を削除。画面・ランナー・集計のファイルも削除 (v.2026.10.15+26101514)
             ],
           ),
         ),
