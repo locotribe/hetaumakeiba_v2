@@ -8,6 +8,9 @@ import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
 import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
+// [追加] 前走と路線の部品 Step2: 今回と前走の間隔の前走を共通の部品で決める (v.2026.10.16+26101606)
+import 'package:hetaumakeiba_v2/logic/previous_race.dart';
+import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 // [追加] 基本情報整理と本賞金照合 Step2追補: 過去走カードの脚質を好走条件と同じ判定にする (v.2026.10.15+26101505)
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
@@ -174,9 +177,12 @@ class PerformanceTabWidget extends StatelessWidget {
       FutureBuilder<_PerformanceData>(
         future: futurePerformanceData,
         builder: (context, snapshot) {
-          if (snapshot.hasData && snapshot.data!.records.isNotEmpty) {
+          // [修正] 前走と路線の部品 Step2: 今回と前走の間隔の前走を、今回のレース日より前に実際に出走した一番新しい走にする（過去のレースを開くとそのレース自身や後の走、取消・除外の行と比べていた）。過去走の列どうしの間隔は今のまま (v.2026.10.16+26101606)
+          final previousRace = snapshot.hasData
+              ? previousStartOf(snapshot.data!.records, parseRaceDateForSpeedIndex(predictionRaceData.raceDate))
+              : null;
+          if (previousRace != null) {
             final currentRace = predictionRaceData;
-            final previousRace = snapshot.data!.records.first;
             final interval = RaceIntervalAnalyzer.formatRaceInterval(currentRace.raceDate, previousRace.date);
             final distanceChange = RaceIntervalAnalyzer.formatDistanceChange(currentRace.raceDetails1 ?? '', previousRace.distance);
             return _buildIntervalCell(interval, distanceChange);

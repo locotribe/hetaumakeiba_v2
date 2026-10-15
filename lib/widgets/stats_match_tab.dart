@@ -10,6 +10,9 @@ import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
+// [追加] 前走と路線の部品 Step2: 前走は共通の部品で決め、日付は共通の関数で読む (v.2026.10.16+26101606)
+import 'package:hetaumakeiba_v2/logic/previous_race.dart';
+import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
@@ -325,6 +328,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       final analysisResult = _engine.analyze(
         currentRaceName: widget.raceName,
         currentRaceClass: widget.currentRaceClass,
+        // [追加] 前走と路線の部品 Step2: 今回の馬の前走を決める基準日 (v.2026.10.16+26101606)
+        currentRaceDate: targetRaceDateStr,
         pastRaceVolatility: volResult.averagePopularity,
         currentHorses: widget.horses,
         pastRaces: pastRaces,
@@ -342,6 +347,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         final predictionAnalysis = _engine.analyze(
           currentRaceName: widget.raceName,
           currentRaceClass: widget.currentRaceClass,
+          // [追加] 前走と路線の部品 Step2: 今回の馬の前走を決める基準日 (v.2026.10.16+26101606)
+          currentRaceDate: targetRaceDateStr,
           pastRaceVolatility: volResult.averagePopularity,
           currentHorses: widget.comparisonTargets!,
           pastRaces: pastRaces,
@@ -591,46 +598,12 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
   }
   // ---------------------------------------------
 
-  /// 文字列日付をDateTimeに変換 (ソート用に使用)
-  DateTime? _parseDate(String dateStr) {
-    try {
-      // "2023年10月24日" 形式
-      if (dateStr.contains('年')) {
-        return DateFormat('yyyy年M月d日').parse(dateStr);
-      }
-      // "2023/10/24" 形式
-      if (dateStr.contains('/')) {
-        return DateFormat('yyyy/MM/dd').parse(dateStr);
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
   /// 指定された基準日より「前」の最新のレース名を取得
+  // [修正] 前走と路線の部品 Step2: 共通の部品 previousStartOf で決める（取消・除外・着順が空欄の行を飛ばす）。日付は共通の parseRaceDateForSpeedIndex で読み、読めなければ従来どおり null。自前の日付の読み取りは削除 (v.2026.10.16+26101606)
   String? _getPreviousRaceName(List<HorseRaceRecord>? history, String referenceDateStr) {
-    if (history == null || history.isEmpty) return null;
-
-    final referenceDate = _parseDate(referenceDateStr);
+    final referenceDate = parseRaceDateForSpeedIndex(referenceDateStr);
     if (referenceDate == null) return null;
-
-    // 履歴を日付降順（新しい順）にソート
-    final sortedHistory = List<HorseRaceRecord>.from(history);
-    sortedHistory.sort((a, b) {
-      final da = _parseDate(a.date) ?? DateTime(1900);
-      final db = _parseDate(b.date) ?? DateTime(1900);
-      return db.compareTo(da);
-    });
-
-    // 基準日より前にある最初のレコードを探す
-    for (final record in sortedHistory) {
-      final recDate = _parseDate(record.date);
-      if (recDate != null && recDate.isBefore(referenceDate)) {
-        return record.raceName;
-      }
-    }
-    return null;
+    return previousStartOf(history, referenceDate)?.raceName;
   }
 
   @override

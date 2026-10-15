@@ -186,6 +186,8 @@ class RaceAnalysisBundleLoader {
     final analysisResult = _engine.analyze(
       currentRaceName: raceName,
       currentRaceClass: currentRaceClass,
+      // [追加] 前走と路線の部品 Step2: 今回の馬の前走を決める基準日 (v.2026.10.16+26101606)
+      currentRaceDate: targetRaceDate,
       pastRaceVolatility: volatilityResult.averagePopularity,
       currentHorses: horses,
       pastRaces: pastRaces,

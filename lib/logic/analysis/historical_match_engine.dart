@@ -4,7 +4,9 @@ import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
-import 'package:intl/intl.dart';
+// [修正] 前走と路線の部品 Step2: 前走は共通の部品で決め、日付は共通の関数で読む（自前の日付の読み取りを削除したので、日付の書式の import は不要） (v.2026.10.16+26101606)
+import 'package:hetaumakeiba_v2/logic/previous_race.dart';
+import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 
 // 各ファクターをインポート
 import '../analysis/historical_match_engine_factors/weight_factor.dart';
@@ -30,6 +32,8 @@ class HistoricalMatchEngine {
     required String currentRaceName,
     // [追加] クラス判定の共通化 Step2: 人気妙味の「クラスの壁」の基準にする今回のクラス。currentRaceName は呼び出し側の変更を増やさないため残す (v.2026.10.16+26101602)
     required RaceClassGrade currentRaceClass,
+    // [追加] 前走と路線の部品 Step2: 今回のレースの日付（今回の馬の前走を決める基準。'2026年10月18日' や '2026/10/18' の形） (v.2026.10.16+26101606)
+    required String currentRaceDate,
     required double pastRaceVolatility,
     required List<PredictionHorseDetail> currentHorses,
     required List<RaceResult> pastRaces,
@@ -83,7 +87,8 @@ class HistoricalMatchEngine {
 
     for (final horse in currentHorses) {
       final history = currentHorseHistory[horse.horseId] ?? [];
-      final prevRecord = history.isNotEmpty ? history.first : null;
+      // [修正] 前走と路線の部品 Step2: 前走を履歴の先頭ではなく、今回のレース日より前に実際に出走した一番新しい走にする（過去のレースを開くとそのレース自身や後の走を、取消・除外の行も前走にしていた） (v.2026.10.16+26101606)
+      final prevRecord = _getPreviousRaceRecord(history, currentRaceDate);
 
       // 各ファクターに分析を委譲
       final weightRes = _weightFactor.analyze(horse, prevRecord, medianWeight);
@@ -162,42 +167,12 @@ class HistoricalMatchEngine {
     };
   }
 
-  // [追加] 日付文字列をDateTimeに変換するヘルパーメソッド (v.1.0)
-  DateTime? _parseDate(String dateStr) {
-    try {
-      if (dateStr.contains('年')) {
-        return DateFormat('yyyy年M月d日').parse(dateStr);
-      }
-      if (dateStr.contains('/')) {
-        return DateFormat('yyyy/MM/dd').parse(dateStr);
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
   // [追加] 対象レース開催日より過去の最新レースレコードを取得するヘルパーメソッド (v.1.0)
+  // [修正] 前走と路線の部品 Step2: 共通の部品 previousStartOf で決める（取消・除外・着順が空欄の行を飛ばす）。日付は共通の parseRaceDateForSpeedIndex で読み、読めなければ従来どおり null (v.2026.10.16+26101606)
   HorseRaceRecord? _getPreviousRaceRecord(List<HorseRaceRecord>? history, String referenceDateStr) {
-    if (history == null || history.isEmpty) return null;
-
-    final referenceDate = _parseDate(referenceDateStr);
+    final referenceDate = parseRaceDateForSpeedIndex(referenceDateStr);
     if (referenceDate == null) return null;
-
-    final sortedHistory = List<HorseRaceRecord>.from(history);
-    sortedHistory.sort((a, b) {
-      final da = _parseDate(a.date) ?? DateTime(1900);
-      final db = _parseDate(b.date) ?? DateTime(1900);
-      return db.compareTo(da);
-    });
-
-    for (final record in sortedHistory) {
-      final recDate = _parseDate(record.date);
-      if (recDate != null && recDate.isBefore(referenceDate)) {
-        return record;
-      }
-    }
-    return null;
+    return previousStartOf(history, referenceDate);
   }
 
   // --- ヘルパーメソッド群 (変更なし) ---
@@ -208,9 +183,8 @@ class HistoricalMatchEngine {
     for (final ctx in topHorses) {
       final records = pastRecords[ctx.horse.horseId];
       if (records == null || records.isEmpty) continue;
-      final targetRace = pastRaces.firstWhere((r) => r.horseResults.any((h) => h.horseId == ctx.horse.horseId), orElse: () => pastRaces.first);
-
-      final prevRace = _getPreviousRaceRecord(records, targetRace.raceDate);
+      // [修正] 前走と路線の部品 Step2: 同じ馬が複数の年に出ていても、その馬が1〜3着だった年のレース日を基準に前走を決める（以前は最初に見つかった年を基準にしていた） (v.2026.10.16+26101606)
+      final prevRace = _getPreviousRaceRecord(records, ctx.raceDate);
 
       if (prevRace != null) {
         String raceName = prevRace.raceName.replaceAll(RegExp(r'\(.*\)'), '').trim();
@@ -229,7 +203,8 @@ class HistoricalMatchEngine {
       final int totalHorses = race.horseResults.length;
       for (final horse in race.horseResults) {
         final rank = int.tryParse(horse.rank ?? '');
-        if (rank != null && rank <= 3) targets.add(_HorseContext(horse, totalHorses));
+        // [修正] 前走と路線の部品 Step2: そのレースの日付も持たせる (v.2026.10.16+26101606)
+        if (rank != null && rank <= 3) targets.add(_HorseContext(horse, totalHorses, race.raceDate));
       }
     }
     return targets;
@@ -267,5 +242,7 @@ class HistoricalMatchEngine {
 class _HorseContext {
   final HorseResult horse;
   final int totalHorses;
-  _HorseContext(this.horse, this.totalHorses);
+  // [追加] 前走と路線の部品 Step2: この馬が1〜3着だったレースの日付（前走を決める基準） (v.2026.10.16+26101606)
+  final String raceDate;
+  _HorseContext(this.horse, this.totalHorses, this.raceDate);
 }

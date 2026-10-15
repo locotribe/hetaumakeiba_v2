@@ -15,6 +15,8 @@ import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/services/jma_weather_service.dart';
 import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
+// [追加] 前走と路線の部品 Step2: 前走騎手・前走馬体重の前走を共通の部品で決める (v.2026.10.16+26101606)
+import 'package:hetaumakeiba_v2/logic/previous_race.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
@@ -589,6 +591,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
     final Map<String, List<HorseRaceRecord>> allPastRecords = {};
     final Set<String> pastRaceIdsToFetch = {};
+    // [追加] 前走と路線の部品 Step2: 馬ID → 前走（実際に出走した一番新しい走） (v.2026.10.16+26101606)
+    final Map<String, HorseRaceRecord> previousRecordsByHorse = {};
 
     for (var horse in raceData.horses) {
       if (marksMap.containsKey(horse.horseId)) {
@@ -617,8 +621,11 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           : allRecordsForHorse;
       allPastRecords[horse.horseId] = pastRecords;
 
-      if (pastRecords.isNotEmpty) {
-        final previousRaceId = pastRecords.first.raceId;
+      // [修正] 前走と路線の部品 Step2: 前走は取消・除外・着順が空欄の行を飛ばした、実際に出走した一番新しい走にする（本気度の「出走の意味」と同じ決め方）。asOfForRecords が読めないときは日付で絞らない (v.2026.10.16+26101606)
+      final previousRecord = previousStartOf(pastRecords, asOfForRecords);
+      if (previousRecord != null) {
+        previousRecordsByHorse[horse.horseId] = previousRecord;
+        final previousRaceId = previousRecord.raceId;
         if (previousRaceId.isNotEmpty) {
           pastRaceIdsToFetch.add(previousRaceId);
         }
@@ -630,8 +637,9 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     for (var horse in raceData.horses) {
       final pastRecords = allPastRecords[horse.horseId] ?? [];
 
-      if (pastRecords.isNotEmpty) {
-        final previousRecord = pastRecords.first;
+      // [修正] 前走と路線の部品 Step2: 上のループで決めた前走を使う (v.2026.10.16+26101606)
+      final previousRecord = previousRecordsByHorse[horse.horseId];
+      if (previousRecord != null) {
         horse.previousJockey = previousRecord.jockey;
         // [追加] 乗り替わり判定をIDで行うため、前走騎手IDも保持する (v.2026.9.21+26092102)
         horse.previousJockeyId = previousRecord.jockeyId;
