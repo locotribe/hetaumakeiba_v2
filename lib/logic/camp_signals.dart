@@ -6,8 +6,8 @@
 // 間隔の区分に120日の区切り（長めの休み明け）を追加し、前走の日付・前走騎手の名前・休み明けから数えたかを追加。
 // DB・画面・通信には触れない (v.2026.10.3+26100304)
 
-import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';
-import 'package:hetaumakeiba_v2/logic/horse_circumstance.dart';
+// [修正] 前走と路線の部品 Step1: 実際に出走した走の取り出しを共通の部品 previous_race.dart に移したため、import を差し替え (v.2026.10.16+26101605)
+import 'package:hetaumakeiba_v2/logic/previous_race.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 
@@ -154,13 +154,6 @@ class HorseCampSignals {
   });
 }
 
-class _Start {
-  final DateTime date;
-  final HorseRaceRecord record;
-
-  _Start(this.date, this.record);
-}
-
 /// 出走馬ごとの仕上げ・人のサインを出す（入力の順）。
 ///
 /// [raceDate] 今回レースの開催日。この日より前（同じ日は含まない）の走だけを見る。
@@ -182,15 +175,8 @@ List<HorseCampSignals> buildCampSignals({
     final records =
         recordsByHorseId[horse.horseId] ?? const <HorseRaceRecord>[];
     final canJudge = records.isNotEmpty || isMaidenOrNewcomerRace;
-    final starts = <_Start>[];
-    for (final record in records) {
-      final date = parseEarnedPrizeDate(record.date);
-      if (date == null || !date.isBefore(raceDay)) continue;
-      if (!isRaceStart(record)) continue;
-      starts.add(_Start(date, record));
-    }
-    // 新しい順
-    starts.sort((a, b) => b.date.compareTo(a.date));
+    // [修正] 前走と路線の部品 Step1: 基準日より前に実際に出走した走（新しい順）を共通の部品で取り出す。決め方は従来と同じ (v.2026.10.16+26101605)
+    final starts = startsBefore(records, raceDay);
 
     final lastStartDate = starts.isEmpty ? null : starts.first.date;
     final daysSinceLastStart =
