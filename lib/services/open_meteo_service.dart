@@ -32,10 +32,11 @@ class OpenMeteoService {
     double relAngle = (windDir - heading) % 360;
     if (relAngle < 0) relAngle += 360;
 
+    // [修正] レース情報ヘッダー整理 Step3: 文の先頭の絵文字を外した（下の横風の3つも同じ） (v.2026.10.15+26101511)
     if (relAngle <= 45 || relAngle >= 315) {
-      return '⚠️ 直線は【向かい風】の傾向（逃げ馬に厳しく、差し馬有利）';
+      return '直線は【向かい風】の傾向（逃げ馬に厳しく、差し馬有利）';
     } else if (relAngle >= 135 && relAngle <= 225) {
-      return '💨 直線は【追い風】の傾向（逃げ・先行馬が止まりにくい）';
+      return '直線は【追い風】の傾向（逃げ・先行馬が止まりにくい）';
     } else {
       bool isRightWind = (relAngle > 45 && relAngle < 135);
       bool isLeftWind = (relAngle > 225 && relAngle < 315);
@@ -49,9 +50,9 @@ class OpenMeteoService {
         if (isRightTurn) fromStand = true; else fromInfield = true;
       }
 
-      if (fromStand) return '🍃 直線は【スタンド側から内馬場】への横風';
-      else if (fromInfield) return '🍃 直線は【内馬場からスタンド側】への横風';
-      return '🍃 直線は【横風】の傾向';
+      if (fromStand) return '直線は【スタンド側から内馬場】への横風';
+      else if (fromInfield) return '直線は【内馬場からスタンド側】への横風';
+      return '直線は【横風】の傾向';
     }
   }
 

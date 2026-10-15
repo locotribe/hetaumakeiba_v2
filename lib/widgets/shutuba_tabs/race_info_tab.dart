@@ -23,6 +23,8 @@ import 'package:hetaumakeiba_v2/utils/memo_csv_util.dart'; // [追加] AIファ�
 import 'package:hetaumakeiba_v2/logic/race_header_format.dart';
 import 'package:hetaumakeiba_v2/utils/track_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// [追加] レース情報ヘッダー整理 Step3: 風の分析の文から絵文字を外すため（保存済みの天気にも絵文字が残っている） (v.2026.10.15+26101511)
+import 'package:hetaumakeiba_v2/logic/ai_export/ai_weather_snapshot.dart' show aiStripEmoji;
 
 class RaceInfoTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
@@ -860,24 +862,29 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.public, size: 16, color: Colors.blue),
-                      SizedBox(width: 4),
-                      Text('気象庁 広域天気概況', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue)),
-                    ],
-                  ),
-                  Text('${data['reportDatetime']} 発表', style: const TextStyle(fontSize: 10, color: Colors.black54)),
-                ],
+              // [修正] レース情報ヘッダー整理 Step3: 見出しの行のタップで開閉する。たたむと見出しと発表時刻だけを出す (v.2026.10.15+26101511)
+              InkWell(
+                onTap: () => _toggleExpanded(_jmaExpandedKey),
+                child: Row(
+                  children: [
+                    const Icon(Icons.public, size: 16, color: Colors.blue),
+                    const SizedBox(width: 4),
+                    const Expanded(
+                      child: Text('気象庁 広域天気概況', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue)),
+                    ),
+                    Text('${data['reportDatetime']} 発表', style: const TextStyle(fontSize: 10, color: Colors.black54)),
+                    const SizedBox(width: 4),
+                    Icon(_isExpanded(_jmaExpandedKey) ? Icons.expand_less : Icons.expand_more, size: 20, color: Colors.grey.shade700),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                data['overviewText'] ?? '',
-                style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.4),
-              ),
+              if (_isExpanded(_jmaExpandedKey)) ...[
+                const SizedBox(height: 8),
+                Text(
+                  data['overviewText'] ?? '',
+                  style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.4),
+                ),
+              ],
             ],
           ),
         );
@@ -912,7 +919,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('📅 レース開催週の天候推移', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+        // [修正] レース情報ヘッダー整理 Step3: 見出しの先頭の絵文字を外した (v.2026.10.15+26101511)
+        const Text('レース開催週の天候推移', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -1006,27 +1014,33 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on, size: 16, color: Colors.teal),
-                      const SizedBox(width: 4),
-                      Text('${widget.predictionRaceData.venue}競馬場 ピンポイント詳細', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
-                    ],
-                  ),
-                  if (widget.isWeatherLocked)
-                    const Text('当時のデータ', style: TextStyle(fontSize: 10, color: Colors.grey))
-                  else
-                    IconButton(
-                      icon: const Icon(Icons.refresh, size: 20, color: Colors.teal),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: widget.onRefreshWeather,
+              // [修正] レース情報ヘッダー整理 Step3: 見出しの行のタップで開閉する。たたむと要約（_buildPinpointSummary）だけを出す。開いたときの中身は変えていない (v.2026.10.15+26101511)
+              InkWell(
+                onTap: () => _toggleExpanded(_pinpointExpandedKey),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on, size: 16, color: Colors.teal),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text('${widget.predictionRaceData.venue}競馬場 ピンポイント詳細', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
                     ),
-                ],
+                    if (widget.isWeatherLocked)
+                      const Text('当時のデータ', style: TextStyle(fontSize: 10, color: Colors.grey))
+                    else
+                      IconButton(
+                        icon: const Icon(Icons.refresh, size: 20, color: Colors.teal),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: widget.onRefreshWeather,
+                      ),
+                    const SizedBox(width: 4),
+                    Icon(_isExpanded(_pinpointExpandedKey) ? Icons.expand_less : Icons.expand_more, size: 20, color: Colors.grey.shade700),
+                  ],
+                ),
               ),
+              if (!_isExpanded(_pinpointExpandedKey))
+                _buildPinpointSummary(data),
+              if (_isExpanded(_pinpointExpandedKey)) ...[
               const Divider(),
 
               if (dailyData.isNotEmpty)
@@ -1035,7 +1049,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text('📍 現在の状況', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  // [修正] レース情報ヘッダー整理 Step3: 見出しの先頭の絵文字を外した (v.2026.10.15+26101511)
+                  const Text('現在の状況', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 8),
                   Text('(${current['time']} 現在)', style: const TextStyle(fontSize: 10, color: Colors.black54)),
                 ],
@@ -1055,7 +1070,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                 ],
               ),
               const SizedBox(height: 12),
-              Text('🏁 発走時刻 (${_getFormattedRaceTime()}) の予報', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              // [修正] レース情報ヘッダー整理 Step3: 見出しの先頭の絵文字を外した (v.2026.10.15+26101511)
+              Text('発走時刻 (${_getFormattedRaceTime()}) の予報', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 16.0,
@@ -1080,7 +1096,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  data['windAnalysis'],
+                  // [修正] レース情報ヘッダー整理 Step3: 絵文字を外して出す。端末に保存済みの天気（当時のデータ）の文にも絵文字が残っているので、表示の時に外す (v.2026.10.15+26101511)
+                  aiStripEmoji('${data['windAnalysis'] ?? ''}'),
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
                 ),
               ),
@@ -1090,7 +1107,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  const Text('📊 馬場・展開インサイト', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  // [修正] レース情報ヘッダー整理 Step3: 見出しの先頭の絵文字を外した (v.2026.10.15+26101511)
+                  const Text('馬場・展開インサイト', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 8),
                   Text('(${widget.predictionRaceData.startTime ?? "15:45"}の予報に基づく)',
                       style: const TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.normal)),
@@ -1102,22 +1120,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                 future: widget.trackConditionFuture,
                 builder: (context, trackSnapshot) {
                   final trackRecord = trackSnapshot.data;
-                  final String venueCode = widget.predictionRaceData.raceId.length >= 6
-                      ? widget.predictionRaceData.raceId.substring(4, 6)
-                      : '00';
-
-                  // [修正] 返却型 WeatherAnalysisResult の展開と UI統合 (v.4.0)
-                  final analysisResult = WeatherAnalyzer.analyzeTrackConditionInsights(
-                    venueCode: venueCode,
-                    trackType: widget.predictionRaceData.trackType ?? '芝',
-                    currentRecord: trackRecord,
-                    cachedRecord: widget.cachedPrevRecord,
-                    expectedPrecipitation: (raceTime['precipitation'] as num?)?.toDouble() ?? 0.0,
-                    expectedRadiation: (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,
-                    expectedSoilMoisture: (raceTime['soilMoisture'] as num?)?.toDouble(),
-                    dailyWeather: dailyData,
-                    raceDateStr: widget.predictionRaceData.raceDate,
-                  );
+                  // [修正] レース情報ヘッダー整理 Step3: 計算を _analyzeTrackInsights に移した（たたんだときの要約と同じ結果を使うため。引数は元のまま） (v.2026.10.15+26101511)
+                  final analysisResult = _analyzeTrackInsights(trackRecord, raceTime, dailyData);
 
                   final insightsList = [
                     WeatherAnalyzer.analyzeTrackRecovery(raceTime['radiation'] ?? 0.0, raceTime['evap'] ?? 0.0),
@@ -1161,7 +1165,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               ),
 
               const SizedBox(height: 16),
-              const Text('🕒 午後の時系列変化', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              // [修正] レース情報ヘッダー整理 Step3: 見出しの先頭の絵文字を外した (v.2026.10.15+26101511)
+              const Text('午後の時系列変化', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -1190,10 +1195,125 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                   }).toList(),
                 ),
               ),
+              ],
             ],
           ),
         );
       },
+    );
+  }
+
+  // [追加] レース情報ヘッダー整理 Step3: 馬場・展開インサイトの計算（開いたときの一覧と、たたんだときの要約で同じ結果を使う） (v.2026.10.15+26101511)
+  WeatherAnalysisResult _analyzeTrackInsights(TrackConditionRecord? trackRecord, dynamic raceTime, List<dynamic> dailyData) {
+    final String venueCode = widget.predictionRaceData.raceId.length >= 6
+        ? widget.predictionRaceData.raceId.substring(4, 6)
+        : '00';
+
+    // [修正] 返却型 WeatherAnalysisResult の展開と UI統合 (v.4.0)
+    return WeatherAnalyzer.analyzeTrackConditionInsights(
+      venueCode: venueCode,
+      trackType: widget.predictionRaceData.trackType ?? '芝',
+      currentRecord: trackRecord,
+      cachedRecord: widget.cachedPrevRecord,
+      expectedPrecipitation: (raceTime['precipitation'] as num?)?.toDouble() ?? 0.0,
+      expectedRadiation: (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,
+      expectedSoilMoisture: (raceTime['soilMoisture'] as num?)?.toDouble(),
+      dailyWeather: dailyData,
+      raceDateStr: widget.predictionRaceData.raceDate,
+    );
+  }
+
+  // [追加] レース情報ヘッダー整理 Step3: ピンポイント詳細をたたんだときの要約。発走時刻の予報（天気・気温・降水確率・風）、馬場予測（芝は予測クッション値→予測含水率、ダートは予測含水率だけ）、今回の馬場予測の見出しと説明（根拠より前の部分）を出す (v.2026.10.15+26101511)
+  Widget _buildPinpointSummary(Map<String, dynamic> data) {
+    final raceTime = data['raceTime'];
+    final List<dynamic> dailyData = data['daily'] ?? [];
+    final isDirt = (widget.predictionRaceData.trackType ?? '').contains('ダ');
+    final windMs = (((raceTime['windSpeed'] as num?)?.toDouble() ?? 0.0) / 3.6).toStringAsFixed(1);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Text('発走時刻 (${_getFormattedRaceTime()}) の予報', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+        const SizedBox(height: 4),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _buildMeasureTile(label: '天気', lines: [WeatherAnalyzer.getWeatherText(raceTime['weatherCode'] ?? 0)])),
+              const SizedBox(width: 6),
+              Expanded(child: _buildMeasureTile(label: '気温', lines: ['${raceTime['temp']}℃'])),
+              const SizedBox(width: 6),
+              Expanded(child: _buildMeasureTile(label: '降水確率', lines: ['${raceTime['pop']}%'])),
+              const SizedBox(width: 6),
+              Expanded(child: _buildMeasureTile(label: '風', lines: ['$windMs m/s'], note: '${data['windDirText'] ?? ''}')),
+            ],
+          ),
+        ),
+        FutureBuilder<TrackConditionRecord?>(
+          future: widget.trackConditionFuture,
+          builder: (context, trackSnapshot) {
+            final analysisResult = _analyzeTrackInsights(trackSnapshot.data, raceTime, dailyData);
+            final moisture = analysisResult.predictedMoisture;
+            if (moisture == null) return const SizedBox.shrink();
+            final cushion = analysisResult.predictedCushion;
+            WeatherInsight? current;
+            for (final insight in analysisResult.insights) {
+              if (!insight.label.startsWith('[前回予測]')) current = insight;
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 10),
+                const Text('馬場予測', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                const SizedBox(height: 4),
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!isDirt && cushion != null) ...[
+                        Expanded(child: _buildMeasureTile(label: '予測クッション値', lines: [cushion.toStringAsFixed(1)], big: true)),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(child: _buildMeasureTile(label: '予測含水率', lines: ['${moisture.toStringAsFixed(1)}%'], big: true)),
+                      if (isDirt || cushion == null) ...[
+                        const SizedBox(width: 6),
+                        const Expanded(child: SizedBox.shrink()),
+                      ],
+                    ],
+                  ),
+                ),
+                if (current != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: current.color.withValues(alpha: 0.05),
+                      border: Border(left: BorderSide(color: current.color, width: 4)),
+                      borderRadius: const BorderRadius.only(topRight: Radius.circular(4), bottomRight: Radius.circular(4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          current.label.replaceFirst('[今回確定] ', ''),
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: current.color),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          current.description.split('\n\n').first,
+                          style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 

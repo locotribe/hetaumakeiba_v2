@@ -372,10 +372,11 @@ class WeatherAnalyzer {
         double diff = currentResult.predictedMoisture - prevResult.predictedMoisture;
         String warning = "";
 
+        // [修正] レース情報ヘッダー整理 Step3: 乖離アラートの先頭の絵文字を外した (v.2026.10.15+26101511)
         if (diff >= 1.5) {
-          warning = "\n\n⚠️【乖離アラート】前回のシミュレーションより含水率が ${diff.toStringAsFixed(1)}% 上振れしています。未明の雨やJRAの散水作業の影響により、想定より時計が掛かる馬場になっています。";
+          warning = "\n\n【乖離アラート】前回のシミュレーションより含水率が ${diff.toStringAsFixed(1)}% 上振れしています。未明の雨やJRAの散水作業の影響により、想定より時計が掛かる馬場になっています。";
         } else if (diff <= -1.5) {
-          warning = "\n\n⚠️【乖離アラート】前回のシミュレーションより含水率が ${diff.abs().toStringAsFixed(1)}% 下振れしています。想定以上に乾燥が進んでおり、時計が速くなる可能性があります。";
+          warning = "\n\n【乖離アラート】前回のシミュレーションより含水率が ${diff.abs().toStringAsFixed(1)}% 下振れしています。想定以上に乾燥が進んでおり、時計が速くなる可能性があります。";
         }
 
         if (warning.isNotEmpty) {
