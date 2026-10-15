@@ -3,6 +3,7 @@
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/logic/race_data_parser.dart';
+import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 
 class AptitudeAnalyzer {
   static const Map<String, int> _defaultWeights = {
@@ -301,13 +302,17 @@ class AptitudeAnalyzer {
     // 2. レース間隔の評価
     if (pastRecords.isNotEmpty) {
       try {
-        final currentRaceDate = DateTime.parse(
-            raceData.raceDate.replaceAll('年', '-').replaceAll('月', '-').replaceAll('日', ''));
-        final lastRaceDate =
-        DateTime.parse(pastRecords.first.date.replaceAll('/', '-'));
-        final interval = currentRaceDate.difference(lastRaceDate).inDays;
+        // [修正] 総合適性の日付読み取り修正: 「2026年6月14日」→「2026-6-14」の DateTime.parse は1桁の月・日や曜日付きで失敗し、
+        // 間隔の加点・減点が0になっていた。出馬表・展開シミュと同じ parseRaceDateForSpeedIndex で読み、読めなければ従来どおり何もしない (v.2026.10.15+26101512)
+        final currentRaceDate = parseRaceDateForSpeedIndex(raceData.raceDate);
+        final lastRaceDate = parseRaceDateForSpeedIndex(pastRecords.first.date);
+        final interval = (currentRaceDate != null && lastRaceDate != null)
+            ? currentRaceDate.difference(lastRaceDate).inDays
+            : null;
 
-        if (interval > 180) {
+        if (interval == null) {
+          // 日付が読めない場合は何もしない（ベーススコアのまま）
+        } else if (interval > 180) {
           // 半年以上の休み明け
           score -= 20;
         } else if (interval < 14) {
