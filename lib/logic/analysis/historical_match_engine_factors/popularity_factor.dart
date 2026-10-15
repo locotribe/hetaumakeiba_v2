@@ -3,6 +3,7 @@
 import 'dart:math';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 
 class PopularityFactorResult {
   final double valueIndex; // 実力スコア
@@ -20,13 +21,14 @@ class PopularityFactorResult {
 
 class PopularityFactor {
   // ★引数に currentRaceName と pastRaceVolatility（波乱度）を追加
-  PopularityFactorResult analyze(PredictionHorseDetail horse, List<HorseRaceRecord> history, String currentRaceName, double pastRaceVolatility) {
+  // [修正] クラス判定の共通化 Step2: 今回のレース名にはグレードの括弧が無く係数がいつも最低(0.4)になっていたため、3番目の引数を今回のクラスの区分（raceClassGradeOfCurrentRace で作る）に替えた (v.2026.10.16+26101602)
+  PopularityFactorResult analyze(PredictionHorseDetail horse, List<HorseRaceRecord> history, RaceClassGrade currentRaceClass, double pastRaceVolatility) {
     double totalRaceScore = 0.0;
     double totalWeight = 0.0;
     bool hasHitWall = false;
 
     // 1. 今回のレース格（モノサシ）を取得
-    double currentClassVal = _getClassValue(currentRaceName);
+    double currentClassVal = _classValueOf(currentRaceClass);
 
     // 直近6走に絞る
     final targetHistory = history.take(6).toList();
@@ -37,7 +39,7 @@ class PopularityFactor {
       int hRank = int.tryParse(rec.rank) ?? 0;
       if (hPop == 0 || hRank == 0) continue;
 
-      double pastClassVal = _getClassValue(rec.raceName);
+      double pastClassVal = _classValueOf(raceClassGradeOfRecord(rec));
 
       // --- A. 絶対評価（着順基本点） ---
       double absolutePoints = 0.0;
@@ -165,14 +167,29 @@ class PopularityFactor {
     );
   }
 
-  double _getClassValue(String raceName) {
-    if (raceName.contains('G1') || raceName.contains('GI')) return 2.0;
-    if (raceName.contains('G2') || raceName.contains('GII')) return 1.7;
-    if (raceName.contains('G3') || raceName.contains('GIII')) return 1.4;
-    if (raceName.contains('OP') || raceName.contains('(L)') || raceName.contains('リステッド')) return 1.2;
-    if (raceName.contains('3勝') || raceName.contains('1600万')) return 1.0;
-    if (raceName.contains('2勝') || raceName.contains('1000万')) return 0.8;
-    if (raceName.contains('1勝') || raceName.contains('500万')) return 0.6;
-    return 0.4;
+  // [修正] クラス判定の共通化 Step2: レース名の文字列判定（contains('GI') が先で G2・G3 も 2.0、Jpn は 0.4 になっていた）を共通の区分からの係数に替えた。係数は従来と同じ (v.2026.10.16+26101602)
+  double _classValueOf(RaceClassGrade grade) {
+    switch (grade) {
+      case RaceClassGrade.g1:
+        return 2.0;
+      case RaceClassGrade.g2:
+        return 1.7;
+      case RaceClassGrade.g3:
+        return 1.4;
+      case RaceClassGrade.listed:
+      case RaceClassGrade.open:
+        return 1.2;
+      case RaceClassGrade.win3:
+        return 1.0;
+      case RaceClassGrade.win2:
+        return 0.8;
+      case RaceClassGrade.win1:
+        return 0.6;
+      case RaceClassGrade.newcomer:
+      case RaceClassGrade.maiden:
+      case RaceClassGrade.local:
+      case RaceClassGrade.unknown:
+        return 0.4;
+    }
   }
 }

@@ -32,6 +32,7 @@ import 'package:hetaumakeiba_v2/widgets/volatility_components/pedigree_cross_ana
 import 'package:hetaumakeiba_v2/widgets/volatility_components/track_condition_trend_card.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_analysis_bundle_loader.dart';
 import 'package:hetaumakeiba_v2/models/race_analysis_bundle.dart';
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 
 // ★追加：各カードウィジェットとアナライザーのインポート
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
@@ -46,11 +47,14 @@ import 'package:hetaumakeiba_v2/widgets/volatility_components/gender_chart_card.
 class RaceStatisticsPage extends StatefulWidget {
   final String raceId;
   final String raceName;
+  // [追加] クラス判定の共通化 Step2: 人気妙味の基準にする今回のクラス。出馬表（race_page）で raceClassGradeOfCurrentRace から作って渡す (v.2026.10.16+26101602)
+  final RaceClassGrade currentRaceClass;
 
   const RaceStatisticsPage({
     super.key,
     required this.raceId,
     required this.raceName,
+    required this.currentRaceClass,
   });
 
   @override
@@ -151,6 +155,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       final bundle = await RaceAnalysisBundleLoader().load(
         raceId: widget.raceId,
         raceName: widget.raceName,
+        currentRaceClass: widget.currentRaceClass,
         horses: _horses,
         targetRaceIds: _targetRaceIds,
       );
@@ -583,6 +588,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                         StatsMatchTab(
                           raceId: widget.raceId,
                           raceName: widget.raceName,
+                          currentRaceClass: widget.currentRaceClass,
                           horses: _resultHorses!,
                           targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                           comparisonTargets: _horses,

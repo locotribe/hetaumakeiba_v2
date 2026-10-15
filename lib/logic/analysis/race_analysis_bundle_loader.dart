@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart'
 import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
 import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -38,6 +39,8 @@ class RaceAnalysisBundleLoader {
   Future<RaceAnalysisBundle?> load({
     required String raceId,
     required String raceName,
+    // [追加] クラス判定の共通化 Step2: 人気妙味の基準にする今回のクラス (v.2026.10.16+26101602)
+    required RaceClassGrade currentRaceClass,
     required List<PredictionHorseDetail> horses,
     List<String>? targetRaceIds,
     void Function(String message)? onProgress,
@@ -182,6 +185,7 @@ class RaceAnalysisBundleLoader {
     // 11. HistoricalMatchEngine によるファクター別スコアの算出
     final analysisResult = _engine.analyze(
       currentRaceName: raceName,
+      currentRaceClass: currentRaceClass,
       pastRaceVolatility: volatilityResult.averagePopularity,
       currentHorses: horses,
       pastRaces: pastRaces,

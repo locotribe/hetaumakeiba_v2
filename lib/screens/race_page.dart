@@ -13,6 +13,7 @@ import 'package:hetaumakeiba_v2/services/horse_performance_scraper_service.dart'
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
 import 'package:hetaumakeiba_v2/screens/jockey_stats_page.dart';
 import 'package:hetaumakeiba_v2/widgets/race_page_tabs/race_detail_tab.dart';
@@ -404,6 +405,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               RaceStatisticsPage(
                 raceId: widget.raceId,
                 raceName: _predictionRaceData!.raceName,
+                // [追加] クラス判定の共通化 Step2: 出馬表のグレード欄（結果から作ったデータはレース名）から今回のクラスを作って渡す (v.2026.10.16+26101602)
+                currentRaceClass: raceClassGradeOfCurrentRace(_predictionRaceData!),
               )
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),

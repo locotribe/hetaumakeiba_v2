@@ -15,6 +15,7 @@ import '../analysis/historical_match_engine_factors/pedigree_factor.dart'; // �
 import '../analysis/historical_match_engine_factors/track_condition_factor.dart'; // ★追加
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart'; // ★追加
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart'; // ★新規追加: TrackConditionRecord用
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 
 class HistoricalMatchEngine {
   // 各ファクターのインスタンス化
@@ -27,6 +28,8 @@ class HistoricalMatchEngine {
 
   Map<String, dynamic> analyze({
     required String currentRaceName,
+    // [追加] クラス判定の共通化 Step2: 人気妙味の「クラスの壁」の基準にする今回のクラス。currentRaceName は呼び出し側の変更を増やさないため残す (v.2026.10.16+26101602)
+    required RaceClassGrade currentRaceClass,
     required double pastRaceVolatility,
     required List<PredictionHorseDetail> currentHorses,
     required List<RaceResult> pastRaces,
@@ -86,7 +89,7 @@ class HistoricalMatchEngine {
       final weightRes = _weightFactor.analyze(horse, prevRecord, medianWeight);
       // [修正] 結果分析の枠順: 過去側（_calculateZoneWinRates）と同じく馬番÷頭数で内・中・外を決める。枠番だと12頭以上で外が出ず、大半の馬が隣のゾーンで採点されていた (v.2026.10.15+26101513)
       final frameRes = _frameFactor.analyze(horse.horseNumber, currentHorses.length, zoneWinRates, maxRate);
-      final popRes = _popularityFactor.analyze(horse, history, currentRaceName, pastRaceVolatility);
+      final popRes = _popularityFactor.analyze(horse, history, currentRaceClass, pastRaceVolatility);
       final rotRes = _rotationFactor.analyze(prevRecord, favorableRotations);
 
       // ★新規追加: 血統と馬場の分析

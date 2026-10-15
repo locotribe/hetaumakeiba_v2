@@ -8,6 +8,7 @@ import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart'
 import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
 import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -43,6 +44,8 @@ class SimilarityData {
 class StatsMatchTab extends StatefulWidget {
   final String raceId;
   final String raceName;
+  // [追加] クラス判定の共通化 Step2: 人気妙味の基準にする今回のクラス (v.2026.10.16+26101602)
+  final RaceClassGrade currentRaceClass;
   final List<PredictionHorseDetail> horses;
   // 集計対象とするレースIDのリスト
   final List<String>? targetRaceIds;
@@ -53,6 +56,7 @@ class StatsMatchTab extends StatefulWidget {
     super.key,
     required this.raceId,
     required this.raceName,
+    required this.currentRaceClass,
     required this.horses,
     this.targetRaceIds,
     this.comparisonTargets,
@@ -320,6 +324,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       // 5. HistoricalMatchEngineによる分析 (引数に上記データを追加)
       final analysisResult = _engine.analyze(
         currentRaceName: widget.raceName,
+        currentRaceClass: widget.currentRaceClass,
         pastRaceVolatility: volResult.averagePopularity,
         currentHorses: widget.horses,
         pastRaces: pastRaces,
@@ -336,6 +341,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       if (widget.comparisonTargets != null && widget.comparisonTargets!.isNotEmpty) {
         final predictionAnalysis = _engine.analyze(
           currentRaceName: widget.raceName,
+          currentRaceClass: widget.currentRaceClass,
           pastRaceVolatility: volResult.averagePopularity,
           currentHorses: widget.comparisonTargets!,
           pastRaces: pastRaces,
