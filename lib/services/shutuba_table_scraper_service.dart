@@ -338,6 +338,10 @@ class ShutubaTableScraperService {
     if (className.contains('Icon_GradeType17')) return '2勝';
     if (className.contains('Icon_GradeType16')) return '3勝';
     if (className.contains('Icon_GradeType15')) return 'L';
+    // [修正] クラス判定の共通化 Step4: 障害重賞（Icon_GradeType10〜12）が下の Icon_GradeType1 に当たって G1 になっていたため、先に判定する。並びは race_schedule_scraper_service.dart と同じ (v.2026.10.16+26101604)
+    if (className.contains('Icon_GradeType12')) return 'J.G3';
+    if (className.contains('Icon_GradeType11')) return 'J.G2';
+    if (className.contains('Icon_GradeType10')) return 'J.G1';
     if (className.contains('Icon_GradeType5')) return 'OP';
     if (className.contains('Icon_GradeType3')) return 'G3';
     if (className.contains('Icon_GradeType2')) return 'G2';
