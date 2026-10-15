@@ -84,7 +84,8 @@ class HistoricalMatchEngine {
 
       // 各ファクターに分析を委譲
       final weightRes = _weightFactor.analyze(horse, prevRecord, medianWeight);
-      final frameRes = _frameFactor.analyze(horse.gateNumber, currentHorses.length, zoneWinRates, maxRate);
+      // [修正] 結果分析の枠順: 過去側（_calculateZoneWinRates）と同じく馬番÷頭数で内・中・外を決める。枠番だと12頭以上で外が出ず、大半の馬が隣のゾーンで採点されていた (v.2026.10.15+26101513)
+      final frameRes = _frameFactor.analyze(horse.horseNumber, currentHorses.length, zoneWinRates, maxRate);
       final popRes = _popularityFactor.analyze(horse, history, currentRaceName, pastRaceVolatility);
       final rotRes = _rotationFactor.analyze(prevRecord, favorableRotations);
 

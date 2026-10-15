@@ -1050,7 +1050,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         SizedBox(width: 40, child: Text('${item.frameScore.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14))),
-        Row(mainAxisSize: MainAxisSize.min, children: [Text('${item.positionZone}目', style: const TextStyle(fontSize: 12)), const SizedBox(width: 4), Text('(${item.gateNumber}番)', style: const TextStyle(fontSize: 11, color: Colors.grey))]),
+        // [修正] 結果分析の枠順: 括弧内は枠番ではなく馬番を出す（ゾーンの判定を馬番にしたため） (v.2026.10.15+26101513)
+        Row(mainAxisSize: MainAxisSize.min, children: [Text('${item.positionZone}目', style: const TextStyle(fontSize: 12)), const SizedBox(width: 4), Text('(${_getHorseNumber(item.horseId)}番)', style: const TextStyle(fontSize: 11, color: Colors.grey))]),
       ],
     );
   }
