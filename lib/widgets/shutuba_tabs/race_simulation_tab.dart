@@ -2,7 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/course_elevations.dart';
-import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+// [修正] 出走馬データ読み込み統一 Step4: 戦績と騎手成績は読み込み係（RaceEntrantDataService）から受け取るので、HorseRepository の import を外した (v.2026.10.16+26101621)
+import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_speed_index_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
@@ -30,8 +31,7 @@ import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
-// [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
-import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';
+// [削除] 出走馬データ読み込み統一 Step4: 騎手成績は読み込み係が計算するので、JockeyAnalysisService の import を外した (v.2026.10.16+26101621)
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_view.dart';
 
@@ -174,7 +174,7 @@ class _RaceSimulationLoadResult {
 
 class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     with AutomaticKeepAliveClientMixin {
-  final HorseRepository _horseRepo = HorseRepository();
+  // [削除] 出走馬データ読み込み統一 Step4: 戦績は読み込み係から受け取るので、HorseRepository のフィールドを外した (v.2026.10.16+26101621)
   final HorseSimulationParamsRepository _simParamsRepo =
       HorseSimulationParamsRepository();
   // [追加] フェーズ5-2 スピード指数の読み出し用 (v.2026.7.30+26073001)
@@ -471,11 +471,14 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         ? activeHorses
         : RaceSimulationEngine.assignTempNumbers(activeHorses);
 
-    final allPastRecords = <String, List<HorseRaceRecord>>{};
-    await Future.wait(horsesForSim.map((horse) async {
-      allPastRecords[horse.horseId] =
-          await _horseRepo.getHorsePerformanceRecords(horse.horseId);
-    }));
+    // [修正] 出走馬データ読み込み統一 Step4: 戦績は読み込み係が1回だけ読んだ、今回のレース日より前の走（そのレース自身の行も除く）を使う。
+    // 過去のレースを開いたとき、そのレースや後の走が展開シミュの計算に入っていた (v.2026.10.16+26101621)
+    final entrantData =
+        await RaceEntrantDataService.instance.load(widget.predictionRaceData);
+    final allPastRecords = <String, List<HorseRaceRecord>>{
+      for (final horse in horsesForSim)
+        horse.horseId: entrantData.recordsOf(horse.horseId),
+    };
 
     final horseIds = horsesForSim.map((h) => h.horseId).toList();
     final paramsByHorseId = await _simParamsRepo.getByHorseIds(horseIds);
@@ -506,29 +509,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
 
     // [追加] 展開シミュ騎手要素Step2: 騎手の強さ・相性・乗り替わり方向を算出する。
     // 騎手統計はDB全レース結果の走査を伴うため1回だけ行い、失敗しても展開シミュ自体は継続する (v.2026.9.29+26092902)
-    final jockeyIdsForStats = <String>{};
-    for (final horse in horsesForSim) {
-      if (horse.jockeyId.isNotEmpty) jockeyIdsForStats.add(horse.jockeyId);
-      final prevJockeyId = horse.previousJockeyId;
-      if (prevJockeyId != null && prevJockeyId.isNotEmpty) {
-        jockeyIdsForStats.add(prevJockeyId);
-      }
-      final pastList = allPastRecords[horse.horseId];
-      if (pastList != null &&
-          pastList.isNotEmpty &&
-          pastList.first.jockeyId.isNotEmpty) {
-        jockeyIdsForStats.add(pastList.first.jockeyId);
-      }
-    }
-    Map<String, JockeyStats> jockeyStatsForSim = const {};
-    try {
-      jockeyStatsForSim = await JockeyAnalysisService().analyzeAllJockeys(
-        jockeyIdsForStats.toList(),
-        raceData: widget.predictionRaceData,
-      );
-    } catch (_) {
-      jockeyStatsForSim = const {};
-    }
+    // [修正] 出走馬データ読み込み統一 Step4: 騎手成績は読み込み係が1回だけ計算したもの（今回の騎手・前走の騎手・戦績のいちばん上の行の騎手。
+    // 相対評価と共用）を使う。計算に失敗したときは空で、展開シミュはそのまま続ける（今までと同じ） (v.2026.10.16+26101621)
+    final Map<String, JockeyStats> jockeyStatsForSim = entrantData.jockeyStats;
     final jockeyFactorParams = JockeyFactorCalculator.calculate(
       horses: horsesForSim,
       allPastRecords: allPastRecords,

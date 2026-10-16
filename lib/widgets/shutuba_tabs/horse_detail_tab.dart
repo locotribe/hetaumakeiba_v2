@@ -1,7 +1,11 @@
 // lib/widgets/shutuba_tabs/horse_detail_tab.dart
 
+// [追加] 出走馬データ読み込み統一 Step4: 読み込み係の知らせの購読（StreamSubscription）と、レース日より前の戦績の読み込み (v.2026.10.16+26101621)
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
+import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
 import 'package:hetaumakeiba_v2/logic/horse_detail_order.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
@@ -116,7 +120,21 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     _trainingViewModel
         .load()
         .then((_) => _trainingViewModel.autoFetchRaceTrainingIfNeeded());
+    // [追加] 出走馬データ読み込み統一 Step4: このレースの戦績を読み込み係が捨てたら（戦績・調教の取り直しなど）、
+    // 好走条件・成長曲線の読み込みをやり直す (v.2026.10.16+26101621)
+    _entrantDataSubscription =
+        RaceEntrantDataService.instance.changes.listen((raceId) {
+      if (!mounted || raceId != widget.raceId) return;
+      setState(() {
+        _allPastRecordsFuture = null;
+        _recordsFutures.clear();
+        _trackCondFutures.clear();
+      });
+    });
   }
+
+  // [追加] 出走馬データ読み込み統一 Step4: 読み込み係の知らせの購読 (v.2026.10.16+26101621)
+  StreamSubscription<String>? _entrantDataSubscription;
 
   @override
   void didUpdateWidget(covariant HorseDetailTabWidget oldWidget) {
@@ -145,6 +163,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
 
   @override
   void dispose() {
+    // [追加] 出走馬データ読み込み統一 Step4: 読み込み係の知らせの購読を止める (v.2026.10.16+26101621)
+    _entrantDataSubscription?.cancel();
     _trainingViewModel.dispose();
     _pageController.dispose();
     _chipScrollController.dispose();
@@ -174,9 +194,11 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   // 結果が空のときは保持せず、次に表示したときに読み直す（レース準備で戦績が後から入る場合に備える） (v.2026.10.1+26100102)
   final Map<String, Future<List<HorseRaceRecord>>> _recordsFutures = {};
 
+  // [修正] 出走馬データ読み込み統一 Step4: 全馬の戦績（読み込み係のレース日より前の走）からその馬の分を取り出す (v.2026.10.16+26101621)
   Future<List<HorseRaceRecord>> _recordsFor(String horseId) {
     return _recordsFutures.putIfAbsent(horseId, () async {
-      final records = await _horseRepo.getHorsePerformanceRecords(horseId);
+      final all = await _allPastRecords();
+      final records = all[horseId] ?? const <HorseRaceRecord>[];
       if (records.isEmpty) {
         _recordsFutures.remove(horseId);
       }
@@ -206,12 +228,14 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     return _allPastRecordsFuture ??= _loadAllPastRecords();
   }
 
+  // [修正] 出走馬データ読み込み統一 Step4: 全馬の戦績は読み込み係が1回だけ読んだ、今回のレース日より前の走（そのレース自身の行も除く）を使う。
+  // 過去のレースを開いたとき、好走条件にそのレースや後の走が入っていた (v.2026.10.16+26101621)
   Future<Map<String, List<HorseRaceRecord>>> _loadAllPastRecords() async {
-    final Map<String, List<HorseRaceRecord>> map = {};
-    for (final h in _horses) {
-      map[h.horseId] = await _horseRepo.getHorsePerformanceRecords(h.horseId);
-    }
-    return map;
+    final entrantData =
+        await RaceEntrantDataService.instance.load(widget.predictionRaceData);
+    return {
+      for (final h in _horses) h.horseId: entrantData.recordsOf(h.horseId),
+    };
   }
 
   // [追加] 好走条件 馬詳細移植 StepA-3: 好走条件を開いた馬の過去走ごとに馬場データ（クッション値/含水率）を引く（馬柱と同じ getTrackConditionForRace） (v.2026.9.25+26092507)
