@@ -80,6 +80,56 @@ class HorseProfileScraperService {
     }
   }
 
+  // [追加] 全出走馬の取得と読み込み Step1: 血統ページ1枚だけを取り、父・母・父父・父母・母父・母母の欄だけを保存する（過去レースの出走馬用。基本情報のページと勝負服の画像は取らない）。
+  // 既にプロフィールがある馬は、血統以外の欄をそのまま残す。馬主が空のままの馬は、出馬表に出たときに今までどおり HorseProfileSyncService が基本情報を取り直す (v.2026.10.16+26101608)
+  static Future<HorseProfile?> scrapeAndSavePedigreeOnly(String horseId, {String horseName = ''}) async {
+    try {
+      final pedigreeUrl = generateNetkeibaHorsePedigreeUrl(horseId: horseId);
+      final pedigreeResponse = await http.get(Uri.parse(pedigreeUrl), headers: _headers);
+      if (pedigreeResponse.statusCode != 200) {
+        debugPrint('DEBUG: [ERROR] Failed to fetch pedigree page ($horseId): ${pedigreeResponse.statusCode}');
+        return null;
+      }
+
+      final pedigreeDoc = html.parse(await CharsetConverter.decode('EUC-JP', pedigreeResponse.bodyBytes));
+      final pedigreeData = _parsePedigree(pedigreeDoc);
+      if ((pedigreeData['fatherName'] ?? '').isEmpty) {
+        debugPrint('DEBUG: [ERROR] Pedigree not found ($horseId)');
+        return null;
+      }
+
+      final existing = await _horseRepository.getHorseProfile(horseId);
+      final profile = HorseProfile(
+        horseId: horseId,
+        horseName: (existing != null && existing.horseName.isNotEmpty) ? existing.horseName : horseName,
+        gender: existing?.gender ?? '',
+        birthday: existing?.birthday ?? '',
+        ownerId: existing?.ownerId ?? '',
+        ownerName: existing?.ownerName ?? '',
+        ownerImageLocalPath: existing?.ownerImageLocalPath ?? '',
+        trainerId: existing?.trainerId ?? '',
+        trainerName: existing?.trainerName ?? '',
+        breederName: existing?.breederName ?? '',
+        fatherId: pedigreeData['fatherId'] ?? '',
+        fatherName: pedigreeData['fatherName'] ?? '',
+        motherId: pedigreeData['motherId'] ?? '',
+        motherName: pedigreeData['motherName'] ?? '',
+        ffName: pedigreeData['ffName'] ?? '',
+        fmName: pedigreeData['fmName'] ?? '',
+        mfName: pedigreeData['mfName'] ?? '',
+        mmName: pedigreeData['mmName'] ?? '',
+        lastUpdated: DateTime.now().toIso8601String(),
+      );
+
+      await _horseRepository.insertOrUpdateHorseProfile(profile);
+      return profile;
+    } catch (e, stackTrace) {
+      debugPrint('DEBUG: [ERROR] scrapeAndSavePedigreeOnly exception ($horseId): $e');
+      debugPrint('DEBUG: StackTrace: $stackTrace');
+      return null;
+    }
+  }
+
   /// 基本情報（馬名、馬主、調教師、画像など）の解析
   static Future<Map<String, String>> _parseBasicInfo(String horseId, dom.Document document) async {
     final Map<String, String> result = {};
