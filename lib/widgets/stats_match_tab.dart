@@ -291,26 +291,17 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         }
       }
       // 過去上位馬のプロフィール
-      for (final race in pastRaces) {
-        for (final horse in race.horseResults) {
-          int rank = int.tryParse(horse.rank ?? '') ?? 0;
-          if (rank >= 1 && rank <= 3 && horse.horseId.isNotEmpty) {
-            if (!horseProfileMap.containsKey(horse.horseId)) {
-              final profile = await _horseRepo.getHorseProfile(horse.horseId);
-              if (profile != null) horseProfileMap[horse.horseId] = profile;
-            }
-          }
-        }
+      // [修正] 総合シンクロ率と血統クロス Step2: 1〜3着の馬だけでなく、過去レースの全出走馬（取消・除外を除く）の血統を読む（血統の点数を父・母父ごとの倍率で出すため） (v.2026.10.16+26101615)
+      for (final horseId in pastRaceHorseIds(pastRaces)) {
+        if (horseProfileMap.containsKey(horseId)) continue;
+        final profile = await _horseRepo.getHorseProfile(horseId);
+        if (profile != null) horseProfileMap[horseId] = profile;
       }
 
       // 新しいアナライザーの実行
       final trackConditionTrendResult = TrackConditionTrendAnalyzer().analyze(trackConditionMap);
       _trackConditionTrendResult = trackConditionTrendResult; // ★状態変数に保持
-      final pedigreeCrossResult = PedigreeCrossAnalyzer().analyze(
-        pastRaces: pastRaces,
-        trackConditionMap: trackConditionMap,
-        horseProfileMap: horseProfileMap,
-      );
+      // [削除] 総合シンクロ率と血統クロス Step2: 血統クロスの集計（PedigreeCrossAnalyzer）は結果分析の点数に使わなくなったので削除した (v.2026.10.16+26101615)
 
       // 出走馬の過去レースの馬場データを一括取得
       final Map<String, TrackConditionRecord> horsePastTrackConditions = {};
@@ -348,8 +339,9 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         pastRaces: pastRaces,
         currentHorseHistory: currentHorseHistory,
         pastTopHorseRecords: pastTopHorseRecords,
+        // [修正] 総合シンクロ率と血統クロス Step2: ローテ・血統の点数を倍率で出すため全出走馬の戦績を渡す。血統クロスの結果は渡さなくなった (v.2026.10.16+26101615)
+        pastHorseRecords: pastHorseRecords,
         horseProfileMap: horseProfileMap,
-        pedigreeCrossResult: pedigreeCrossResult,
         trackConditionTrendResult: _trackConditionTrendResult!,
         horsePastTrackConditions: horsePastTrackConditions,
         isDirt: _isDirt,
@@ -367,8 +359,9 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           pastRaces: pastRaces,
           currentHorseHistory: currentHorseHistory,
           pastTopHorseRecords: pastTopHorseRecords,
+          // [修正] 総合シンクロ率と血統クロス Step2: 1つ目の呼び出しと同じく全出走馬の戦績を渡す (v.2026.10.16+26101615)
+          pastHorseRecords: pastHorseRecords,
           horseProfileMap: horseProfileMap,
-          pedigreeCrossResult: pedigreeCrossResult,
           trackConditionTrendResult: _trackConditionTrendResult!,
           horsePastTrackConditions: horsePastTrackConditions,
           isDirt: _isDirt,
@@ -717,7 +710,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
           DataColumn(label: Text(_getShortTrackConditionLabel(_selectedTrackCondition), style: const TextStyle(color: Colors.indigo))),
         const DataColumn(label: Text('血統')),
         const DataColumn(label: Text('人気妙味')),
-        const DataColumn(label: Text('信頼度(格)')),
+        // [修正] 総合シンクロ率と血統クロス Step2: 中身（前走の路線の倍率）に合わせて列名を「信頼度(格)」から「ローテ」にした (v.2026.10.16+26101615)
+        const DataColumn(label: Text('ローテ')),
         const DataColumn(label: Text('馬体重')),
         const DataColumn(label: Text('枠順')),
       ],
@@ -939,7 +933,8 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
     Color color = Colors.black;
     if (item.rotationScore >= 90) color = Colors.red;
     else if (item.rotationScore >= 80) color = Colors.orange[800]!;
-    String raceName = item.prevRaceName;
+    // [修正] 総合シンクロ率と血統クロス Step2: 下の行は前走名ではなく前走の路線名（過去分析のローテの表と同じ表示名）。上の行は倍率の文字（rotDiagnosis） (v.2026.10.16+26101615)
+    String raceName = item.rotationRouteLabel;
     if (raceName.length > 8) raceName = '${raceName.substring(0, 7)}...';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

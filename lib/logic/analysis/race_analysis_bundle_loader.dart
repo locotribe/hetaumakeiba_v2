@@ -216,8 +216,9 @@ class RaceAnalysisBundleLoader {
       pastRaces: pastRaces,
       currentHorseHistory: currentHorseHistory,
       pastTopHorseRecords: pastTopHorseRecords,
+      // [修正] 総合シンクロ率と血統クロス Step2: ローテ・血統の点数を倍率で出すため全出走馬の戦績を渡す。血統クロスの結果は渡さなくなった（血統クロスカードには今までどおり使う） (v.2026.10.16+26101615)
+      pastHorseRecords: pastHorseRecords,
       horseProfileMap: horseProfileMap,
-      pedigreeCrossResult: pedigreeCrossResult,
       trackConditionTrendResult: trackConditionTrendResult,
       horsePastTrackConditions: horsePastTrackConditions,
       isDirt: isDirt,

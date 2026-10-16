@@ -7,13 +7,15 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 // [修正] 前走と路線の部品 Step2: 前走は共通の部品で決め、日付は共通の関数で読む（自前の日付の読み取りを削除したので、日付の書式の import は不要） (v.2026.10.16+26101606)
 import 'package:hetaumakeiba_v2/logic/previous_race.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
+// [追加] 総合シンクロ率と血統クロス Step2: ローテ・血統の点数は、過去の全出走馬を路線・父・母父ごとに数えた表の複勝率の倍率×50 にする (v.2026.10.16+26101615)
+import 'package:hetaumakeiba_v2/logic/analysis/past_race_lift.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/lift_match_score.dart';
 
 // 各ファクターをインポート
+// [削除] 総合シンクロ率と血統クロス Step2: rotation_factor・pedigree_factor は使わなくなったので削除した (v.2026.10.16+26101615)
 import '../analysis/historical_match_engine_factors/weight_factor.dart';
 import '../analysis/historical_match_engine_factors/frame_factor.dart';
 import '../analysis/historical_match_engine_factors/popularity_factor.dart';
-import '../analysis/historical_match_engine_factors/rotation_factor.dart';
-import '../analysis/historical_match_engine_factors/pedigree_factor.dart'; // ★追加
 import '../analysis/historical_match_engine_factors/track_condition_factor.dart'; // ★追加
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart'; // ★追加
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart'; // ★新規追加: TrackConditionRecord用
@@ -24,8 +26,6 @@ class HistoricalMatchEngine {
   final WeightFactor _weightFactor = WeightFactor();
   final FrameFactor _frameFactor = FrameFactor();
   final PopularityFactor _popularityFactor = PopularityFactor();
-  final RotationFactor _rotationFactor = RotationFactor();
-  final PedigreeFactor _pedigreeFactor = PedigreeFactor(); // ★追加
   final TrackConditionFactor _trackConditionFactor = TrackConditionFactor(); // ★追加
 
   Map<String, dynamic> analyze({
@@ -39,8 +39,10 @@ class HistoricalMatchEngine {
     required List<RaceResult> pastRaces,
     required Map<String, List<HorseRaceRecord>> currentHorseHistory,
     required Map<String, List<HorseRaceRecord>> pastTopHorseRecords,
+    // [追加] 総合シンクロ率と血統クロス Step2: 過去レースの全出走馬（取消・除外を除く）の戦績。ローテの表を作るのに使う (v.2026.10.16+26101615)
+    required Map<String, List<HorseRaceRecord>> pastHorseRecords,
+    // [修正] 総合シンクロ率と血統クロス Step2: 過去レースの全出走馬と今回の馬の血統。血統の表を作るのに使う（血統クロスの結果 pedigreeCrossResult は受け取らなくなった） (v.2026.10.16+26101615)
     required Map<String, HorseProfile> horseProfileMap,
-    required CrossAnalysisResult pedigreeCrossResult,
     required TrackConditionTrendResult trackConditionTrendResult,
     required Map<String, TrackConditionRecord> horsePastTrackConditions, // ★新規追加: 個別の馬の馬場データ
     required bool isDirt, // ★新規追加: 芝・ダート判定
@@ -65,16 +67,39 @@ class HistoricalMatchEngine {
       }
     });
 
-    final prevDataAnalysis = _analyzePrevRaceTrends(topHorses, pastRaces, pastTopHorseRecords);
-    final List<String> favorableRotations = (prevDataAnalysis['rotations'] as List).cast<String>();
-    final double avgPrevPop = prevDataAnalysis['avgPop'] as double;
+    // [修正] 総合シンクロ率と血統クロス Step2: 前走の傾向からは前走の平均人気だけを出す（よく来た路線は下のローテの表で決める） (v.2026.10.16+26101615)
+    final double avgPrevPop = _calculateAvgPrevPopularity(topHorses, pastTopHorseRecords);
 
+    // [追加] 総合シンクロ率と血統クロス Step2: 過去の全出走馬を前走の路線・父・母父ごとに数えた表（過去分析のローテ・血統タブと同じ作り方） (v.2026.10.16+26101615)
+    final rotationTable = buildRotationLiftTable(
+      pastRaces: pastRaces,
+      pastHorseRecords: pastHorseRecords,
+      currentHorseRecords: {
+        for (final horse in currentHorses)
+          horse.horseId: currentHorseHistory[horse.horseId] ?? const <HorseRaceRecord>[],
+      },
+      currentRaceDate: parseRaceDateForSpeedIndex(currentRaceDate),
+    );
+    final currentHorseIds = [for (final horse in currentHorses) horse.horseId];
+    final sireTable = buildPedigreeLiftTable(
+      pastRaces: pastRaces,
+      profiles: horseProfileMap,
+      currentHorseIds: currentHorseIds,
+      damSire: false,
+    );
+    final damSireTable = buildPedigreeLiftTable(
+      pastRaces: pastRaces,
+      profiles: horseProfileMap,
+      currentHorseIds: currentHorseIds,
+      damSire: true,
+    );
+
+    // [修正] 総合シンクロ率と血統クロス Step2: 上の帯の「ローテ」は、過去の出走2頭以上の路線で複勝率がいちばん高い路線。好走血統（bestSire）は画面で使っていないので出さない (v.2026.10.16+26101615)
     final summary = TrendSummary(
       medianWeight: medianWeight,
       bestZone: bestZone,
-      bestRotation: favorableRotations.isNotEmpty ? favorableRotations.first : 'なし',
+      bestRotation: bestLiftRowLabel(rotationTable),
       bestPrevPop: '${avgPrevPop.toStringAsFixed(1)}番人気以内',
-      bestSire: pedigreeCrossResult.overallSires.isNotEmpty ? pedigreeCrossResult.overallSires.first.name : 'なし', // ★追加
       avgCushion: trackConditionTrendResult.avgCushion, // ★追加
     );
 
@@ -95,11 +120,15 @@ class HistoricalMatchEngine {
       // [修正] 結果分析の枠順: 過去側（_calculateZoneWinRates）と同じく馬番÷頭数で内・中・外を決める。枠番だと12頭以上で外が出ず、大半の馬が隣のゾーンで採点されていた (v.2026.10.15+26101513)
       final frameRes = _frameFactor.analyze(horse.horseNumber, currentHorses.length, zoneWinRates, maxRate);
       final popRes = _popularityFactor.analyze(horse, history, currentRaceClass, pastRaceVolatility);
-      final rotRes = _rotationFactor.analyze(prevRecord, favorableRotations);
+      // [修正] 総合シンクロ率と血統クロス Step2: ローテは前走の路線の複勝率の倍率×50、血統は父と母父の倍率×50 を 父3:母父1 で合わせる（100点で頭打ち。前走・血統が分からない、過去の例が1頭以下は50点） (v.2026.10.16+26101615)
+      final rotRes = liftMatchScoreOf(rotationTable, horse.horseId);
 
       // ★新規追加: 血統と馬場の分析
-      final profile = horseProfileMap[horse.horseId];
-      final pedRes = _pedigreeFactor.analyze(profile: profile, crossResult: pedigreeCrossResult);
+      final pedRes = pedigreeMatchScoreOf(
+        sireTable: sireTable,
+        damSireTable: damSireTable,
+        horseId: horse.horseId,
+      );
       final tcRes = _trackConditionFactor.analyze(
         history: history,
         horsePastTrackConditions: horsePastTrackConditions,
@@ -149,10 +178,13 @@ class HistoricalMatchEngine {
         popDiagnosis: popRes.diag,
         valueReasoning: popRes.reasoning,
         rotationScore: rotRes.score,
-        prevRaceName: rotRes.prevRaceName,
-        rotDiagnosis: rotRes.diag,
+        // [修正] 総合シンクロ率と血統クロス Step2: 前走名はそのまま。ローテの診断は倍率の文字（'1.42倍'・'例なし'・'前走不明'）、路線名は表の表示名 (v.2026.10.16+26101615)
+        prevRaceName: prevRecord?.raceName ?? '-',
+        rotDiagnosis: rotRes.liftText(unknownText: '前走不明'),
+        rotationRouteLabel: rotRes.row?.label ?? '-',
         pedigreeScore: pedRes.score, // ★追加
-        pedigreeDiag: pedRes.diag,   // ★追加
+        // [修正] 総合シンクロ率と血統クロス Step2: 血統の診断は '父1.42倍・母父0.80倍' の形（血統が無ければ 'データなし'） (v.2026.10.16+26101615)
+        pedigreeDiag: pedRes.diagText,
         trackConditionScores: tcRes.scenarioScores, // ★追加
         scenarioTotalScores: scenarioTotalScores,   // ★追加
         recentHistory: history,
@@ -176,8 +208,8 @@ class HistoricalMatchEngine {
   }
 
   // --- ヘルパーメソッド群 (変更なし) ---
-  Map<String, dynamic> _analyzePrevRaceTrends(List<_HorseContext> topHorses, List<RaceResult> pastRaces, Map<String, List<HorseRaceRecord>> pastRecords) {
-    final Map<String, int> rotationCounts = {};
+  // [修正] 総合シンクロ率と血統クロス Step2: 前走の路線の数え上げ（前走名の括弧を外して数えていた）をやめ、過去の1〜3着馬の前走の平均人気だけを出す (v.2026.10.16+26101615)
+  double _calculateAvgPrevPopularity(List<_HorseContext> topHorses, Map<String, List<HorseRaceRecord>> pastRecords) {
     int totalPop = 0;
     int popCount = 0;
     for (final ctx in topHorses) {
@@ -187,14 +219,11 @@ class HistoricalMatchEngine {
       final prevRace = _getPreviousRaceRecord(records, ctx.raceDate);
 
       if (prevRace != null) {
-        String raceName = prevRace.raceName.replaceAll(RegExp(r'\(.*\)'), '').trim();
-        if (raceName.isNotEmpty) rotationCounts[raceName] = (rotationCounts[raceName] ?? 0) + 1;
         int pop = int.tryParse(prevRace.popularity) ?? 0;
         if (pop > 0) { totalPop += pop; popCount++; }
       }
     }
-    final sortedRotations = rotationCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    return {'rotations': sortedRotations.take(3).map((e) => e.key).toList(), 'avgPop': popCount > 0 ? totalPop / popCount : 0.0};
+    return popCount > 0 ? totalPop / popCount : 0.0;
   }
 
   List<_HorseContext> _extractTopHorses(List<RaceResult> races) {

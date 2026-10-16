@@ -33,6 +33,8 @@ class HistoricalMatchModel {
   final double rotationScore;
   final String prevRaceName;
   final String rotDiagnosis;
+  // [追加] 総合シンクロ率と血統クロス Step2: 前走の路線の表示名（過去分析のローテの表と同じ。'BBBS（芝1600）' の形。前走が分からなければ '-'） (v.2026.10.16+26101615)
+  final String rotationRouteLabel;
 
   // ★新規追加: 血統ファクターデータ
   final double pedigreeScore;
@@ -68,6 +70,7 @@ class HistoricalMatchModel {
     required this.rotationScore,
     required this.prevRaceName,
     required this.rotDiagnosis,
+    required this.rotationRouteLabel,
     required this.pedigreeScore, // ★追加
     required this.pedigreeDiag,  // ★追加
     required this.trackConditionScores, // ★追加
@@ -81,7 +84,7 @@ class TrendSummary {
   final String bestZone;
   final String bestRotation;
   final String bestPrevPop;
-  final String bestSire; // ★追加
+  // [削除] 総合シンクロ率と血統クロス Step2: 好走血統（bestSire）は画面で使っていないので削除した (v.2026.10.16+26101615)
   final double avgCushion; // ★追加
 
   TrendSummary({
@@ -89,7 +92,6 @@ class TrendSummary {
     required this.bestZone,
     required this.bestRotation,
     required this.bestPrevPop,
-    this.bestSire = '-', // ★追加
     this.avgCushion = 0.0, // ★追加
   });
 }
