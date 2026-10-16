@@ -1,13 +1,13 @@
 // lib/widgets/horse_stats_tabs/relative_battle_tab.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/relative_evaluation_model.dart';
-import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
-import 'package:hetaumakeiba_v2/services/jockey_analysis_service.dart';
+// [修正] 出走馬データ読み込み統一 Step3: 相対評価は読み込み係（RaceEntrantDataService）の結果を使うので、計算・騎手成績・戦績の読み込みの import を外した (v.2026.10.16+26101620)
+import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
-import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 // [追加] 調教タブ改修Step7: netkeiba の調教・評価 (v.2026.9.23+26092305)
 import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
@@ -43,50 +43,52 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
   int _sortColumnIndex = 1;
   bool _sortAscending = false;
 
+  // [追加] 出走馬データ読み込み統一 Step3: 読み込み係が結果を捨てたとき（戦績・調教の取り直し、更新ボタン）に計算し直すための購読 (v.2026.10.16+26101620)
+  StreamSubscription<String>? _entrantDataSubscription;
+
   @override
   void initState() {
     super.initState();
+    // [追加] 出走馬データ読み込み統一 Step3: このレースの結果が捨てられたら読み直す (v.2026.10.16+26101620)
+    _entrantDataSubscription =
+        RaceEntrantDataService.instance.changes.listen((raceId) {
+      if (!mounted || raceId != widget.raceData?.raceId) return;
+      setState(() => _isLoading = true);
+      _runSimulation();
+    });
     _runSimulation();
   }
 
+  // [追加] 出走馬データ読み込み統一 Step3: 購読を止める (v.2026.10.16+26101620)
+  @override
+  void dispose() {
+    _entrantDataSubscription?.cancel();
+    super.dispose();
+  }
+
+  // [修正] 出走馬データ読み込み統一 Step3: 相対評価は読み込み係が1回だけ計算した結果を使う（レース日より前の戦績・騎手成績・調教で計算し、
+  // 取消の馬は入らない。乱数はレースIDで決まるので開き直しても同じ）。並べ替えでほかの画面の結果を変えないよう、一覧は写して使う。
+  // 渡される調教（trainingDataMap など）は使わなくなった (v.2026.10.16+26101620)
   Future<void> _runSimulation() async {
     await Future.delayed(Duration.zero);
 
-    // 1. 騎手データの取得
-    final jockeyIds = widget.horses.map((h) => h.jockeyId).where((id) => id.isNotEmpty).toList();
-    final jockeyService = JockeyAnalysisService();
-    final Map<String, JockeyStats> jockeyStats = await jockeyService.analyzeAllJockeys(
-        jockeyIds,
-        raceData: widget.raceData
-    );
-
-    // 2. 馬ごとの過去戦績の取得
-    final _horseRepo = HorseRepository();
-    final Map<String, List<HorseRaceRecord>> horsePerformanceMap = {};
-
-    for (var horse in widget.horses) {
-      final List<HorseRaceRecord> records = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
-      horsePerformanceMap[horse.horseId] = records;
+    final raceData = widget.raceData;
+    if (raceData == null) {
+      if (mounted) {
+        setState(() {
+          _results = <RelativeEvaluationResult>[];
+          _jockeyStats = const <String, JockeyStats>{};
+          _isLoading = false;
+        });
+      }
+      return;
     }
-
-    // 3. 計算実行
-    final calculator = RelativeBattleCalculator();
-    final results = calculator.runSimulation(
-      widget.horses,
-      iterations: 100,
-      jockeyStats: jockeyStats,
-      horsePerformanceMap: horsePerformanceMap,
-      trainingDataMap: widget.trainingDataMap,
-      // [追加] 調教タブ改修Step7 (v.2026.9.23+26092305)
-      netkeibaTrainingMap: widget.netkeibaTrainingMap,
-      netkeibaReviews: widget.netkeibaReviews,
-      raceId: widget.raceData?.raceId,
-    );
+    final entrantData = await RaceEntrantDataService.instance.load(raceData);
 
     if (mounted) {
       setState(() {
-        _results = results;
-        _jockeyStats = jockeyStats;
+        _results = List<RelativeEvaluationResult>.of(entrantData.relativeResults);
+        _jockeyStats = entrantData.jockeyStats;
         _results!.sort((a, b) => b.winRate.compareTo(a.winRate));
         _isLoading = false;
       });

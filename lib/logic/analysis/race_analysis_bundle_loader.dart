@@ -9,7 +9,9 @@ import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
-import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
+// [修正] 出走馬データ読み込み統一 Step3: 相対評価は読み込み係の結果を使う（出馬表のキャッシュが無いときだけ、ここで計算する） (v.2026.10.16+26101620)
+import 'package:hetaumakeiba_v2/logic/race_entrant_data.dart';
+import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
 // [追加] 全出走馬の取得と読み込み Step3: 過去レースの全出走馬の取り出しと、今回の馬の過去走をレース日より前に絞る部品 (v.2026.10.16+26101610)
 import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
 import 'package:hetaumakeiba_v2/logic/past_race_horse_data.dart';
@@ -176,13 +178,23 @@ class RaceAnalysisBundleLoader {
 
     // 10. ペース別シミュレーション
     onProgress?.call('展開・ファクターを計算中...');
-    final relResults = RelativeBattleCalculator().runSimulation(
-      horses,
-      horsePerformanceMap: currentHorseHistory,
-    );
-    final Map<String, RelativeEvaluationResult> relativeBattleResults = {
-      for (final r in relResults) r.horseId: r
-    };
+    // [修正] 出走馬データ読み込み統一 Step3: 出馬表のキャッシュがあれば、読み込み係が1回だけ計算した相対評価を使う（出走馬分析の相対評価タブと同じ数字。
+    // 騎手成績・調教を含み、取消の馬は入らない）。キャッシュが無い古いレースは今までどおりここで計算する（乱数はレースIDで固定・取消の馬は入れない） (v.2026.10.16+26101620)
+    final Map<String, RelativeEvaluationResult> relativeBattleResults;
+    if (targetCache != null) {
+      final entrantData = await RaceEntrantDataService.instance
+          .load(targetCache.predictionRaceData);
+      relativeBattleResults = entrantData.relativeByHorse;
+    } else {
+      relativeBattleResults = {
+        for (final r in computeRelativeBattle(
+          raceId: raceId,
+          horses: horses,
+          recordsByHorse: currentHorseHistory,
+        ))
+          r.horseId: r
+      };
+    }
 
     // 11. HistoricalMatchEngine によるファクター別スコアの算出
     final analysisResult = _engine.analyze(

@@ -9,7 +9,9 @@ import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
-import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
+// [修正] 出走馬データ読み込み統一 Step3: 相対評価は読み込み係の結果を使う（出馬表のキャッシュが無いときだけ、ここで計算する） (v.2026.10.16+26101620)
+import 'package:hetaumakeiba_v2/logic/race_entrant_data.dart';
+import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
 // [追加] 前走と路線の部品 Step2: 前走は共通の部品で決め、日付は共通の関数で読む (v.2026.10.16+26101606)
 import 'package:hetaumakeiba_v2/logic/previous_race.dart';
 // [追加] 総合シンクロ率と血統クロス Step3: 類似馬のローテ比較で、前走を路線にまとめる部品 (v.2026.10.16+26101616)
@@ -345,12 +347,23 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       }
 
       // ペース別シミュレーションの実行 (RelativeBattleCalculator)
-      final relativeCalculator = RelativeBattleCalculator();
-      final relResults = relativeCalculator.runSimulation(
-        widget.horses,
-        horsePerformanceMap: currentHorseHistory,
-      );
-      _relativeBattleResults = {for (var r in relResults) r.horseId: r};
+      // [修正] 出走馬データ読み込み統一 Step3: 出馬表のキャッシュがあれば、読み込み係が出馬表の馬で1回だけ計算した相対評価を馬IDで引く
+      // （今までは結果から作った馬＝脚質なし・人気の欄に着順、で計算していた）。キャッシュが無い古いレースは今までどおり結果から作った馬で計算する
+      // （乱数はレースIDで固定・取消の馬は入れない） (v.2026.10.16+26101620)
+      if (targetCache != null) {
+        final entrantData = await RaceEntrantDataService.instance
+            .load(targetCache.predictionRaceData);
+        _relativeBattleResults = entrantData.relativeByHorse;
+      } else {
+        _relativeBattleResults = {
+          for (final r in computeRelativeBattle(
+            raceId: widget.raceId,
+            horses: widget.horses,
+            recordsByHorse: currentHorseHistory,
+          ))
+            r.horseId: r
+        };
+      }
 
       // 5. HistoricalMatchEngineによる分析 (引数に上記データを追加)
       final analysisResult = _engine.analyze(

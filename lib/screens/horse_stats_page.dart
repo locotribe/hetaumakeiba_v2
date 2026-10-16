@@ -38,6 +38,8 @@ import 'package:hetaumakeiba_v2/db/repositories/race_preparation_repository.dart
 import 'package:hetaumakeiba_v2/logic/horse_stats_gate.dart';
 import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
 import 'package:hetaumakeiba_v2/services/race_preparation_service.dart';
+// [追加] 出走馬データ読み込み統一 Step3: 更新ボタンで戦績を取り直したら、読み込み係の結果を捨てる (v.2026.10.16+26101620)
+import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
 
 class HorseStatsPage extends StatefulWidget {
   final String raceId;
@@ -487,6 +489,11 @@ class _HorseStatsPageState extends State<HorseStatsPage> with SingleTickerProvid
         lastUpdatedAt: DateTime.now(),
       );
       await _horseRepository.insertOrUpdateHorseStatsCache(cacheToSave);
+
+      // [追加] 出走馬データ読み込み統一 Step3: 更新ボタン（取り直し）のときは、読み込み係の結果を捨てる（相対評価タブが読み直す） (v.2026.10.16+26101620)
+      if (forceRefresh) {
+        RaceEntrantDataService.instance.invalidate(widget.raceId);
+      }
 
       if (!mounted) return;
       setState(() {
