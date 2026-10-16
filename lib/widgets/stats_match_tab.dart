@@ -12,6 +12,8 @@ import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
 // [追加] 前走と路線の部品 Step2: 前走は共通の部品で決め、日付は共通の関数で読む (v.2026.10.16+26101606)
 import 'package:hetaumakeiba_v2/logic/previous_race.dart';
+// [追加] 総合シンクロ率と血統クロス Step3: 類似馬のローテ比較で、前走を路線にまとめる部品 (v.2026.10.16+26101616)
+import 'package:hetaumakeiba_v2/logic/race_route.dart';
 // [追加] 全出走馬の取得と読み込み Step3: 過去レースの全出走馬の取り出しと、今回の馬の過去走をレース日より前に絞る部品 (v.2026.10.16+26101610)
 import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
 import 'package:hetaumakeiba_v2/logic/past_race_horse_data.dart';
@@ -148,7 +150,7 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
 
       // 3. 過去レースの全出走馬の履歴を取得
       // [修正] 全出走馬の取得と読み込み Step3: 1〜3着だけでなく全出走馬（取消・除外を除く）の履歴を読む（類似馬のローテ比較を路線に揃える A-6 で使う）。
-      // 類似馬と結果分析の計算には、今までどおり1〜3着の馬の履歴（pastTopHorseRecords）だけを渡す（数字は A-6 まで変えない） (v.2026.10.16+26101610)
+      // [修正] 総合シンクロ率と血統クロス Step3: 類似馬のローテ比較は全出走馬の前走を路線で比べる。1〜3着の馬の履歴（pastTopHorseRecords）は結果分析の前走の平均人気に使う (v.2026.10.16+26101616)
       setState(() => _statusMessage = '過去の好走パターンを分析中...');
       final Map<String, List<HorseRaceRecord>> pastHorseRecords = {};
       for (final horseId in pastRaceHorseIds(pastRaces)) {
@@ -196,27 +198,49 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
             ));
       }
 
+      // [追加] 総合シンクロ率と血統クロス Step3: 類似馬のローテ比較のため、今回の馬（今回のレース日が基準）と過去の全出走馬（その過去レースの日付が基準）の前走を先に1回だけ決め、
+      // まとめて路線（RaceRouteIndex。過去分析のローテの表と同じまとめ方）に分ける。過去の馬のキーは「レースID|馬ID」（同じ馬が別の年に出ていれば年ごとに前走が違う） (v.2026.10.16+26101616)
+      final Map<String, HorseRaceRecord?> curPrevRecords = {
+        for (final horse in widget.horses)
+          horse.horseId: _getPreviousRecord(currentHorseHistory[horse.horseId], targetRaceDateStr),
+      };
+      final Map<String, HorseRaceRecord?> pastPrevRecords = {};
+      for (final race in pastRaces) {
+        for (final pastHorse in race.horseResults) {
+          pastPrevRecords['${race.raceId}|${pastHorse.horseId}'] =
+              _getPreviousRecord(pastHorseRecords[pastHorse.horseId], race.raceDate);
+        }
+      }
+      final routeIndex = RaceRouteIndex.build([
+        for (final record in pastPrevRecords.values)
+          if (record != null) record,
+        for (final record in curPrevRecords.values)
+          if (record != null) record,
+      ]);
+      String? routeIdOf(HorseRaceRecord? record) =>
+          record == null ? null : routeIndex.routeOf(record)?.id;
+
       for (final currentHorse in widget.horses) {
         List<SimilarityData> matches = [];
         SimilarityData? bestFirstPlaceMatch;
         double bestFirstPlaceScore = -1.0;
 
-        // 今回の馬の前走レース名を取得（対象レースの日付を基準にする）
-        final curHistory = currentHorseHistory[currentHorse.horseId];
-        final curPrevRaceName = _getPreviousRaceName(curHistory, targetRaceDateStr);
+        // 今回の馬の前走の路線（対象レースの日付を基準にする）
+        // [修正] 総合シンクロ率と血統クロス Step3: 前走のレース名ではなく、前走の路線のIDで比べる (v.2026.10.16+26101616)
+        final curRouteId = routeIdOf(curPrevRecords[currentHorse.horseId]);
 
         for (final race in pastRaces) {
           for (final pastHorse in race.horseResults) {
-            // 過去馬の前走レース名を取得（その過去レースの日付を基準にする）
-            final pastHistory = pastTopHorseRecords[pastHorse.horseId];
-            final pastPrevRaceName = _getPreviousRaceName(pastHistory, race.raceDate);
+            // 過去馬の前走の路線（その過去レースの日付を基準にする）
+            // [修正] 総合シンクロ率と血統クロス Step3: 1〜3着の馬だけでなく全出走馬の前走を使う（取消・除外の馬は戦績を読んでいないので前走なし） (v.2026.10.16+26101616)
+            final pastRouteId = routeIdOf(pastPrevRecords['${race.raceId}|${pastHorse.horseId}']);
 
             // 類似度計算
             final score = _calculateSimilarity(
               currentHorse,
               pastHorse,
-              curPrevRaceName,
-              pastPrevRaceName,
+              curRouteId,
+              pastRouteId,
             );
 
             // 1着馬の中でベストスコアを探す
@@ -394,11 +418,12 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
 
   /// 類似度計算メソッド
   /// 要素: 性齢, 馬体重, 斤量, ローテーション(レース名一致)
+  // [修正] 総合シンクロ率と血統クロス Step3: ローテーションは前走の路線のIDが同じかどうか（前走名の部分一致はやめた）。どちらかの前走が分からなければ比べない (v.2026.10.16+26101616)
   double _calculateSimilarity(
       PredictionHorseDetail current,
       HorseResult past,
-      String? curPrevRaceName,
-      String? pastPrevRaceName,
+      String? curRouteId,
+      String? pastRouteId,
       ) {
     double totalScore = 0;
     int count = 0;
@@ -444,10 +469,10 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
       count++;
     }
 
-    // 4. ローテーション (レース名)
-    if (curPrevRaceName != null && pastPrevRaceName != null && curPrevRaceName.isNotEmpty && pastPrevRaceName.isNotEmpty) {
-      // 文字列の部分一致判定
-      if (curPrevRaceName.contains(pastPrevRaceName) || pastPrevRaceName.contains(curPrevRaceName)) {
+    // 4. ローテーション (前走の路線)
+    if (curRouteId != null && pastRouteId != null) {
+      // 同じ路線か
+      if (curRouteId == pastRouteId) {
         totalScore += 100;
       } else {
         totalScore += 0;
@@ -606,10 +631,11 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
 
   /// 指定された基準日より「前」の最新のレース名を取得
   // [修正] 前走と路線の部品 Step2: 共通の部品 previousStartOf で決める（取消・除外・着順が空欄の行を飛ばす）。日付は共通の parseRaceDateForSpeedIndex で読み、読めなければ従来どおり null。自前の日付の読み取りは削除 (v.2026.10.16+26101606)
-  String? _getPreviousRaceName(List<HorseRaceRecord>? history, String referenceDateStr) {
+  // [修正] 総合シンクロ率と血統クロス Step3: 路線にまとめるため、レース名ではなく前走の走そのものを返す (v.2026.10.16+26101616)
+  HorseRaceRecord? _getPreviousRecord(List<HorseRaceRecord>? history, String referenceDateStr) {
     final referenceDate = parseRaceDateForSpeedIndex(referenceDateStr);
     if (referenceDate == null) return null;
-    return previousStartOf(history, referenceDate)?.raceName;
+    return previousStartOf(history, referenceDate);
   }
 
   @override
