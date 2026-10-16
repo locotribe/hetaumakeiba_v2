@@ -30,6 +30,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/bundle_factor_selector.dart';
 import 'package:hetaumakeiba_v2/logic/past_race_horse_data.dart';
 import 'package:hetaumakeiba_v2/services/past_race_horse_fetch_service.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/past_race_horse_fetch_card.dart';
+// [追加] ローテ・血統タブのリフト化 Step3: 路線・父・母父ごとの表のカード (v.2026.10.16+26101613)
+import 'package:hetaumakeiba_v2/widgets/volatility_components/past_race_lift_table_card.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/lap_time_chart_card.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/pedigree_cross_analysis_card.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/track_condition_trend_card.dart';
@@ -96,6 +98,9 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   // ここでは取る必要がある頭数と、このレースを取得中だったか（終わったら読み直すため）だけを持つ (v.2026.10.16+26101609)
   PastRaceHorseFetchPlan? _pastRaceHorsePlan;
   bool _wasFetchingPastRaceHorses = false;
+
+  // [追加] ローテ・血統タブのリフト化 Step3: ローテ・父・母父の表。分析データを読み込んだときに1回だけ作り、該当馬の選出とタブの表の両方で使う (v.2026.10.16+26101613)
+  BundleLiftTables? _liftTables;
 
   @override
   void initState() {
@@ -177,10 +182,18 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       setState(() {
         _analysisBundle = bundle;
         _loadedBundleKey = key;
+        // [追加] ローテ・血統タブのリフト化 Step3: ローテ・父・母父の表をここで1回だけ作る (v.2026.10.16+26101613)
+        _liftTables = bundle == null
+            ? null
+            : BundleFactorSelector.liftTablesOf(bundle, _horses);
         // タブを開くたびに再計算しないよう、ここで1回だけ選出しておく
         _bundleFactors = bundle == null
             ? const {}
-            : BundleFactorSelector.selectAll(bundle: bundle, horses: _horses);
+            : BundleFactorSelector.selectAll(
+                bundle: bundle,
+                horses: _horses,
+                liftTables: _liftTables,
+              );
       });
       // [追加] 全出走馬の取得と読み込み Step2: 取る必要がある戦績・血統の頭数を数え直す（ローテタブ・血統タブの上のカードに出す） (v.2026.10.16+26101609)
       final plan = await PastRaceHorseFetchService.instance.loadPlan(_targetRaceIds);
@@ -750,6 +763,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             trendCard,
             const SizedBox(height: 16),
           ],
+          // [追加] ローテ・血統タブのリフト化 Step3: ローテタブは路線の表、血統タブは父と母父の表 (v.2026.10.16+26101613)
+          ..._buildLiftTableCards(factorKey),
           FactorCandidatesCard(result: result),
           // [追加] ローテ・血統タブのリフト化 Step2: 血統タブには、父の該当馬の下に母父の該当馬も出す (v.2026.10.16+26101612)
           if (factorKey == 'pedigree' &&
@@ -807,6 +822,47 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         onStart: _startPastRaceHorseFetch,
       ),
     );
+  }
+
+  // [追加] ローテ・血統タブのリフト化 Step3: ローテタブには路線の表、血統タブには父と母父の表を返す。表がまだ無ければ何も返さない (v.2026.10.16+26101613)
+  List<Widget> _buildLiftTableCards(String factorKey) {
+    final tables = _liftTables;
+    if (tables == null) return const [];
+    final horseNames = {for (final h in _horses) h.horseId: h.horseName};
+    switch (factorKey) {
+      case 'rotation':
+        return [
+          PastRaceLiftTableCard(
+            title: '過去の出走馬の前走（路線別）',
+            rowHeader: '路線',
+            table: tables.rotation,
+            horseNames: horseNames,
+            noPastLabel: '過去に例の無い路線から来た馬',
+          ),
+          const SizedBox(height: 16),
+        ];
+      case 'pedigree':
+        return [
+          PastRaceLiftTableCard(
+            title: '過去の出走馬の父',
+            rowHeader: '父',
+            table: tables.sire,
+            horseNames: horseNames,
+            noPastLabel: '過去に出走例の無い父の馬',
+          ),
+          const SizedBox(height: 16),
+          PastRaceLiftTableCard(
+            title: '過去の出走馬の母父',
+            rowHeader: '母父',
+            table: tables.damSire,
+            horseNames: horseNames,
+            noPastLabel: '過去に出走例の無い母父の馬',
+          ),
+          const SizedBox(height: 16),
+        ];
+      default:
+        return const [];
+    }
   }
 
   // [追加] 今回の出走馬が牝馬のみか判定する (v.2026.9.9+26090904)
