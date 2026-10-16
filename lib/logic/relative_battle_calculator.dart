@@ -15,7 +15,12 @@ import '../models/relative_evaluation_model.dart';
 
 /// 相対評価シミュレーションを実行する計算クラス
 class RelativeBattleCalculator {
-  final Random _random = Random();
+  // [修正] 出走馬データ読み込み統一 Step1: 乱数の種（seed）を渡せるようにした。同じ種・同じ入力なら、数字も短評も毎回同じになる。
+  // 種を渡さないときは今までどおり毎回違う乱数になる (v.2026.10.16+26101618)
+  final Random _random;
+
+  RelativeBattleCalculator({int? seed})
+      : _random = seed == null ? Random() : Random(seed);
 
   /// メインメソッド
   List<RelativeEvaluationResult> runSimulation(
