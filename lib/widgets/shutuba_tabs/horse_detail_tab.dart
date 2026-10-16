@@ -34,6 +34,10 @@ import 'package:hetaumakeiba_v2/widgets/horse_detail/growth_curve_section.dart';
 // [追加] 陣営の本気度指数 実施順6: 情報・血統のいちばん下の「出走の意味」 (v.2026.10.3+26100308)
 import 'package:hetaumakeiba_v2/logic/entry_meaning_snapshot.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/entry_meaning_section.dart';
+// [追加] 能力分析を馬詳細へ Step2: 「能力・条件」の上の段（Rt の要約・条件適合・推移）。今回のクラスは出馬表のグレード欄から作る (v.2026.10.17+26101702)
+import 'package:hetaumakeiba_v2/logic/analysis/race_rating_summary.dart';
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
+import 'package:hetaumakeiba_v2/widgets/horse_detail/rating_section.dart';
 
 // [追加] 馬詳細タブStep3: 出馬表の「馬詳細」タブ。馬番順・1頭1ページで、左右スワイプ／◀▶／馬番チップで馬を切り替える (v.2026.9.23+26092308)
 // [修正] 馬詳細タブStep4: チップの左端に「全」（全頭の最終追い切り一覧。PageView の1ページ目、開いたときの初期表示）を追加。
@@ -129,6 +133,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
         _allPastRecordsFuture = null;
         _recordsFutures.clear();
         _trackCondFutures.clear();
+        // [追加] 能力分析を馬詳細へ Step2: 全馬の Rt も計算し直す (v.2026.10.17+26101702)
+        _ratingSummaryFuture = null;
       });
     });
   }
@@ -236,6 +242,25 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     return {
       for (final h in _horses) h.horseId: entrantData.recordsOf(h.horseId),
     };
+  }
+
+  // [追加] 能力分析を馬詳細へ Step2: 全馬の Rt（能力分析）を1回だけ計算する。戦績は読み込み係のレース日より前の走、性別は読み込み係の血統、
+  // 今回のクラスは出馬表のグレード欄から作った区分。読み込み係が結果を捨てたら計算し直す (v.2026.10.17+26101702)
+  Future<RaceRatingSummary>? _ratingSummaryFuture;
+
+  Future<RaceRatingSummary> _ratingSummary() {
+    return _ratingSummaryFuture ??= _loadRatingSummary();
+  }
+
+  Future<RaceRatingSummary> _loadRatingSummary() async {
+    final entrantData =
+        await RaceEntrantDataService.instance.load(widget.predictionRaceData);
+    return buildRaceRatingSummary(
+      horses: _horses,
+      recordsByHorse: entrantData.recordsByHorse,
+      profilesByHorse: entrantData.profilesByHorse,
+      currentClass: raceClassGradeOfCurrentRace(widget.predictionRaceData),
+    );
   }
 
   // [追加] 好走条件 馬詳細移植 StepA-3: 好走条件を開いた馬の過去走ごとに馬場データ（クッション値/含水率）を引く（馬柱と同じ getTrackConditionForRace） (v.2026.9.25+26092507)
@@ -690,7 +715,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       _HorseDetailView.finalTraining: '最終追切',
       _HorseDetailView.interimTraining: '中間追切',
       _HorseDetailView.memo: 'メモ',
-      _HorseDetailView.condition: '好走条件',
+      // [修正] 能力分析を馬詳細へ Step2: 好走条件の上に能力（Rt）を足したので「能力・条件」にした (v.2026.10.17+26101702)
+      _HorseDetailView.condition: '能力・条件',
     };
     return Container(
       color: Colors.white,
@@ -877,7 +903,38 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
         );
         break;
       case _HorseDetailView.condition:
-        content = FutureBuilder<Map<String, List<HorseRaceRecord>>>(
+        // [修正] 能力分析を馬詳細へ Step2: 上に能力（Rt の要約・条件適合・推移）、下に今までの好走条件を並べる (v.2026.10.17+26101702)
+        content = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _sectionLabel('能力（Rt）'),
+            FutureBuilder<RaceRatingSummary>(
+              future: _ratingSummary(),
+              builder: (context, ratingSnapshot) {
+                if (ratingSnapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final summary = ratingSnapshot.data;
+                if (summary == null) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text('能力（Rt）を計算できませんでした',
+                        style: TextStyle(fontSize: 12, color: Colors.black54)),
+                  );
+                }
+                return RatingSection(
+                  horse: horse,
+                  summary: summary,
+                  raceDate: widget.predictionRaceData.raceDate,
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _sectionLabel('好走条件'),
+            FutureBuilder<Map<String, List<HorseRaceRecord>>>(
           future: _allPastRecords(),
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
@@ -921,6 +978,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
               },
             );
           },
+            ),
+          ],
         );
         break;
     }
