@@ -1,5 +1,11 @@
 // lib/widgets/shutuba_tabs/race_info_tab.dart
 
+// [追加] 能力分析を馬詳細へ Step4: レースレベル診断（読み込み係の知らせの購読・Rt のまとめ・今回のクラス・カード） (v.2026.10.17+26101704)
+import 'dart:async';
+import 'package:hetaumakeiba_v2/logic/analysis/race_rating_summary.dart';
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
+import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_level_card.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
@@ -72,6 +78,49 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
     _loadAiRaceComment();
     // [追加] レース情報ヘッダー整理 Step2: 折りたたみの開閉状態を端末から読む (v.2026.10.15+26101510)
     _loadExpandedStates();
+    // [追加] 能力分析を馬詳細へ Step4: このレースの戦績を読み込み係が捨てたら（戦績・調教の取り直しなど）、レースレベル診断を計算し直す (v.2026.10.17+26101704)
+    _entrantDataSubscription =
+        RaceEntrantDataService.instance.changes.listen((raceId) {
+      if (!mounted || raceId != widget.predictionRaceData.raceId) return;
+      setState(() => _ratingSummaryFuture = null);
+    });
+  }
+
+  // [追加] 能力分析を馬詳細へ Step4: 読み込み係の知らせの購読を止める (v.2026.10.17+26101704)
+  @override
+  void dispose() {
+    _entrantDataSubscription?.cancel();
+    super.dispose();
+  }
+
+  // [追加] 能力分析を馬詳細へ Step4: レースレベル診断。折りたたみで、初期は閉。開いたときだけ読み込み係から戦績を受け取って計算する
+  // （読み込みは騎手成績・相対評価の計算も含んで重いため、出馬表を開いただけでは読まない）。開閉は端末に保存する (v.2026.10.17+26101704)
+  static const String _levelExpandedKey = 'race_info_level_expanded';
+  StreamSubscription<String>? _entrantDataSubscription;
+  Future<RaceRatingSummary>? _ratingSummaryFuture;
+
+  bool get _levelExpanded => _expandedCache[_levelExpandedKey] ?? false;
+
+  Future<void> _toggleLevelExpanded() async {
+    final next = !_levelExpanded;
+    setState(() => _expandedCache[_levelExpandedKey] = next);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_levelExpandedKey, next);
+  }
+
+  Future<RaceRatingSummary> _ratingSummary() {
+    return _ratingSummaryFuture ??= _loadRatingSummary();
+  }
+
+  Future<RaceRatingSummary> _loadRatingSummary() async {
+    final entrantData =
+        await RaceEntrantDataService.instance.load(widget.predictionRaceData);
+    return buildRaceRatingSummary(
+      horses: widget.predictionRaceData.horses,
+      recordsByHorse: entrantData.recordsByHorse,
+      profilesByHorse: entrantData.profilesByHorse,
+      currentClass: raceClassGradeOfCurrentRace(widget.predictionRaceData),
+    );
   }
 
   // [追加] レース情報ヘッダー整理 Step2: 折りたたみの開閉（コース図・高低差／気象庁 広域天気概況／ピンポイント詳細）。キーごとに端末へ保存し、別のレースを開いても同じ状態にする。初期は開 (v.2026.10.15+26101510)
@@ -84,11 +133,17 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
 
   Future<void> _loadExpandedStates() async {
     const keys = [_courseExpandedKey, _jmaExpandedKey, _pinpointExpandedKey];
-    if (keys.every(_expandedCache.containsKey)) return;
+    // [修正] 能力分析を馬詳細へ Step4: レースレベル診断の開閉（初期は閉）も読む (v.2026.10.17+26101704)
+    if (keys.every(_expandedCache.containsKey) &&
+        _expandedCache.containsKey(_levelExpandedKey)) {
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     for (final key in keys) {
       _expandedCache[key] = prefs.getBool(key) ?? true;
     }
+    _expandedCache[_levelExpandedKey] =
+        prefs.getBool(_levelExpandedKey) ?? false;
     if (!mounted) return;
     setState(() {});
   }
@@ -320,6 +375,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           const SizedBox(height: 10),
           _buildRaceCategoryChips(),
           _buildBasePrizeRow(),
+          // [追加] 能力分析を馬詳細へ Step4: 本賞金の下にレースレベル診断（能力分析タブから移した） (v.2026.10.17+26101704)
+          _buildRaceLevelSection(),
           _buildDetailedTrackCondition(),
           _buildCourseSectionHeader(),
           if (_isExpanded(_courseExpandedKey)) ...[
@@ -481,6 +538,67 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           ),
         ],
       ),
+    );
+  }
+
+  // [追加] 能力分析を馬詳細へ Step4: 「レースレベル診断」の見出し（行全体のタップで開閉。見た目は「コース図・高低差」の見出しと同じ）と、開いているときのカード (v.2026.10.17+26101704)
+  Widget _buildRaceLevelSection() {
+    final expanded = _levelExpanded;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 12.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _toggleLevelExpanded,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.insights, size: 16, color: Colors.green.shade700),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text('レースレベル診断（能力 Rt）', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  ),
+                  Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 20, color: Colors.grey.shade700),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (expanded)
+          FutureBuilder<RaceRatingSummary>(
+            future: _ratingSummary(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(12.0),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                );
+              }
+              final level = snapshot.data?.level;
+              if (level == null) {
+                return const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text('出走馬の過去成績が無いため、診断できません', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                );
+              }
+              return RaceLevelCard(diagnosis: level);
+            },
+          ),
+      ],
     );
   }
 
