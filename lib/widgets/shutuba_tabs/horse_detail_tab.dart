@@ -38,6 +38,8 @@ import 'package:hetaumakeiba_v2/widgets/horse_detail/entry_meaning_section.dart'
 import 'package:hetaumakeiba_v2/logic/analysis/race_rating_summary.dart';
 import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/rating_section.dart';
+// [追加] 能力分析を馬詳細へ Step3: 「全」ページの「能力」チップの表 (v.2026.10.17+26101703)
+import 'package:hetaumakeiba_v2/widgets/horse_detail/rating_all_horses_view.dart';
 
 // [追加] 馬詳細タブStep3: 出馬表の「馬詳細」タブ。馬番順・1頭1ページで、左右スワイプ／◀▶／馬番チップで馬を切り替える (v.2026.9.23+26092308)
 // [修正] 馬詳細タブStep4: チップの左端に「全」（全頭の最終追い切り一覧。PageView の1ページ目、開いたときの初期表示）を追加。
@@ -49,6 +51,9 @@ enum _HorseDetailMenuAction { fetchTraining, bulkEditMemos, importMemos, exportM
 
 /// 馬のページに表示する内容（ボタンで切り替え、馬を変えても保つ）
 enum _HorseDetailView { info, finalTraining, interimTraining, memo, condition }
+
+// [追加] 能力分析を馬詳細へ Step3: 「全」ページに表示する内容（チップで切り替える。調教＝全頭の最終追い切り、能力＝全頭の Rt の表） (v.2026.10.17+26101703)
+enum _AllHorsesView { training, rating }
 
 class HorseDetailTabWidget extends StatefulWidget {
   final String raceId;
@@ -99,6 +104,9 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   /// 表示中の馬（全頭一覧のときは null）
   String? _currentHorseId;
   _HorseDetailView _view = _HorseDetailView.finalTraining;
+
+  // [追加] 能力分析を馬詳細へ Step3: 「全」ページで選んでいるチップ（初期は調教。馬を切り替えても保つ） (v.2026.10.17+26101703)
+  _AllHorsesView _allView = _AllHorsesView.training;
 
   // [追加] 基本情報整理と本賞金照合 Step1: 「情報・血統」の基本情報と血統の開閉（全馬共通・初期は開。馬を切り替えても保つ） (v.2026.10.15+26101504)
   bool _basicInfoExpanded = true;
@@ -344,6 +352,14 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     final index = _horses.indexWhere((h) => h.horseId == horse.horseId);
     if (index < 0) return;
     setState(() => _view = _HorseDetailView.finalTraining);
+    _goToPage(index + 1, animate: false);
+  }
+
+  // [追加] 能力分析を馬詳細へ Step3: 「全」ページの能力の表で行をタップしたとき: その馬のページへ移り、表示を「能力・条件」にする (v.2026.10.17+26101703)
+  void _selectHorseForRating(PredictionHorseDetail horse) {
+    final index = _horses.indexWhere((h) => h.horseId == horse.horseId);
+    if (index < 0) return;
+    setState(() => _view = _HorseDetailView.condition);
     _goToPage(index + 1, animate: false);
   }
 
@@ -989,20 +1005,71 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     );
   }
 
+  // [修正] 能力分析を馬詳細へ Step3: いちばん上にチップ（調教／能力）を付け、選んだほうを出す。調教は今までの全頭の最終追い切り一覧 (v.2026.10.17+26101703)
   Widget _buildAllHorsesPage() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
       children: [
-        AnimatedBuilder(
-          animation: _trainingViewModel,
-          builder: (context, _) => TrainingAllHorsesView(
-            horses: _horses,
-            viewModel: _trainingViewModel,
-            raceId: widget.raceId,
-            onSelectHorse: _selectHorseFromList,
+        _buildAllViewChips(),
+        if (_allView == _AllHorsesView.training)
+          AnimatedBuilder(
+            animation: _trainingViewModel,
+            builder: (context, _) => TrainingAllHorsesView(
+              horses: _horses,
+              viewModel: _trainingViewModel,
+              raceId: widget.raceId,
+              onSelectHorse: _selectHorseFromList,
+            ),
+          )
+        else
+          FutureBuilder<RaceRatingSummary>(
+            future: _ratingSummary(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final summary = snapshot.data;
+              if (summary == null) {
+                return const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('能力（Rt）を計算できませんでした',
+                      style: TextStyle(fontSize: 12, color: Colors.black54)),
+                );
+              }
+              return RatingAllHorsesView(
+                horses: _horses,
+                summary: summary,
+                onSelectHorse: _selectHorseForRating,
+              );
+            },
           ),
-        ),
       ],
+    );
+  }
+
+  // [追加] 能力分析を馬詳細へ Step3: 「全」ページのチップ（調教／能力） (v.2026.10.17+26101703)
+  Widget _buildAllViewChips() {
+    const labels = {
+      _AllHorsesView.training: '調教',
+      _AllHorsesView.rating: '能力',
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          for (final view in _AllHorsesView.values)
+            ChoiceChip(
+              label: Text(labels[view]!, style: const TextStyle(fontSize: 12)),
+              selected: _allView == view,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) => setState(() => _allView = view),
+            ),
+        ],
+      ),
     );
   }
 
