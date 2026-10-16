@@ -26,6 +26,10 @@ class RaceAnalysisBundle {
   /// 過去レースの1〜3着馬の過去成績（Key: horseId）
   final Map<String, List<HorseRaceRecord>> pastTopHorseRecords;
 
+  // [追加] 全出走馬の取得と読み込み Step3: 過去レースの全出走馬（取消・除外を除く）の過去成績（Key: horseId）。ローテタブのリフト化（A-4）で使う。
+  // 血統は horseProfileMap に全出走馬の分も入る (v.2026.10.16+26101610)
+  final Map<String, List<HorseRaceRecord>> pastHorseRecords;
+
   /// 過去レース当日の馬場状態（Key: 過去レースのraceId）
   final Map<String, TrackConditionRecord> trackConditionMap;
 
@@ -72,6 +76,8 @@ class RaceAnalysisBundle {
     required this.pastRaces,
     required this.currentHorseHistory,
     required this.pastTopHorseRecords,
+    // [追加] 全出走馬の取得と読み込み Step3 (v.2026.10.16+26101610)
+    this.pastHorseRecords = const {},
     required this.trackConditionMap,
     required this.horsePastTrackConditions,
     required this.horseProfileMap,

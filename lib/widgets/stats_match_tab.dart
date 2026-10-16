@@ -12,6 +12,9 @@ import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
 // [追加] 前走と路線の部品 Step2: 前走は共通の部品で決め、日付は共通の関数で読む (v.2026.10.16+26101606)
 import 'package:hetaumakeiba_v2/logic/previous_race.dart';
+// [追加] 全出走馬の取得と読み込み Step3: 過去レースの全出走馬の取り出しと、今回の馬の過去走をレース日より前に絞る部品 (v.2026.10.16+26101610)
+import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
+import 'package:hetaumakeiba_v2/logic/past_race_horse_data.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -143,21 +146,18 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
         return;
       }
 
-      // 3. 過去の上位馬の履歴を取得
+      // 3. 過去レースの全出走馬の履歴を取得
+      // [修正] 全出走馬の取得と読み込み Step3: 1〜3着だけでなく全出走馬（取消・除外を除く）の履歴を読む（類似馬のローテ比較を路線に揃える A-6 で使う）。
+      // 類似馬と結果分析の計算には、今までどおり1〜3着の馬の履歴（pastTopHorseRecords）だけを渡す（数字は A-6 まで変えない） (v.2026.10.16+26101610)
       setState(() => _statusMessage = '過去の好走パターンを分析中...');
-      final Map<String, List<HorseRaceRecord>> pastTopHorseRecords = {};
-
-      for (final race in pastRaces) {
-        for (final horse in race.horseResults) {
-          final rank = int.tryParse(horse.rank ?? '');
-          if (rank != null && rank <= 3 && horse.horseId.isNotEmpty) {
-            if (!pastTopHorseRecords.containsKey(horse.horseId)) {
-              final records = await _horseRepo.getHorsePerformanceRecords(horse.horseId);
-              pastTopHorseRecords[horse.horseId] = records;
-            }
-          }
-        }
+      final Map<String, List<HorseRaceRecord>> pastHorseRecords = {};
+      for (final horseId in pastRaceHorseIds(pastRaces)) {
+        pastHorseRecords[horseId] = await _horseRepo.getHorsePerformanceRecords(horseId);
       }
+      final Map<String, List<HorseRaceRecord>> pastTopHorseRecords = {
+        for (final horseId in pastTopFinisherHorseIds(pastRaces))
+          horseId: pastHorseRecords[horseId] ?? const <HorseRaceRecord>[],
+      };
 
       // 4. 類似度分析ロジックの実行
       final Map<String, List<SimilarityData>> tempSimilarityAllMatches = {};
@@ -174,13 +174,26 @@ class _StatsMatchTabState extends State<StatsMatchTab> {
 
       // 日付の取得: まず結果データ(RaceResult)から探し、無ければキャッシュから探す
       final targetResult = await _raceRepo.getRaceResult(widget.raceId);
-      if (targetResult != null) {
+      // [修正] 全出走馬の取得と読み込み Step3: レース結果の日付が空・読めないとき（実データで2件）は、出馬表の日付を使う (v.2026.10.16+26101610)
+      if (targetResult != null &&
+          parseRaceDateForSpeedIndex(targetResult.raceDate) != null) {
         targetRaceDateStr = targetResult.raceDate;
       } else if (targetCache != null) {
         targetRaceDateStr = targetCache.predictionRaceData.raceDate;
       } else {
         // それでもなければ（稀なケース）、今日の日付をフォールバックとして使う
         targetRaceDateStr = DateFormat('yyyy/MM/dd').format(DateTime.now());
+      }
+
+      // [追加] 全出走馬の取得と読み込み Step3: 今回の馬の過去走を、今回のレース日より前の走だけにする（そのレース自身の行も除く）。
+      // 結果のあるレースでは、そのレース自身の結果が人気妙味・馬場・相対評価（ペース）の計算に入っていた。類似馬の前走は前から日付で決めているので変わらない (v.2026.10.16+26101610)
+      final targetRaceDay = parseRaceDateForSpeedIndex(targetRaceDateStr);
+      if (targetRaceDay != null) {
+        currentHorseHistory.updateAll((horseId, records) => filterRecordsBeforeAsOf(
+              records,
+              asOf: targetRaceDay,
+              excludeRaceId: widget.raceId,
+            ));
       }
 
       for (final currentHorse in widget.horses) {

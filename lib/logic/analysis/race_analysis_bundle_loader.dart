@@ -10,6 +10,10 @@ import 'package:hetaumakeiba_v2/logic/analysis/historical_match_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/volatility_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 import 'package:hetaumakeiba_v2/logic/relative_battle_calculator.dart';
+// [追加] 全出走馬の取得と読み込み Step3: 過去レースの全出走馬の取り出しと、今回の馬の過去走をレース日より前に絞る部品 (v.2026.10.16+26101610)
+import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
+import 'package:hetaumakeiba_v2/logic/past_race_horse_data.dart';
+import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 import 'package:hetaumakeiba_v2/models/historical_match_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
@@ -68,21 +72,19 @@ class RaceAnalysisBundleLoader {
       return null;
     }
 
-    // 3. 過去の上位馬（1〜3着）の履歴を取得
+    // 3. 過去レースの全出走馬の履歴を取得
+    // [修正] 全出走馬の取得と読み込み Step3: 1〜3着だけでなく全出走馬（取消・除外を除く）の履歴を読む（ローテタブのリフト化 A-4 で使う）。
+    // 1〜3着の馬の履歴（pastTopHorseRecords）はそこから取り出して、今までどおり結果分析の計算に渡す (v.2026.10.16+26101610)
     onProgress?.call('過去の好走パターンを分析中...');
-    final Map<String, List<HorseRaceRecord>> pastTopHorseRecords = {};
-    for (final race in pastRaces) {
-      for (final horse in race.horseResults) {
-        final rank = int.tryParse(horse.rank);
-        if (rank != null && rank <= 3 && horse.horseId.isNotEmpty) {
-          if (!pastTopHorseRecords.containsKey(horse.horseId)) {
-            final records =
-                await _horseRepo.getHorsePerformanceRecords(horse.horseId);
-            pastTopHorseRecords[horse.horseId] = records;
-          }
-        }
-      }
+    final Map<String, List<HorseRaceRecord>> pastHorseRecords = {};
+    for (final horseId in pastRaceHorseIds(pastRaces)) {
+      pastHorseRecords[horseId] =
+          await _horseRepo.getHorsePerformanceRecords(horseId);
     }
+    final Map<String, List<HorseRaceRecord>> pastTopHorseRecords = {
+      for (final horseId in pastTopFinisherHorseIds(pastRaces))
+        horseId: pastHorseRecords[horseId] ?? const <HorseRaceRecord>[],
+    };
 
     // 4. 今回のレースの基本情報（芝ダ判定・開催日）
     bool isDirt = false;
@@ -93,12 +95,25 @@ class RaceAnalysisBundleLoader {
 
     String targetRaceDate;
     final targetResult = await _raceRepo.getRaceResult(raceId);
-    if (targetResult != null) {
+    // [修正] 全出走馬の取得と読み込み Step3: レース結果の日付が空・読めないとき（実データで2件）は、出馬表の日付を使う (v.2026.10.16+26101610)
+    if (targetResult != null &&
+        parseRaceDateForSpeedIndex(targetResult.raceDate) != null) {
       targetRaceDate = targetResult.raceDate;
     } else if (targetCache != null) {
       targetRaceDate = targetCache.predictionRaceData.raceDate;
     } else {
       targetRaceDate = DateFormat('yyyy/MM/dd').format(DateTime.now());
+    }
+
+    // [追加] 全出走馬の取得と読み込み Step3: 今回の馬の過去走を、今回のレース日より前の走だけにする（そのレース自身の行も除く）。
+    // 過去のレースを開くと、そのレース自身の結果や後の走が、人気妙味・馬場・相対評価（ペース）の計算に入っていた (v.2026.10.16+26101610)
+    final targetRaceDay = parseRaceDateForSpeedIndex(targetRaceDate);
+    if (targetRaceDay != null) {
+      currentHorseHistory.updateAll((horseId, records) => filterRecordsBeforeAsOf(
+            records,
+            asOf: targetRaceDay,
+            excludeRaceId: raceId,
+          ));
     }
 
     // 5. 波乱度とラップ・ペースの算出（どちらもDBアクセスなしの純粋計算）
@@ -139,6 +154,14 @@ class RaceAnalysisBundleLoader {
           }
         }
       }
+    }
+
+    // [追加] 全出走馬の取得と読み込み Step3: 過去レースの全出走馬の血統も読む（血統タブのリフト化 A-5 で使う）。
+    // 血統クロスカードの「不足」の数（missingPedigreeCount）は、今までどおり1〜3着の馬だけで数える (v.2026.10.16+26101610)
+    for (final horseId in pastRaceHorseIds(pastRaces)) {
+      if (horseProfileMap.containsKey(horseId)) continue;
+      final profile = await _horseRepo.getHorseProfile(horseId);
+      if (profile != null) horseProfileMap[horseId] = profile;
     }
 
     int missingPedigreeCount = 0;
@@ -208,6 +231,8 @@ class RaceAnalysisBundleLoader {
       pastRaces: pastRaces,
       currentHorseHistory: currentHorseHistory,
       pastTopHorseRecords: pastTopHorseRecords,
+      // [追加] 全出走馬の取得と読み込み Step3 (v.2026.10.16+26101610)
+      pastHorseRecords: pastHorseRecords,
       trackConditionMap: trackConditionMap,
       horsePastTrackConditions: horsePastTrackConditions,
       horseProfileMap: horseProfileMap,
