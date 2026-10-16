@@ -21,7 +21,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_result_prediction_converter.dart';
 import 'package:hetaumakeiba_v2/screens/odds_page.dart';
-import 'package:hetaumakeiba_v2/widgets/rating/rating_analysis_tab.dart';
+// [削除] 能力分析を馬詳細へ Step5: 能力分析タブを削除したので import を外した（中身は馬詳細の「能力・条件」・「全」ページの能力、レース情報タブのレースレベル診断へ移した） (v.2026.10.17+26101705)
 
 enum RaceStatus { loading, beforeHolding, resultConfirmed, resultUnconfirmed }
 
@@ -114,7 +114,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this);
+    // [修正] 能力分析を馬詳細へ Step5: 能力分析タブを削除したので 8 → 7 (v.2026.10.17+26101705)
+    _tabController = TabController(length: 7, vsync: this);
     _determineRaceStatus();
   }
 
@@ -137,7 +138,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _predictionRaceData = enrichedData;
         _raceResult = dbResult;
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(dbResult != null ? 6 : 0);
+        // [修正] 能力分析を馬詳細へ Step5: 能力分析タブを削除したので、レース結果タブの位置は 6 → 5 (v.2026.10.17+26101705)
+        _tabController.animateTo(dbResult != null ? 5 : 0);
       });
 
       try {
@@ -190,7 +192,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _raceResult = dbResult;
         _predictionRaceData = generatedPredictionData;
         _status = RaceStatus.resultConfirmed;
-        _tabController.animateTo(6);
+        // [修正] 能力分析を馬詳細へ Step5: レース結果タブの位置は 6 → 5 (v.2026.10.17+26101705)
+        _tabController.animateTo(5);
       });
 
       // ▼ [追加] フェーズ1a-2: 裏で本物の出馬表(shutuba+newspaper)をスクレイプし、成功時のみ差し替える (v.2026.7.28+26072802)
@@ -272,7 +275,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         setState(() {
           _raceResult = result;
           _status = RaceStatus.resultConfirmed;
-          _tabController.animateTo(6);
+          // [修正] 能力分析を馬詳細へ Step5: レース結果タブの位置は 6 → 5 (v.2026.10.17+26101705)
+          _tabController.animateTo(5);
         });
       }
     } catch (e) {
@@ -313,7 +317,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                         // [修正] 親タブの並び順を変更（出馬表/出走馬分析/能力分析/過去分析/オッズ分析/騎手特性/レース結果/レース詳細） (v.2026.9.5+26090506)
                         Tab(text: '出馬表'),
                         Tab(text: '出走馬分析'),
-                        Tab(text: '能力分析(Rt)'),
+                        // [削除] 能力分析を馬詳細へ Step5: 「能力分析(Rt)」のタブを外した（下の2か所と同じ順番で外す） (v.2026.10.17+26101705)
                         Tab(text: '過去分析'),
                         Tab(text: 'オッズ分析'),
                         Tab(text: '騎手特性'),
@@ -350,7 +354,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                 // [修正] 親タブの並び替えに合わせてプレースホルダの順序も変更 (v.2026.9.5+26090506)
                 ShutubaTablePage(raceId: widget.raceId),
                 const Center(child: Text('レース結果を取得中です...')), // 出走馬分析
-                const Center(child: Text('レーティング算出中...')), // 能力分析(Rt)
+                // [削除] 能力分析を馬詳細へ Step5: 能力分析(Rt)の仮表示を外した (v.2026.10.17+26101705)
                 const Center(child: CircularProgressIndicator()), // 過去分析
                 const Center(child: Text('オッズを取得中...')), // オッズ分析
                 const Center(child: Text('レース結果を取得中です...')), // 騎手特性
@@ -391,15 +395,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               )
             else
               const Center(child: Text('出馬表データを読み込んでいます...')),
-            // ★修正：引数に raceDate も渡す
-            if (_predictionRaceData != null)
-              RatingAnalysisTab(
-                horses: _predictionRaceData!.horses,
-                raceName: _predictionRaceData!.raceName,
-                raceDate: _predictionRaceData!.raceDate,
-              )
-            else
-              const Center(child: CircularProgressIndicator()),
+            // [削除] 能力分析を馬詳細へ Step5: 能力分析タブを外した (v.2026.10.17+26101705)
 
             if (_predictionRaceData != null)
               RaceStatisticsPage(
