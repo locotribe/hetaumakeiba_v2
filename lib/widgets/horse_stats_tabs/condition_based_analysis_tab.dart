@@ -79,10 +79,13 @@ class _ConditionBasedAnalysisTabState extends State<ConditionBasedAnalysisTab>
       return const Center(child: Text('分析データがありません。'));
     }
 
-    return ConditionHeatmapTable(
-      table: table,
-      allPastRecords: _allPastRecords,
-      currentRaceHorses: widget.raceData.horses,
+    // [修正] 好走条件・個別成績・相対評価の移動 Step2: ヒートマップがスクロールを持たなくなったので、ここで縦スクロールに包む (v.2026.10.17+26101707)
+    return SingleChildScrollView(
+      child: ConditionHeatmapTable(
+        table: table,
+        allPastRecords: _allPastRecords,
+        currentRaceHorses: widget.raceData.horses,
+      ),
     );
   }
 }

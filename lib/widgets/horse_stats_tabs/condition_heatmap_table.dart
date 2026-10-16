@@ -83,13 +83,12 @@ class _ConditionHeatmapTableState extends State<ConditionHeatmapTable> {
   @override
   Widget build(BuildContext context) {
     final columns = widget.table.columns;
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          _buildHeaderRow(columns),
-          for (final row in widget.table.rows) ..._buildHorseRow(columns, row),
-        ],
-      ),
+    // [修正] 好走条件・個別成績・相対評価の移動 Step2: 外側の縦スクロールを外した。スクロールは置き場所（馬詳細の「全」ページ・出走馬分析の好走条件）が持つ (v.2026.10.17+26101707)
+    return Column(
+      children: [
+        _buildHeaderRow(columns),
+        for (final row in widget.table.rows) ..._buildHorseRow(columns, row),
+      ],
     );
   }
 

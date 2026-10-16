@@ -40,6 +40,10 @@ import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/rating_section.dart';
 // [追加] 能力分析を馬詳細へ Step3: 「全」ページの「能力」チップの表 (v.2026.10.17+26101703)
 import 'package:hetaumakeiba_v2/widgets/horse_detail/rating_all_horses_view.dart';
+// [追加] 好走条件・個別成績・相対評価の移動 Step2: 「全」ページの「条件」チップ（今回条件ヒートマップ）と、「過去走を取り直す」ボタン（レース準備の戦績・レース結果のステップを流す） (v.2026.10.17+26101707)
+import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/condition_heatmap_table.dart';
+import 'package:hetaumakeiba_v2/services/race_preparation_service.dart';
+import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
 
 // [追加] 馬詳細タブStep3: 出馬表の「馬詳細」タブ。馬番順・1頭1ページで、左右スワイプ／◀▶／馬番チップで馬を切り替える (v.2026.9.23+26092308)
 // [修正] 馬詳細タブStep4: チップの左端に「全」（全頭の最終追い切り一覧。PageView の1ページ目、開いたときの初期表示）を追加。
@@ -53,7 +57,8 @@ enum _HorseDetailMenuAction { fetchTraining, bulkEditMemos, importMemos, exportM
 enum _HorseDetailView { info, finalTraining, interimTraining, memo, condition }
 
 // [追加] 能力分析を馬詳細へ Step3: 「全」ページに表示する内容（チップで切り替える。調教＝全頭の最終追い切り、能力＝全頭の Rt の表） (v.2026.10.17+26101703)
-enum _AllHorsesView { training, rating }
+// [修正] 好走条件・個別成績・相対評価の移動 Step2: 条件＝今回条件ヒートマップ（出走馬分析の好走条件から移した）を足した (v.2026.10.17+26101707)
+enum _AllHorsesView { training, rating, condition }
 
 class HorseDetailTabWidget extends StatefulWidget {
   final String raceId;
@@ -361,6 +366,50 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     if (index < 0) return;
     setState(() => _view = _HorseDetailView.condition);
     _goToPage(index + 1, animate: false);
+  }
+
+  // [追加] 好走条件・個別成績・相対評価の移動 Step2: 出走馬分析の更新ボタンの代わり。全頭の過去走（競走馬ページ）と、過去走のレース結果を取り直す。
+  // レース準備の「出走馬の戦績」「戦績内レースの結果」を強制で流す（出馬表のステップが記録されていない古いレースでも動くよう依存元は見ない）。
+  // 戦績のステップが終わると読み込み係が結果を捨てて知らせるので、馬詳細・展開シミュは自動で読み直す (v.2026.10.17+26101707)
+  Future<void> _refetchPastRecords() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('過去走の取り直し'),
+        content: const Text(
+            '全出走馬の過去走と、過去走のレース結果を取り直します。時間がかかることがあります。よろしいですか？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('取り直す'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await RacePreparationService().enqueuePreparation(
+        raceId: widget.raceId,
+        raceDate: widget.predictionRaceData.raceDate,
+        horseIds: _horses.map((h) => h.horseId).toList(),
+        raceName: widget.predictionRaceData.raceName,
+        force: true,
+        only: {PreparationStep.horsePerformance, PreparationStep.pastRaceResults},
+        ignoreDependencies: true,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('過去走の取り直しを始めました。終わると自動で読み直します。')));
+    } catch (e) {
+      debugPrint('HorseDetailTab: 過去走の取り直しの投入に失敗: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('過去走の取り直しを始められませんでした: $e')));
+    }
   }
 
   Future<void> _editMemo(PredictionHorseDetail horse) async {
@@ -1011,6 +1060,7 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
       children: [
         _buildAllViewChips(),
+        // [修正] 好走条件・個別成績・相対評価の移動 Step2: 条件（今回条件ヒートマップ）を足した (v.2026.10.17+26101707)
         if (_allView == _AllHorsesView.training)
           AnimatedBuilder(
             animation: _trainingViewModel,
@@ -1021,6 +1071,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
               onSelectHorse: _selectHorseFromList,
             ),
           )
+        else if (_allView == _AllHorsesView.condition)
+          _buildConditionHeatmap()
         else
           FutureBuilder<RaceRatingSummary>(
             future: _ratingSummary(),
@@ -1051,25 +1103,87 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   }
 
   // [追加] 能力分析を馬詳細へ Step3: 「全」ページのチップ（調教／能力） (v.2026.10.17+26101703)
+  // [修正] 好走条件・個別成績・相対評価の移動 Step2: 「条件」のチップと、右端の「過去走を取り直す」ボタンを足した (v.2026.10.17+26101707)
   Widget _buildAllViewChips() {
     const labels = {
       _AllHorsesView.training: '調教',
       _AllHorsesView.rating: '能力',
+      _AllHorsesView.condition: '条件',
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Wrap(
-        spacing: 8,
+      child: Row(
         children: [
-          for (final view in _AllHorsesView.values)
-            ChoiceChip(
-              label: Text(labels[view]!, style: const TextStyle(fontSize: 12)),
-              selected: _allView == view,
-              visualDensity: VisualDensity.compact,
-              onSelected: (_) => setState(() => _allView = view),
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              children: [
+                for (final view in _AllHorsesView.values)
+                  ChoiceChip(
+                    label: Text(labels[view]!, style: const TextStyle(fontSize: 12)),
+                    selected: _allView == view,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) => setState(() => _allView = view),
+                  ),
+              ],
             ),
+          ),
+          TextButton.icon(
+            onPressed: _refetchPastRecords,
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('過去走を取り直す', style: TextStyle(fontSize: 11)),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  // [追加] 好走条件・個別成績・相対評価の移動 Step2: 「全」ページの「条件」。出走馬分析の好走条件（今回条件ヒートマップ）を移した。
+  // 戦績は読み込み係のレース日より前の走（今までは日付で絞っていなかった）。今回のクラスは出馬表のグレード欄から判定する（Step1） (v.2026.10.17+26101707)
+  Widget _buildConditionHeatmap() {
+    return FutureBuilder<Map<String, List<HorseRaceRecord>>>(
+      future: _allPastRecords(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(24.0),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final all = snapshot.data ?? const <String, List<HorseRaceRecord>>{};
+        final table = ConditionRankingBuilder.build(
+          raceData: widget.predictionRaceData,
+          allPastRecords: all,
+        );
+        if (table.rows.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text('分析データがありません。',
+                style: TextStyle(fontSize: 12, color: Colors.black54)),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Text(
+                '今回と同じ条件での複勝率（かっこは走数）。列ごとに色が濃いほど上位。数字をタップすると、その条件のレースが出ます。',
+                style: TextStyle(fontSize: 11, color: Colors.black54),
+              ),
+            ),
+            ConditionHeatmapTable(
+              table: table,
+              allPastRecords: all,
+              currentRaceHorses: widget.predictionRaceData.horses,
+            ),
+          ],
+        );
+      },
     );
   }
 
