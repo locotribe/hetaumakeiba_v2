@@ -104,6 +104,9 @@ class RacePreparationService {
 
   /// 指定レースの準備ステップを依存順にScrapingManagerへ投入する。
   /// [force] が false のとき、既に done のステップと、依存元が done でないステップは投入しない。
+  /// [ignoreDependencies] が true のとき、依存元が done でなくても投入する（結果から開いた古いレースなど、出馬表のステップが記録されていないレースで
+  /// 過去走を取り直すため）。完了後の自動投入（カスケード）は今までどおり依存元を見る。
+  // [修正] 好走条件・個別成績・相対評価の移動 Step1: ignoreDependencies を足した（馬詳細の「過去走を取り直す」ボタンが使う） (v.2026.10.17+26101706)
   Future<void> enqueuePreparation({
     required String raceId,
     required String raceDate,
@@ -111,6 +114,7 @@ class RacePreparationService {
     required String raceName,
     bool force = false,
     Set<PreparationStep>? only,
+    bool ignoreDependencies = false,
   }) async {
     final current = await _repository.getForRace(raceId);
 
@@ -137,7 +141,8 @@ class RacePreparationService {
       final deps = stepDependencies[step] ?? const [];
       final depsSatisfied =
           deps.every((dep) => current[dep]?.state == PreparationState.done);
-      if (!depsSatisfied) {
+      // [修正] 好走条件・個別成績・相対評価の移動 Step1: ignoreDependencies のときは依存元を見ない (v.2026.10.17+26101706)
+      if (!ignoreDependencies && !depsSatisfied) {
         continue;
       }
 

@@ -3,6 +3,8 @@
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_aptitude_analyzer.dart';
+// [追加] 好走条件・個別成績・相対評価の移動 Step1: 今回のクラスを出馬表のグレード欄から判定する (v.2026.10.17+26101706)
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 
 // [追加] 好走条件 相対順位付け StepB-1: 今回レース条件で全出走馬を横断比較するヒートマップの集約ロジック (v.2026.9.25+26092508)
 
@@ -135,7 +137,10 @@ class ConditionRankingBuilder {
 
     final venue = _venueName(raceData.venue);
 
-    final classLabel = ConditionAptitudeAnalyzer.gradeClassOf(raceData.raceName);
+    // [修正] 好走条件・個別成績・相対評価の移動 Step1: 今回のレース名にはグレードが付かないので、G1 でも「条件」になっていた。
+    // 出馬表のグレード欄（結果から作ったデータはレース名）から作った区分で判定する（能力分析と同じ raceClassGradeOfCurrentRace） (v.2026.10.17+26101706)
+    final classLabel =
+        ConditionAptitudeAnalyzer.gradeLabelOf(raceClassGradeOfCurrentRace(raceData));
 
     return RaceConditions(
       surface: surface,

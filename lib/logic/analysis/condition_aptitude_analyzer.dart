@@ -142,6 +142,11 @@ class ConditionAptitudeAnalyzer {
     return _gradeLabelOf(raceClassGradeOfRecord(r));
   }
 
+  // [追加] 好走条件・個別成績・相対評価の移動 Step1: 区分（今回のレースは出馬表のグレード欄から作ったもの）から表示を作る。ヒートマップの今回のクラスに使う (v.2026.10.17+26101706)
+  static String gradeLabelOf(RaceClassGrade grade) {
+    return _gradeLabelOf(grade);
+  }
+
   static String _gradeLabelOf(RaceClassGrade grade) {
     switch (grade) {
       case RaceClassGrade.g1:

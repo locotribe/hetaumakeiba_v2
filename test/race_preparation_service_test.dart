@@ -247,6 +247,48 @@ void main() {
       expect(result, isNull);
     });
 
+    // [追加] 好走条件・個別成績・相対評価の移動 Step1: 過去走の取り直しボタン用。出馬表のステップが記録されていなくても、指定した2ステップが1回ずつ動く (v.2026.10.17+26101706)
+    test('ignoreDependencies:trueなら依存元がdoneでなくても投入され、カスケードで二重に動かない', () async {
+      final repository = RacePreparationRepository();
+      int horsePerformanceCalls = 0;
+      int pastRaceResultsCalls = 0;
+      final service = RacePreparationService(
+        repository: repository,
+        stepExecutors: _fakeExecutors(
+          horsePerformance: () {
+            horsePerformanceCalls++;
+            return 3;
+          },
+          pastRaceResults: () {
+            pastRaceResultsCalls++;
+            return 2;
+          },
+        ),
+      );
+
+      await service.enqueuePreparation(
+        raceId: 'S9',
+        raceDate: '2026年9月6日',
+        horseIds: const ['h1'],
+        raceName: 'テストステークス',
+        force: true,
+        only: {PreparationStep.horsePerformance, PreparationStep.pastRaceResults},
+        ignoreDependencies: true,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 3500));
+
+      expect(horsePerformanceCalls, 1);
+      expect(pastRaceResultsCalls, 1);
+      final performance =
+          await repository.getStep('S9', PreparationStep.horsePerformance);
+      expect(performance!.state, PreparationState.done);
+      final pastResults =
+          await repository.getStep('S9', PreparationStep.pastRaceResults);
+      expect(pastResults!.state, PreparationState.done);
+      final shutuba = await repository.getStep('S9', PreparationStep.shutuba);
+      expect(shutuba, isNull);
+    });
+
     test('raceStatisticsは投入されずskippedが記録される', () async {
       final repository = RacePreparationRepository();
       final service = RacePreparationService(

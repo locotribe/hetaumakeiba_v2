@@ -47,6 +47,8 @@ PredictionRaceData prd({
   String? direction,
   String venue = '5東京8',
   String raceName = '3歳未勝利',
+  // [追加] 好走条件・個別成績・相対評価の移動 Step1: 今回のクラスは出馬表のグレード欄から判定するので、テストでも渡せるようにした (v.2026.10.17+26101706)
+  String raceGrade = '',
 }) {
   return PredictionRaceData(
     raceId: 'r',
@@ -55,7 +57,7 @@ PredictionRaceData prd({
     venue: venue,
     raceNumber: '11',
     shutubaTableUrl: '',
-    raceGrade: '',
+    raceGrade: raceGrade,
     horses: const [],
     trackType: trackType,
     distanceValue: distanceValue,
@@ -87,6 +89,30 @@ void main() {
       expect(c.distanceLabel, 'ダ〜1300');
       expect(c.direction, '右');
       expect(c.venue, '京都');
+    });
+
+    // [追加] 好走条件・個別成績・相対評価の移動 Step1: レース名にグレードが付かなくても、出馬表のグレード欄で今回のクラスが決まる (v.2026.10.17+26101706)
+    test('今回のクラスは出馬表のグレード欄から（G1・J.G2・OP。空なら今までどおりレース名）', () {
+      expect(
+          ConditionRankingBuilder.conditionsOf(prd(
+                  trackType: '芝', distanceValue: 2000, raceName: '天皇賞（秋）', raceGrade: 'G1'))
+              .classLabel,
+          'G1');
+      expect(
+          ConditionRankingBuilder.conditionsOf(prd(
+                  trackType: '障', distanceValue: 3000, raceName: '阪神スプリングジャンプ', raceGrade: 'J.G2'))
+              .classLabel,
+          'G2');
+      expect(
+          ConditionRankingBuilder.conditionsOf(prd(
+                  trackType: 'ダ', distanceValue: 1400, raceName: '大阪スポーツ杯', raceGrade: 'OP'))
+              .classLabel,
+          'OP');
+      expect(
+          ConditionRankingBuilder.conditionsOf(prd(
+                  trackType: '芝', distanceValue: 1600, raceName: '毎日王冠(GII)'))
+              .classLabel,
+          'G2');
     });
 
     test('障は距離帯 null', () {
