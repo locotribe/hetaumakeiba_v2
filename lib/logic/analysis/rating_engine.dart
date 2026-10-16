@@ -65,17 +65,17 @@ class AdvancedRatingEngine {
   static const double wPerf   = 0.25;
   static const double wWeight = 0.05;
 
-  static double getBaseRating(String raceName) {
-    if (raceName.contains('(GI)') || raceName.contains('J.GI')) return 115.0;
-    if (raceName.contains('(GII)') || raceName.contains('J.GII')) return 112.0;
-    if (raceName.contains('(GIII)') || raceName.contains('J.GIII')) return 109.0;
-    if (raceName.contains('(OP)') || raceName.contains('L)')) return 106.0;
-    if (raceName.contains('3勝') || raceName.contains('1600万')) return 102.0;
-    if (raceName.contains('2勝') || raceName.contains('1000万')) return 97.0;
-    if (raceName.contains('1勝') || raceName.contains('500万')) return 92.0;
-    if (raceName.contains('新馬') || raceName.contains('未勝利')) return 87.0;
-    return 80.0;
+  // [削除] 能力分析を馬詳細へ Step1: 今回のレース名から基準値を出す getBaseRating を削除した。今回のレース名にはグレードの括弧が付かず、ほぼ全レースで 80 になっていた。
+  // 今回のクラスは出馬表のグレード欄から作った区分（raceClassGradeOfCurrentRace）で受け取る (v.2026.10.17+26101701)
+
+  // [追加] 能力分析を馬詳細へ Step1: そのクラスの「標準の Rt」。そのクラスを標準の斤量で走り、相対着順の2乗が平均（1/3）だったときの Rt で、
+  // 基準値×(0.70＋0.25×(0.9＋0.2÷3))＝基準値×約0.942。同じクラスで1着でも Rt は基準値に届かないので、クラス壁とレースレベル診断はこの値と比べる (v.2026.10.17+26101701)
+  static double classStandardRatingOf(RaceClassGrade grade) {
+    return baseRatingOfClass(grade) * (wClass + (0.9 + 0.2 / 3) * wPerf);
   }
+
+  // [追加] 能力分析を馬詳細へ Step1: Rt の計算に入れる着順か（数字の着順だけ。取消・除外・中止・空欄は入れない） (v.2026.10.17+26101701)
+  static bool isRatedRank(String rank) => int.tryParse(rank) != null;
 
   // [追加] クラス判定の共通化 Step3: 過去走の基準値を共通の区分から返す。Jpn交流重賞が 80（最低）、地方のOPが 106（中央のOP扱い）になっていたのを直す。基準値は getBaseRating と同じ (v.2026.10.16+26101603)
   static double baseRatingOfClass(RaceClassGrade grade) {
@@ -104,15 +104,17 @@ class AdvancedRatingEngine {
     }
   }
 
-  static HorseRatingProfile analyze(List<HorseRaceRecord> history, String horseId, String gender, String currentRaceName) {
-    if (history.isEmpty) {
+  // [修正] 能力分析を馬詳細へ Step1: 今回のクラスを区分（currentClass）で受け取る。着順が数字でない行（取消・除外・中止・空欄）は計算に入れない（今までは 10着として計算していた） (v.2026.10.17+26101701)
+  static HorseRatingProfile analyze(List<HorseRaceRecord> history, String horseId, String gender, RaceClassGrade currentClass) {
+    final ratedHistory = history.where((r) => isRatedRank(r.rank)).toList();
+    if (ratedHistory.isEmpty) {
       return HorseRatingProfile(horseId: horseId, history: [], latestTrend: 0, stabilityRank: 'C', momentumStatus: 'データなし', isClassCleared: false, bestRatingWeight: 0, bestRatingMonth: 0);
     }
 
     List<RatingAnalyzedResult> results = [];
     List<double> rollingRatings = [];
 
-    final sortedHistory = List<HorseRaceRecord>.from(history);
+    final sortedHistory = List<HorseRaceRecord>.from(ratedHistory);
     sortedHistory.sort((a, b) => a.date.compareTo(b.date));
 
     int birthYear = 2020;
@@ -172,8 +174,8 @@ class AdvancedRatingEngine {
       if (rollingRatings.length > 3) rollingRatings.removeAt(0);
     }
 
-    final currentBaseRating = getBaseRating(currentRaceName);
-    bool isClassCleared = maxRt >= currentBaseRating;
+    // [修正] 能力分析を馬詳細へ Step1: 今回のクラスの標準の Rt と比べる。今までは今回のレース名から出した基準値（ほぼ 80）と比べていて、ほぼ全馬が「突破済」になっていた (v.2026.10.17+26101701)
+    bool isClassCleared = maxRt >= classStandardRatingOf(currentClass);
     double latestTrend = results.last.trendRating;
 
     String stabilityRank = 'C';

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/rating_engine.dart';
+// [追加] 能力分析を馬詳細へ Step1: 能力分析の計算が今回のクラスを区分で受け取るようになったため。このタブは Step5 で削除する (v.2026.10.17+26101701)
+import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
 import 'views/rating_summary_view.dart';
 import 'views/rating_momentum_view.dart';
 import 'views/rating_suitability_view.dart';
@@ -55,7 +57,7 @@ class _RatingAnalysisTabState extends State<RatingAnalysisTab> {
       final profile = await _horseRepo.getHorseProfile(horse.horseId);
       final gender = profile?.gender ?? '牡';
 
-      final resultProfile = AdvancedRatingEngine.analyze(history, horse.horseId, gender, widget.raceName);
+      final resultProfile = AdvancedRatingEngine.analyze(history, horse.horseId, gender, raceClassGradeOfName(widget.raceName));
       _profilesMap[horse.horseId] = resultProfile;
 
       if (resultProfile.history.isNotEmpty) {
@@ -66,7 +68,7 @@ class _RatingAnalysisTabState extends State<RatingAnalysisTab> {
     }
 
     if (validHorseCount > 0) {
-      final double classBase = AdvancedRatingEngine.getBaseRating(widget.raceName);
+      final double classBase = AdvancedRatingEngine.baseRatingOfClass(raceClassGradeOfName(widget.raceName));
       final double avgTrend = totalTrend / validHorseCount;
 
       _predictedRaceLevel = (avgTrend * 0.7) + (classBase * 0.3);
