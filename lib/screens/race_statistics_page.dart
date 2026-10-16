@@ -751,6 +751,13 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             const SizedBox(height: 16),
           ],
           FactorCandidatesCard(result: result),
+          // [追加] ローテ・血統タブのリフト化 Step2: 血統タブには、父の該当馬の下に母父の該当馬も出す (v.2026.10.16+26101612)
+          if (factorKey == 'pedigree' &&
+              _bundleFactors[BundleFactorSelector.damSireKey] != null) ...[
+            const SizedBox(height: 16),
+            FactorCandidatesCard(
+                result: _bundleFactors[BundleFactorSelector.damSireKey]!),
+          ],
         ],
       ),
     );

@@ -4,7 +4,12 @@ import 'package:hetaumakeiba_v2/logic/analysis/factor_candidate_selector.dart';
 import 'package:hetaumakeiba_v2/models/race_analysis_bundle.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/relative_evaluation_model.dart';
+// [追加] ローテ・血統タブのリフト化 Step2: ローテ・血統を、過去の全出走馬の着度数と倍率（リフト）で選ぶための部品 (v.2026.10.16+26101612)
+import 'package:hetaumakeiba_v2/logic/analysis/past_race_lift.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 
+// [修正] ローテ・血統タブのリフト化 Step2: 血統（父・母父）とローテーションは、下の説明の擬似的な倍率ではなく、過去の全出走馬を分母にした本物の倍率（他タブと同じ）にした (v.2026.10.16+26101612)
 // [追加] RaceAnalysisBundle から、ペース・馬場・血統・ローテ・人気妙味の該当馬を選出する (v.2026.9.5+26090506)
 ///
 /// 配当〜調教師タブ（statisticsJson由来）は全出走馬を母集団にした「リフト」で評価できるが、
@@ -35,6 +40,9 @@ class BundleFactorSelector {
   static const String _disclaimer =
       'ここに出ている馬は「過去データの傾向に当てはまる」というだけで、'
       '今回の結果を予想したものではありません。あくまで判断材料のひとつとしてご覧ください。';
+
+  // [追加] ローテ・血統タブのリフト化 Step2: 血統（母父）の該当馬のキー。総合タブの「ファクター該当数」には入れない（血統の列は父） (v.2026.10.16+26101612)
+  static const String damSireKey = 'pedigreeDamSire';
 
   // ---------------------------------------------------------------------------
   // 内部ヘルパー
@@ -77,6 +85,87 @@ class BundleFactorSelector {
           : filtered.sublist(0, maxCandidates);
     }
     return byMetric;
+  }
+
+  // [追加] ローテ・血統タブのリフト化 Step2: ローテ・父・母父の表を、バンドルと今回の出走馬（取消を除く）から作る (v.2026.10.16+26101612)
+  static BundleLiftTables liftTablesOf(
+    RaceAnalysisBundle bundle,
+    List<PredictionHorseDetail> horses,
+  ) {
+    final active = horses.where((h) => !h.isScratched).toList();
+    final currentIds = [for (final h in active) h.horseId];
+    return BundleLiftTables(
+      rotation: buildRotationLiftTable(
+        pastRaces: bundle.pastRaces,
+        pastHorseRecords: bundle.pastHorseRecords,
+        currentHorseRecords: {
+          for (final h in active)
+            h.horseId: bundle.currentHorseHistory[h.horseId] ??
+                const <HorseRaceRecord>[],
+        },
+        currentRaceDate: parseRaceDateForSpeedIndex(bundle.targetRaceDate),
+      ),
+      sire: buildPedigreeLiftTable(
+        pastRaces: bundle.pastRaces,
+        profiles: bundle.horseProfileMap,
+        currentHorseIds: currentIds,
+        damSire: false,
+      ),
+      damSire: buildPedigreeLiftTable(
+        pastRaces: bundle.pastRaces,
+        profiles: bundle.horseProfileMap,
+        currentHorseIds: currentIds,
+        damSire: true,
+      ),
+    );
+  }
+
+  // [追加] ローテ・血統タブのリフト化 Step2: 要約の文（複勝率の高い区分の上位3つと、数えた・数えなかった延べ頭数） (v.2026.10.16+26101612)
+  static String _liftSummary(
+    PastRaceLiftTable table, {
+    required String header,
+    required String dataName,
+  }) {
+    if (table.countedStarts == 0) {
+      return '過去の出走馬の$dataNameがまだありません。上の「過去の全出走馬のデータ」から取得してください。';
+    }
+    final top = table.topRows();
+    final topText = top.isEmpty
+        ? '2頭以上が出走して3着以内に入った区分はありません'
+        : top.map((row) {
+            final rate = row.rateFor(FactorMetric.show);
+            final lift = table.liftsOf(row)[FactorMetric.show] ?? 0.0;
+            return '${row.label} ${rate.toStringAsFixed(0)}%(${lift.toStringAsFixed(1)}倍)';
+          }).join(' / ');
+    final missingText = table.missingStarts > 0
+        ? '・$dataNameが無い延べ${table.missingStarts}頭は数えていません'
+        : '';
+    return '$header: $topText\n過去の出走 延べ${table.countedStarts}頭で集計$missingText';
+  }
+
+  // [追加] ローテ・血統タブのリフト化 Step2: 表から今回の出走馬の該当馬を作る。過去に同じ区分の出走が無い馬は入れない (v.2026.10.16+26101612)
+  static List<FactorCandidate> _liftCandidates(
+    PastRaceLiftTable table,
+    List<PredictionHorseDetail> horses,
+    String Function(PastRaceLiftRow row, String detail) reasonOf,
+  ) {
+    final List<FactorCandidate> list = [];
+    for (final horse in horses) {
+      if (horse.isScratched) continue;
+      final row = table.rowOf(horse.horseId);
+      if (row == null || row.total <= 0) continue;
+      list.add(FactorCandidate(
+        horseId: horse.horseId,
+        horseNumber: horse.horseNumber,
+        gateNumber: horse.gateNumber,
+        horseName: horse.horseName,
+        reason: reasonOf(row, table.currentDetailOfHorse[horse.horseId] ?? ''),
+        recordText: row.recordText,
+        rates: row.rates,
+        lifts: table.liftsOf(row),
+      ));
+    }
+    return list;
   }
 
   // ---------------------------------------------------------------------------
@@ -264,77 +353,84 @@ class BundleFactorSelector {
   // 3. 血統 : 過去にこのレースで好走した父・母父を持つ馬を抽出
   // ---------------------------------------------------------------------------
 
+  // [修正] ローテ・血統タブのリフト化 Step2: 1〜3着の父・母父を数えた点数（50点=1.00倍の換算）をやめ、過去の全出走馬を父ごとに数えた着度数と倍率で選ぶ。母父は selectByDamSire (v.2026.10.16+26101612)
   static FactorCandidateResult selectByPedigree(
     RaceAnalysisBundle bundle,
-    List<PredictionHorseDetail> horses,
-  ) {
-    const label = '血統';
-    const criteria = '過去にこのレースで好走した父・母父を持つ馬を上位$maxCandidates頭まで選出';
+    List<PredictionHorseDetail> horses, {
+    PastRaceLiftTable? table,
+  }) {
+    return _selectByPedigreeLift(
+      table: table ?? liftTablesOf(bundle, horses).sire,
+      horses: horses,
+      factorKey: 'pedigree',
+      roleName: '父',
+    );
+  }
 
-    final cross = bundle.pedigreeCrossResult;
-    final topSires = cross.overallSires.take(3).map((e) => '${e.name}(${e.count}回)');
-    final summary = topSires.isEmpty
-        ? '血統データがまだ取得されていません。「総合」タブから血統情報を取得してください。'
-        : '好走が多い父: ${topSires.join(" / ")}';
+  // [追加] ローテ・血統タブのリフト化 Step2: 血統（母父）。過去の全出走馬を母父ごとに数えた着度数と倍率で選ぶ (v.2026.10.16+26101612)
+  static FactorCandidateResult selectByDamSire(
+    RaceAnalysisBundle bundle,
+    List<PredictionHorseDetail> horses, {
+    PastRaceLiftTable? table,
+  }) {
+    return _selectByPedigreeLift(
+      table: table ?? liftTablesOf(bundle, horses).damSire,
+      horses: horses,
+      factorKey: damSireKey,
+      roleName: '母父',
+    );
+  }
 
-    final List<FactorCandidate> list = [];
-    for (final match in bundle.matchResults) {
-      final horse = _findHorse(horses, match.horseId);
-      // [修正] 枠順確定前は馬番が全頭0になり、この条件で全頭が除外されていたため馬番の条件を外す (v.2026.9.9+26090905)
-      if (horse == null || horse.isScratched) continue;
+  // [追加] ローテ・血統タブのリフト化 Step2: 父・母父で共通の選出と注意書き (v.2026.10.16+26101612)
+  static FactorCandidateResult _selectByPedigreeLift({
+    required PastRaceLiftTable table,
+    required List<PredictionHorseDetail> horses,
+    required String factorKey,
+    required String roleName,
+  }) {
+    final label = '血統（$roleName）';
+    final criteria =
+        '過去の出走馬を$roleNameごとに数え、今回の出走馬と同じ$roleNameの成績が全体平均を上回る馬を上位$maxCandidates頭まで選出';
 
-      final profile = bundle.horseProfileMap[match.horseId];
-      final String pedigreeText = profile == null || profile.fatherName.isEmpty
-          ? '血統データ未取得'
-          : '父 ${profile.fatherName}'
-              '${profile.mfName.isEmpty ? "" : " / 母父 ${profile.mfName}"}';
-
-      list.add(FactorCandidate(
-        horseId: match.horseId,
-        horseNumber: horse.horseNumber,
-        gateNumber: horse.gateNumber,
-        horseName: match.horseName,
-        reason: '$pedigreeText  【${match.pedigreeDiag}】',
-        lifts: _uniformLifts(_scoreToLift(match.pedigreeScore)),
-      ));
-    }
+    final list = _liftCandidates(
+      table,
+      horses,
+      (row, detail) =>
+          '$roleName ${row.label}（今年${row.currentHorseIds.length}頭）',
+    );
 
     final notes = <String>[
       '血統は「このレースで走る血の傾向」を見るファクターです。'
-      '過去10年前後で1〜3着に入った馬の父と母父を数え、'
-      '同じ父・母父を持つ今回の出走馬に点数を付けています。'
-      '父が3回以上好走していれば大きく加点（父特注）、2回なら中程度、1回でも少し加点します。'
-      '母父の実績も上乗せされます。'
-      'コース形状や距離への適性は血統に出やすいので、'
-      '同じ血を引く馬が繰り返し好走しているレースでは有力な手がかりになります。',
-      '【他タブとの違いにご注意ください】'
-      'この点数は「1〜3着に入った馬」だけを数えて作っています。'
-      '配当〜調教師タブの倍率が「全出走馬を分母にした複勝率」なのに対し、'
-      'こちらは分母がないため、同じ数字でも意味が違います。'
-      '「$maxCandidates頭中3回好走した父」なのか「50頭中3回」なのかは区別できていません。'
-      '出走頭数の多い人気種牡馬ほど回数が増えやすい点を差し引いて見てください。'
-      '表示を「適合」としているのはこのためです。',
-      '血統データが未取得の馬は一律40点（0.80倍）になります。'
-      '「総合」タブの血統カードにある取得ボタンを押すと、'
-      '過去の1〜3着馬の血統がまとめて取得され、この画面の精度が上がります。',
-      // [追加] 枠順確定前は同点馬が多数並ぶため、順位の意味を誤読させない注記 (v.2026.9.9+26090905)
-      '枠順が確定していないレースでは、同じ点数の馬が多数並びます。'
-      'その場合の並び順は馬名の昇順で固定しているだけなので、'
-      '上位に出ていること自体に意味はありません。'
-      '枠順確定後に改めてご確認ください。',
+          'このレースの過去の出走馬全員（取消・除外を除く）を$roleNameごとに数え、'
+          'その$roleNameの勝率・連対率・複勝率を、過去の出走馬全体の率で割った倍率で比べています。'
+          '人気・枠番などのタブと同じ倍率です。'
+          'コース形状や距離への適性は血統に出やすいので、'
+          '同じ血を引く馬が繰り返し好走しているレースでは有力な手がかりになります。',
+      '出走の少ない$roleNameほど数字が大きく振れます。'
+          '右の度数（1着-2着-3着-着外）も合わせて確認してください。'
+          '出走頭数の多い種牡馬は好走の回数も増えますが、'
+          'この倍率は出走数で割っているので、回数が多いだけでは高くなりません。',
+      '血統が保存されていない過去の出走馬は数えていません。'
+          '上の「過去の全出走馬のデータ」で取得すると、集計に加わります。',
+      '同じ$roleNameの馬は同じ倍率になります。'
+          '同じ倍率の馬の並び順に意味はありません'
+          '（馬番の順。枠順が確定していないレースでは馬名の順）。',
       _disclaimer,
     ];
 
     return FactorCandidateResult(
-      factorKey: 'pedigree',
+      factorKey: factorKey,
       factorLabel: label,
-      trendSummary: summary,
+      trendSummary: _liftSummary(table, header: '好走した$roleName', dataName: '血統データ'),
       criteria: criteria,
       candidatesByMetric: _buildByMetric(list),
-      emptyMessage: list.isEmpty ? '血統を判定できる出走馬データがありません。' : null,
+      emptyMessage: list.isEmpty
+          ? (table.countedStarts == 0
+              ? '過去の出走馬の血統データがありません。'
+              : '今回の出走馬と同じ$roleNameの馬は、過去の出走馬にいません。')
+          : null,
       notes: notes,
-      isRateBased: false,
-      showMetricSelector: false,
+      baseline: table.baseline,
     );
   }
 
@@ -342,65 +438,61 @@ class BundleFactorSelector {
   // 4. ローテーション : 過去の好走馬と同じ路線から来た馬を抽出
   // ---------------------------------------------------------------------------
 
+  // [修正] ローテ・血統タブのリフト化 Step2: 1〜3着の前走だけを数えた点数（王道95・格上80・その他50・不明40）をやめ、過去の全出走馬の前走を路線ごとに数えた着度数と倍率で選ぶ (v.2026.10.16+26101612)
   static FactorCandidateResult selectByRotation(
     RaceAnalysisBundle bundle,
-    List<PredictionHorseDetail> horses,
-  ) {
+    List<PredictionHorseDetail> horses, {
+    PastRaceLiftTable? table,
+  }) {
     const label = 'ローテーション';
-    const criteria = '過去の好走馬と同じ前走レースから来た馬を上位$maxCandidates頭まで選出';
+    const criteria =
+        '過去の出走馬の前走を路線ごとに数え、今回の出走馬と同じ路線の成績が全体平均を上回る馬を上位$maxCandidates頭まで選出';
 
-    final summary = bundle.summary == null
-        ? 'ローテーションの傾向データがありません。'
-        : '王道ローテ: ${bundle.summary!.bestRotation}'
-            ' / 好走馬の前走平均人気: ${bundle.summary!.bestPrevPop}';
-
-    final List<FactorCandidate> list = [];
-    for (final match in bundle.matchResults) {
-      final horse = _findHorse(horses, match.horseId);
-      // [修正] 枠順確定前は馬番が全頭0になり、この条件で全頭が除外されていたため馬番の条件を外す (v.2026.9.9+26090905)
-      if (horse == null || horse.isScratched) continue;
-
-      list.add(FactorCandidate(
-        horseId: match.horseId,
-        horseNumber: horse.horseNumber,
-        gateNumber: horse.gateNumber,
-        horseName: match.horseName,
-        reason: '前走 ${match.prevRaceName}'
-            '${match.rotDiagnosis.isEmpty ? "" : "  【${match.rotDiagnosis}】"}',
-        lifts: _uniformLifts(_scoreToLift(match.rotationScore)),
-      ));
-    }
+    final t = table ?? liftTablesOf(bundle, horses).rotation;
+    final list = _liftCandidates(
+      t,
+      horses,
+      (row, detail) => row.key == kFirstStartLiftKey
+          ? '前走なし（今年${row.currentHorseIds.length}頭）'
+          : '前走 $detail → 路線 ${row.label}（今年${row.currentHorseIds.length}頭）',
+    );
 
     final notes = <String>[
       'ローテーションは「どのレースを使ってここに来たか」を見るファクターです。'
-      '過去にこのレースで1〜3着した馬の前走を数え、最も多かった路線を「王道」としています。'
-      '同じ路線から来た馬は95点、王道ではないがG1・G2から来た格上馬は80点、'
-      'それ以外は50点、前走が不明な馬は40点です。'
-      'ステップレースが決まっているレースでは、'
-      '王道ローテを通ってきた馬が繰り返し好走する傾向があります。'
-      '逆に「格上」だけが高い馬は、格は足りるがこのレース向きの叩き方ではない可能性があります。',
-      '【他タブとの違いにご注意ください】'
-      'この点数は「1〜3着に入った馬」の前走だけを数えています。'
-      '同じ路線から来て凡走した馬は数えていないため、'
-      '「その路線から来れば good」ではなく「好走馬にはこの路線が多かった」という意味です。'
-      // [修正] 枠順確定前は馬名順になるため、並び順の説明を実装に合わせる (v.2026.9.9+26090905)
-      'また点数が95・80・50・40の4段階しかないため、同点の馬が多く出ます。'
-      '同点の場合は馬番順（枠順が確定していないレースでは馬名の昇順）に並んでいるだけなので、'
-      '順位の上下に意味はありません。'
-      '枠順確定前は同点の馬が特に多く並ぶため、上位に出ていること自体に意味はありません。',
+          'このレースの過去の出走馬全員（取消・除外を除く）の前走を路線にまとめ、'
+          '路線ごとの勝率・連対率・複勝率を、過去の出走馬全体の率で割った倍率で比べています。'
+          '人気・枠番などのタブと同じ倍率です。'
+          'ステップレースが決まっているレースでは、同じ路線から来た馬が繰り返し好走する傾向があります。',
+      '路線は、主催・芝ダ・距離が同じで名前が同じレース'
+          '（スポンサー名の有無・途中で切れた名前・改名も同じとみなす）をまとめたものです。'
+          '1勝〜3勝クラス・新馬・未勝利はクラスと距離ごとに、'
+          '地方の重賞以外の競走は「地方」にまとめています。'
+          '表示名は一番新しい年の名前です。前走は、その年のこのレースより前に実際に走った一番新しいレースです'
+          '（取消・除外は飛ばし、中止は数えます）。',
+      '出走の少ない路線ほど数字が大きく振れます。'
+          '右の度数（1着-2着-3着-着外）も合わせて確認してください。'
+          '過去に1頭しか来ていない路線は、その馬が3着以内だったときだけ倍率が付きます。',
+      '戦績が保存されていない過去の出走馬は数えていません。'
+          '上の「過去の全出走馬のデータ」で取得すると、集計に加わります。',
+      '同じ路線から来た馬は同じ倍率になります。'
+          '同じ倍率の馬の並び順に意味はありません'
+          '（馬番の順。枠順が確定していないレースでは馬名の順）。',
       _disclaimer,
     ];
 
     return FactorCandidateResult(
       factorKey: 'rotation',
       factorLabel: label,
-      trendSummary: summary,
+      trendSummary: _liftSummary(t, header: '好走した路線', dataName: '戦績データ'),
       criteria: criteria,
       candidatesByMetric: _buildByMetric(list),
-      emptyMessage: list.isEmpty ? 'ローテーションを判定できる出走馬データがありません。' : null,
+      emptyMessage: list.isEmpty
+          ? (t.countedStarts == 0
+              ? '過去の出走馬の戦績データがありません。'
+              : '今回の出走馬と同じ路線から来た馬は、過去の出走馬にいません。')
+          : null,
       notes: notes,
-      isRateBased: false,
-      showMetricSelector: false,
+      baseline: t.baseline,
     );
   }
 
@@ -483,13 +575,31 @@ class BundleFactorSelector {
   static Map<String, FactorCandidateResult> selectAll({
     required RaceAnalysisBundle bundle,
     required List<PredictionHorseDetail> horses,
+    // [追加] ローテ・血統タブのリフト化 Step2: 画面で作った表を渡せば作り直さない。省略すればここで作る (v.2026.10.16+26101612)
+    BundleLiftTables? liftTables,
   }) {
+    final tables = liftTables ?? liftTablesOf(bundle, horses);
     return {
       'pace': selectByPace(bundle, horses),
       'trackCondition': selectByTrackCondition(bundle, horses),
-      'pedigree': selectByPedigree(bundle, horses),
-      'rotation': selectByRotation(bundle, horses),
+      'pedigree': selectByPedigree(bundle, horses, table: tables.sire),
+      // [追加] ローテ・血統タブのリフト化 Step2: 血統（母父）。総合タブの「ファクター該当数」には入れない (v.2026.10.16+26101612)
+      damSireKey: selectByDamSire(bundle, horses, table: tables.damSire),
+      'rotation': selectByRotation(bundle, horses, table: tables.rotation),
       'popularityValue': selectByPopularityValue(bundle, horses),
     };
   }
+}
+
+// [追加] ローテ・血統タブのリフト化 Step2: ローテ・父・母父の表をまとめたもの（BundleFactorSelector.liftTablesOf で作る） (v.2026.10.16+26101612)
+class BundleLiftTables {
+  final PastRaceLiftTable rotation;
+  final PastRaceLiftTable sire;
+  final PastRaceLiftTable damSire;
+
+  const BundleLiftTables({
+    required this.rotation,
+    required this.sire,
+    required this.damSire,
+  });
 }
