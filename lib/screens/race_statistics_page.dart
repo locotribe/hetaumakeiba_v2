@@ -26,7 +26,10 @@ import 'package:hetaumakeiba_v2/widgets/factor_candidates_card.dart';
 
 // [追加] 子タブ共通の分析データバンドル（フェーズ2） (v.2026.9.5+26090506)
 import 'package:hetaumakeiba_v2/logic/analysis/bundle_factor_selector.dart';
-import 'package:hetaumakeiba_v2/services/horse_profile_scraper_service.dart';
+// [修正] 全出走馬の取得と読み込み Step2: 血統だけの取得（horse_profile_scraper_service）を、過去の全出走馬の戦績・血統の取得に替えた (v.2026.10.16+26101609)
+import 'package:hetaumakeiba_v2/logic/past_race_horse_data.dart';
+import 'package:hetaumakeiba_v2/services/past_race_horse_fetch_service.dart';
+import 'package:hetaumakeiba_v2/widgets/volatility_components/past_race_horse_fetch_card.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/lap_time_chart_card.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/pedigree_cross_analysis_card.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/track_condition_trend_card.dart';
@@ -89,16 +92,27 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   // [追加] バンドル由来5ファクターの該当馬。バンドル読み込み時に1回だけ算出して保持する (v.2026.9.5+26090506)
   Map<String, FactorCandidateResult> _bundleFactors = const {};
 
-  // [追加] 血統情報の取得進捗。総合タブから血統タブへ移設 (v.2026.9.5+26090506)
-  bool _isFetchingPedigree = false;
-  int _currentPedigreeFetchCount = 0;
-  int _totalPedigreeToFetch = 0;
+  // [修正] 全出走馬の取得と読み込み Step2: 血統だけの取得の進み具合（_isFetchingPedigree など）は PastRaceHorseFetchService.instance.progress に移した。
+  // ここでは取る必要がある頭数と、このレースを取得中だったか（終わったら読み直すため）だけを持つ (v.2026.10.16+26101609)
+  PastRaceHorseFetchPlan? _pastRaceHorsePlan;
+  bool _wasFetchingPastRaceHorses = false;
 
   @override
   void initState() {
     super.initState();
+    // [追加] 全出走馬の取得と読み込み Step2: 画面を閉じても取得は続くので、開いたときに取得中かを見て、終わったら読み直す (v.2026.10.16+26101609)
+    _wasFetchingPastRaceHorses =
+        PastRaceHorseFetchService.instance.progress.value.isRunningFor(widget.raceId);
+    PastRaceHorseFetchService.instance.progress.addListener(_onPastRaceHorseFetchChanged);
     _checkAndLoadStatistics();
     _loadShutubaData();
+  }
+
+  // [追加] 全出走馬の取得と読み込み Step2: 画面を閉じても取得は止めず、進み具合を見るのだけをやめる (v.2026.10.16+26101609)
+  @override
+  void dispose() {
+    PastRaceHorseFetchService.instance.progress.removeListener(_onPastRaceHorseFetchChanged);
+    super.dispose();
   }
 
   // 出馬表データの読み込み
@@ -168,6 +182,10 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             ? const {}
             : BundleFactorSelector.selectAll(bundle: bundle, horses: _horses);
       });
+      // [追加] 全出走馬の取得と読み込み Step2: 取る必要がある戦績・血統の頭数を数え直す（ローテタブ・血統タブの上のカードに出す） (v.2026.10.16+26101609)
+      final plan = await PastRaceHorseFetchService.instance.loadPlan(_targetRaceIds);
+      if (!mounted) return;
+      setState(() => _pastRaceHorsePlan = plan);
     } catch (e) {
       debugPrint('[RaceAnalysisBundle] 読み込みに失敗しました: $e');
       if (mounted) _loadedBundleKey = key;
@@ -660,62 +678,32 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     );
   }
 
-  // [追加] 血統が未取得の過去上位馬をスクレイプする。総合タブから血統タブへ移設 (v.2026.9.5+26090506)
-  Future<void> _fetchMissingPedigreeData() async {
-    final bundle = _analysisBundle;
-    if (bundle == null || _isFetchingPedigree) return;
-
-    setState(() {
-      _isFetchingPedigree = true;
-      _currentPedigreeFetchCount = 0;
-      _totalPedigreeToFetch = 0;
-    });
-
-    try {
-      // 過去レースの1〜3着馬のうち、血統（父名）が未取得の馬を洗い出す
-      final Set<String> targetHorseIds = {};
-      for (final race in bundle.pastRaces) {
-        for (final horse in race.horseResults) {
-          final rank = int.tryParse(horse.rank) ?? 0;
-          if (rank >= 1 && rank <= 3 && horse.horseId.isNotEmpty) {
-            targetHorseIds.add(horse.horseId);
-          }
-        }
-      }
-
-      final List<String> horsesToFetch = [];
-      for (final horseId in targetHorseIds) {
-        final profile = bundle.horseProfileMap[horseId];
-        if (profile == null || profile.fatherName.isEmpty) {
-          horsesToFetch.add(horseId);
-        }
-      }
-
-      if (mounted) {
-        setState(() => _totalPedigreeToFetch = horsesToFetch.length);
-      }
-
-      for (final horseId in horsesToFetch) {
-        await HorseProfileScraperService.scrapeAndSaveProfile(horseId);
-        if (!mounted) return;
-        setState(() => _currentPedigreeFetchCount++);
-        // サーバー負荷軽減のため、1頭取得するごとに1秒待機
-        await Future.delayed(const Duration(milliseconds: 1000));
-      }
-
-      // 取得できた血統を反映するため、分析データを作り直す
-      if (!mounted) return;
-      _analysisBundle = null;
-      _loadedBundleKey = null;
-      _bundleFactors = const {};
-      await _maybeLoadAnalysisBundle();
-    } catch (e) {
-      debugPrint('血統情報の取得中にエラーが発生しました: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isFetchingPedigree = false);
-      }
+  // [修正] 全出走馬の取得と読み込み Step2: 1〜3着の血統だけを画面の中で取る処理（_fetchMissingPedigreeData）を、過去の全出走馬の戦績・血統を取る共通の取得（PastRaceHorseFetchService）に替えた。
+  // ローテタブ・血統タブの上のカードと、血統クロスカードのボタンの3か所から呼ぶ (v.2026.10.16+26101609)
+  void _startPastRaceHorseFetch() {
+    if (_targetRaceIds.isEmpty) return;
+    final started = PastRaceHorseFetchService.instance.start(
+      raceId: widget.raceId,
+      pastRaceIds: _targetRaceIds,
+    );
+    if (!started && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('別のレースの過去の出走馬を取得中です。終わってからもう一度押してください。')),
+      );
     }
+  }
+
+  // [追加] 全出走馬の取得と読み込み Step2: このレースの取得が終わったら、取れた戦績・血統を反映するため分析データを作り直す (v.2026.10.16+26101609)
+  void _onPastRaceHorseFetchChanged() {
+    final isFetching =
+        PastRaceHorseFetchService.instance.progress.value.isRunningFor(widget.raceId);
+    final finished = _wasFetchingPastRaceHorses && !isFetching;
+    _wasFetchingPastRaceHorses = isFetching;
+    if (!finished || !mounted) return;
+    _analysisBundle = null;
+    _loadedBundleKey = null;
+    _bundleFactors = const {};
+    unawaited(_maybeLoadAnalysisBundle());
   }
 
   // [追加] バンドル由来ファクター（ペース/馬場/血統/ローテ/人気妙味）のタブ本体 (v.2026.9.5+26090506)
@@ -753,6 +741,11 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // [追加] 全出走馬の取得と読み込み Step2: ローテタブ・血統タブの上に、過去の全出走馬の戦績・血統の取得カードを置く (v.2026.10.16+26101609)
+          if (factorKey == 'rotation' || factorKey == 'pedigree') ...[
+            _buildPastRaceHorseFetchCard(),
+            const SizedBox(height: 16),
+          ],
           if (trendCard != null) ...[
             trendCard,
             const SizedBox(height: 16),
@@ -775,18 +768,38 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       case 'trackCondition':
         return TrackConditionTrendCard(result: bundle.trackConditionTrendResult);
       case 'pedigree':
-        return PedigreeCrossAnalysisCard(
-          result: bundle.pedigreeCrossResult,
-          isFetching: _isFetchingPedigree,
-          currentFetchCount: _currentPedigreeFetchCount,
-          totalFetchCount: _totalPedigreeToFetch,
-          missingPedigreeCount: bundle.missingPedigreeCount,
-          totalTargetHorseCount: bundle.totalTargetHorseCount,
-          onFetchPedigree: _fetchMissingPedigreeData,
+        // [修正] 全出走馬の取得と読み込み Step2: ボタンは共通の取得を呼び、進み具合は共通の取得のものを出す。分析を隠す条件（1〜3着の血統の不足）は今のまま (v.2026.10.16+26101609)
+        return ValueListenableBuilder<PastRaceHorseFetchProgress>(
+          valueListenable: PastRaceHorseFetchService.instance.progress,
+          builder: (context, progress, _) {
+            final isFetching = progress.isRunningFor(widget.raceId);
+            return PedigreeCrossAnalysisCard(
+              result: bundle.pedigreeCrossResult,
+              isFetching: isFetching,
+              currentFetchCount: isFetching ? progress.doneHorses : 0,
+              totalFetchCount: isFetching ? progress.totalHorses : 0,
+              missingPedigreeCount: bundle.missingPedigreeCount,
+              totalTargetHorseCount: bundle.totalTargetHorseCount,
+              onFetchPedigree: _startPastRaceHorseFetch,
+            );
+          },
         );
       default:
         return null;
     }
+  }
+
+  // [追加] 全出走馬の取得と読み込み Step2: ローテタブ・血統タブの上の取得カード。進み具合が変わったらカードだけを描き直す (v.2026.10.16+26101609)
+  Widget _buildPastRaceHorseFetchCard() {
+    return ValueListenableBuilder<PastRaceHorseFetchProgress>(
+      valueListenable: PastRaceHorseFetchService.instance.progress,
+      builder: (context, progress, _) => PastRaceHorseFetchCard(
+        raceId: widget.raceId,
+        plan: _pastRaceHorsePlan,
+        progress: progress,
+        onStart: _startPastRaceHorseFetch,
+      ),
+    );
   }
 
   // [追加] 今回の出走馬が牝馬のみか判定する (v.2026.9.9+26090904)
