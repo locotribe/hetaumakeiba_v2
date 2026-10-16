@@ -141,33 +141,12 @@ class RaceAnalysisBundleLoader {
       if (profile != null) horseProfileMap[horse.horseId] = profile;
     }
 
-    // 血統タブの取得ボタン用に、過去1〜3着馬の実頭数と未取得数も数える
-    final Set<String> pedigreeTargetIds = {};
-    for (final race in pastRaces) {
-      for (final horse in race.horseResults) {
-        final rank = int.tryParse(horse.rank) ?? 0;
-        if (rank >= 1 && rank <= 3 && horse.horseId.isNotEmpty) {
-          pedigreeTargetIds.add(horse.horseId);
-          if (!horseProfileMap.containsKey(horse.horseId)) {
-            final profile = await _horseRepo.getHorseProfile(horse.horseId);
-            if (profile != null) horseProfileMap[horse.horseId] = profile;
-          }
-        }
-      }
-    }
-
     // [追加] 全出走馬の取得と読み込み Step3: 過去レースの全出走馬の血統も読む（血統タブのリフト化 A-5 で使う）。
-    // 血統クロスカードの「不足」の数（missingPedigreeCount）は、今までどおり1〜3着の馬だけで数える (v.2026.10.16+26101610)
+    // [削除] 総合シンクロ率と血統クロス Step4: 血統クロスカードの「不足」の数え上げ（過去1〜3着馬の頭数・血統が無い頭数）は使わなくなったので削除した。1〜3着の馬の血統もこの全出走馬の読み込みに入る (v.2026.10.16+26101617)
     for (final horseId in pastRaceHorseIds(pastRaces)) {
       if (horseProfileMap.containsKey(horseId)) continue;
       final profile = await _horseRepo.getHorseProfile(horseId);
       if (profile != null) horseProfileMap[horseId] = profile;
-    }
-
-    int missingPedigreeCount = 0;
-    for (final horseId in pedigreeTargetIds) {
-      final profile = horseProfileMap[horseId];
-      if (profile == null || profile.fatherName.isEmpty) missingPedigreeCount++;
     }
 
     // 8. 馬場傾向と血統クロスの分析
@@ -241,8 +220,6 @@ class RaceAnalysisBundleLoader {
       pedigreeCrossResult: pedigreeCrossResult,
       volatilityResult: volatilityResult,
       lapTimeResult: lapTimeResult,
-      totalTargetHorseCount: pedigreeTargetIds.length,
-      missingPedigreeCount: missingPedigreeCount,
       relativeBattleResults: relativeBattleResults,
       matchResults: matchResults,
       summary: summary,

@@ -790,22 +790,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       case 'trackCondition':
         return TrackConditionTrendCard(result: bundle.trackConditionTrendResult);
       case 'pedigree':
-        // [修正] 全出走馬の取得と読み込み Step2: ボタンは共通の取得を呼び、進み具合は共通の取得のものを出す。分析を隠す条件（1〜3着の血統の不足）は今のまま (v.2026.10.16+26101609)
-        return ValueListenableBuilder<PastRaceHorseFetchProgress>(
-          valueListenable: PastRaceHorseFetchService.instance.progress,
-          builder: (context, progress, _) {
-            final isFetching = progress.isRunningFor(widget.raceId);
-            return PedigreeCrossAnalysisCard(
-              result: bundle.pedigreeCrossResult,
-              isFetching: isFetching,
-              currentFetchCount: isFetching ? progress.doneHorses : 0,
-              totalFetchCount: isFetching ? progress.totalHorses : 0,
-              missingPedigreeCount: bundle.missingPedigreeCount,
-              totalTargetHorseCount: bundle.totalTargetHorseCount,
-              onFetchPedigree: _startPastRaceHorseFetch,
-            );
-          },
-        );
+        // [修正] 総合シンクロ率と血統クロス Step4: 血統クロスカードは着度数の表示だけ。取得は上の取得カードで行うので、カードの取得ボタン・進み具合と「1〜3着の血統が欠けると隠す」作りはやめた (v.2026.10.16+26101617)
+        return PedigreeCrossAnalysisCard(result: bundle.pedigreeCrossResult);
       default:
         return null;
     }

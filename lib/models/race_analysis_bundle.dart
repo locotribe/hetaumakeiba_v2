@@ -51,11 +51,7 @@ class RaceAnalysisBundle {
   // [追加] ラップタイム・ペースの分析結果（ペースタブで表示） (v.2026.9.5+26090506)
   final LapTimeAnalysisResult? lapTimeResult;
 
-  // [追加] 血統取得の進捗判定用。過去1〜3着馬の実頭数 (v.2026.9.5+26090506)
-  final int totalTargetHorseCount;
-
-  // [追加] 血統取得の進捗判定用。父名が未取得の頭数 (v.2026.9.5+26090506)
-  final int missingPedigreeCount;
+  // [削除] 総合シンクロ率と血統クロス Step4: 血統クロスカードの「不足」の数（過去1〜3着馬の頭数 totalTargetHorseCount・血統が無い頭数 missingPedigreeCount）は使わなくなったので削除した (v.2026.10.16+26101617)
 
   /// ペース別シミュレーション結果（Key: horseId）
   final Map<String, RelativeEvaluationResult> relativeBattleResults;
@@ -85,8 +81,6 @@ class RaceAnalysisBundle {
     required this.pedigreeCrossResult,
     required this.volatilityResult,
     required this.lapTimeResult,
-    required this.totalTargetHorseCount,
-    required this.missingPedigreeCount,
     required this.relativeBattleResults,
     required this.matchResults,
     required this.summary,
@@ -107,7 +101,4 @@ class RaceAnalysisBundle {
 
   /// 血統プロフィールが1件も取得できていないか（血統タブの案内表示に使用）
   bool get hasNoPedigreeData => horseProfileMap.isEmpty;
-
-  /// 血統データが1頭でも不足しているか
-  bool get hasMissingPedigree => missingPedigreeCount > 0;
 }

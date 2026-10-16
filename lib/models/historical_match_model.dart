@@ -112,30 +112,67 @@ class TrackConditionTrendResult {
   });
 }
 
-class PedigreeCount {
+// [修正] 総合シンクロ率と血統クロス Step4: 血統クロスは、過去の全出走馬（取消・除外を除く）を父ごとに数えた着度数にした。
+// 3着以内の回数（PedigreeCount）と全体傾向の父・母父の一覧（overallSires・overallBms）は削除した (v.2026.10.16+26101617)
+/// 父1頭分の着度数。
+class PedigreeRecordCount {
+  /// 父の名前
   final String name;
-  int count;
-  PedigreeCount(this.name, this.count);
+
+  /// 過去の出走（延べ頭数）
+  final int total;
+
+  /// 1着の数
+  final int win;
+
+  /// 1〜2着の数
+  final int place;
+
+  /// 1〜3着の数
+  final int show;
+
+  const PedigreeRecordCount({
+    required this.name,
+    required this.total,
+    required this.win,
+    required this.place,
+    required this.show,
+  });
+
+  /// 着度数（1着-2着-3着-着外）
+  String get recordText =>
+      '$win-${place - win}-${show - place}-${total - show}';
 }
 
 class CrossAnalysisResult {
-  final List<PedigreeCount> overallSires;
-  final List<PedigreeCount> overallBms;
+  final List<PedigreeRecordCount> highCushionSires;
+  final List<PedigreeRecordCount> standardCushionSires;
+  final List<PedigreeRecordCount> lowCushionSires;
 
-  final List<PedigreeCount> highCushionSires;
-  final List<PedigreeCount> standardCushionSires;
-  final List<PedigreeCount> lowCushionSires;
+  final List<PedigreeRecordCount> highMoistureSires;
+  final List<PedigreeRecordCount> lowMoistureSires;
 
-  final List<PedigreeCount> highMoistureSires;
-  final List<PedigreeCount> lowMoistureSires;
+  /// 数えた過去の出走（父が分かる馬。延べ頭数）
+  final int countedStarts;
+
+  /// 血統が無く数えなかった過去の出走（延べ頭数）
+  final int missingStarts;
+
+  /// クッション値が無く、クッション値別に入らなかったレースの数
+  final int racesWithoutCushion;
+
+  /// 含水率が無く、含水率別に入らなかったレースの数
+  final int racesWithoutMoisture;
 
   CrossAnalysisResult({
-    required this.overallSires,
-    required this.overallBms,
     required this.highCushionSires,
     required this.standardCushionSires,
     required this.lowCushionSires,
     required this.highMoistureSires,
     required this.lowMoistureSires,
+    required this.countedStarts,
+    required this.missingStarts,
+    required this.racesWithoutCushion,
+    required this.racesWithoutMoisture,
   });
 }
