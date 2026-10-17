@@ -20,6 +20,8 @@ import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart'; // [追�
 import 'package:hetaumakeiba_v2/db/repositories/race_statistics_repository.dart'; // [追加] AI分析データ 過去データ分離 Step3 (v.2026.10.14+26101403)
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_past_race_markdown_builder.dart'; // [追加] AI分析データ 過去データ分離 Step3 (v.2026.10.14+26101403)
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart'; // [追加] AI分析データ 過去データ馬場・読み方 (v.2026.10.14+26101406)
+import 'package:hetaumakeiba_v2/logic/past_race_horse_data.dart'; // [追加] 過去データに血統と前走 (v.2026.10.18+26101804)
+import 'package:hetaumakeiba_v2/models/horse_profile_model.dart'; // [追加] 過去データに血統と前走 (v.2026.10.18+26101804)
 
 // [追加] 馬詳細タブStep2: メモタブ（memo_tab.dart）のメモ入力ダイアログ・過去メモ・CSV入出力をここへ移した。
 // 見た目・文言・処理内容は移す前と同じ。馬詳細タブ（Step3）からも使う (v.2026.9.23+26092307)
@@ -345,6 +347,17 @@ Future<void> exportPastRaceDataAsMarkdown(
           raceId: r.raceId, raceDate: r.raceDate),
   };
 
+  // [追加] 過去データに血統と前走: 過去の出走馬（取消・除外を除く）の血統と戦績をDBから読む。取得は過去分析「ローテ・血統」タブの取得カードで行う（ここでは取らない） (v.2026.10.18+26101804)
+  final horseRepository = HorseRepository();
+  final profileByHorseId = <String, HorseProfile>{};
+  final recordsByHorseId = <String, List<HorseRaceRecord>>{};
+  for (final horseId in pastRaceHorseIds(pastResults)) {
+    final profile = await horseRepository.getHorseProfile(horseId);
+    if (profile != null) profileByHorseId[horseId] = profile;
+    recordsByHorseId[horseId] =
+        await horseRepository.getHorsePerformanceRecords(horseId);
+  }
+
   final markdown = buildPastRaceMarkdown(
     raceId: raceId,
     raceName: raceData.raceName,
@@ -353,6 +366,9 @@ Future<void> exportPastRaceDataAsMarkdown(
     exportedAt: DateTime.now(),
     // [追加] AI分析データ 過去データ馬場・読み方 (v.2026.10.14+26101406)
     trackByRaceId: trackByRaceId,
+    // [追加] 過去データに血統と前走 (v.2026.10.18+26101804)
+    profileByHorseId: profileByHorseId,
+    recordsByHorseId: recordsByHorseId,
   );
 
   final mdName = buildExportFileName(
