@@ -1,6 +1,7 @@
 // lib/logic/race_class_grade.dart
 
 // [追加] クラス判定の共通化 Step1: レース名・過去走・今回のレースからクラスの区分を返す共通の部品。各機能はこの区分を自分の数値（人気妙味の係数・Rt の基準値など）に置き換えて使う (v.2026.10.16+26101601)
+// [修正] レーティング削除: Rt（能力分析）を削除したので、今の使い手は人気妙味・好走条件・ヒートマップ・路線 (v.2026.10.18+26101803)
 
 import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/race_classification.dart';

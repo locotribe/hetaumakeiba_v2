@@ -36,12 +36,7 @@ import 'package:hetaumakeiba_v2/widgets/horse_detail/growth_curve_section.dart';
 // [追加] 陣営の本気度指数 実施順6: 情報・血統のいちばん下の「出走の意味」 (v.2026.10.3+26100308)
 import 'package:hetaumakeiba_v2/logic/entry_meaning_snapshot.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/entry_meaning_section.dart';
-// [追加] 能力分析を馬詳細へ Step2: 「能力・条件」の上の段（Rt の要約・条件適合・推移）。今回のクラスは出馬表のグレード欄から作る (v.2026.10.17+26101702)
-import 'package:hetaumakeiba_v2/logic/analysis/race_rating_summary.dart';
-import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
-import 'package:hetaumakeiba_v2/widgets/horse_detail/rating_section.dart';
-// [追加] 能力分析を馬詳細へ Step3: 「全」ページの「能力」チップの表 (v.2026.10.17+26101703)
-import 'package:hetaumakeiba_v2/widgets/horse_detail/rating_all_horses_view.dart';
+// [削除] レーティング削除: 能力（Rt）の段と「全」ページの能力の表を外したので、Rt のまとめ・今回のクラス・その表示の import を外した (v.2026.10.18+26101803)
 // [追加] 好走条件・個別成績・相対評価の移動 Step2: 「全」ページの「条件」チップ（今回条件ヒートマップ）と、「過去走を取り直す」ボタン（レース準備の戦績・レース結果のステップを流す） (v.2026.10.17+26101707)
 import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/condition_heatmap_table.dart';
 import 'package:hetaumakeiba_v2/services/race_preparation_service.dart';
@@ -61,9 +56,9 @@ enum _HorseDetailMenuAction { fetchTraining, bulkEditMemos, importMemos, exportM
 /// 馬のページに表示する内容（ボタンで切り替え、馬を変えても保つ）
 enum _HorseDetailView { info, finalTraining, interimTraining, memo, condition }
 
-// [追加] 能力分析を馬詳細へ Step3: 「全」ページに表示する内容（チップで切り替える。調教＝全頭の最終追い切り、能力＝全頭の Rt の表） (v.2026.10.17+26101703)
-// [修正] 好走条件・個別成績・相対評価の移動 Step2: 条件＝今回条件ヒートマップ（出走馬分析の好走条件から移した）を足した (v.2026.10.17+26101707)
-enum _AllHorsesView { training, rating, condition }
+/// 「全」ページに表示する内容（チップで切り替える。調教＝全頭の最終追い切り、比較（condition）＝今回条件ヒートマップ）
+// [修正] レーティング削除: 能力（全頭の Rt の表）を外した (v.2026.10.18+26101803)
+enum _AllHorsesView { training, condition }
 
 class HorseDetailTabWidget extends StatefulWidget {
   final String raceId;
@@ -156,8 +151,6 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
         _trackCondFutures.clear();
         // [追加] 好走条件の改良 Step3: 全馬の馬場データ（ヒートマップの馬場の列）も読み直す (v.2026.10.17+26101713)
         _allTrackCondsFuture = null;
-        // [追加] 能力分析を馬詳細へ Step2: 全馬の Rt も計算し直す (v.2026.10.17+26101702)
-        _ratingSummaryFuture = null;
         // [追加] 好走条件・個別成績・相対評価の移動 Step3: 通算成績と回収率も計算し直す (v.2026.10.17+26101708)
         _recordStatsFuture = null;
       });
@@ -283,24 +276,7 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     };
   }
 
-  // [追加] 能力分析を馬詳細へ Step2: 全馬の Rt（能力分析）を1回だけ計算する。戦績は読み込み係のレース日より前の走、性別は読み込み係の血統、
-  // 今回のクラスは出馬表のグレード欄から作った区分。読み込み係が結果を捨てたら計算し直す (v.2026.10.17+26101702)
-  Future<RaceRatingSummary>? _ratingSummaryFuture;
-
-  Future<RaceRatingSummary> _ratingSummary() {
-    return _ratingSummaryFuture ??= _loadRatingSummary();
-  }
-
-  Future<RaceRatingSummary> _loadRatingSummary() async {
-    final entrantData =
-        await RaceEntrantDataService.instance.load(widget.predictionRaceData);
-    return buildRaceRatingSummary(
-      horses: _horses,
-      recordsByHorse: entrantData.recordsByHorse,
-      profilesByHorse: entrantData.profilesByHorse,
-      currentClass: raceClassGradeOfCurrentRace(widget.predictionRaceData),
-    );
-  }
+  // [削除] レーティング削除: 全馬の Rt を1回だけ計算する _ratingSummary を外した (v.2026.10.18+26101803)
 
   // [追加] 好走条件・個別成績・相対評価の移動 Step3: 全馬の通算成績と回収率を1回だけ計算する。戦績は読み込み係のレース日より前の走、
   // 複勝の払戻は保存してある過去走のレース結果（通信なし）。読み込み係が結果を捨てたとき・過去走のレース結果の取得が終わったときに計算し直す (v.2026.10.17+26101708)
@@ -424,13 +400,7 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     _goToPage(index + 1, animate: false);
   }
 
-  // [追加] 能力分析を馬詳細へ Step3: 「全」ページの能力の表で行をタップしたとき: その馬のページへ移り、表示を「能力・条件」にする (v.2026.10.17+26101703)
-  void _selectHorseForRating(PredictionHorseDetail horse) {
-    final index = _horses.indexWhere((h) => h.horseId == horse.horseId);
-    if (index < 0) return;
-    setState(() => _view = _HorseDetailView.condition);
-    _goToPage(index + 1, animate: false);
-  }
+  // [削除] レーティング削除: 「全」ページの能力の表の行をタップしたときの _selectHorseForRating を外した (v.2026.10.18+26101803)
 
   // [追加] 好走条件・個別成績・相対評価の移動 Step2: 出走馬分析の更新ボタンの代わり。全頭の過去走（競走馬ページ）と、過去走のレース結果を取り直す。
   // レース準備の「出走馬の戦績」「戦績内レースの結果」を強制で流す（出馬表のステップが記録されていない古いレースでも動くよう依存元は見ない）。
@@ -844,8 +814,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       _HorseDetailView.finalTraining: '最終追切',
       _HorseDetailView.interimTraining: '中間追切',
       _HorseDetailView.memo: 'メモ',
-      // [修正] 能力分析を馬詳細へ Step2: 好走条件の上に能力（Rt）を足したので「能力・条件」にした (v.2026.10.17+26101702)
-      _HorseDetailView.condition: '能力・条件',
+      // [修正] レーティング削除: 能力（Rt）を外したので「好走条件」に戻した (v.2026.10.18+26101803)
+      _HorseDetailView.condition: '好走条件',
     };
     return Container(
       color: Colors.white,
@@ -1032,36 +1002,10 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
         );
         break;
       case _HorseDetailView.condition:
-        // [修正] 能力分析を馬詳細へ Step2: 上に能力（Rt の要約・条件適合・推移）、下に今までの好走条件を並べる (v.2026.10.17+26101702)
+        // [修正] レーティング削除: 上の能力（Rt の要約・条件適合・推移）を外し、好走条件だけにした (v.2026.10.18+26101803)
         content = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _sectionLabel('能力（Rt）'),
-            FutureBuilder<RaceRatingSummary>(
-              future: _ratingSummary(),
-              builder: (context, ratingSnapshot) {
-                if (ratingSnapshot.connectionState != ConnectionState.done) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24.0),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final summary = ratingSnapshot.data;
-                if (summary == null) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text('能力（Rt）を計算できませんでした',
-                        style: TextStyle(fontSize: 12, color: Colors.black54)),
-                  );
-                }
-                return RatingSection(
-                  horse: horse,
-                  summary: summary,
-                  raceDate: widget.predictionRaceData.raceDate,
-                );
-              },
-            ),
-            const SizedBox(height: 12),
             _sectionLabel('好走条件'),
             FutureBuilder<Map<String, List<HorseRaceRecord>>>(
           future: _allPastRecords(),
@@ -1143,49 +1087,19 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
               onSelectHorse: _selectHorseFromList,
             ),
           )
-        else if (_allView == _AllHorsesView.condition)
-          _buildConditionHeatmap()
+        // [修正] レーティング削除: 能力の表（全頭の Rt と通算成績・回収率）を外し、調教でなければ条件を出す (v.2026.10.18+26101803)
         else
-          FutureBuilder<RaceRatingSummary>(
-            future: _ratingSummary(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Padding(
-                  padding: EdgeInsets.all(24.0),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final summary = snapshot.data;
-              if (summary == null) {
-                return const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text('能力（Rt）を計算できませんでした',
-                      style: TextStyle(fontSize: 12, color: Colors.black54)),
-                );
-              }
-              // [修正] 好走条件・個別成績・相対評価の移動 Step3: 2段目の通算成績と回収率を渡す。計算が終わったら2段目が出る (v.2026.10.17+26101708)
-              return FutureBuilder<Map<String, HorseRecordStats>>(
-                future: _recordStats(),
-                builder: (context, statsSnapshot) => RatingAllHorsesView(
-                  horses: _horses,
-                  summary: summary,
-                  onSelectHorse: _selectHorseForRating,
-                  recordStats: statsSnapshot.data ?? const <String, HorseRecordStats>{},
-                ),
-              );
-            },
-          ),
+          _buildConditionHeatmap(),
       ],
     );
   }
 
-  // [追加] 能力分析を馬詳細へ Step3: 「全」ページのチップ（調教／能力） (v.2026.10.17+26101703)
-  // [修正] 好走条件・個別成績・相対評価の移動 Step2: 「条件」のチップと、右端の「過去走を取り直す」ボタンを足した (v.2026.10.17+26101707)
+  /// 「全」ページのチップ（調教／比較）と、右端の「過去走を取り直す」ボタン
+  // [修正] レーティング削除: 「能力」のチップを外し、「条件」（今回条件ヒートマップ）のチップ名を「比較」にした (v.2026.10.18+26101803)
   Widget _buildAllViewChips() {
     const labels = {
       _AllHorsesView.training: '調教',
-      _AllHorsesView.rating: '能力',
-      _AllHorsesView.condition: '条件',
+      _AllHorsesView.condition: '比較',
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
