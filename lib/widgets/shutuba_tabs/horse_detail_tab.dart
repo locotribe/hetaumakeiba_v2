@@ -44,6 +44,9 @@ import 'package:hetaumakeiba_v2/widgets/horse_detail/rating_all_horses_view.dart
 import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/condition_heatmap_table.dart';
 import 'package:hetaumakeiba_v2/services/race_preparation_service.dart';
 import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
+// [追加] 好走条件・個別成績・相対評価の移動 Step3: 通算成績と回収率（出走馬分析の個別成績から移した）。複勝の払戻は保存した過去走のレース結果から読む (v.2026.10.17+26101708)
+import 'package:hetaumakeiba_v2/logic/analysis/horse_record_stats.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 
 // [追加] 馬詳細タブStep3: 出馬表の「馬詳細」タブ。馬番順・1頭1ページで、左右スワイプ／◀▶／馬番チップで馬を切り替える (v.2026.9.23+26092308)
 // [修正] 馬詳細タブStep4: チップの左端に「全」（全頭の最終追い切り一覧。PageView の1ページ目、開いたときの初期表示）を追加。
@@ -148,9 +151,23 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
         _trackCondFutures.clear();
         // [追加] 能力分析を馬詳細へ Step2: 全馬の Rt も計算し直す (v.2026.10.17+26101702)
         _ratingSummaryFuture = null;
+        // [追加] 好走条件・個別成績・相対評価の移動 Step3: 通算成績と回収率も計算し直す (v.2026.10.17+26101708)
+        _recordStatsFuture = null;
+      });
+    });
+    // [追加] 好走条件・個別成績・相対評価の移動 Step3: 過去走のレース結果の取得が終わったら（複勝の払戻が増える）、通算成績と回収率を計算し直す (v.2026.10.17+26101708)
+    _pastRaceResultsSubscription =
+        RacePreparationService.stepCompletedStream.listen((event) {
+      if (!mounted || event.raceId != widget.raceId) return;
+      if (event.step != PreparationStep.pastRaceResults) return;
+      setState(() {
+        _recordStatsFuture = null;
       });
     });
   }
+
+  // [追加] 好走条件・個別成績・相対評価の移動 Step3: 過去走のレース結果の取得の知らせの購読 (v.2026.10.17+26101708)
+  StreamSubscription<RacePreparationStepCompleted>? _pastRaceResultsSubscription;
 
   // [追加] 出走馬データ読み込み統一 Step4: 読み込み係の知らせの購読 (v.2026.10.16+26101621)
   StreamSubscription<String>? _entrantDataSubscription;
@@ -184,6 +201,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   void dispose() {
     // [追加] 出走馬データ読み込み統一 Step4: 読み込み係の知らせの購読を止める (v.2026.10.16+26101621)
     _entrantDataSubscription?.cancel();
+    // [追加] 好走条件・個別成績・相対評価の移動 Step3 (v.2026.10.17+26101708)
+    _pastRaceResultsSubscription?.cancel();
     _trainingViewModel.dispose();
     _pageController.dispose();
     _chipScrollController.dispose();
@@ -274,6 +293,30 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       profilesByHorse: entrantData.profilesByHorse,
       currentClass: raceClassGradeOfCurrentRace(widget.predictionRaceData),
     );
+  }
+
+  // [追加] 好走条件・個別成績・相対評価の移動 Step3: 全馬の通算成績と回収率を1回だけ計算する。戦績は読み込み係のレース日より前の走、
+  // 複勝の払戻は保存してある過去走のレース結果（通信なし）。読み込み係が結果を捨てたとき・過去走のレース結果の取得が終わったときに計算し直す (v.2026.10.17+26101708)
+  final RaceRepository _raceRepo = RaceRepository();
+  Future<Map<String, HorseRecordStats>>? _recordStatsFuture;
+
+  Future<Map<String, HorseRecordStats>> _recordStats() {
+    return _recordStatsFuture ??= _loadRecordStats();
+  }
+
+  Future<Map<String, HorseRecordStats>> _loadRecordStats() async {
+    final entrantData =
+        await RaceEntrantDataService.instance.load(widget.predictionRaceData);
+    final raceIds = <String>{
+      for (final h in _horses)
+        for (final r in entrantData.recordsOf(h.horseId))
+          if (r.raceId.isNotEmpty) r.raceId,
+    };
+    final raceResults = await _raceRepo.getMultipleRaceResults(raceIds.toList());
+    return {
+      for (final h in _horses)
+        h.horseId: horseRecordStatsOf(entrantData.recordsOf(h.horseId), raceResults),
+    };
   }
 
   // [追加] 好走条件 馬詳細移植 StepA-3: 好走条件を開いた馬の過去走ごとに馬場データ（クッション値/含水率）を引く（馬柱と同じ getTrackConditionForRace） (v.2026.9.25+26092507)
@@ -1029,14 +1072,19 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
                         child: Center(child: CircularProgressIndicator()),
                       );
                     }
-                    return ConditionSection(
-                      horse: horse,
-                      allPastRecords: all,
-                      currentRaceHorses: _horses,
-                      trackConditions: tcSnapshot.data ?? const {},
-                      currentSurface:
-                          ConditionRankingBuilder.conditionsOf(widget.predictionRaceData).surface,
-                      currentTrackCondition: currentSnapshot.data,
+                    // [修正] 好走条件・個別成績・相対評価の移動 Step3: 回収率を渡す。通算成績の計算を待たずに出し、計算が終わったら回収率の行が出る (v.2026.10.17+26101708)
+                    return FutureBuilder<Map<String, HorseRecordStats>>(
+                      future: _recordStats(),
+                      builder: (context, statsSnapshot) => ConditionSection(
+                        horse: horse,
+                        allPastRecords: all,
+                        currentRaceHorses: _horses,
+                        trackConditions: tcSnapshot.data ?? const {},
+                        currentSurface:
+                            ConditionRankingBuilder.conditionsOf(widget.predictionRaceData).surface,
+                        currentTrackCondition: currentSnapshot.data,
+                        recordStats: statsSnapshot.data?[horse.horseId],
+                      ),
                     );
                   },
                 );
@@ -1091,10 +1139,15 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
                       style: TextStyle(fontSize: 12, color: Colors.black54)),
                 );
               }
-              return RatingAllHorsesView(
-                horses: _horses,
-                summary: summary,
-                onSelectHorse: _selectHorseForRating,
+              // [修正] 好走条件・個別成績・相対評価の移動 Step3: 2段目の通算成績と回収率を渡す。計算が終わったら2段目が出る (v.2026.10.17+26101708)
+              return FutureBuilder<Map<String, HorseRecordStats>>(
+                future: _recordStats(),
+                builder: (context, statsSnapshot) => RatingAllHorsesView(
+                  horses: _horses,
+                  summary: summary,
+                  onSelectHorse: _selectHorseForRating,
+                  recordStats: statsSnapshot.data ?? const <String, HorseRecordStats>{},
+                ),
               );
             },
           ),

@@ -11,6 +11,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/condition_match_engine.dart';
 // [追加] 基本情報整理と本賞金照合 Step2: 脚質の割合（脚質詳細と同じ計算） (v.2026.10.15+26101505)
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/widgets/condition_race_tile.dart';
+// [追加] 好走条件・個別成績・相対評価の移動 Step3: 総成績の下の回収率 (v.2026.10.17+26101708)
+import 'package:hetaumakeiba_v2/logic/analysis/horse_record_stats.dart';
 
 // [追加] 好走条件 馬詳細移植 StepA-2: 馬詳細タブ「好走条件」ビュー。条件カテゴリ主軸（得意条件）で1頭ぶんを縦に表示 (v.2026.9.25+26092506)
 class ConditionSection extends StatelessWidget {
@@ -23,6 +25,9 @@ class ConditionSection extends StatelessWidget {
   final String? currentSurface;
   final TrackConditionRecord? currentTrackCondition;
 
+  // [追加] 好走条件・個別成績・相対評価の移動 Step3: 回収率（出走馬分析の個別成績から移した）。読み込み前・計算できないときは null (v.2026.10.17+26101708)
+  final HorseRecordStats? recordStats;
+
   const ConditionSection({
     super.key,
     required this.horse,
@@ -31,6 +36,8 @@ class ConditionSection extends StatelessWidget {
     this.trackConditions = const {},
     this.currentSurface,
     this.currentTrackCondition,
+    // [追加] 好走条件・個別成績・相対評価の移動 Step3 (v.2026.10.17+26101708)
+    this.recordStats,
   });
 
   // 1着=赤 / 2着=青 / 3着=橙 / 着外=灰
@@ -101,6 +108,15 @@ class ConditionSection extends StatelessWidget {
                 style: const TextStyle(fontSize: 11, color: Colors.black54)),
           ],
         ),
+        // [追加] 好走条件・個別成績・相対評価の移動 Step3: 単勝・複勝の回収率（1走100円。取消・除外を除く。複勝はレース結果を保存してある走だけ） (v.2026.10.17+26101708)
+        if (recordStats != null && recordStats!.starts > 0) ...[
+          const SizedBox(height: 2),
+          Text(
+            '回収率 単勝${recordPercentLabel(recordStats!.winReturnRate)} 複勝${recordPercentLabel(recordStats!.showReturnRate)}'
+            '（${recordStats!.starts}戦。取消・除外を除く）',
+            style: const TextStyle(fontSize: 11, color: Colors.black54),
+          ),
+        ],
         const SizedBox(height: 6),
         const Text('得意条件（勝率順）',
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),

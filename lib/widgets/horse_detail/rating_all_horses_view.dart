@@ -5,6 +5,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_rating_summary.dart';
+// [追加] 好走条件・個別成績・相対評価の移動 Step3: 2段目の通算成績と回収率 (v.2026.10.17+26101708)
+import 'package:hetaumakeiba_v2/logic/analysis/horse_record_stats.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/rating_engine.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
@@ -16,11 +18,15 @@ class RatingAllHorsesView extends StatelessWidget {
   final RaceRatingSummary summary;
   final ValueChanged<PredictionHorseDetail> onSelectHorse;
 
+  // [追加] 好走条件・個別成績・相対評価の移動 Step3: 馬ごとの通算成績と回収率（馬ID→成績）。無い馬は2段目を出さない (v.2026.10.17+26101708)
+  final Map<String, HorseRecordStats> recordStats;
+
   const RatingAllHorsesView({
     super.key,
     required this.horses,
     required this.summary,
     required this.onSelectHorse,
+    this.recordStats = const {},
   });
 
   static const double _numberWidth = 26;
@@ -47,7 +53,8 @@ class RatingAllHorsesView extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.only(bottom: 6.0),
           child: Text(
-            '実力Trendの高い順。期待値Gap＝今回の人気−Trend順位（＋は人気より能力が上）。行をタップでその馬の「能力・条件」へ',
+            // [修正] 好走条件・個別成績・相対評価の移動 Step3: 2段目（通算成績と回収率）の説明を足した (v.2026.10.17+26101708)
+            '実力Trendの高い順。期待値Gap＝今回の人気−Trend順位（＋は人気より能力が上）。2段目は今回より前の通算成績（取消・除外を除く）と単勝・複勝の回収率。行をタップでその馬の「能力・条件」へ',
             style: TextStyle(fontSize: 10.5, color: Colors.black54),
           ),
         ),
@@ -88,8 +95,17 @@ class RatingAllHorsesView extends StatelessWidget {
     );
   }
 
+  // [追加] 好走条件・個別成績・相対評価の移動 Step3: 2段目の文字（例「12戦 勝率8% 複勝率33% 単回45% 複回80%」） (v.2026.10.17+26101708)
+  static String _recordLineOf(HorseRecordStats stats) {
+    if (stats.starts == 0) return '出走歴なし';
+    return '${stats.starts}戦 勝率${recordPercentLabel(stats.winRate)} 複勝率${recordPercentLabel(stats.showRate)} '
+        '単回${recordPercentLabel(stats.winReturnRate)} 複回${recordPercentLabel(stats.showReturnRate)}';
+  }
+
   Widget _buildRow(PredictionHorseDetail horse) {
     final profile = summary.profileOf(horse.horseId);
+    // [追加] 好走条件・個別成績・相対評価の移動 Step3 (v.2026.10.17+26101708)
+    final stats = recordStats[horse.horseId];
     final history = profile?.history ?? const <RatingAnalyzedResult>[];
     final hasGate = horse.gateNumber > 0;
     final gap = summary.gapOf(horse);
@@ -171,54 +187,70 @@ class RatingAllHorsesView extends StatelessWidget {
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
           ),
-          child: Row(
+          // [修正] 好走条件・個別成績・相対評価の移動 Step3: 2段目に通算成績と回収率（出走馬分析の個別成績から移した）を出す。今までの1段目は字下げしただけで中身は同じ (v.2026.10.17+26101708)
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: _numberWidth,
-                child: Center(
-                  child: Container(
-                    width: 22,
-                    height: 22,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: hasGate
-                          ? horse.gateNumber.gateBackgroundColor
-                          : Colors.grey.shade400,
-                      border: Border.all(color: Colors.grey.shade400),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      horse.horseNumber > 0 ? '${horse.horseNumber}' : '-',
-                      style: TextStyle(
-                        color: hasGate
-                            ? horse.gateNumber.gateTextColor
-                            : Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+              Row(
+                children: [
+                  SizedBox(
+                    width: _numberWidth,
+                    child: Center(
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: hasGate
+                              ? horse.gateNumber.gateBackgroundColor
+                              : Colors.grey.shade400,
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          horse.horseNumber > 0 ? '${horse.horseNumber}' : '-',
+                          style: TextStyle(
+                            color: hasGate
+                                ? horse.gateNumber.gateTextColor
+                                : Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      horse.horseName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        decoration:
+                            horse.isScratched ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: _trendWidth, child: Center(child: trendCell)),
+                  SizedBox(width: _gapWidth, child: Center(child: gapCell)),
+                  SizedBox(width: _lastWidth, child: Center(child: lastCell)),
+                  SizedBox(
+                      width: _momentumWidth, child: Center(child: momentumCell)),
+                ],
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  horse.horseName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    decoration:
-                        horse.isScratched ? TextDecoration.lineThrough : null,
+              if (stats != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: _numberWidth + 6, top: 2),
+                  child: Text(
+                    _recordLineOf(stats),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10, color: Colors.black54),
                   ),
                 ),
-              ),
-              SizedBox(width: _trendWidth, child: Center(child: trendCell)),
-              SizedBox(width: _gapWidth, child: Center(child: gapCell)),
-              SizedBox(width: _lastWidth, child: Center(child: lastCell)),
-              SizedBox(
-                  width: _momentumWidth, child: Center(child: momentumCell)),
             ],
           ),
         ),
