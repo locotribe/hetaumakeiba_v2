@@ -64,6 +64,9 @@ class ConditionAptitude {
   const ConditionAptitude({required this.overall, required this.categories});
 }
 
+// [追加] 好走条件の改良 Step4: 1頭ページの好走条件の並べ替え（標準＝今の並び・勝率・複勝率・出走数） (v.2026.10.18+26101802)
+enum AptitudeSort { standard, winRate, showRate, starts }
+
 // [追加] 馬詳細タブ 表示項目変更 Step1: 並び順を決めた値の1件（キー・表示名・着度数） (v.2026.10.14+26101407)
 class _OrderedEntry {
   final String key;
@@ -366,6 +369,46 @@ class ConditionAptitudeAnalyzer {
 
     final currentKey = jockeyKeyOf(currentJockeyId ?? '', currentJockeyName ?? '');
     return AptitudeCategory(name: '騎手', values: _markInOrder(entries, currentKey: currentKey));
+  }
+
+  // [追加] 好走条件の改良 Step4: 並べ替え。standard はそのまま返す。ほかは各カテゴリの値を「2走以上」→「2走未満」に分け、
+  // それぞれを選んだ順（勝率: 勝率→複勝率→走数、複勝率: 複勝率→勝率→走数、出走数: 走数→勝率→複勝率。いずれも大きい順。
+  // すべて同じなら今の並びの順）に並べる。印（得意・参考・今回）は変えない (v.2026.10.18+26101802)
+  static ConditionAptitude sortedBy(ConditionAptitude aptitude, AptitudeSort sort) {
+    if (sort == AptitudeSort.standard) return aptitude;
+    List<double> keysOf(RankTally t) {
+      if (sort == AptitudeSort.showRate) return [t.showRate, t.winRate, t.total.toDouble()];
+      if (sort == AptitudeSort.starts) return [t.total.toDouble(), t.winRate, t.showRate];
+      return [t.winRate, t.showRate, t.total.toDouble()];
+    }
+
+    List<AptitudeValue> sortGroup(List<AptitudeValue> group) {
+      final indexed = [for (int i = 0; i < group.length; i++) MapEntry(i, group[i])];
+      indexed.sort((a, b) {
+        final ka = keysOf(a.value.tally);
+        final kb = keysOf(b.value.tally);
+        for (int i = 0; i < ka.length; i++) {
+          final c = kb[i].compareTo(ka[i]);
+          if (c != 0) return c;
+        }
+        return a.key.compareTo(b.key);
+      });
+      return [for (final e in indexed) e.value];
+    }
+
+    return ConditionAptitude(
+      overall: aptitude.overall,
+      categories: [
+        for (final cat in aptitude.categories)
+          AptitudeCategory(
+            name: cat.name,
+            values: [
+              ...sortGroup(cat.values.where((v) => v.tally.total >= MIN_RACES).toList()),
+              ...sortGroup(cat.values.where((v) => v.tally.total < MIN_RACES).toList()),
+            ],
+          ),
+      ],
+    );
   }
 
   // カテゴリ定義（名前と値ラベル関数）。追加はここに1行足すだけ。

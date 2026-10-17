@@ -300,6 +300,50 @@ void main() {
     });
   });
 
+  // [追加] 好走条件の改良 Step4: 並べ替え (v.2026.10.18+26101802)
+  group('sortedBy', () {
+    // 馬場: 良 4走[1-0-0-3]（勝率25%・複勝率25%）、重 2走[0-1-1-0]（勝率0%・複勝率100%）、稍 1走[1-0-0-0]（参考）
+    final records = <HorseRaceRecord>[
+      rec(trackCondition: '良', rank: '1'),
+      rec(trackCondition: '良', rank: '5'),
+      rec(trackCondition: '良', rank: '6'),
+      rec(trackCondition: '良', rank: '7'),
+      rec(trackCondition: '重', rank: '2'),
+      rec(trackCondition: '重', rank: '3'),
+      rec(trackCondition: '稍', rank: '1'),
+    ];
+
+    test('標準は今の並びのまま', () {
+      final a = ConditionAptitudeAnalyzer.analyze(records);
+      expect(identical(ConditionAptitudeAnalyzer.sortedBy(a, AptitudeSort.standard), a), isTrue);
+      expect(catOf(a, '馬場')!.values.map((v) => v.label).toList(), ['良', '重', '稍']);
+    });
+
+    test('複勝率順・2走未満は下・得意の印は変わらない', () {
+      final a = ConditionAptitudeAnalyzer.sortedBy(
+          ConditionAptitudeAnalyzer.analyze(records), AptitudeSort.showRate);
+      final baba = catOf(a, '馬場')!;
+      expect(baba.values.map((v) => v.label).toList(), ['重', '良', '稍']);
+      expect(baba.values.where((v) => v.isBest).map((v) => v.label).toList(), ['良']);
+      expect(baba.values[2].isReference, isTrue);
+      expect(a.overall.total, 7);
+    });
+
+    test('出走数順は距離など独自の並びのカテゴリにも効く', () {
+      final a = ConditionAptitudeAnalyzer.sortedBy(
+          ConditionAptitudeAnalyzer.analyze(<HorseRaceRecord>[
+            rec(distance: '芝1200', rank: '1'),
+            rec(distance: '芝1600', rank: '4'),
+            rec(distance: '芝1600', rank: '5'),
+            rec(distance: '芝1600', rank: '6'),
+            rec(distance: 'ダ1200', rank: '2'),
+            rec(distance: 'ダ1200', rank: '1'),
+          ]),
+          AptitudeSort.starts);
+      expect(catOf(a, '距離')!.values.map((v) => v.label).toList(), ['芝1600', 'ダ1200', '芝1200']);
+    });
+  });
+
   group('track condition categories', () {
     test('cushionBand 6段の境界 / moistureBand', () {
       expect(ConditionAptitudeAnalyzer.cushionBand(10.1), '10以上');

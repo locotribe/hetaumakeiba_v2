@@ -28,6 +28,10 @@ class ConditionSection extends StatelessWidget {
   // [追加] 好走条件・個別成績・相対評価の移動 Step3: 回収率（出走馬分析の個別成績から移した）。読み込み前・計算できないときは null (v.2026.10.17+26101708)
   final HorseRecordStats? recordStats;
 
+  // [追加] 好走条件の改良 Step4: 好走条件の並べ替え（選んでいるもの）と、チップを押したときの知らせ。知らせが無ければチップは押せない (v.2026.10.18+26101802)
+  final AptitudeSort sort;
+  final ValueChanged<AptitudeSort>? onSortChanged;
+
   const ConditionSection({
     super.key,
     required this.horse,
@@ -38,6 +42,9 @@ class ConditionSection extends StatelessWidget {
     this.currentTrackCondition,
     // [追加] 好走条件・個別成績・相対評価の移動 Step3 (v.2026.10.17+26101708)
     this.recordStats,
+    // [追加] 好走条件の改良 Step4 (v.2026.10.18+26101802)
+    this.sort = AptitudeSort.standard,
+    this.onSortChanged,
   });
 
   // 1着=赤 / 2着=青 / 3着=橙 / 着外=灰
@@ -68,14 +75,18 @@ class ConditionSection extends StatelessWidget {
     }
 
     // [修正] 馬詳細タブ 表示項目変更 Step2: 今回レースの芝/ダ・クッション値・含水率・騎手を渡して「今回」印を付ける (v.2026.10.15+26101501)
-    final aptitude = ConditionAptitudeAnalyzer.analyze(
-      records,
-      trackConditions: trackConditions,
-      currentSurface: currentSurface,
-      currentCushionValue: currentTrackCondition?.cushionValue,
-      currentMoistureDirtGoal: currentTrackCondition?.moistureDirtGoal,
-      currentJockeyId: horse.jockeyId,
-      currentJockeyName: horse.jockey,
+    // [修正] 好走条件の改良 Step4: 選んだ並び（sort）で並べ替える。標準なら今までどおり (v.2026.10.18+26101802)
+    final aptitude = ConditionAptitudeAnalyzer.sortedBy(
+      ConditionAptitudeAnalyzer.analyze(
+        records,
+        trackConditions: trackConditions,
+        currentSurface: currentSurface,
+        currentCushionValue: currentTrackCondition?.cushionValue,
+        currentMoistureDirtGoal: currentTrackCondition?.moistureDirtGoal,
+        currentJockeyId: horse.jockeyId,
+        currentJockeyName: horse.jockey,
+      ),
+      sort,
     );
     final o = aptitude.overall;
     final debut = ConditionAptitudeAnalyzer.debutRecordOf(records);
@@ -118,8 +129,15 @@ class ConditionSection extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 6),
-        const Text('得意条件（勝率順）',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),
+        // [修正] 好走条件の改良 Step4: 見出しを「得意条件」にし、右に並べ替えのチップ（標準／勝率／複勝率／出走数） (v.2026.10.18+26101802)
+        Row(
+          children: [
+            const Text('得意条件',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),
+            const SizedBox(width: 8),
+            Expanded(child: _buildSortChips()),
+          ],
+        ),
         const Divider(height: 8),
 
         // カテゴリ一覧
@@ -164,6 +182,30 @@ class ConditionSection extends StatelessWidget {
       style: const TextStyle(fontSize: 12, color: Colors.black87),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  // [追加] 好走条件の改良 Step4: 並べ替えのチップ（標準＝今の並び。標準以外は全カテゴリを選んだ順に並べ、2走未満は下） (v.2026.10.18+26101802)
+  Widget _buildSortChips() {
+    const labels = {
+      AptitudeSort.standard: '標準',
+      AptitudeSort.winRate: '勝率',
+      AptitudeSort.showRate: '複勝率',
+      AptitudeSort.starts: '出走数',
+    };
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: [
+        for (final s in AptitudeSort.values)
+          ChoiceChip(
+            label: Text(labels[s]!, style: const TextStyle(fontSize: 11)),
+            selected: sort == s,
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            onSelected: onSortChanged == null ? null : (_) => onSortChanged!(s),
+          ),
+      ],
     );
   }
 
