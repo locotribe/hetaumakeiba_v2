@@ -27,8 +27,8 @@ class TrackConditionFactor {
             double cushion = tc.cushionValue ?? 0.0;
             if (cushion > 0) goodPerformances.add(cushion);
           } else {
-            // ★修正: ダートの場合は4コーナーの含水率を採用（無ければゴール前）
-            double moisture = (tc.moistureDirt4c ?? 0.0) > 0 ? tc.moistureDirt4c! : (tc.moistureDirtGoal ?? 0.0);
+            // [修正] 好走条件の改良 Step2: ダートは含水率のゴール前だけを使う（比べる相手＝過去のこのレースの平均〈TrackConditionTrendAnalyzer〉がゴール前だけの平均のため。4コーナーの値は使わない） (v.2026.10.17+26101712)
+            double moisture = tc.moistureDirtGoal ?? 0.0;
             if (moisture > 0) goodPerformances.add(moisture);
           }
         }
