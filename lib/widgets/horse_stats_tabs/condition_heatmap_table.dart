@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/condition_presentation_model.dart';
+// [追加] 好走条件の改良 Step3: 馬場の列のタップで出す走を選ぶため (v.2026.10.17+26101713)
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_ranking_builder.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_match_engine.dart';
 import 'package:hetaumakeiba_v2/widgets/condition_race_tile.dart';
@@ -13,12 +15,15 @@ class ConditionHeatmapTable extends StatefulWidget {
   final ConditionRankingTable table;
   final Map<String, List<HorseRaceRecord>> allPastRecords;
   final List<PredictionHorseDetail> currentRaceHorses;
+  // [追加] 好走条件の改良 Step3: 全馬の過去走の馬場データ（馬ID→レースID→馬場データ）。馬場の列のタップで出す走を選ぶ (v.2026.10.17+26101713)
+  final Map<String, Map<String, TrackConditionRecord?>> trackConditionsByHorse;
 
   const ConditionHeatmapTable({
     super.key,
     required this.table,
     required this.allPastRecords,
     required this.currentRaceHorses,
+    this.trackConditionsByHorse = const <String, Map<String, TrackConditionRecord?>>{},
   });
 
   @override
@@ -241,6 +246,9 @@ class _ConditionHeatmapTableState extends State<ConditionHeatmapTable> {
       columnKey,
       col.todayValue,
       widget.allPastRecords[row.horseId] ?? const [],
+      // [追加] 好走条件の改良 Step3 (v.2026.10.17+26101713)
+      trackConditions:
+          widget.trackConditionsByHorse[row.horseId] ?? const <String, TrackConditionRecord?>{},
     );
     final sorted = List<HorseRaceRecord>.of(records)
       ..sort((a, b) => _parseDate(b.date).compareTo(_parseDate(a.date)));

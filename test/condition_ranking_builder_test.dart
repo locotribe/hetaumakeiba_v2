@@ -4,8 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_ranking_builder.dart';
+// [追加] 好走条件の改良 Step3: 馬場の列のテスト (v.2026.10.17+26101713)
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 
+// [修正] 好走条件の改良 Step3: 馬場の列のテストのため、レースIDを渡せるようにした (v.2026.10.17+26101713)
 HorseRaceRecord rec({
+  String raceId = 'r',
   String rank = '5',
   String distance = '芝1600',
   String venue = '5東京8',
@@ -13,7 +17,7 @@ HorseRaceRecord rec({
 }) {
   return HorseRaceRecord(
     horseId: 'h',
-    raceId: 'r',
+    raceId: raceId,
     date: '2025/01/01',
     venue: venue,
     weather: '晴',
@@ -117,6 +121,29 @@ void main() {
           'G2');
     });
 
+    // [追加] 好走条件の改良 Step3: 今回の馬場の帯（芝はクッション値、ダートは含水率ゴール前。測定が無い・障害は null） (v.2026.10.17+26101713)
+    test('今回の馬場の帯', () {
+      final tc = TrackConditionRecord(
+          trackConditionId: 1, date: '2025-01-01', weekDay: 'sa', cushionValue: 9.6, moistureDirtGoal: 8.0);
+      expect(
+          ConditionRankingBuilder.conditionsOf(prd(trackType: '芝', distanceValue: 1600),
+                  currentTrackCondition: tc)
+              .trackBand,
+          '9.9-9.5');
+      expect(
+          ConditionRankingBuilder.conditionsOf(prd(trackType: 'ダ', distanceValue: 1400),
+                  currentTrackCondition: tc)
+              .trackBand,
+          '7〜10%');
+      expect(ConditionRankingBuilder.conditionsOf(prd(trackType: '芝', distanceValue: 1600)).trackBand,
+          isNull);
+      expect(
+          ConditionRankingBuilder.conditionsOf(prd(trackType: '障', distanceValue: 3000),
+                  currentTrackCondition: tc)
+              .trackBand,
+          isNull);
+    });
+
     test('障は距離帯 null', () {
       final c = ConditionRankingBuilder.conditionsOf(
           prd(trackType: '障', distanceValue: 3000));
@@ -170,6 +197,41 @@ void main() {
           ConditionRankingBuilder.recordsForColumn(
               ConditionRankingBuilder.kSurface, '—', recs),
           isEmpty);
+    });
+
+    // [追加] 好走条件の改良 Step3: 馬場の帯で絞り込み（芝の走はクッション値、ダートの走は含水率ゴール前。馬場データが無い走は入らない） (v.2026.10.17+26101713)
+    test('馬場で絞り込み', () {
+      TrackConditionRecord tcOf(double? cushion, double? dirtGoal) => TrackConditionRecord(
+          trackConditionId: 1,
+          date: '2025-01-01',
+          weekDay: 'sa',
+          cushionValue: cushion,
+          moistureDirtGoal: dirtGoal);
+      final records = [
+        rec(raceId: 'a', distance: '芝1600'),
+        rec(raceId: 'b', distance: '芝1600'),
+        rec(raceId: 'c', distance: 'ダ1200'),
+        rec(raceId: 'd', distance: '芝2000'),
+      ];
+      final tcs = <String, TrackConditionRecord?>{
+        'a': tcOf(9.6, 9.0),
+        'b': tcOf(8.2, 8.0),
+        'c': tcOf(9.6, 8.0),
+      };
+      expect(
+          ConditionRankingBuilder.recordsForColumn(
+                  ConditionRankingBuilder.kTrack, '9.9-9.5', records,
+                  trackConditions: tcs)
+              .map((r) => r.raceId)
+              .toList(),
+          ['a']);
+      expect(
+          ConditionRankingBuilder.recordsForColumn(
+                  ConditionRankingBuilder.kTrack, '7〜10%', records,
+                  trackConditions: tcs)
+              .map((r) => r.raceId)
+              .toList(),
+          ['c']);
     });
 
     // [追加] 好走条件の改良 Step1: 取消・除外・空欄の走は返さない（中止は返す） (v.2026.10.17+26101711)
@@ -231,10 +293,12 @@ void main() {
     final table = ConditionRankingBuilder.buildFrom(
         conditions: conditions, horses: horses);
 
-    test('列は5データ列＋総合列', () {
+    // [修正] 好走条件の改良 Step3: 距離の次に馬場の列 (v.2026.10.17+26101713)
+    test('列は6データ列＋総合列', () {
       expect(table.columns.map((c) => c.key).toList(), [
         ConditionRankingBuilder.kSurface,
         ConditionRankingBuilder.kDistance,
+        ConditionRankingBuilder.kTrack,
         ConditionRankingBuilder.kDirection,
         ConditionRankingBuilder.kVenue,
         ConditionRankingBuilder.kClass,
@@ -247,6 +311,10 @@ void main() {
           table.columns.firstWhere((c) => c.key == ConditionRankingBuilder.kDistance);
       // [修正] 好走条件の改良 Step1: 距離ちょうど (v.2026.10.17+26101711)
       expect(distCol.todayValue, '芝1600');
+      // [追加] 好走条件の改良 Step3: 今回の馬場の帯が無ければ「—」 (v.2026.10.17+26101713)
+      final trackCol =
+          table.columns.firstWhere((c) => c.key == ConditionRankingBuilder.kTrack);
+      expect(trackCol.todayValue, '—');
       final overallCol =
           table.columns.firstWhere((c) => c.key == ConditionRankingBuilder.kOverall);
       expect(overallCol.todayValue, '—');

@@ -149,6 +149,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
         _allPastRecordsFuture = null;
         _recordsFutures.clear();
         _trackCondFutures.clear();
+        // [追加] 好走条件の改良 Step3: 全馬の馬場データ（ヒートマップの馬場の列）も読み直す (v.2026.10.17+26101713)
+        _allTrackCondsFuture = null;
         // [追加] 能力分析を馬詳細へ Step2: 全馬の Rt も計算し直す (v.2026.10.17+26101702)
         _ratingSummaryFuture = null;
         // [追加] 好走条件・個別成績・相対評価の移動 Step3: 通算成績と回収率も計算し直す (v.2026.10.17+26101708)
@@ -337,6 +339,20 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       }
       return map;
     });
+  }
+
+  // [追加] 好走条件の改良 Step3: 全馬の過去走の馬場データ（馬ID→レースID→馬場データ）を1回だけ読む。馬ごとの読み込み（_trackCondsFor）は1頭ページと共有する (v.2026.10.17+26101713)
+  Future<Map<String, Map<String, TrackConditionRecord?>>>? _allTrackCondsFuture;
+
+  Future<Map<String, Map<String, TrackConditionRecord?>>> _allTrackConds(
+      Map<String, List<HorseRaceRecord>> all) {
+    return _allTrackCondsFuture ??= () async {
+      final entries = await Future.wait([
+        for (final h in _horses)
+          _trackCondsFor(h.horseId, all).then((m) => MapEntry(h.horseId, m)),
+      ]);
+      return Map<String, Map<String, TrackConditionRecord?>>.fromEntries(entries);
+    }();
   }
 
   // [追加] 馬詳細タブ 表示項目変更 Step2: 今回レースの当日の馬場データ（クッション値/含水率）を1回だけ引く。当日の測定が無ければ null (v.2026.10.15+26101501)
@@ -1197,6 +1213,7 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
 
   // [追加] 好走条件・個別成績・相対評価の移動 Step2: 「全」ページの「条件」。出走馬分析の好走条件（今回条件ヒートマップ）を移した。
   // 戦績は読み込み係のレース日より前の走（今までは日付で絞っていなかった）。今回のクラスは出馬表のグレード欄から判定する（Step1） (v.2026.10.17+26101707)
+  // [修正] 好走条件の改良 Step3: 全馬の過去走の馬場データと今回の馬場データも読んでから作る（馬場の列）。説明に馬場の列のことを足した (v.2026.10.17+26101713)
   Widget _buildConditionHeatmap() {
     return FutureBuilder<Map<String, List<HorseRaceRecord>>>(
       future: _allPastRecords(),
@@ -1208,33 +1225,61 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
           );
         }
         final all = snapshot.data ?? const <String, List<HorseRaceRecord>>{};
-        final table = ConditionRankingBuilder.build(
-          raceData: widget.predictionRaceData,
-          allPastRecords: all,
-        );
-        if (table.rows.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text('分析データがありません。',
-                style: TextStyle(fontSize: 12, color: Colors.black54)),
-          );
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(bottom: 4),
-              child: Text(
-                '今回と同じ条件での複勝率（かっこは走数）。列ごとに色が濃いほど上位。数字をタップすると、その条件のレースが出ます。',
-                style: TextStyle(fontSize: 11, color: Colors.black54),
-              ),
-            ),
-            ConditionHeatmapTable(
-              table: table,
-              allPastRecords: all,
-              currentRaceHorses: widget.predictionRaceData.horses,
-            ),
-          ],
+        return FutureBuilder<Map<String, Map<String, TrackConditionRecord?>>>(
+          future: _allTrackConds(all),
+          builder: (context, tcSnapshot) {
+            if (tcSnapshot.connectionState != ConnectionState.done) {
+              return const Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            return FutureBuilder<TrackConditionRecord?>(
+              future: _currentTrackCondition(),
+              builder: (context, currentSnapshot) {
+                if (currentSnapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final trackConds = tcSnapshot.data ??
+                    const <String, Map<String, TrackConditionRecord?>>{};
+                final table = ConditionRankingBuilder.build(
+                  raceData: widget.predictionRaceData,
+                  allPastRecords: all,
+                  trackConditionsByHorse: trackConds,
+                  currentTrackCondition: currentSnapshot.data,
+                );
+                if (table.rows.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text('分析データがありません。',
+                        style: TextStyle(fontSize: 12, color: Colors.black54)),
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '今回と同じ条件での複勝率（かっこは走数）。列ごとに色が濃いほど上位。数字をタップすると、その条件のレースが出ます。'
+                        '馬場は、芝はクッション値、ダートは含水率（ゴール前）の帯（1頭ページと同じ区切り）。今回の測定が無いときは「—」。',
+                        style: TextStyle(fontSize: 11, color: Colors.black54),
+                      ),
+                    ),
+                    ConditionHeatmapTable(
+                      table: table,
+                      allPastRecords: all,
+                      currentRaceHorses: widget.predictionRaceData.horses,
+                      trackConditionsByHorse: trackConds,
+                    ),
+                  ],
+                );
+              },
+            );
+          },
         );
       },
     );

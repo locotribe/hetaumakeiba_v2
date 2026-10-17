@@ -2,6 +2,8 @@
 
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
+// [追加] 好走条件の改良 Step3: 馬場の列（クッション値・含水率） (v.2026.10.17+26101713)
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_aptitude_analyzer.dart';
 // [追加] 好走条件・個別成績・相対評価の移動 Step1: 今回のクラスを出馬表のグレード欄から判定する (v.2026.10.17+26101706)
 import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
@@ -18,12 +20,15 @@ class RaceConditions {
   final String? direction; // 左/右
   final String? venue; // 例「東京」
   final String? classLabel; // 例「G1」
+  // [追加] 好走条件の改良 Step3: 今回の馬場の帯（芝はクッション値、ダートは含水率ゴール前。1頭ページと同じ区切り）。当日の測定が無ければ null (v.2026.10.17+26101713)
+  final String? trackBand; // 例「9.4-9」「7〜10%」
   const RaceConditions({
     this.surface,
     this.distanceLabel,
     this.direction,
     this.venue,
     this.classLabel,
+    this.trackBand,
   });
 }
 
@@ -35,18 +40,22 @@ class HorseInput {
   final List<HorseRaceRecord> records;
   // [追加] 好走条件の改良 Step1: 今回取り消した馬（順位を付けず、いちばん下に出す） (v.2026.10.17+26101711)
   final bool isScratched;
+  // [追加] 好走条件の改良 Step3: 過去走の馬場データ（レースID→馬場データ。無い走は null か、キーが無い） (v.2026.10.17+26101713)
+  final Map<String, TrackConditionRecord?> trackConditions;
   const HorseInput({
     required this.horseId,
     required this.horseName,
     required this.horseNumber,
     required this.records,
     this.isScratched = false,
+    this.trackConditions = const <String, TrackConditionRecord?>{},
   });
 }
 
 /// ヒートマップの列1つ
 class RaceConditionColumn {
-  final String key; // surface|distance|direction|venue|class|overall
+  // [修正] 好走条件の改良 Step3: 馬場（track）を足した (v.2026.10.17+26101713)
+  final String key; // surface|distance|track|direction|venue|class|overall
   final String name; // 表示名
   final String todayValue; // 今回値（確定不可・総合は '—'）
   const RaceConditionColumn({
@@ -95,7 +104,8 @@ class HorseConditionRow {
 
 /// ヒートマップ全体
 class ConditionRankingTable {
-  final List<RaceConditionColumn> columns; // [surface, distance, direction, venue, class, overall]
+  // [修正] 好走条件の改良 Step3: 馬場（track）を足した (v.2026.10.17+26101713)
+  final List<RaceConditionColumn> columns; // [surface, distance, track, direction, venue, class, overall]
   final List<HorseConditionRow> rows; // 総合降順で整列済み
   const ConditionRankingTable({required this.columns, required this.rows});
 }
@@ -109,11 +119,15 @@ class ConditionRankingBuilder {
   static const String kVenue = 'venue';
   static const String kClass = 'class';
   static const String kOverall = 'overall';
+  // [追加] 好走条件の改良 Step3: 馬場（クッション値・含水率の帯）の列 (v.2026.10.17+26101713)
+  static const String kTrack = 'track';
 
   /// データ列の順序（総合は末尾に付ける）
+  // [修正] 好走条件の改良 Step3: 距離の次に馬場 (v.2026.10.17+26101713)
   static const List<String> dataColumnKeys = [
     kSurface,
     kDistance,
+    kTrack,
     kDirection,
     kVenue,
     kClass,
@@ -129,8 +143,25 @@ class ConditionRankingBuilder {
     return null;
   }
 
+  // [追加] 好走条件の改良 Step3: 馬場の帯。芝ならクッション値の帯、ダートなら含水率（ゴール前）の帯（1頭ページと同じ cushionBand・moistureBand）。
+  // 馬場データが無い・値が無い・障害は null (v.2026.10.17+26101713)
+  static String? trackBandOf(String? surface, TrackConditionRecord? trackCondition) {
+    if (trackCondition == null) return null;
+    if (surface == '芝') {
+      final cv = trackCondition.cushionValue;
+      return cv == null ? null : ConditionAptitudeAnalyzer.cushionBand(cv);
+    }
+    if (surface == 'ダ') {
+      final mg = trackCondition.moistureDirtGoal;
+      return mg == null ? null : ConditionAptitudeAnalyzer.moistureBand(mg);
+    }
+    return null;
+  }
+
   /// 今回レースの各列の今回値を決める
-  static RaceConditions conditionsOf(PredictionRaceData raceData) {
+  // [修正] 好走条件の改良 Step3: 今回の当日の馬場データ（無ければ null）を任意で受け取り、馬場の列の今回値にする (v.2026.10.17+26101713)
+  static RaceConditions conditionsOf(PredictionRaceData raceData,
+      {TrackConditionRecord? currentTrackCondition}) {
     final surface = _surfaceFromTrackType(raceData.trackType);
 
     // [修正] 好走条件の改良 Step1: 距離帯ではなく距離ちょうど（例「芝1600」。1頭ページの distanceExactLabelOf と同じ形） (v.2026.10.17+26101711)
@@ -157,6 +188,8 @@ class ConditionRankingBuilder {
       direction: direction,
       venue: venue.isEmpty ? null : venue,
       classLabel: classLabel,
+      // [追加] 好走条件の改良 Step3 (v.2026.10.17+26101713)
+      trackBand: trackBandOf(surface, currentTrackCondition),
     );
   }
 
@@ -166,6 +199,9 @@ class ConditionRankingBuilder {
         return '芝ダ';
       case kDistance:
         return '距離';
+      // [追加] 好走条件の改良 Step3 (v.2026.10.17+26101713)
+      case kTrack:
+        return '馬場';
       case kDirection:
         return '回り';
       case kVenue:
@@ -184,6 +220,9 @@ class ConditionRankingBuilder {
         return c.surface;
       case kDistance:
         return c.distanceLabel;
+      // [追加] 好走条件の改良 Step3 (v.2026.10.17+26101713)
+      case kTrack:
+        return c.trackBand;
       case kDirection:
         return c.direction;
       case kVenue:
@@ -196,8 +235,10 @@ class ConditionRankingBuilder {
 
   /// 指定列の今回値に該当する過去走だけを返す
   // [修正] 好走条件の改良 Step1: 取消・除外・空欄の走は返さない（セルの走数とタップで出る走をそろえる）。距離は距離ちょうどで比べる (v.2026.10.17+26101711)
+  // [修正] 好走条件の改良 Step3: 馬場の列のため、過去走の馬場データ（レースID→馬場データ）を任意で受け取る (v.2026.10.17+26101713)
   static List<HorseRaceRecord> recordsForColumn(
-      String key, String todayValue, List<HorseRaceRecord> records) {
+      String key, String todayValue, List<HorseRaceRecord> records,
+      {Map<String, TrackConditionRecord?> trackConditions = const <String, TrackConditionRecord?>{}}) {
     if (todayValue.isEmpty || todayValue == '—') return const [];
     bool match(HorseRaceRecord r) {
       if (!isCountedStart(r.rank)) return false;
@@ -206,6 +247,10 @@ class ConditionRankingBuilder {
           return ConditionAptitudeAnalyzer.surfaceOf(r.distance) == todayValue;
         case kDistance:
           return ConditionAptitudeAnalyzer.distanceExactLabelOf(r) == todayValue;
+        // [追加] 好走条件の改良 Step3: その走の馬場の帯が今回と同じ（芝の帯とダートの帯は字が違うので混ざらない） (v.2026.10.17+26101713)
+        case kTrack:
+          return trackBandOf(ConditionAptitudeAnalyzer.surfaceOf(r.distance), trackConditions[r.raceId]) ==
+              todayValue;
         case kDirection:
           return ConditionAptitudeAnalyzer.directionOf(r.venue) == todayValue;
         case kVenue:
@@ -221,11 +266,15 @@ class ConditionRankingBuilder {
   }
 
   /// 今回レース＋全馬過去走からヒートマップを作る
+  // [修正] 好走条件の改良 Step3: 全馬の過去走の馬場データ（馬ID→レースID→馬場データ）と今回の馬場データを任意で受け取る (v.2026.10.17+26101713)
   static ConditionRankingTable build({
     required PredictionRaceData raceData,
     required Map<String, List<HorseRaceRecord>> allPastRecords,
+    Map<String, Map<String, TrackConditionRecord?>> trackConditionsByHorse =
+        const <String, Map<String, TrackConditionRecord?>>{},
+    TrackConditionRecord? currentTrackCondition,
   }) {
-    final conditions = conditionsOf(raceData);
+    final conditions = conditionsOf(raceData, currentTrackCondition: currentTrackCondition);
     final horses = raceData.horses
         .map((h) => HorseInput(
               horseId: h.horseId,
@@ -234,6 +283,9 @@ class ConditionRankingBuilder {
               records: allPastRecords[h.horseId] ?? const [],
               // [追加] 好走条件の改良 Step1 (v.2026.10.17+26101711)
               isScratched: h.isScratched,
+              // [追加] 好走条件の改良 Step3 (v.2026.10.17+26101713)
+              trackConditions:
+                  trackConditionsByHorse[h.horseId] ?? const <String, TrackConditionRecord?>{},
             ))
         .toList();
     return buildFrom(conditions: conditions, horses: horses);
@@ -269,7 +321,8 @@ class ConditionRankingBuilder {
         final tv = _todayValueOf(key, conditions);
         final matched = (tv == null || tv.isEmpty)
             ? const <HorseRaceRecord>[]
-            : recordsForColumn(key, tv, h.records);
+            // [修正] 好走条件の改良 Step3: 馬場の列のため、その馬の過去走の馬場データを渡す (v.2026.10.17+26101713)
+            : recordsForColumn(key, tv, h.records, trackConditions: h.trackConditions);
         final tally = ConditionAptitudeAnalyzer.rankTallyOf(matched);
         final total = tally.total;
         final showRate = total > 0 ? tally.showRate : null;
