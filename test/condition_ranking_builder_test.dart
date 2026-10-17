@@ -76,7 +76,8 @@ void main() {
       final c = ConditionRankingBuilder.conditionsOf(
           prd(trackType: '芝', distanceValue: 1600, direction: '左'));
       expect(c.surface, '芝');
-      expect(c.distanceLabel, '芝1400-1600');
+      // [修正] 好走条件の改良 Step1: 距離ちょうど (v.2026.10.17+26101711)
+      expect(c.distanceLabel, '芝1600');
       expect(c.direction, '左');
       expect(c.venue, '東京');
       expect(c.classLabel, '条件');
@@ -86,7 +87,8 @@ void main() {
       final c = ConditionRankingBuilder.conditionsOf(
           prd(trackType: 'ダ', distanceValue: 1200, venue: '8京都3'));
       expect(c.surface, 'ダ');
-      expect(c.distanceLabel, 'ダ〜1300');
+      // [修正] 好走条件の改良 Step1: 距離ちょうど (v.2026.10.17+26101711)
+      expect(c.distanceLabel, 'ダ1200');
       expect(c.direction, '右');
       expect(c.venue, '京都');
     });
@@ -138,10 +140,11 @@ void main() {
           2);
     });
 
-    test('距離帯で絞り込み', () {
+    // [修正] 好走条件の改良 Step1: 距離ちょうど (v.2026.10.17+26101711)
+    test('距離で絞り込み', () {
       expect(
           ConditionRankingBuilder.recordsForColumn(
-                  ConditionRankingBuilder.kDistance, '芝1400-1600', recs)
+                  ConditionRankingBuilder.kDistance, '芝1600', recs)
               .length,
           1);
     });
@@ -168,13 +171,31 @@ void main() {
               ConditionRankingBuilder.kSurface, '—', recs),
           isEmpty);
     });
+
+    // [追加] 好走条件の改良 Step1: 取消・除外・空欄の走は返さない（中止は返す） (v.2026.10.17+26101711)
+    test('取消・除外・空欄の走は返さない（中止は返す）', () {
+      final withScratch = [
+        rec(rank: '1'),
+        rec(rank: '取'),
+        rec(rank: '除'),
+        rec(rank: ''),
+        rec(rank: '中'),
+      ];
+      expect(
+          ConditionRankingBuilder.recordsForColumn(
+                  ConditionRankingBuilder.kSurface, '芝', withScratch)
+              .map((r) => r.rank)
+              .toList(),
+          ['1', '中']);
+    });
   });
 
   group('buildFrom', () {
-    // 今回条件: 芝 / 芝1400-1600 / 左 / 東京 / 条件
+    // 今回条件: 芝 / 芝1600 / 左 / 東京 / 条件
+    // [修正] 好走条件の改良 Step1: 距離ちょうど (v.2026.10.17+26101711)
     const conditions = RaceConditions(
       surface: '芝',
-      distanceLabel: '芝1400-1600',
+      distanceLabel: '芝1600',
       direction: '左',
       venue: '東京',
       classLabel: '条件',
@@ -224,7 +245,8 @@ void main() {
       expect(surfaceCol.todayValue, '芝');
       final distCol =
           table.columns.firstWhere((c) => c.key == ConditionRankingBuilder.kDistance);
-      expect(distCol.todayValue, '芝1400-1600');
+      // [修正] 好走条件の改良 Step1: 距離ちょうど (v.2026.10.17+26101711)
+      expect(distCol.todayValue, '芝1600');
       final overallCol =
           table.columns.firstWhere((c) => c.key == ConditionRankingBuilder.kOverall);
       expect(overallCol.todayValue, '—');
@@ -278,6 +300,38 @@ void main() {
 
     test('行は総合降順→馬番昇順', () {
       expect(table.rows.map((r) => r.horseNumber).toList(), [1, 5, 3, 2, 4]);
+    });
+
+    // [追加] 好走条件の改良 Step1: 今回取り消した馬は順位なし・いちばん下（馬番順）。取消・除外の走は数えない (v.2026.10.17+26101711)
+    test('今回取り消した馬は順位を付けずいちばん下・取消の走は数えない', () {
+      final t = ConditionRankingBuilder.buildFrom(conditions: conditions, horses: [
+        HorseInput(horseId: 'S', horseName: 'S', horseNumber: 1, isScratched: true, records: [
+          rec(rank: '1'),
+          rec(rank: '1'),
+        ]),
+        HorseInput(horseId: 'A', horseName: 'A', horseNumber: 2, records: [
+          rec(rank: '1'),
+          rec(rank: '4'),
+          rec(rank: '取'),
+          rec(rank: '除'),
+        ]),
+        HorseInput(horseId: 'B', horseName: 'B', horseNumber: 3, records: [
+          rec(rank: '5'),
+          rec(rank: '6'),
+        ]),
+      ]);
+      expect(t.rows.map((r) => r.horseNumber).toList(), [2, 3, 1]);
+      expect(t.rows.last.isScratched, isTrue);
+      final s = cell(t, 1, ConditionRankingBuilder.kSurface);
+      expect(s.matchedCount, 2);
+      expect(s.showRate, 1.0);
+      expect(s.rank, isNull);
+      expect(cell(t, 1, ConditionRankingBuilder.kOverall).rank, isNull);
+      final a = cell(t, 2, ConditionRankingBuilder.kSurface);
+      expect(a.matchedCount, 2);
+      expect(a.showRate, 0.5);
+      expect(a.rank, 1);
+      expect(cell(t, 3, ConditionRankingBuilder.kSurface).rank, 2);
     });
   });
 }

@@ -164,6 +164,20 @@ void main() {
       expect(t.showRate, closeTo(0.6, 1e-9));
     });
 
+    // [追加] 好走条件の改良 Step1: 取消・除外・空欄は数えない（中止は着外） (v.2026.10.17+26101711)
+    test('rankTallyOf: 取消・除外・空欄は数えない', () {
+      final t = ConditionAptitudeAnalyzer.rankTallyOf([
+        rec(rank: '1'),
+        rec(rank: '取'),
+        rec(rank: '除'),
+        rec(rank: ''),
+        rec(rank: '中'),
+      ]);
+      expect(t.first, 1);
+      expect(t.out, 1);
+      expect(t.total, 2);
+    });
+
     test('debutRecordOf: 日付がいちばん古い走・読めない日付は除く・空なら null', () {
       final records = <HorseRaceRecord>[
         rec(raceId: 'b', date: '2025/03/01'),
@@ -230,6 +244,21 @@ void main() {
       expect(a.overall.total, 2);
       expect(a.overall.first, 1);
       expect(a.overall.winRate, closeTo(0.5, 1e-9));
+    });
+
+    // [追加] 好走条件の改良 Step1: 取消・除外の走はどのカテゴリにも入れない (v.2026.10.17+26101711)
+    test('analyze: 取消・除外の走はどのカテゴリにも入れない', () {
+      final records = <HorseRaceRecord>[
+        rec(rank: '1', weather: '晴'),
+        rec(rank: '3', weather: '晴'),
+        rec(rank: '取', weather: '雨'),
+        rec(rank: '除', distance: 'ダ1200', weather: '曇'),
+      ];
+      final a = ConditionAptitudeAnalyzer.analyze(records);
+      expect(a.overall.total, 2);
+      expect(catOf(a, '天候')!.values.map((v) => v.label).toList(), ['晴']);
+      expect(catOf(a, '芝/ダ')!.values.map((v) => v.label).toList(), ['芝']);
+      expect(catOf(a, '含水率(ダ・ゴール前)'), isNull);
     });
 
     test('empty records → empty categories', () {

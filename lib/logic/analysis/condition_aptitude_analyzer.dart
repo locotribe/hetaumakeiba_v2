@@ -7,6 +7,8 @@ import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 // [追加] 馬詳細タブ 表示項目変更 Step1: デビュー戦と騎手の最新騎乗を日付で決める (v.2026.10.14+26101407)
 import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
 import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
+// [追加] 好走条件の改良 Step1: 取消・除外・空欄の走を数えない判定（通算成績・回収率と同じ isCountedStart） (v.2026.10.17+26101711)
+import 'package:hetaumakeiba_v2/logic/analysis/horse_record_stats.dart';
 
 // [追加] 好走条件 馬詳細移植 StepA-1: 各馬の好走条件（得意条件）を条件カテゴリ主軸で集計する純粋ロジック (v.2026.9.25+26092505)
 
@@ -115,8 +117,8 @@ class ConditionAptitudeAnalyzer {
     return '$s${distanceBandLabel(m)}';
   }
 
-  // [追加] 馬詳細タブ 表示項目変更 Step1: 経験距離ごとの値ラベル（例「芝1600」。障・不明は null）。
-  // 距離帯の distanceLabelOf はヒートマップ（condition_ranking_builder）が使うため変えない (v.2026.10.14+26101407)
+  // [修正] 好走条件の改良 Step1: 経験距離ごとの値ラベル（例「芝1600」。障・不明は null）。1頭ページとヒートマップ（condition_ranking_builder）の距離に使う。
+  // 距離帯の distanceLabelOf・distanceBandLabel はアプリでは使われなくなった（テストだけが使うので残す） (v.2026.10.17+26101711)
   static String? distanceExactLabelOf(HorseRaceRecord r) {
     final s = surfaceOf(r.distance);
     if (s == null || s == '障') return null;
@@ -254,9 +256,11 @@ class ConditionAptitudeAnalyzer {
   }
 
   /// レコード群の着度数
+  // [修正] 好走条件の改良 Step1: 取消・除外・着順が空欄の走は数えない（中止は着外のまま。isCountedStart と同じ決め方） (v.2026.10.17+26101711)
   static RankTally rankTallyOf(List<HorseRaceRecord> records) {
     var t = const RankTally();
     for (final r in records) {
+      if (!isCountedStart(r.rank)) continue;
       t = t.addRank(int.tryParse(r.rank));
     }
     return t;
@@ -391,6 +395,8 @@ class ConditionAptitudeAnalyzer {
     String? currentJockeyId,
     String? currentJockeyName,
   }) {
+    // [追加] 好走条件の改良 Step1: 取消・除外・空欄の走はどのカテゴリにも入れない（その走だけの値が着度数0で出ないように。芝ダの有無・騎手・馬場データも同じ） (v.2026.10.17+26101711)
+    records = records.where((r) => isCountedStart(r.rank)).toList();
     final overall = rankTallyOf(records);
     final List<AptitudeCategory> categories = [];
 

@@ -158,7 +158,8 @@ class _ConditionHeatmapTableState extends State<ConditionHeatmapTable> {
       ),
     );
 
-    final widgets = <Widget>[rowWidget];
+    // [修正] 好走条件の改良 Step1: 今回取り消した馬の行は薄く出す（能力の表と同じ） (v.2026.10.17+26101711)
+    final widgets = <Widget>[row.isScratched ? Opacity(opacity: 0.5, child: rowWidget) : rowWidget];
     if (_expandedHorseId == row.horseId && _expandedColumnKey != null) {
       widgets.add(_buildExpansion(row, _expandedColumnKey!));
     }
@@ -174,10 +175,14 @@ class _ConditionHeatmapTableState extends State<ConditionHeatmapTable> {
         children: [
           Text('${row.horseNumber}',
               style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+          // [修正] 好走条件の改良 Step1: 今回取り消した馬は馬名に取り消し線（能力の表と同じ） (v.2026.10.17+26101711)
           Text(row.horseName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 9)),
+              style: TextStyle(
+                fontSize: 9,
+                decoration: row.isScratched ? TextDecoration.lineThrough : null,
+              )),
         ],
       ),
     );

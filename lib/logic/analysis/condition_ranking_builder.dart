@@ -5,13 +5,16 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/condition_aptitude_analyzer.dart';
 // [追加] 好走条件・個別成績・相対評価の移動 Step1: 今回のクラスを出馬表のグレード欄から判定する (v.2026.10.17+26101706)
 import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
+// [追加] 好走条件の改良 Step1: 取消・除外・空欄の走を数えない判定（通算成績・回収率と同じ isCountedStart） (v.2026.10.17+26101711)
+import 'package:hetaumakeiba_v2/logic/analysis/horse_record_stats.dart';
 
 // [追加] 好走条件 相対順位付け StepB-1: 今回レース条件で全出走馬を横断比較するヒートマップの集約ロジック (v.2026.9.25+26092508)
 
 /// 今回レースの確定条件（各列の今回値）
 class RaceConditions {
   final String? surface; // 芝/ダ/障
-  final String? distanceLabel; // 例「芝1400-1600」
+  // [修正] 好走条件の改良 Step1: 距離帯ではなく距離ちょうど（1頭ページと同じ） (v.2026.10.17+26101711)
+  final String? distanceLabel; // 例「芝1600」
   final String? direction; // 左/右
   final String? venue; // 例「東京」
   final String? classLabel; // 例「G1」
@@ -30,11 +33,14 @@ class HorseInput {
   final String horseName;
   final int horseNumber;
   final List<HorseRaceRecord> records;
+  // [追加] 好走条件の改良 Step1: 今回取り消した馬（順位を付けず、いちばん下に出す） (v.2026.10.17+26101711)
+  final bool isScratched;
   const HorseInput({
     required this.horseId,
     required this.horseName,
     required this.horseNumber,
     required this.records,
+    this.isScratched = false,
   });
 }
 
@@ -75,12 +81,15 @@ class HorseConditionRow {
   final int horseNumber;
   final Map<String, HorseConditionCell> cells; // key → cell（overall 含む）
   final double? overallShowRate; // 総合列の値（並び替え・グラデ用。無ければ null）
+  // [追加] 好走条件の改良 Step1: 今回取り消した馬（表で薄く出す） (v.2026.10.17+26101711)
+  final bool isScratched;
   const HorseConditionRow({
     required this.horseId,
     required this.horseName,
     required this.horseNumber,
     required this.cells,
     required this.overallShowRate,
+    this.isScratched = false,
   });
 }
 
@@ -124,10 +133,10 @@ class ConditionRankingBuilder {
   static RaceConditions conditionsOf(PredictionRaceData raceData) {
     final surface = _surfaceFromTrackType(raceData.trackType);
 
+    // [修正] 好走条件の改良 Step1: 距離帯ではなく距離ちょうど（例「芝1600」。1頭ページの distanceExactLabelOf と同じ形） (v.2026.10.17+26101711)
     String? distanceLabel;
     if ((surface == '芝' || surface == 'ダ') && raceData.distanceValue != null) {
-      distanceLabel =
-          '$surface${ConditionAptitudeAnalyzer.distanceBandLabel(raceData.distanceValue!)}';
+      distanceLabel = '$surface${raceData.distanceValue!}';
     }
 
     String? direction = raceData.direction;
@@ -186,15 +195,17 @@ class ConditionRankingBuilder {
   }
 
   /// 指定列の今回値に該当する過去走だけを返す
+  // [修正] 好走条件の改良 Step1: 取消・除外・空欄の走は返さない（セルの走数とタップで出る走をそろえる）。距離は距離ちょうどで比べる (v.2026.10.17+26101711)
   static List<HorseRaceRecord> recordsForColumn(
       String key, String todayValue, List<HorseRaceRecord> records) {
     if (todayValue.isEmpty || todayValue == '—') return const [];
     bool match(HorseRaceRecord r) {
+      if (!isCountedStart(r.rank)) return false;
       switch (key) {
         case kSurface:
           return ConditionAptitudeAnalyzer.surfaceOf(r.distance) == todayValue;
         case kDistance:
-          return ConditionAptitudeAnalyzer.distanceLabelOf(r) == todayValue;
+          return ConditionAptitudeAnalyzer.distanceExactLabelOf(r) == todayValue;
         case kDirection:
           return ConditionAptitudeAnalyzer.directionOf(r.venue) == todayValue;
         case kVenue:
@@ -221,6 +232,8 @@ class ConditionRankingBuilder {
               horseName: h.horseName,
               horseNumber: h.horseNumber,
               records: allPastRecords[h.horseId] ?? const [],
+              // [追加] 好走条件の改良 Step1 (v.2026.10.17+26101711)
+              isScratched: h.isScratched,
             ))
         .toList();
     return buildFrom(conditions: conditions, horses: horses);
@@ -288,6 +301,8 @@ class ConditionRankingBuilder {
       // 順位対象＝該当2走以上（総合列は overall!=null）
       final List<MapEntry<String, HorseConditionCell>> ranked = [];
       for (final h in horses) {
+        // [追加] 好走条件の改良 Step1: 今回取り消した馬は順位を付けない (v.2026.10.17+26101711)
+        if (h.isScratched) continue;
         final cell = cellByHorse[h.horseId]![key]!;
         final bool eligible = key == kOverall
             ? cell.showRate != null
@@ -340,10 +355,15 @@ class ConditionRankingBuilder {
               horseNumber: h.horseNumber,
               cells: cellByHorse[h.horseId]!,
               overallShowRate: overallByHorse[h.horseId],
+              // [追加] 好走条件の改良 Step1 (v.2026.10.17+26101711)
+              isScratched: h.isScratched,
             ))
         .toList();
 
+    // [修正] 好走条件の改良 Step1: 今回取り消した馬は、ほかの馬の後に馬番順で並べる (v.2026.10.17+26101711)
     rows.sort((a, b) {
+      if (a.isScratched != b.isScratched) return a.isScratched ? 1 : -1;
+      if (a.isScratched) return a.horseNumber.compareTo(b.horseNumber);
       final ao = a.overallShowRate;
       final bo = b.overallShowRate;
       if (ao == null && bo == null) return a.horseNumber.compareTo(b.horseNumber);
