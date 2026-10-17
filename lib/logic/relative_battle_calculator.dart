@@ -78,10 +78,7 @@ class RelativeBattleCalculator {
       double reversalScore = (maxScenarioWinRate - baseRes.winRate) * 100;
       if (reversalScore < 0) reversalScore = 0;
 
-      RacePace? bestPace;
-      if (maxScenarioWinRate == slowRes.winRate) bestPace = RacePace.slow;
-      else if (maxScenarioWinRate == highRes.winRate) bestPace = RacePace.high;
-      else bestPace = RacePace.middle;
+      // [削除] 好走条件・個別成績・相対評価の移動 Step4: 評価短評を廃止したので、短評だけに使っていた bestPace を消した (v.2026.10.17+26101709)
 
       double valueScore = 0.0;
       double winRate = baseRes.winRate;
@@ -94,18 +91,8 @@ class RelativeBattleCalculator {
         valueScore = (roi * 100) + gapBonus;
       }
 
-      // コメント生成
-      String comment = _generateRichComment(
-        winRate: winRate,
-        valueScore: valueScore,
-        reversalScore: reversalScore,
-        bestPace: bestPace,
-        aptitudeScore: baseRes.factorScores['aptitude'] ?? 0,
-        popularity: popularity,
-        aiRank: aiRank,
-        odds: odds,
-        legStyleProfile: staticData.legStyleProfile,
-      );
+      // [削除] 好走条件・個別成績・相対評価の移動 Step4: 評価短評の生成（_generateRichComment）の呼び出しを消した。
+      // 短評はペース別のシミュレーションがすべて終わった後に作っていたので、乱数の順番が変わっても勝率などの数字は変わらない (v.2026.10.17+26101709)
 
       results.add(RelativeEvaluationResult(
         horseId: baseRes.horseId,
@@ -116,7 +103,6 @@ class RelativeBattleCalculator {
         rank: aiRank,
         reversalScore: reversalScore,
         confidence: baseRes.confidence,
-        evaluationComment: comment,
         factorScores: {
           ...baseRes.factorScores,
           'value': valueScore,
@@ -134,69 +120,7 @@ class RelativeBattleCalculator {
     return results;
   }
 
-  // ===========================================================================
-  // プロフェッショナル短評生成エンジン
-  // ===========================================================================
-  String _generateRichComment({
-    required double winRate,
-    required double valueScore,
-    required double reversalScore,
-    required RacePace? bestPace,
-    required double aptitudeScore,
-    required int popularity,
-    required int aiRank,
-    required double odds,
-    required LegStyleProfile? legStyleProfile,
-  }) {
-    String part1 = _selectSubjectPhrase(legStyleProfile, popularity, winRate, aptitudeScore, aiRank);
-    String part2 = _selectConditionPhrase(bestPace, reversalScore, valueScore, winRate, odds);
-    String part3 = _selectConclusionPhrase(winRate, valueScore, reversalScore, popularity);
-    return "$part1、$part2、$part3";
-  }
-
-  String _selectSubjectPhrase(LegStyleProfile? profile, int popularity, double winRate, double aptitudeScore, int aiRank) {
-    if (popularity > 5 && (winRate > 0.15 || aiRank <= 3)) return _getRandom(_subjectAnauma);
-    if (aptitudeScore >= 15.0) return _getRandom(_subjectCourseSpecialist);
-    String style = profile?.primaryStyle ?? '自在';
-    if (style == '逃げ') return _getRandom(_subjectNige);
-    if (style == '先行') return _getRandom(_subjectSenko);
-    if (style == '差し' || style == '追込') return _getRandom(_subjectSashi);
-    return "自在性に富んだ取り口を見せ";
-  }
-
-  String _selectConditionPhrase(RacePace? bestPace, double reversal, double value, double winRate, double odds) {
-    if (reversal >= 20.0) {
-      if (bestPace == RacePace.high) return _getRandom(_conditionHighPace);
-      if (bestPace == RacePace.slow) return _getRandom(_conditionSlowPace);
-    }
-    if (value >= 150.0 || (value >= 100.0 && odds >= 10.0)) return _getRandom(_conditionValue);
-    if (winRate >= 0.40) return _getRandom(_conditionAbility);
-    return "展開に左右されない強みがあり";
-  }
-
-  String _selectConclusionPhrase(double winRate, double value, double reversal, int popularity) {
-    if (popularity <= 3 && winRate < 0.15) return _getRandom(_conclusionDanger);
-    if (winRate >= 0.40) return _getRandom(_conclusionIronclad);
-    if (reversal >= 25.0 || (value >= 200.0 && winRate < 0.2)) return _getRandom(_conclusionDarkHorse);
-    if (winRate >= 0.15) return _getRandom(_conclusionContender);
-    return "静観するのが賢明でしょう。";
-  }
-
-  String _getRandom(List<String> list) => list[_random.nextInt(list.length)];
-
-  static const _subjectNige = ["テンの速さを最大限に活かし", "果敢にハナを奪うスタイルで", "単騎マイペースの逃げなら", "自慢の快速を武器に主導権を握り", "自分のリズムで逃げられれば", "強引にでもハナを叩く構えで", "行き脚の良さはメンバー随一で", "淀みない流れを作る快速馬で", "先手を奪って主導権を渡さず", "ハナを奪う形がベストの構成で"];
-  static const _subjectSenko = ["好位のインで脚を溜め", "安定感ある取り口が武器で", "番手から抜け出す競馬が板につき", "隙のない立ち回りが持ち味で", "先団の直後で機を伺い", "好位で流れに乗る形が理想で", "器用な脚を使える先行タイプで", "先団の一角で流れに乗れば", "好位から安定した伸びを見せ", "経済コースを立ち回れる器用さがあり"];
-  static const _subjectSashi = ["メンバー随一の末脚を誇り", "後方から虎視眈々と展開を伺い", "直線の切れ味を最大の武器に", "終い確実に脚を使うタイプで", "鋭い決め手を秘めており", "展開が嵌まった時の爆発力は凄まじく", "大外から豪快に脚を伸ばして", "溜めれば溜めるだけ伸びるタイプで", "混戦を切り裂くような末脚で", "自慢の瞬発力をフルに活かし"];
-  static const _subjectAnauma = ["実績面では見劣りするものの", "人気ほどの能力差は感じられず", "マークが薄くなるここは不気味で", "伏兵的存在ながら地力は秘めており", "潜在的な指数は上位に匹敵し", "配当的な旨味を感じさせる一頭で", "虎視眈々と波乱を狙う一角で", "隠れた実力馬として警戒が必要", "人気薄が予想される今回こそが買いで", "指数面では上位と互角の評価で"];
-  static const _subjectCourseSpecialist = ["この舞台を庭にしており", "得意の条件に戻って一変が期待でき", "コース相性抜群で不安要素は少なく", "特定の距離で無類の強さを発揮し", "舞台適性の高さは証明済みで", "小回りコースでの立ち回りが巧みで", "この条件なら能力全開が可能で", "コース実績がメンバー中で抜けており"];
-  static const _conditionSlowPace = ["息の入るスローな流れになれば", "前が止まらない展開が味方し", "上がり勝負の決め手比べになれば", "瞬発力が要求される展開こそ理想で", "ペースが落ち着いて余力が残れば", "ヨーイドンの競馬に持ち込めれば", "逃げ馬不在の楽な流れが予想され", "後続に脚を使わせないスローなら", "緩い流れを味方に早め先頭を奪えば", "極端な上がり勝負がこの馬に合い"];
-  static const _conditionHighPace = ["前が激流に巻き込まれれば", "前崩れの展開利を後方から得て", "タフな消耗戦になれば浮上し", "息の入らない厳しいラップになれば", "淀みのない流れで底力が問われ", "オーバーペースで前が脱落する中", "ハイペースを中団で死守できれば", "厳しい流れを経験してきた強みがあり", "激しい先行争いを尻目に脚を溜め", "バテ合いの展開で持ち前の粘りを発揮"];
-  static const _conditionValue = ["実力に対し完全に過小評価されており", "配当妙味はメンバー中No.1で", "オッズ的な旨味が非常に大きく", "単勝期待値が極めて高いデータを示し", "盲点となっている今が絶好の狙い目", "複勝圏内の確実性はオッズ以上で", "穴党なら見逃せない魅力的な数値で", "期待値重視の戦略なら外せない一頭", "リスク・リターンのバランスが秀逸で", "伏兵ながら指数的には単穴以上の評価"];
-  static const _conditionAbility = ["地力は明らかに一枚上で", "ここでは能力が完全に抜けており", "死角らしい死角は見当たらず", "順当なら負けられない実力馬で", "指数的には圧倒的な優位に立ち", "どんな展開になっても対応できる", "凡走する姿が想像しにくい安定感で", "メンバー構成を見渡しても隙はなく", "圧倒的な指数が示す通り実力は本物", "ここは盤石の態勢で挑める一戦"];
-  static const _conclusionIronclad = ["勝ち負け必至です。", "軸として最も信頼できます。", "中心視して間違いありません。", "首位争いの筆頭候補です。", "堂々の主役を務めます。", "信頼度はメンバー中随一。", "順当に白星を掴むでしょう。", "勝利への最短距離にいます。", "盤石の軸馬として指名します。", "迷わず中心に据えるべき一頭。"];
-  static const _conclusionContender = ["連対候補として押さえるべき。", "相手には必ず入れておきたい一頭。", "3着なら十分に圏内です。", "圏内への食い込みは濃厚です。", "ヒモ穴として注意を払いたい。", "連下の一角として軽視禁物。", "善戦以上の期待がかかります。", "馬券内には拾っておきたい。", "相手なりに走る堅実さを信頼。", "手広く買うなら外せぬ一頭。"];
-  static const _conclusionDarkHorse = ["波乱の主役になり得ます。", "一発大駆けの魅力十分です。", "頭まで突き抜けるシーンも。", "爆発力は上位を脅かす存在。", "高配当のキーマンはこの馬。", "大番狂わせを期待させる一頭。", "穴党なら迷わず狙いたい。", "突き抜ければ高配当必至。", "展開次第で主役に躍り出る。", "面白い穴馬として推奨します。"];
-  static const _conclusionDanger = ["全幅の信頼は置けません。", "静観するのが賢明でしょう。", "リスクの方が大きい評価です。", "今回は評価を下げるのが妥当。", "過信は禁物の危うさがあり。", "人気先行の感が否めません。", "今回は苦戦が予想されます。", "馬券的な妙味は薄いと判断。", "見送る勇気も必要な一頭。", "過剰人気に対する懸念あり。"];
+  // [削除] 好走条件・個別成績・相対評価の移動 Step4: 評価短評の生成（_generateRichComment・言い回しの選び方・言い回しの一覧）を消した (v.2026.10.17+26101709)
 
   // --- メイン処理 ---
 
@@ -269,7 +193,6 @@ class RelativeBattleCalculator {
         rank: i + 1,
         reversalScore: 0.0,
         confidence: _calculateConfidence(winRate, iterations),
-        evaluationComment: "",
         factorScores: factorScores,
         jockeyDetails: staticData.jockeyDetails,
         compatibilityDetails: staticData.compatibilityDetails,

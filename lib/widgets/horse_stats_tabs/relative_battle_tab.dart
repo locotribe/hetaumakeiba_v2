@@ -572,9 +572,7 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
         numeric: true,
         onSort: (idx, asc) => _sort((r) => r.factorScores['value'] ?? 0, idx, asc),
       ),
-      const DataColumn(
-        label: Text('評価短評', style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
+      // [削除] 好走条件・個別成績・相対評価の移動 Step4: 「評価短評」の列を外した（短評は役目を終えたので廃止。オーナー判断） (v.2026.10.17+26101709)
     ]);
 
     return columns;
@@ -750,16 +748,7 @@ class _RelativeBattleTabState extends State<RelativeBattleTab> {
           child: Text((result.factorScores['value'] ?? 0).toStringAsFixed(0)),
         ),
       ),
-      DataCell(
-        ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 200),
-          child: Text(
-            result.evaluationComment,
-            style: const TextStyle(fontSize: 12),
-            softWrap: true,
-          ),
-        ),
-      ),
+      // [削除] 好走条件・個別成績・相対評価の移動 Step4: 「評価短評」のセルを外した (v.2026.10.17+26101709)
     ]);
 
     return DataRow(cells: cells);

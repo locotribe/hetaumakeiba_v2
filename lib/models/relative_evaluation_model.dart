@@ -33,8 +33,7 @@ class RelativeEvaluationResult {
   /// 信頼度/安定度
   final double confidence;
 
-  /// 自動生成された評価短評
-  final String evaluationComment;
+  // [削除] 好走条件・個別成績・相対評価の移動 Step4: 評価短評（evaluationComment）を廃止した (v.2026.10.17+26101709)
 
   /// 各評価要因の寄与度 (base, style, pace, aptitude, jockey, compatibility, gate, value)
   final Map<String, double> factorScores;
@@ -66,7 +65,6 @@ class RelativeEvaluationResult {
     required this.rank,
     required this.reversalScore,
     required this.confidence,
-    required this.evaluationComment,
     required this.factorScores,
     this.jockeyDetails,
     this.compatibilityDetails,

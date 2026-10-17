@@ -34,6 +34,8 @@ import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
 // [削除] 出走馬データ読み込み統一 Step4: 騎手成績は読み込み係が計算するので、JockeyAnalysisService の import を外した (v.2026.10.16+26101621)
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_view.dart';
+// [追加] 好走条件・個別成績・相対評価の移動 Step4: 「評価」チップで出す相対評価（出走馬分析から移した。中身は今までの一覧のまま） (v.2026.10.17+26101709)
+import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/relative_battle_tab.dart';
 
 /// 「展開シミュ」タブ：コース平面図上で展開予想アニメーションを表示する。
 class RaceSimulationTabWidget extends StatefulWidget {
@@ -197,6 +199,10 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
 
   // [追加] 0-9b-2不具合修正 スクロール位置を再ビルドをまたいで保持するコントローラー (v.2026.7.27+26072706)
   late final ScrollController _scrollController;
+
+  // [追加] 好走条件・個別成績・相対評価の移動 Step4: 「評価」を出しているか（初期はシミュ）。評価は初めて押したときに作り、以後は切り替えても残す (v.2026.10.17+26101709)
+  bool _showEvaluation = false;
+  bool _evaluationOpened = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -694,9 +700,63 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     );
   }
 
+  // [修正] 好走条件・個別成績・相対評価の移動 Step4: いちばん上に「シミュ／評価」のチップを置いた。シミュは今までの表示（_buildSimulation）、
+  // 評価は出走馬分析の相対評価。切り替えてもどちらの表示（スクロール位置・並べ替え）も残す (v.2026.10.17+26101709)
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildModeChips(),
+        Expanded(
+          child: IndexedStack(
+            index: _showEvaluation ? 1 : 0,
+            sizing: StackFit.expand,
+            children: [
+              _buildSimulation(),
+              _evaluationOpened
+                  ? RelativeBattleTab(
+                      horses: widget.predictionRaceData.horses,
+                      raceData: widget.predictionRaceData,
+                    )
+                  : const SizedBox.shrink(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // [追加] 好走条件・個別成績・相対評価の移動 Step4: 「シミュ／評価」のチップ（馬詳細の「全」ページのチップと同じ見た目） (v.2026.10.17+26101709)
+  Widget _buildModeChips() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          ChoiceChip(
+            label: const Text('シミュ', style: TextStyle(fontSize: 12)),
+            selected: !_showEvaluation,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => setState(() => _showEvaluation = false),
+          ),
+          ChoiceChip(
+            label: const Text('評価', style: TextStyle(fontSize: 12)),
+            selected: _showEvaluation,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => setState(() {
+              _showEvaluation = true;
+              _evaluationOpened = true;
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // [修正] 好走条件・個別成績・相対評価の移動 Step4: 今までの build の中身（展開シミュの表示）。中身は変えていない (v.2026.10.17+26101709)
+  Widget _buildSimulation() {
     return FutureBuilder<_CachedSimInputs?>(
       future: _inputsFuture,
       builder: (context, inputsSnapshot) {
