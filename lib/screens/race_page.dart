@@ -14,7 +14,7 @@ import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/screens/race_statistics_page.dart';
 import 'package:hetaumakeiba_v2/logic/race_class_grade.dart';
-import 'package:hetaumakeiba_v2/screens/horse_stats_page.dart';
+// [削除] 好走条件・個別成績・相対評価の移動 Step5: 出走馬分析タブを削除したので import を外した（好走条件・個別成績は馬詳細、相対評価は展開シミュの「評価」へ移した） (v.2026.10.17+26101710)
 import 'package:hetaumakeiba_v2/screens/jockey_stats_page.dart';
 import 'package:hetaumakeiba_v2/widgets/race_page_tabs/race_detail_tab.dart';
 import 'dart:io';
@@ -114,8 +114,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    // [修正] 能力分析を馬詳細へ Step5: 能力分析タブを削除したので 8 → 7 (v.2026.10.17+26101705)
-    _tabController = TabController(length: 7, vsync: this);
+    // [修正] 好走条件・個別成績・相対評価の移動 Step5: 能力分析タブ（順7）に続いて出走馬分析タブも削除したので 8 → 7 → 6 (v.2026.10.17+26101710)
+    _tabController = TabController(length: 6, vsync: this);
     _determineRaceStatus();
   }
 
@@ -138,8 +138,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _predictionRaceData = enrichedData;
         _raceResult = dbResult;
         _status = RaceStatus.resultConfirmed;
-        // [修正] 能力分析を馬詳細へ Step5: 能力分析タブを削除したので、レース結果タブの位置は 6 → 5 (v.2026.10.17+26101705)
-        _tabController.animateTo(dbResult != null ? 5 : 0);
+        // [修正] 好走条件・個別成績・相対評価の移動 Step5: 能力分析タブ・出走馬分析タブを削除したので、レース結果タブの位置は 6 → 5 → 4 (v.2026.10.17+26101710)
+        _tabController.animateTo(dbResult != null ? 4 : 0);
       });
 
       try {
@@ -192,8 +192,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         _raceResult = dbResult;
         _predictionRaceData = generatedPredictionData;
         _status = RaceStatus.resultConfirmed;
-        // [修正] 能力分析を馬詳細へ Step5: レース結果タブの位置は 6 → 5 (v.2026.10.17+26101705)
-        _tabController.animateTo(5);
+        // [修正] 好走条件・個別成績・相対評価の移動 Step5: レース結果タブの位置は 6 → 5 → 4 (v.2026.10.17+26101710)
+        _tabController.animateTo(4);
       });
 
       // ▼ [追加] フェーズ1a-2: 裏で本物の出馬表(shutuba+newspaper)をスクレイプし、成功時のみ差し替える (v.2026.7.28+26072802)
@@ -275,8 +275,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
         setState(() {
           _raceResult = result;
           _status = RaceStatus.resultConfirmed;
-          // [修正] 能力分析を馬詳細へ Step5: レース結果タブの位置は 6 → 5 (v.2026.10.17+26101705)
-          _tabController.animateTo(5);
+          // [修正] 好走条件・個別成績・相対評価の移動 Step5: レース結果タブの位置は 6 → 5 → 4 (v.2026.10.17+26101710)
+          _tabController.animateTo(4);
         });
       }
     } catch (e) {
@@ -316,7 +316,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
                       tabs: const [
                         // [修正] 親タブの並び順を変更（出馬表/出走馬分析/能力分析/過去分析/オッズ分析/騎手特性/レース結果/レース詳細） (v.2026.9.5+26090506)
                         Tab(text: '出馬表'),
-                        Tab(text: '出走馬分析'),
+                        // [削除] 好走条件・個別成績・相対評価の移動 Step5: 「出走馬分析」のタブを外した（下の2か所と同じ順番で外す） (v.2026.10.17+26101710)
                         // [削除] 能力分析を馬詳細へ Step5: 「能力分析(Rt)」のタブを外した（下の2か所と同じ順番で外す） (v.2026.10.17+26101705)
                         Tab(text: '過去分析'),
                         Tab(text: 'オッズ分析'),
@@ -353,7 +353,7 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               children: [
                 // [修正] 親タブの並び替えに合わせてプレースホルダの順序も変更 (v.2026.9.5+26090506)
                 ShutubaTablePage(raceId: widget.raceId),
-                const Center(child: Text('レース結果を取得中です...')), // 出走馬分析
+                // [削除] 好走条件・個別成績・相対評価の移動 Step5: 出走馬分析の仮表示を外した (v.2026.10.17+26101710)
                 // [削除] 能力分析を馬詳細へ Step5: 能力分析(Rt)の仮表示を外した (v.2026.10.17+26101705)
                 const Center(child: CircularProgressIndicator()), // 過去分析
                 const Center(child: Text('オッズを取得中...')), // オッズ分析
@@ -383,18 +383,8 @@ class _RacePageState extends State<RacePage> with SingleTickerProviderStateMixin
               onDataRefreshed: _onShutubaDataRefreshed,
             ),
 
-            if (_predictionRaceData != null)
-              HorseStatsPage(
-                raceId: widget.raceId,
-                raceName: _predictionRaceData!.raceName,
-                horses: _predictionRaceData!.horses,
-                raceData: _predictionRaceData!,
-                // [追加] 陣営の本気度指数 過去走取り直しStep3: レース結果が無い（＝出馬表がレース準備を投入する）レースでは、
-                // 過去走の取り直しが終わるまで出走馬分析の計算を待つ (v.2026.10.2+26100203)
-                waitForPreparation: _raceResult == null,
-              )
-            else
-              const Center(child: Text('出馬表データを読み込んでいます...')),
+            // [削除] 好走条件・個別成績・相対評価の移動 Step5: 出走馬分析タブを外した。過去走の取り直しまで計算を待つ仕組み（waitForPreparation）は、
+            // 移した先が読み込み係の知らせ（戦績・調教の取り直しの完了）で読み直すので要らなくなった (v.2026.10.17+26101710)
             // [削除] 能力分析を馬詳細へ Step5: 能力分析タブを外した (v.2026.10.17+26101705)
 
             if (_predictionRaceData != null)
