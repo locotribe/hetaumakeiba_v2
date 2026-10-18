@@ -5,6 +5,8 @@
 // DB / I/O / UI には一切触れない (v.2026.10.1+26100101)
 
 import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
+// [追加] 成長曲線の表示項目追加: 上の帯の間隔の文字を成績タブと同じ書き方にするため (v.2026.10.19+26101905)
+import 'package:hetaumakeiba_v2/logic/race_interval_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 
 /// 横軸の表示期間（同じ枠の中でスイッチで切り替える）
@@ -55,6 +57,12 @@ class GrowthPoint {
   /// 今回レースの当日体重の点なら true
   final bool isCurrent;
 
+  // [追加] 成長曲線の表示項目追加: 斤量（過去走は netkeiba の表記のまま、今回の点は出馬表の斤量を小数1桁で）。不明なら null (v.2026.10.19+26101905)
+  final String? carriedWeight;
+
+  // [追加] 成長曲線の表示項目追加: 上がり3Fのタイム（'33.9'）。不明なら null。今回の点は常に null (v.2026.10.19+26101905)
+  final String? agari;
+
   const GrowthPoint({
     required this.date,
     required this.raceName,
@@ -65,7 +73,14 @@ class GrowthPoint {
     required this.finishKind,
     required this.fieldSize,
     required this.isCurrent,
+    this.carriedWeight,
+    this.agari,
   });
+
+  // [追加] 成長曲線の表示項目追加: 取消・除外（走っていない）なら true。上の帯で ▼ の代わりに赤い × を出す (v.2026.10.19+26101905)
+  bool get didNotStart =>
+      finishKind == GrowthFinishKind.excluded ||
+      finishKind == GrowthFinishKind.scratched;
 
   /// 着順が人気より上位なら 1、下位なら -1、同じなら 0。比べられなければ null。
   int? get rankVsPopularity {
@@ -204,6 +219,8 @@ class GrowthCurveBuilder {
     required List<HorseRaceRecord> records,
     DateTime? raceDate,
     String? currentHorseWeight,
+    // [追加] 成長曲線の表示項目追加: 今回の斤量（出馬表）。「今回」の点に付ける (v.2026.10.19+26101905)
+    double? currentCarriedWeight,
   }) {
     final dated = <MapEntry<DateTime, HorseRaceRecord>>[];
     for (final r in records) {
@@ -229,6 +246,9 @@ class GrowthCurveBuilder {
         finishKind: finishKindOf(r.rank),
         fieldSize: parsePositiveInt(r.numberOfHorses),
         isCurrent: false,
+        // [追加] 成長曲線の表示項目追加: 斤量と上がり（空なら null） (v.2026.10.19+26101905)
+        carriedWeight: textOrNull(r.carriedWeight),
+        agari: textOrNull(r.agari),
       ));
     }
 
@@ -246,6 +266,8 @@ class GrowthCurveBuilder {
           finishKind: GrowthFinishKind.unknown,
           fieldSize: null,
           isCurrent: true,
+          // [追加] 成長曲線の表示項目追加: 今回の斤量（上がりは無い） (v.2026.10.19+26101905)
+          carriedWeight: currentCarriedWeight?.toStringAsFixed(1),
         ));
       }
     }
@@ -360,5 +382,19 @@ class GrowthCurveBuilder {
     return weightWindow([
       for (final points in pointsByHorse) ...points,
     ]);
+  }
+
+  // [追加] 成長曲線の表示項目追加: 前後の空白を除き、空なら null (v.2026.10.19+26101905)
+  static String? textOrNull(String text) {
+    final t = text.trim();
+    return t.isEmpty ? null : t;
+  }
+
+  // [追加] 成長曲線の表示項目追加: 2つのレースの間隔の文字（成績タブと同じ RaceIntervalAnalyzer.formatRaceInterval。
+  // 連闘／中N週／Nヶ月。決められなければ '--'） (v.2026.10.19+26101905)
+  static String intervalLabel(DateTime previous, DateTime current) {
+    String slash(DateTime d) => '${d.year}/${d.month}/${d.day}';
+    return RaceIntervalAnalyzer.formatRaceInterval(
+        slash(current), slash(previous));
   }
 }

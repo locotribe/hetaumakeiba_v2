@@ -5,6 +5,8 @@
 // グラフ（タップした点の詳細を下に表示）、凡例を並べる。データは受け取るだけで、読み込みはしない (v.2026.10.1+26100102)
 // [修正] 馬詳細タブ 表示項目変更 Step3: 期間スイッチを廃止し、全期間を「画面の幅＝1年」の横スクロールで表示（開いたときは右端＝最新）。
 // 左の体重目盛りはスクロールさせない。縦軸は全期間で固定。凡例は 馬体重・頭数・人気・着順 の4つ (v.2026.10.15+26101502)
+// [修正] 成長曲線の表示項目追加: 選んだレースの枠に斤量・上がりの行を足し、タップで選んだ点を薄い青で点滅させる。
+// 上の帯の ▼・×・間隔は GrowthCurvePainter が描く (v.2026.10.19+26101905)
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/growth_curve_builder.dart';
@@ -37,7 +39,8 @@ class GrowthCurveSection extends StatefulWidget {
   State<GrowthCurveSection> createState() => _GrowthCurveSectionState();
 }
 
-class _GrowthCurveSectionState extends State<GrowthCurveSection> {
+class _GrowthCurveSectionState extends State<GrowthCurveSection>
+    with SingleTickerProviderStateMixin {
   /// タップで選んだ点（全期間の中での番号）。null なら最後の点
   int? _selectedIndex;
 
@@ -45,17 +48,31 @@ class _GrowthCurveSectionState extends State<GrowthCurveSection> {
   final ScrollController _scrollController = ScrollController();
   bool _scrollToEndPending = true;
 
+  // [追加] 成長曲線の表示項目追加: タップで選んだ点の点滅（0.9秒で薄い↔濃いを行き来する）。タップするまでは動かさない (v.2026.10.19+26101905)
+  late final AnimationController _blinkController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+  late final Animation<double> _blink = CurvedAnimation(
+    parent: _blinkController,
+    curve: Curves.easeInOut,
+  );
+
   @override
   void didUpdateWidget(covariant GrowthCurveSection oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.horse.horseId != widget.horse.horseId) {
       _selectedIndex = null;
       _scrollToEndPending = true;
+      // [追加] 成長曲線の表示項目追加: 馬が変わったら点滅を止める (v.2026.10.19+26101905)
+      _blinkController.reset();
     }
   }
 
   @override
   void dispose() {
+    // [追加] 成長曲線の表示項目追加 (v.2026.10.19+26101905)
+    _blinkController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -133,6 +150,10 @@ class _GrowthCurveSectionState extends State<GrowthCurveSection> {
                     final index = layout.nearestIndex(details.localPosition);
                     if (index != null) {
                       setState(() => _selectedIndex = index);
+                      // [追加] 成長曲線の表示項目追加: タップで選んだら点滅を始める (v.2026.10.19+26101905)
+                      if (!_blinkController.isAnimating) {
+                        _blinkController.repeat(reverse: true);
+                      }
                     }
                   },
                   child: CustomPaint(
@@ -141,6 +162,9 @@ class _GrowthCurveSectionState extends State<GrowthCurveSection> {
                       points: points,
                       window: window,
                       selectedIndex: selected,
+                      // [追加] 成長曲線の表示項目追加: タップで選んだ点だけ点滅（開いたときの最後の点は点滅しない） (v.2026.10.19+26101905)
+                      highlightSelected: _selectedIndex == selected,
+                      blink: _blink,
                     ),
                   ),
                 ),
@@ -194,6 +218,14 @@ class _GrowthCurveSectionState extends State<GrowthCurveSection> {
             '$weightText　$resultText',
             style: const TextStyle(fontSize: 12, color: Colors.black87),
           ),
+          // [追加] 成長曲線の表示項目追加: 斤量と上がり（今回の点は斤量だけ） (v.2026.10.19+26101905)
+          const SizedBox(height: 2),
+          Text(
+            p.isCurrent
+                ? '斤量 ${p.carriedWeight ?? '--'}'
+                : '斤量 ${p.carriedWeight ?? '--'}　上がり ${p.agari ?? '--'}',
+            style: const TextStyle(fontSize: 12, color: Colors.black87),
+          ),
         ],
       ),
     );
@@ -237,7 +269,8 @@ class _GrowthCurveSectionState extends State<GrowthCurveSection> {
           ),
           const SizedBox(height: 2),
           Text(
-            '棒は高いほど上位（18頭立てを満杯）。破線は計不をはさむ区間と今回の当日体重。点をタップで詳細',
+            // [修正] 成長曲線の表示項目追加: 上の帯の説明を足す (v.2026.10.19+26101905)
+            '上の▼は出走（×は取消・除外）、間の文字は前走からの間隔。棒は高いほど上位（18頭立てを満杯）。破線は計不をはさむ区間と今回の当日体重。点をタップで詳細',
             style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
           ),
         ],
@@ -262,6 +295,8 @@ class _GrowthCurveSectionState extends State<GrowthCurveSection> {
       records: widget.records,
       raceDate: raceDate,
       currentHorseWeight: widget.horse.horseWeight,
+      // [追加] 成長曲線の表示項目追加: 「今回」の点に出馬表の斤量を付ける (v.2026.10.19+26101905)
+      currentCarriedWeight: widget.horse.carriedWeight,
     );
     // [修正] 馬詳細タブ 表示項目変更 Step3: 期間で絞らず全期間を描く。縦軸も全期間で1回だけ決める (v.2026.10.15+26101502)
     // [修正] 馬詳細タブ 表示項目変更 Step3追補: レース全体の縦軸を渡されたらそれを使う（グラフの高さは同じで、10kgの間隔がレースごとに変わる） (v.2026.10.15+26101502)

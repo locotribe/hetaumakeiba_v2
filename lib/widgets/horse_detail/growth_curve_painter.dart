@@ -6,6 +6,8 @@
 // [修正] 馬詳細タブ 表示項目変更 Step3: 棒を「頭数（薄いグレー）・人気（緑）・着順（赤）」の3本に（18頭立てを満杯とする高さ）。
 // 450kgの水準線を廃止。横スクロールのため、体重の目盛りは別の描画（GrowthCurveAxisPainter）に分け、本体は左端0から描く。
 // 日付の目盛りは1・4・7・10月の頭に統一 (v.2026.10.15+26101502)
+// [修正] 成長曲線の表示項目追加: いちばん上に帯を足し、各レースの位置に赤い ▼（取消・除外は赤い ×）と、
+// ▼ と ▼ の間に前走からの間隔（入らないときは出さない）を描く。タップで選んだ点は薄い青で点滅させる (v.2026.10.19+26101905)
 
 import 'dart:math' as math;
 
@@ -18,6 +20,9 @@ class GrowthCurveLayout {
   static const double leftAxisWidth = 34;
   static const double rightPadding = 10;
   static const double topPadding = 10;
+
+  // [追加] 成長曲線の表示項目追加: いちばん上の ▼ と間隔の帯の高さ（この下に topPadding、その下に描画領域） (v.2026.10.19+26101905)
+  static const double markerBandHeight = 14;
 
   /// 折れ線と棒を描く領域の高さ
   // [修正] 馬詳細タブ 表示項目変更 Step3追補: グラフ全体の高さを 226 → 180 にする（描画領域 200 → 154。上の余白10・日付の目盛り16は同じ） (v.2026.10.15+26101502)
@@ -33,7 +38,9 @@ class GrowthCurveLayout {
   // [修正] 馬詳細タブ 表示項目変更 Step3追補: 棒の領域を下50%から80%へ広げる（体重の線と重なってもよい） (v.2026.10.15+26101502)
   static const double barZoneRatio = 0.8;
 
-  static const double totalHeight = topPadding + plotHeight + dateAxisHeight;
+  // [修正] 成長曲線の表示項目追加: 上の帯の高さを足す (v.2026.10.19+26101905)
+  static const double totalHeight =
+      markerBandHeight + topPadding + plotHeight + dateAxisHeight;
 
   final Size size;
   final List<GrowthPoint> points;
@@ -48,9 +55,10 @@ class GrowthCurveLayout {
     required this.window,
   }) {
     // [修正] 馬詳細タブ 表示項目変更 Step3: 目盛りを別に描くので、描画領域は左端0から (v.2026.10.15+26101502)
+    // [修正] 成長曲線の表示項目追加: 描画領域は上の帯の下から (v.2026.10.19+26101905)
     plot = Rect.fromLTWH(
       0,
-      topPadding,
+      markerBandHeight + topPadding,
       math.max(0.0, size.width - rightPadding),
       plotHeight,
     );
@@ -177,6 +185,16 @@ class GrowthCurvePainter extends CustomPainter {
   /// 選択中の点の番号（null なら選択なし）
   final int? selectedIndex;
 
+  // [追加] 成長曲線の表示項目追加: true なら選択中の点を薄い青で点滅させる（タップで選んだときだけ） (v.2026.10.19+26101905)
+  final bool highlightSelected;
+
+  // [追加] 成長曲線の表示項目追加: 点滅の進み具合（0〜1）。値が変わるたびに描き直す (v.2026.10.19+26101905)
+  final Animation<double>? blink;
+
+  // [追加] 成長曲線の表示項目追加: 上の帯の ▼・× の色と、選択中の点の点滅の色 (v.2026.10.19+26101905)
+  static const Color markerColor = Color(0xFFE53935);
+  static const Color highlightColor = Color(0xFF4FC3F7);
+
   static const Color weightColor = Color(0xFF5D4037);
   // [修正] 馬詳細タブ 表示項目変更 Step3: 棒の色は 頭数=薄いグレー・人気=緑・着順=赤 の3色（着順の上/下/同じの色分けと450kg線の色は廃止） (v.2026.10.15+26101502)
   static const Color fieldColor = Color(0xFFB0BEC5);
@@ -189,7 +207,9 @@ class GrowthCurvePainter extends CustomPainter {
     required this.points,
     required this.window,
     required this.selectedIndex,
-  });
+    this.highlightSelected = false,
+    this.blink,
+  }) : super(repaint: blink);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -202,6 +222,8 @@ class GrowthCurvePainter extends CustomPainter {
     _drawBars(canvas, layout);
     _drawWeightLine(canvas, layout);
     _drawDateAxis(canvas, layout);
+    // [追加] 成長曲線の表示項目追加 (v.2026.10.19+26101905)
+    _drawRaceMarkers(canvas, layout);
     canvas.restore();
   }
 
@@ -324,18 +346,28 @@ class GrowthCurvePainter extends CustomPainter {
       if (w == null) continue;
       final offset = Offset(layout.xOf(points[i].date), layout.yOfWeight(w));
       final radius = i == selectedIndex ? 5.5 : 3.5;
+      // [修正] 成長曲線の表示項目追加: タップで選んだ点は薄い青で点滅（透明度 35%〜100%）。
+      // 下の折れ線が透けないよう、先に白で塗る (v.2026.10.19+26101905)
+      final highlight = highlightSelected && i == selectedIndex;
+      final color = highlight
+          ? highlightColor.withValues(
+              alpha: 0.35 + 0.65 * (blink?.value ?? 1.0))
+          : weightColor;
       if (points[i].isCurrent) {
         canvas.drawCircle(offset, radius, Paint()..color = Colors.white);
         canvas.drawCircle(
           offset,
           radius,
           Paint()
-            ..color = weightColor
+            ..color = color
             ..style = PaintingStyle.stroke
             ..strokeWidth = 2,
         );
       } else {
-        canvas.drawCircle(offset, radius, Paint()..color = weightColor);
+        if (highlight) {
+          canvas.drawCircle(offset, radius, Paint()..color = Colors.white);
+        }
+        canvas.drawCircle(offset, radius, Paint()..color = color);
       }
     }
   }
@@ -404,10 +436,57 @@ class GrowthCurvePainter extends CustomPainter {
     }
   }
 
+  // [追加] 成長曲線の表示項目追加: いちばん上の帯。各レースの位置に赤い ▼（取消・除外は赤い ×）、
+  // 隣り合う印の間に前走からの間隔の文字（印の間に入りきらないときは出さない） (v.2026.10.19+26101905)
+  void _drawRaceMarkers(Canvas canvas, GrowthCurveLayout layout) {
+    if (points.isEmpty) return;
+    const half = 4.0;
+    const top = 3.0;
+    const tip = 10.0;
+    const centerY = (top + tip) / 2;
+    final fillPaint = Paint()..color = markerColor;
+    final crossPaint = Paint()
+      ..color = markerColor
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final xs = [for (final p in points) layout.xOf(p.date)];
+    for (var i = 0; i < points.length; i++) {
+      final x = xs[i];
+      if (points[i].didNotStart) {
+        canvas.drawLine(Offset(x - half + 0.5, top),
+            Offset(x + half - 0.5, tip), crossPaint);
+        canvas.drawLine(Offset(x + half - 0.5, top),
+            Offset(x - half + 0.5, tip), crossPaint);
+      } else {
+        final path = Path()
+          ..moveTo(x - half, top)
+          ..lineTo(x + half, top)
+          ..lineTo(x, tip)
+          ..close();
+        canvas.drawPath(path, fillPaint);
+      }
+      if (i == 0) continue;
+      final label =
+          GrowthCurveBuilder.intervalLabel(points[i - 1].date, points[i].date);
+      if (label == '--') continue;
+      final tp = _GrowthCurveText.text(label, fontSize: 9);
+      final room = xs[i] - xs[i - 1] - half * 2 - 4;
+      if (tp.width > room) continue;
+      tp.paint(
+          canvas,
+          Offset((xs[i - 1] + xs[i]) / 2 - tp.width / 2,
+              centerY - tp.height / 2));
+    }
+  }
+
   @override
   bool shouldRepaint(covariant GrowthCurvePainter oldDelegate) {
+    // [修正] 成長曲線の表示項目追加: 点滅の有無と点滅の進み具合も見る (v.2026.10.19+26101905)
     return oldDelegate.points != points ||
         oldDelegate.window != window ||
-        oldDelegate.selectedIndex != selectedIndex;
+        oldDelegate.selectedIndex != selectedIndex ||
+        oldDelegate.highlightSelected != highlightSelected ||
+        oldDelegate.blink != blink;
   }
 }

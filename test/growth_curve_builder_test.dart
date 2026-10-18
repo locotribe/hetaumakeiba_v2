@@ -11,6 +11,8 @@ HorseRaceRecord _record({
   String popularity = '1',
   String rank = '1',
   String numberOfHorses = '16',
+  String carriedWeight = '',
+  String agari = '',
 }) {
   return HorseRaceRecord(
     horseId: 'h1',
@@ -28,14 +30,14 @@ HorseRaceRecord _record({
     rank: rank,
     jockey: '',
     jockeyId: '',
-    carriedWeight: '',
+    carriedWeight: carriedWeight,
     distance: '',
     trackCondition: '',
     time: '',
     margin: '',
     cornerPassage: '',
     pace: '',
-    agari: '',
+    agari: agari,
     horseWeight: horseWeight,
     winnerOrSecondHorse: '',
     prizeMoney: '',
@@ -347,6 +349,57 @@ void main() {
       final empty = GrowthCurveBuilder.raceWeightWindow([[], []]);
       expect(empty.min, GrowthCurveBuilder.emptyWindow.min);
       expect(empty.max, GrowthCurveBuilder.emptyWindow.max);
+    });
+  });
+
+  group('斤量・上がり・上の帯（成長曲線の表示項目追加）', () {
+    test('過去走の斤量と上がりを持つ。空なら null', () {
+      final points = GrowthCurveBuilder.buildPoints(records: [
+        _record(date: '2026/02/14', carriedWeight: '55', agari: '33.9'),
+        _record(date: '2026/04/12', carriedWeight: ' ', agari: ''),
+      ]);
+      expect(points[0].carriedWeight, '55');
+      expect(points[0].agari, '33.9');
+      expect(points[1].carriedWeight, isNull);
+      expect(points[1].agari, isNull);
+    });
+
+    test('今回の点は出馬表の斤量を小数1桁で持ち、上がりは null', () {
+      final points = GrowthCurveBuilder.buildPoints(
+        records: [_record(date: '2026/04/12', carriedWeight: '55')],
+        raceDate: DateTime(2026, 10, 18),
+        currentHorseWeight: '498(+8)',
+        currentCarriedWeight: 55,
+      );
+      expect(points.last.isCurrent, isTrue);
+      expect(points.last.carriedWeight, '55.0');
+      expect(points.last.agari, isNull);
+    });
+
+    test('取消・除外だけが didNotStart', () {
+      final points = GrowthCurveBuilder.buildPoints(records: [
+        _record(date: '2026/01/05', rank: '取'),
+        _record(date: '2026/01/12', rank: '除'),
+        _record(date: '2026/01/19', rank: '中'),
+        _record(date: '2026/01/26', rank: '3'),
+      ]);
+      expect(points.map((p) => p.didNotStart).toList(),
+          [true, true, false, false]);
+    });
+
+    test('間隔の文字は成績タブと同じ書き方', () {
+      expect(
+          GrowthCurveBuilder.intervalLabel(
+              DateTime(2026, 4, 5), DateTime(2026, 4, 12)),
+          '連闘');
+      expect(
+          GrowthCurveBuilder.intervalLabel(
+              DateTime(2026, 3, 29), DateTime(2026, 4, 12)),
+          '中1週');
+      expect(
+          GrowthCurveBuilder.intervalLabel(
+              DateTime(2026, 2, 14), DateTime(2026, 4, 12)),
+          '1ヶ月');
     });
   });
 }
