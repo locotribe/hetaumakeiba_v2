@@ -32,7 +32,8 @@ class BundleFactorSelector {
   static const Map<String, String> factorLabels = {
     'pace': 'ペース',
     'trackCondition': '馬場状態',
-    'pedigree': '血統',
+    // [修正] ローテ・血統タブの見た目の調整 Step3: 総合タブ「ファクター該当数」の列名。中身は父だけなので「父」にした (v.2026.10.19+26101908)
+    'pedigree': '父',
     'rotation': 'ローテーション',
     'popularityValue': '人気妙味',
   };
@@ -87,6 +88,32 @@ class BundleFactorSelector {
     return byMetric;
   }
 
+  // [追加] ローテ・血統タブの見た目の調整 Step3: ローテ・血統（父・母父）の該当馬は、倍率ではなく回数で選ぶ。指標ごとに、その回数が1回以上の馬を、回数の多い順（同じなら回収率の高い順＝1着は単回・ほかは複回。回収率が無い馬は後ろ）、次に馬番の順に並べて上位を切り出す (v.2026.10.19+26101908)
+  static Map<String, List<FactorCandidate>> _buildByCount(
+      List<FactorCandidate> all) {
+    final Map<String, List<FactorCandidate>> byMetric = {};
+    for (final metric in FactorMetric.all) {
+      final filtered = all.where((c) => c.countFor(metric) > 0).toList()
+        ..sort((a, b) {
+          final byCount = b.countFor(metric).compareTo(a.countFor(metric));
+          if (byCount != 0) return byCount;
+          final returnA = a.returnFor(metric) ?? -1.0;
+          final returnB = b.returnFor(metric) ?? -1.0;
+          final byReturn = returnB.compareTo(returnA);
+          if (byReturn != 0) return byReturn;
+          return FactorCandidateSelector.compareForTie(a, b);
+        });
+      byMetric[metric] = filtered.length <= maxCandidates
+          ? filtered
+          : filtered.sublist(0, maxCandidates);
+    }
+    return byMetric;
+  }
+
+  /// 回収率(%)の文字。例 '132%'。計算できないときは '-'。
+  static String _returnText(double? percent) =>
+      percent == null ? '-' : '${percent.toStringAsFixed(0)}%';
+
   // [追加] ローテ・血統タブのリフト化 Step2: ローテ・父・母父の表を、バンドルと今回の出走馬（取消を除く）から作る (v.2026.10.16+26101612)
   static BundleLiftTables liftTablesOf(
     RaceAnalysisBundle bundle,
@@ -129,14 +156,17 @@ class BundleFactorSelector {
     if (table.countedStarts == 0) {
       return '過去の出走馬の$dataNameがまだありません。上の「過去の全出走馬のデータ」から取得してください。';
     }
-    final top = table.topRows();
+    // [修正] ローテ・血統タブの見た目の調整 Step3: 要約は、3着以内の多い順に3つと、その複勝回収率にした（倍率の上位はやめた） (v.2026.10.19+26101908)
+    final top = [
+      for (final row in table.rowsByShow)
+        if (row.show > 0) row,
+    ].take(3).toList();
     final topText = top.isEmpty
-        ? '2頭以上が出走して3着以内に入った区分はありません'
-        : top.map((row) {
-            final rate = row.rateFor(FactorMetric.show);
-            final lift = table.liftsOf(row)[FactorMetric.show] ?? 0.0;
-            return '${row.label} ${rate.toStringAsFixed(0)}%(${lift.toStringAsFixed(1)}倍)';
-          }).join(' / ');
+        ? '3着以内に入った区分はありません'
+        : top
+            .map((row) =>
+                '${row.label} ${row.show}回(複回${_returnText(row.returns.showReturn)})')
+            .join(' / ');
     final missingText = table.missingStarts > 0
         ? '・$dataNameが無い延べ${table.missingStarts}頭は数えていません'
         : '';
@@ -163,6 +193,15 @@ class BundleFactorSelector {
         recordText: row.recordText,
         rates: row.rates,
         lifts: table.liftsOf(row),
+        // [追加] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶための回数・回収率・過去の出走（lifts・rates は総合タブの色と同点の並べ替えに使われるので今までどおり入れる） (v.2026.10.19+26101908)
+        counts: {
+          FactorMetric.win: row.win,
+          FactorMetric.place: row.place,
+          FactorMetric.show: row.show,
+        },
+        winReturn: row.returns.winReturn,
+        showReturn: row.returns.showReturn,
+        sampleStarts: row.total,
       ));
     }
     return list;
@@ -389,8 +428,11 @@ class BundleFactorSelector {
     required String roleName,
   }) {
     final label = '血統（$roleName）';
+    // [修正] ローテ・血統タブの見た目の調整 Step3: 倍率ではなく、好走の回数（同じなら回収率）で選ぶ。説明もそれに合わせた (v.2026.10.19+26101908)
     final criteria =
-        '過去の出走馬を$roleNameごとに数え、今回の出走馬と同じ$roleNameの成績が全体平均を上回る馬を上位$maxCandidates頭まで選出';
+        '過去の出走馬を$roleNameごとに数え、今回の出走馬と同じ$roleNameの馬が過去に好走した回数'
+        '（並べ替えで選んだ着順以内）の多い順に、1回以上の馬を上位$maxCandidates頭まで選出'
+        '（同じ回数なら回収率の高い順）';
 
     final list = _liftCandidates(
       table,
@@ -402,18 +444,21 @@ class BundleFactorSelector {
     final notes = <String>[
       '血統は「このレースで走る血の傾向」を見るファクターです。'
           'このレースの過去の出走馬全員（取消・除外を除く）を$roleNameごとに数え、'
-          'その$roleNameの勝率・連対率・複勝率を、過去の出走馬全体の率で割った倍率で比べています。'
-          '人気・枠番などのタブと同じ倍率です。'
+          '今回の出走馬と同じ$roleNameの馬が過去に何回好走したか'
+          '（並べ替えの「1着数・連対数・3着内数」）の多い順に並べています。'
+          '同じ回数なら、その$roleNameの馬を毎回100円ずつ買ったときの回収率'
+          '（1着数は単勝、ほかは複勝）の高い順です。'
           'コース形状や距離への適性は血統に出やすいので、'
           '同じ血を引く馬が繰り返し好走しているレースでは有力な手がかりになります。',
-      '出走の少ない$roleNameほど数字が大きく振れます。'
-          '右の度数（1着-2着-3着-着外）も合わせて確認してください。'
-          '出走頭数の多い種牡馬は好走の回数も増えますが、'
-          'この倍率は出走数で割っているので、回数が多いだけでは高くなりません。',
+      '回数は、出走の多い$roleNameほど多くなります。'
+          '右の度数（1着-2着-3着-着外）と回収率も合わせて見てください。'
+          '回収率が100%を超えていれば、人気より走っている（人気薄でも来ている）$roleNameです。'
+          '好走が1回だけで回収率が大きいときは、大穴が1回来ただけのこともあります'
+          '（過去の出走が2頭以下の$roleNameは回収率に色を付けていません）。',
       '血統が保存されていない過去の出走馬は数えていません。'
-          '上の「過去の全出走馬のデータ」で取得すると、集計に加わります。',
-      '同じ$roleNameの馬は同じ倍率になります。'
-          '同じ倍率の馬の並び順に意味はありません'
+          '「過去の全出走馬のデータ」で取得すると、集計に加わります。',
+      '同じ$roleNameの馬は同じ回数・回収率になります。'
+          '同じ回数・回収率の馬の並び順に意味はありません'
           '（馬番の順。枠順が確定していないレースでは馬名の順）。',
       _disclaimer,
     ];
@@ -423,14 +468,17 @@ class BundleFactorSelector {
       factorLabel: label,
       trendSummary: _liftSummary(table, header: '好走した$roleName', dataName: '血統データ'),
       criteria: criteria,
-      candidatesByMetric: _buildByMetric(list),
+      candidatesByMetric: _buildByCount(list),
       emptyMessage: list.isEmpty
           ? (table.countedStarts == 0
               ? '過去の出走馬の血統データがありません。'
               : '今回の出走馬と同じ$roleNameの馬は、過去の出走馬にいません。')
-          : null,
+          : '並べ替えで選んだ着順以内に来た同じ$roleNameの馬は、過去の出走馬にいません。',
       notes: notes,
       baseline: table.baseline,
+      isCountBased: true,
+      overallWinReturn: table.overallReturns.winReturn,
+      overallShowReturn: table.overallReturns.showReturn,
     );
   }
 
@@ -445,8 +493,11 @@ class BundleFactorSelector {
     PastRaceLiftTable? table,
   }) {
     const label = 'ローテーション';
+    // [修正] ローテ・血統タブの見た目の調整 Step3: 倍率ではなく、好走の回数（同じなら回収率）で選ぶ。説明もそれに合わせた (v.2026.10.19+26101908)
     const criteria =
-        '過去の出走馬の前走を路線ごとに数え、今回の出走馬と同じ路線の成績が全体平均を上回る馬を上位$maxCandidates頭まで選出';
+        '過去の出走馬の前走を路線ごとに数え、今回の出走馬と同じ路線から来た馬が過去に好走した回数'
+        '（並べ替えで選んだ着順以内）の多い順に、1回以上の馬を上位$maxCandidates頭まで選出'
+        '（同じ回数なら回収率の高い順）';
 
     final t = table ?? liftTablesOf(bundle, horses).rotation;
     final list = _liftCandidates(
@@ -460,8 +511,10 @@ class BundleFactorSelector {
     final notes = <String>[
       'ローテーションは「どのレースを使ってここに来たか」を見るファクターです。'
           'このレースの過去の出走馬全員（取消・除外を除く）の前走を路線にまとめ、'
-          '路線ごとの勝率・連対率・複勝率を、過去の出走馬全体の率で割った倍率で比べています。'
-          '人気・枠番などのタブと同じ倍率です。'
+          '今回の出走馬と同じ路線から来た馬が過去に何回好走したか'
+          '（並べ替えの「1着数・連対数・3着内数」）の多い順に並べています。'
+          '同じ回数なら、その路線から来た馬を毎回100円ずつ買ったときの回収率'
+          '（1着数は単勝、ほかは複勝）の高い順です。'
           'ステップレースが決まっているレースでは、同じ路線から来た馬が繰り返し好走する傾向があります。',
       '路線は、主催・芝ダ・距離が同じで名前が同じレース'
           '（スポンサー名の有無・途中で切れた名前・改名も同じとみなす）をまとめたものです。'
@@ -469,13 +522,15 @@ class BundleFactorSelector {
           '地方の重賞以外の競走は「地方」にまとめています。'
           '表示名は一番新しい年の名前です。前走は、その年のこのレースより前に実際に走った一番新しいレースです'
           '（取消・除外は飛ばし、中止は数えます）。',
-      '出走の少ない路線ほど数字が大きく振れます。'
-          '右の度数（1着-2着-3着-着外）も合わせて確認してください。'
-          '過去に1頭しか来ていない路線は、その馬が3着以内だったときだけ倍率が付きます。',
+      '回数は、出走の多い路線ほど多くなります。'
+          '右の度数（1着-2着-3着-着外）と回収率も合わせて見てください。'
+          '回収率が100%を超えていれば、人気より走っている（人気薄でも来ている）路線です。'
+          '好走が1回だけで回収率が大きいときは、大穴が1回来ただけのこともあります'
+          '（過去の出走が2頭以下の路線は回収率に色を付けていません）。',
       '戦績が保存されていない過去の出走馬は数えていません。'
           '上の「過去の全出走馬のデータ」で取得すると、集計に加わります。',
-      '同じ路線から来た馬は同じ倍率になります。'
-          '同じ倍率の馬の並び順に意味はありません'
+      '同じ路線から来た馬は同じ回数・回収率になります。'
+          '同じ回数・回収率の馬の並び順に意味はありません'
           '（馬番の順。枠順が確定していないレースでは馬名の順）。',
       _disclaimer,
     ];
@@ -485,14 +540,17 @@ class BundleFactorSelector {
       factorLabel: label,
       trendSummary: _liftSummary(t, header: '好走した路線', dataName: '戦績データ'),
       criteria: criteria,
-      candidatesByMetric: _buildByMetric(list),
+      candidatesByMetric: _buildByCount(list),
       emptyMessage: list.isEmpty
           ? (t.countedStarts == 0
               ? '過去の出走馬の戦績データがありません。'
               : '今回の出走馬と同じ路線から来た馬は、過去の出走馬にいません。')
-          : null,
+          : '並べ替えで選んだ着順以内に来た、同じ路線から来た馬は、過去の出走馬にいません。',
       notes: notes,
       baseline: t.baseline,
+      isCountBased: true,
+      overallWinReturn: t.overallReturns.winReturn,
+      overallShowReturn: t.overallReturns.showReturn,
     );
   }
 

@@ -65,6 +65,19 @@ class FactorCandidate {
   /// 指標別のリフト値（率 ÷ 全体平均）。率ベースでない場合は擬似リフトを格納する。
   final Map<String, double> lifts;
 
+  // [追加] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶファクター（ローテ・血統）で使う、区分の回数・回収率・過去の出走 (v.2026.10.19+26101908)
+  /// 指標別の回数（win=1着・place=2着以内・show=3着以内の回数）。回数で選ぶファクター以外は null。
+  final Map<String, int>? counts;
+
+  /// 区分の単勝回収率(%)。計算できないとき、または回数で選ぶファクター以外は null。
+  final double? winReturn;
+
+  /// 区分の複勝回収率(%)。計算できないとき、または回数で選ぶファクター以外は null。
+  final double? showReturn;
+
+  /// 区分の過去の出走（延べ頭数）。回収率の色分けに使う。回数で選ぶファクター以外は null。
+  final int? sampleStarts;
+
   FactorCandidate({
     required this.horseId,
     required this.horseNumber,
@@ -74,11 +87,22 @@ class FactorCandidate {
     required this.lifts,
     this.recordText,
     this.rates,
+    this.counts,
+    this.winReturn,
+    this.showReturn,
+    this.sampleStarts,
   });
 
   double liftFor(String metric) => lifts[metric] ?? 0.0;
 
   double? rateFor(String metric) => rates?[metric];
+
+  /// 指標別の回数。無ければ0。
+  int countFor(String metric) => counts?[metric] ?? 0;
+
+  /// 指標に対応する回収率(%)。1着（win）は単勝、2着以内・3着以内は複勝。
+  double? returnFor(String metric) =>
+      metric == FactorMetric.win ? winReturn : showReturn;
 }
 
 // [追加] 1ファクター分の該当馬選出結果 (v.2026.9.5+26090506)
@@ -128,6 +152,16 @@ class FactorCandidateResult {
   /// 横断集計では常に中庸のシナリオ（ミドル・標準）で数える。
   final String neutralMetric;
 
+  // [追加] ローテ・血統タブの見た目の調整 Step3: ローテ・血統（父・母父）は倍率ではなく回数で選ぶ。true ならカードはチップを「1着数・連対数・3着内数」にし、倍率の代わりに回収率を出す (v.2026.10.19+26101908)
+  /// 回数で選ぶファクターかどうか。
+  final bool isCountBased;
+
+  /// 過去の出走馬全体の単勝回収率(%)。回数で選ぶファクター以外や、計算できないときは null。
+  final double? overallWinReturn;
+
+  /// 過去の出走馬全体の複勝回収率(%)。回数で選ぶファクター以外や、計算できないときは null。
+  final double? overallShowReturn;
+
   FactorCandidateResult({
     required this.factorKey,
     required this.factorLabel,
@@ -141,6 +175,9 @@ class FactorCandidateResult {
     this.metricLabels,
     this.showMetricSelector = true,
     this.neutralMetric = FactorMetric.show,
+    this.isCountBased = false,
+    this.overallWinReturn,
+    this.overallShowReturn,
   });
 
   /// 横断集計で実際に参照する区分を返す。

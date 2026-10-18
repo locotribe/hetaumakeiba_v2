@@ -3,6 +3,15 @@
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/factor_candidate_selector.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_number_badge.dart';
+// [追加] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶファクター（ローテ・血統）の回収率の文字と色 (v.2026.10.19+26101908)
+import 'package:hetaumakeiba_v2/widgets/volatility_components/past_race_return_style.dart';
+
+// [追加] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶファクター（ローテ・血統）のチップの名前（中身は win/place/show のまま） (v.2026.10.19+26101908)
+const Map<String, String> _countMetricLabels = {
+  FactorMetric.win: '1着数',
+  FactorMetric.place: '連対数',
+  FactorMetric.show: '3着内数',
+};
 
 // [追加] リフト値の水準に応じた色分け（カード内で共通利用） (v.2026.9.5+26090506)
 Color _liftColor(double lift) {
@@ -220,7 +229,10 @@ class _FactorCandidatesCardState extends State<FactorCandidatesCard> {
                     child: _MetricSelector(
                       selected: _metric,
                       onChanged: (value) => setState(() => _metric = value),
-                      labels: result.metricLabels,
+                      // [修正] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶファクターはチップを「1着数・連対数・3着内数」にする (v.2026.10.19+26101908)
+                      labels: result.isCountBased
+                          ? _countMetricLabels
+                          : result.metricLabels,
                     ),
                   ),
                 ],
@@ -235,7 +247,21 @@ class _FactorCandidatesCardState extends State<FactorCandidatesCard> {
                   style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
                 ),
               ),
-            if (result.baseline != null && result.isRateBased)
+            // [追加] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶファクターは、全体平均の行の代わりに全体の回収率を出す (v.2026.10.19+26101908)
+            if (result.isCountBased)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  '過去の出走馬全体の回収率: '
+                  '単回 ${pastRaceReturnText(result.overallWinReturn)} ／ '
+                  '複回 ${pastRaceReturnText(result.overallShowReturn)}',
+                  style: TextStyle(fontSize: 10, color: Colors.teal.shade800),
+                ),
+              ),
+            // [修正] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶファクターでは全体平均（倍率の基準）の行を出さない (v.2026.10.19+26101908)
+            if (result.baseline != null &&
+                result.isRateBased &&
+                !result.isCountBased)
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
@@ -321,14 +347,19 @@ class _FactorCandidatesCardState extends State<FactorCandidatesCard> {
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6.0, vertical: 1.0),
+                      // [修正] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶファクターのバッジは回収率（1着数のチップでは単回、ほかは複回） (v.2026.10.19+26101908)
                       decoration: BoxDecoration(
-                        color: _liftColor(lift),
+                        color: result.isCountBased
+                            ? _returnBadgeColor(candidate)
+                            : _liftColor(lift),
                         borderRadius: BorderRadius.circular(8.0),
                       ),
                       child: Text(
-                        result.isRateBased
-                            ? '${lift.toStringAsFixed(2)}倍'
-                            : '適合 ${lift.toStringAsFixed(2)}',
+                        result.isCountBased
+                            ? _returnBadgeText(candidate)
+                            : (result.isRateBased
+                                ? '${lift.toStringAsFixed(2)}倍'
+                                : '適合 ${lift.toStringAsFixed(2)}'),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 11,
@@ -342,7 +373,11 @@ class _FactorCandidatesCardState extends State<FactorCandidatesCard> {
                   candidate.reason,
                   style: const TextStyle(fontSize: 11, color: Colors.black54),
                 ),
-                if (candidate.rates != null) _buildRatesLine(candidate, result),
+                // [修正] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶファクターは、率と倍率の行の代わりに回数と回収率の行を出す (v.2026.10.19+26101908)
+                if (result.isCountBased)
+                  _buildCountsLine(candidate)
+                else if (candidate.rates != null)
+                  _buildRatesLine(candidate, result),
               ],
             ),
           ),
@@ -391,6 +426,73 @@ class _FactorCandidatesCardState extends State<FactorCandidatesCard> {
     }
 
     if (spans.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 1.0),
+      child: RichText(text: TextSpan(children: spans)),
+    );
+  }
+
+  // [追加] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶファクター（ローテ・血統）のバッジの文字と色。1着数のチップでは単回、ほかは複回 (v.2026.10.19+26101908)
+  String _returnBadgeText(FactorCandidate candidate) {
+    final name = _metric == FactorMetric.win ? '単回' : '複回';
+    return '$name ${pastRaceReturnText(candidate.returnFor(_metric))}';
+  }
+
+  Color _returnBadgeColor(FactorCandidate candidate) {
+    final value = candidate.returnFor(_metric);
+    if (value == null) return Colors.grey;
+    return pastRaceReturnColor(value, candidate.sampleStarts ?? 0);
+  }
+
+  // [追加] ローテ・血統タブの見た目の調整 Step3: 回数で選ぶファクターの行。「勝1 連2 複6  単回85% 複回132%  [1-1-4-9]」。選んだチップの回数と、並べ替えに使う回収率を太字にする (v.2026.10.19+26101908)
+  Widget _buildCountsLine(FactorCandidate candidate) {
+    final spans = <InlineSpan>[];
+
+    for (final metric in FactorMetric.all) {
+      final bool isSelected = metric == _metric;
+      if (spans.isNotEmpty) {
+        spans.add(const TextSpan(
+          text: ' ',
+          style: TextStyle(fontSize: 11, color: Colors.black38),
+        ));
+      }
+      spans.add(TextSpan(
+        text:
+            '${FactorMetric.shortLabels[metric] ?? metric}${candidate.countFor(metric)}',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? Colors.teal.shade800 : Colors.black45,
+        ),
+      ));
+    }
+
+    final starts = candidate.sampleStarts ?? 0;
+    final bool winSelected = _metric == FactorMetric.win;
+    spans.add(TextSpan(
+      text: '  単回${pastRaceReturnText(candidate.winReturn)}',
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: winSelected ? FontWeight.bold : FontWeight.normal,
+        color: pastRaceReturnColor(candidate.winReturn, starts),
+      ),
+    ));
+    spans.add(TextSpan(
+      text: ' 複回${pastRaceReturnText(candidate.showReturn)}',
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: winSelected ? FontWeight.normal : FontWeight.bold,
+        color: pastRaceReturnColor(candidate.showReturn, starts),
+      ),
+    ));
+
+    if (candidate.recordText != null) {
+      spans.add(TextSpan(
+        text: '  [${candidate.recordText}]',
+        style: const TextStyle(fontSize: 10, color: Colors.black38),
+      ));
+    }
 
     return Padding(
       padding: const EdgeInsets.only(top: 1.0),
