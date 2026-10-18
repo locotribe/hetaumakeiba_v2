@@ -14,7 +14,6 @@ import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/widgets/analyzed_races_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/detailed_analysis_tab.dart';
 import 'package:hetaumakeiba_v2/widgets/past_race_selection_dialog.dart';
-import 'package:hetaumakeiba_v2/widgets/stats_match_tab.dart';
 import 'package:intl/intl.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_analysis_tab.dart';
 
@@ -78,9 +77,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   // [追加] 過去レース詳細検索の初期値(開催場/馬場/距離)に使う出馬表データ (v.2026.9.9+26090903)
   PredictionRaceData? _currentRaceData;
 
-  List<PredictionHorseDetail>? _resultHorses;
+  // [削除] 結果分析タブの廃止 Step1: 結果分析タブ専用の「結果から作った馬」（_resultHorses）と、タブを出すかどうか（_showResultTab）を削除した (v.2026.10.19+26101901)
   bool _hasCacheData = false;
-  bool get _showResultTab => _hasCacheData && _resultHorses != null;
 
   // ★追加：グラフ描画のために過去レース(RaceResult)のリストを保持する変数
   List<RaceResult> _pastRaces = [];
@@ -133,15 +131,10 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         _hasCacheData = false;
       }
 
+      // [修正] 結果分析タブの廃止 Step1: レース結果は、出馬表のキャッシュが無いときに結果から馬を作るためだけに読む (v.2026.10.19+26101901)
       final RaceResult? result = await _raceRepo.getRaceResult(widget.raceId);
-      if (result != null) {
-        _resultHorses = _convertResultsToDetails(result.horseResults, useRankAsPopularity: true);
-
-        if (!_hasCacheData) {
-          _horses = _convertResultsToDetails(result.horseResults, useRankAsPopularity: false);
-        }
-      } else {
-        _resultHorses = null;
+      if (result != null && !_hasCacheData) {
+        _horses = _convertResultsToDetails(result.horseResults);
       }
 
       if (mounted) {
@@ -215,19 +208,15 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     }
   }
 
-  List<PredictionHorseDetail> _convertResultsToDetails(List<HorseResult> results, {bool useRankAsPopularity = false}) {
+  // [修正] 結果分析タブの廃止 Step1: 人気の欄に着順を入れる使い方（結果分析タブ専用）をやめ、人気はいつも結果の人気にした (v.2026.10.19+26101901)
+  List<PredictionHorseDetail> _convertResultsToDetails(List<HorseResult> results) {
     return results.map((res) {
       final int hNum = int.tryParse(res.horseNumber) ?? 0;
       final int fNum = int.tryParse(res.frameNumber) ?? 0;
       final double weight = double.tryParse(res.weightCarried) ?? 57.0;
       final double? oddsVal = double.tryParse(res.odds);
 
-      int? popVal;
-      if (useRankAsPopularity) {
-        popVal = int.tryParse(res.rank);
-      } else {
-        popVal = int.tryParse(res.popularity);
-      }
+      final int? popVal = int.tryParse(res.popularity);
 
       final bool isScratched = int.tryParse(res.rank) == null;
 
@@ -375,9 +364,9 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      key: ValueKey(_showResultTab),
+      // [修正] 結果分析タブの廃止 Step1: タブの数は結果の有無によらず16にした（結果の有無でタブを作り直すための key も外した） (v.2026.10.19+26101901)
       // [修正] 性別タブを追加 (v.2026.9.9+26090904)
-      length: _showResultTab ? 17 : 16,
+      length: 16,
       child: Scaffold(
         body: Column(
           children: [
@@ -406,7 +395,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   const Tab(text: 'ローテ'),
                   const Tab(text: '人気妙味'),
                   const Tab(text: '人気分析'),
-                  if (_showResultTab) const Tab(text: '結果分析'),
+                  // [削除] 結果分析タブの廃止 Step1: 「結果分析」のタブを外した（下の TabBarView の2か所と同じ順番で外す） (v.2026.10.19+26101901)
                   const Tab(text: '分析対象'),
                 ],
               ),
@@ -426,7 +415,7 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   if (stats == null) {
                     return TabBarView(
                       // [修正] 性別タブを追加 (v.2026.9.9+26090904)
-                      children: List.generate(_showResultTab ? 17 : 16, (index) => _buildInitialView()),
+                      children: List.generate(16, (index) => _buildInitialView()),
                     );
                   }
 
@@ -610,20 +599,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                         horses: _horses,
                         targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
                       ),
-                      // [削除] 傾向マッチ(予想データ)のタブは廃止 (v.2026.9.5+26090506)
-                      // 5ファクターは ペース/馬場/血統/ローテ/人気妙味 の各タブへ分割済み。
-                      // StatsMatchTab は下の結果分析タブ専用として残す。
+                      // [削除] 結果分析タブの廃止 Step1: 結果分析タブ（StatsMatchTab）を外した。結果と予想・印の見比べは、レース結果ページに新しい結果分析ページとして作り直す (v.2026.10.19+26101901)
 
-                      // 9. 結果分析
-                      if (_showResultTab)
-                        StatsMatchTab(
-                          raceId: widget.raceId,
-                          raceName: widget.raceName,
-                          currentRaceClass: widget.currentRaceClass,
-                          horses: _resultHorses!,
-                          targetRaceIds: stats.analyzedRacesList.map((e) => e['raceId'] as String).toList(),
-                          comparisonTargets: _horses,
-                        ),
                       // 10. 分析対象
                       stats.analyzedRacesList.isEmpty
                           ? _buildRefetchView('分析対象レース一覧')
