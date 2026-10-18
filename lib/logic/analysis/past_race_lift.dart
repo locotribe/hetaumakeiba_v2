@@ -17,6 +17,45 @@ const String kFirstStartLiftKey = '初出走';
 /// 表に出す行の最小の頭数。これより少ない行は、3着以内が1頭以上いるときだけ出す。
 const int kLiftRowMinTotal = 2;
 
+// [追加] ローテ・血統タブの見た目の調整 Step1: 区分の回収率（毎回100円ずつ買ったとき）。単勝はオッズ×100、複勝は払戻し表（券種ID '2'）から読む。倍率・複勝率の計算は変えない (v.2026.10.19+26101906)
+/// 単勝・複勝を毎回100円ずつ買ったときの、買えた走の数と払戻しの合計。
+class PastRaceReturnTotals {
+  /// 単勝を買えた走の数（単勝オッズが読めた走）
+  final int winBets;
+
+  /// 単勝の払戻しの合計（円）
+  final double winPayout;
+
+  /// 複勝を買えた走の数（そのレースに複勝の払戻しがあった走）
+  final int showBets;
+
+  /// 複勝の払戻しの合計（円）
+  final double showPayout;
+
+  const PastRaceReturnTotals({
+    required this.winBets,
+    required this.winPayout,
+    required this.showBets,
+    required this.showPayout,
+  });
+
+  /// 1走も買えていないもの
+  static const PastRaceReturnTotals empty = PastRaceReturnTotals(
+    winBets: 0,
+    winPayout: 0.0,
+    showBets: 0,
+    showPayout: 0.0,
+  );
+
+  /// 単勝回収率(%)。買えた走が無ければ null。
+  double? get winReturn =>
+      winBets > 0 ? winPayout / (winBets * 100) * 100.0 : null;
+
+  /// 複勝回収率(%)。買えた走が無ければ null。
+  double? get showReturn =>
+      showBets > 0 ? showPayout / (showBets * 100) * 100.0 : null;
+}
+
 /// 区分（路線・父・母父）1つの成績。
 class PastRaceLiftRow {
   /// 区分のキー（路線のID・父の名前など）
@@ -40,6 +79,10 @@ class PastRaceLiftRow {
   /// 今回の出走馬のうち、この区分に入る馬の馬ID
   final List<String> currentHorseIds;
 
+  // [追加] ローテ・血統タブの見た目の調整 Step1: この区分の単勝・複勝の回収率のもと (v.2026.10.19+26101906)
+  /// 単勝・複勝を毎回100円ずつ買ったときの、買えた走の数と払戻しの合計
+  final PastRaceReturnTotals returns;
+
   const PastRaceLiftRow({
     required this.key,
     required this.label,
@@ -48,6 +91,7 @@ class PastRaceLiftRow {
     required this.place,
     required this.show,
     required this.currentHorseIds,
+    this.returns = PastRaceReturnTotals.empty,
   });
 
   /// 着度数（1着-2着-3着-着外）
@@ -91,6 +135,10 @@ class PastRaceLiftTable {
   /// 今回の出走馬の馬ID → 区分を決めた元の文字（前走のレース名・父の名前など。前走が無ければ空）
   final Map<String, String> currentDetailOfHorse;
 
+  // [追加] ローテ・血統タブの見た目の調整 Step1: 数えた過去の出走全体の回収率のもと (v.2026.10.19+26101906)
+  /// 数えた過去の出走全体で、単勝・複勝を毎回100円ずつ買ったときの、買えた走の数と払戻しの合計
+  final PastRaceReturnTotals overallReturns;
+
   final Map<String, PastRaceLiftRow> _rowByKey;
 
   PastRaceLiftTable({
@@ -99,6 +147,7 @@ class PastRaceLiftTable {
     required this.missingStarts,
     required this.rowKeyOfCurrentHorse,
     required this.currentDetailOfHorse,
+    this.overallReturns = PastRaceReturnTotals.empty,
   }) : _rowByKey = {for (final row in rows) row.key: row};
 
   /// 数えた過去の出走（延べ頭数）
@@ -126,6 +175,32 @@ class PastRaceLiftTable {
         for (final row in rows)
           if (row.total >= kLiftRowMinTotal || row.show > 0) row,
       ];
+
+  // [追加] ローテ・血統タブの見た目の調整 Step1: 表と該当馬カードの要約に使う、3着以内の多い順の並び。rows・shownRows・topRows の並びは変えない（シンクロ率は変わらない） (v.2026.10.19+26101906)
+  /// 過去の出走が1以上の行を、3着以内の多い順（同じなら出走の多い順、次に表示名の順）に並べたもの。
+  List<PastRaceLiftRow> get rowsByShow {
+    final list = [
+      for (final row in rows)
+        if (row.total > 0) row,
+    ];
+    list.sort(_compareByShow);
+    return list;
+  }
+
+  /// [shownRows] と同じ行を、[rowsByShow] と同じ順に並べたもの。
+  List<PastRaceLiftRow> get shownRowsByShow {
+    final list = List<PastRaceLiftRow>.from(shownRows);
+    list.sort(_compareByShow);
+    return list;
+  }
+
+  static int _compareByShow(PastRaceLiftRow a, PastRaceLiftRow b) {
+    final byShow = b.show.compareTo(a.show);
+    if (byShow != 0) return byShow;
+    final byTotal = b.total.compareTo(a.total);
+    if (byTotal != 0) return byTotal;
+    return a.label.compareTo(b.label);
+  }
 
   /// 今回の出走馬のうち、過去に同じ区分の出走が無い馬の馬ID（今回の出走馬の並び）。
   List<String> get currentHorsesWithoutPast => [
@@ -160,7 +235,63 @@ class _PastStart {
   final String label;
   final String rank;
 
-  const _PastStart(this.key, this.label, this.rank);
+  // [追加] ローテ・血統タブの見た目の調整 Step1: 単勝・複勝の払戻し（回収率に使う） (v.2026.10.19+26101906)
+  /// 単勝の払戻し（100円あたり・円）。単勝オッズが読めない走は null（買えなかった扱い）
+  final double? winPayout;
+
+  /// 複勝の払戻し（100円あたり・円）。そのレースに複勝の払戻しが無い走は null（買えなかった扱い）
+  final double? showPayout;
+
+  const _PastStart(this.key, this.label, this.rank,
+      {this.winPayout, this.showPayout});
+}
+
+/// 過去の出走1つの単勝・複勝の払戻し（100円あたり・円）。買えなかった券種は null。
+class _Payouts {
+  final double? win;
+  final double? show;
+
+  const _Payouts(this.win, this.show);
+}
+
+/// [race] での [horse] の単勝・複勝の払戻し（horse_record_stats.dart の horseRecordStatsOf と同じ読み方）。
+/// - 単勝: 単勝オッズが読めて0より大きければ買えた走。1着なら オッズ×100、それ以外は0。
+/// - 複勝: そのレースに複勝（券種ID '2'）の払戻しが1つ以上あれば買えた走。1〜3着で馬番が払戻しの組み合わせに
+///   入っていればその金額、それ以外は0（7頭立て以下の3着は払戻しに無いので0）。
+_Payouts _payoutsOf(RaceResult race, HorseResult horse) {
+  final rank = int.tryParse(horse.rank.trim());
+  final odds = double.tryParse(horse.odds.trim());
+  double? win;
+  if (odds != null && odds > 0) {
+    win = rank == 1 ? odds * 100 : 0.0;
+  }
+
+  Refund? showRefund;
+  for (final refund in race.refunds) {
+    if (refund.ticketTypeId == '2') {
+      showRefund = refund;
+      break;
+    }
+  }
+  double? show;
+  if (showRefund != null && showRefund.payouts.isNotEmpty) {
+    show = 0.0;
+    final horseNumber = int.tryParse(horse.horseNumber.trim());
+    if (rank != null && rank >= 1 && rank <= 3 && horseNumber != null) {
+      for (final payout in showRefund.payouts) {
+        if (payout.combinationNumbers.contains(horseNumber)) {
+          show = (int.tryParse(payout.amount
+                      .replaceAll(',', '')
+                      .replaceAll('円', '')
+                      .trim()) ??
+                  0)
+              .toDouble();
+          break;
+        }
+      }
+    }
+  }
+  return _Payouts(win, show);
 }
 
 /// 今回の出走馬1頭（区分と元の文字）。
@@ -180,6 +311,11 @@ class _Counter {
   int place = 0;
   int show = 0;
   final List<String> currentHorseIds = [];
+  // [追加] ローテ・血統タブの見た目の調整 Step1: 回収率のもと (v.2026.10.19+26101906)
+  int winBets = 0;
+  double winPayout = 0.0;
+  int showBets = 0;
+  double showPayout = 0.0;
 
   _Counter(this.key, this.label);
 }
@@ -191,12 +327,29 @@ PastRaceLiftTable _buildTable({
 }) {
   final counters = <String, _Counter>{};
   int total = 0, win = 0, place = 0, show = 0;
+  // [追加] ローテ・血統タブの見た目の調整 Step1: 区分ごとと全体の、単勝・複勝の買えた走の数と払戻しの合計 (v.2026.10.19+26101906)
+  int winBets = 0, showBets = 0;
+  double winPayoutTotal = 0.0, showPayoutTotal = 0.0;
   for (final start in pastStarts) {
     final counter =
         counters.putIfAbsent(start.key, () => _Counter(start.key, start.label));
     final rank = int.tryParse(start.rank.trim());
     counter.total++;
     total++;
+    final startWinPayout = start.winPayout;
+    if (startWinPayout != null) {
+      counter.winBets++;
+      counter.winPayout += startWinPayout;
+      winBets++;
+      winPayoutTotal += startWinPayout;
+    }
+    final startShowPayout = start.showPayout;
+    if (startShowPayout != null) {
+      counter.showBets++;
+      counter.showPayout += startShowPayout;
+      showBets++;
+      showPayoutTotal += startShowPayout;
+    }
     if (rank != null && rank >= 1 && rank <= 3) {
       counter.show++;
       show++;
@@ -232,6 +385,13 @@ PastRaceLiftTable _buildTable({
         place: c.place,
         show: c.show,
         currentHorseIds: List.unmodifiable(c.currentHorseIds),
+        // [追加] ローテ・血統タブの見た目の調整 Step1: 区分の回収率のもと (v.2026.10.19+26101906)
+        returns: PastRaceReturnTotals(
+          winBets: c.winBets,
+          winPayout: c.winPayout,
+          showBets: c.showBets,
+          showPayout: c.showPayout,
+        ),
       ),
   ];
   rows.sort((a, b) {
@@ -269,6 +429,13 @@ PastRaceLiftTable _buildTable({
     missingStarts: missingStarts,
     rowKeyOfCurrentHorse: keyOfHorse,
     currentDetailOfHorse: detailOfHorse,
+    // [追加] ローテ・血統タブの見た目の調整 Step1: 全体の回収率のもと (v.2026.10.19+26101906)
+    overallReturns: PastRaceReturnTotals(
+      winBets: winBets,
+      winPayout: winPayoutTotal,
+      showBets: showBets,
+      showPayout: showPayoutTotal,
+    ),
   );
 }
 
@@ -294,6 +461,8 @@ PastRaceLiftTable buildRotationLiftTable({
 }) {
   final pastPrevious = <HorseRaceRecord?>[];
   final pastRanks = <String>[];
+  // [追加] ローテ・血統タブの見た目の調整 Step1: 過去の出走ごとの単勝・複勝の払戻し (v.2026.10.19+26101906)
+  final pastPayouts = <_Payouts>[];
   int missing = 0;
   for (final race in pastRaces) {
     for (final horse in race.horseResults) {
@@ -315,6 +484,7 @@ PastRaceLiftTable buildRotationLiftTable({
       }
       pastPrevious.add(previousStartOf(records, raceDay));
       pastRanks.add(horse.rank);
+      pastPayouts.add(_payoutsOf(race, horse));
     }
   }
 
@@ -351,6 +521,9 @@ PastRaceLiftTable buildRotationLiftTable({
           keyOf(pastPrevious[i]),
           labelOf(pastPrevious[i]),
           pastRanks[i],
+          // [追加] ローテ・血統タブの見た目の調整 Step1: 単勝・複勝の払戻し (v.2026.10.19+26101906)
+          winPayout: pastPayouts[i].win,
+          showPayout: pastPayouts[i].show,
         ),
     ],
     currentEntries: {
@@ -395,7 +568,10 @@ PastRaceLiftTable buildPedigreeLiftTable({
         missing++;
         continue;
       }
-      pastStarts.add(_PastStart(name, name, horse.rank));
+      // [追加] ローテ・血統タブの見た目の調整 Step1: 単勝・複勝の払戻しも持たせる (v.2026.10.19+26101906)
+      final payouts = _payoutsOf(race, horse);
+      pastStarts.add(_PastStart(name, name, horse.rank,
+          winPayout: payouts.win, showPayout: payouts.show));
     }
   }
 
