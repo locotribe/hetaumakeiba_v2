@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
-import 'package:hetaumakeiba_v2/models/analysis_model.dart';
+// [削除] 結果分析タブの廃止 Step4: ペースの予想をやめたので analysis_model の import を外した (v.2026.10.19+26101904)
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
@@ -352,7 +352,7 @@ class _RaceResultPageState extends State<RaceResultPage> {
                     else ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: _buildRaceInfoCard(raceResult, pageData.pacePrediction),
+                        child: _buildRaceInfoCard(raceResult),
                       ),
                       // 【新規追加】レース総評カードをここに挿入
                       Padding(
@@ -579,7 +579,8 @@ class _RaceResultPageState extends State<RaceResultPage> {
     );
   }
 
-  Widget _buildRaceInfoCard(RaceResult raceResult, RacePacePrediction? pacePrediction) {
+  // [修正] 結果分析タブの廃止 Step4: 使っていなかったペースの予想の引数を外した (v.2026.10.19+26101904)
+  Widget _buildRaceInfoCard(RaceResult raceResult) {
     return RaceHeaderCard(
       title: raceResult.raceTitle,
       detailsLine1: raceResult.raceDate,

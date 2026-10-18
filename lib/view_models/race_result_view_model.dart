@@ -10,18 +10,14 @@ import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/ticket_repository.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
+// [削除] 結果分析タブの廃止 Step4: ペースの予想をやめたので、それだけに使っていた import（race_analyzer・analysis_model・horse_performance_model・race_data・statistics_service）を外した (v.2026.10.19+26101904)
 import 'package:hetaumakeiba_v2/logic/hit_checker.dart';
 import 'package:hetaumakeiba_v2/logic/memo_import_logic.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
-import 'package:hetaumakeiba_v2/models/analysis_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/qr_data_model.dart';
-import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
-import 'package:hetaumakeiba_v2/services/statistics_service.dart';
 import 'package:hetaumakeiba_v2/services/user_session.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:path_provider/path_provider.dart';
@@ -33,12 +29,11 @@ import 'package:hetaumakeiba_v2/logic/ai_export/citation_sanitizer.dart'; // [�
 class PageData {
   final List<Map<String, dynamic>> parsedTickets;
   final RaceResult? raceResult;
-  final RacePacePrediction? pacePrediction;
+  // [削除] 結果分析タブの廃止 Step4: ペースの予想（pacePrediction）は画面で使っていなかったので外した (v.2026.10.19+26101904)
 
   PageData({
     required this.parsedTickets,
     this.raceResult,
-    this.pacePrediction,
   });
 }
 
@@ -151,67 +146,23 @@ class RaceResultViewModel extends ChangeNotifier {
 
       RaceResult? raceResult = await _raceRepo.getRaceResult(raceId);
 
+      // [削除] 結果分析タブの廃止 Step4: ペースの予想（各馬の戦績を読み、過去レースを netkeiba のレース名検索で集めて RaceAnalyzer.predictRacePace に渡す）を外した。結果は画面で使われておらず、検索も 2026-09-04 の netkeiba の仕様変更から1件も取れていなかった。残すのは各馬へのメモの付け足しだけ (v.2026.10.19+26101904)
       final userId = UserSession().localUserId;
       if (raceResult != null && userId != null) {
         final memos = await _horseRepo.getMemosForRace(userId, raceId);
         final memosMap = {for (var memo in memos) memo.horseId: memo};
-        final List<PredictionHorseDetail> horseDetailsForPacePrediction = [];
-        final Map<String, List<HorseRaceRecord>> allPastRecords = {};
 
         for (var horseResult in raceResult.horseResults) {
           if (memosMap.containsKey(horseResult.horseId)) {
             horseResult.userMemo = memosMap[horseResult.horseId];
           }
-          final pastRecords = await _horseRepo.getHorsePerformanceRecords(horseResult.horseId);
-          allPastRecords[horseResult.horseId] = pastRecords;
-          final trainerText = horseResult.trainerName;
-          String trainerAffiliation = '';
-          String trainerName = trainerText;
-
-          if (trainerText.startsWith('美') || trainerText.startsWith('栗')) {
-            final parts = trainerText.split(' ');
-            if (parts.length > 1) {
-              trainerAffiliation = parts[0];
-              trainerName = parts.sublist(1).join(' ');
-            }
-          }
-          // 展開予測のためにPredictionHorseDetailのリストを作成
-          horseDetailsForPacePrediction.add(
-              PredictionHorseDetail(
-                horseId: horseResult.horseId,
-                horseNumber: int.tryParse(horseResult.horseNumber) ?? 0,
-                gateNumber: int.tryParse(horseResult.frameNumber) ?? 0,
-                horseName: horseResult.horseName,
-                sexAndAge: horseResult.sexAndAge,
-                jockey: horseResult.jockeyName,
-                jockeyId: horseResult.jockeyId,
-                carriedWeight: double.tryParse(horseResult.weightCarried) ?? 0.0,
-                trainerName: trainerName,
-                trainerAffiliation: trainerAffiliation,
-                isScratched: false,
-              )
-          );
         }
-
-        // 過去レースの結果を取得する
-        final statisticsService = StatisticsService();
-        final pastRaceResults = await statisticsService.fetchPastRacesForAnalysis(
-            raceResult.raceTitle, raceId);
-
-        final pacePrediction = RaceAnalyzer.predictRacePace(
-            horseDetailsForPacePrediction, allPastRecords, pastRaceResults);
-
-        pageData = PageData(
-          parsedTickets: parsedTickets,
-          raceResult: raceResult,
-          pacePrediction: pacePrediction,
-        );
-      } else {
-        pageData = PageData(
-          parsedTickets: parsedTickets,
-          raceResult: raceResult,
-        );
       }
+
+      pageData = PageData(
+        parsedTickets: parsedTickets,
+        raceResult: raceResult,
+      );
     } catch (e) {
       debugPrint('ページデータの読み込みに失敗しました: $e');
       errorMessage = 'データの表示に失敗しました。';

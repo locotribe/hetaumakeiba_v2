@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
 import 'package:hetaumakeiba_v2/models/featured_race_model.dart';
-import 'package:hetaumakeiba_v2/utils/url_generator.dart';
+// [削除] 結果分析タブの廃止 Step4: レース名検索の関数を消したので url_generator の import を外した（generateNetkeibaRaceSearchUrl は url_generator.dart に残る） (v.2026.10.19+26101904)
 import 'package:charset_converter/charset_converter.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
@@ -85,57 +85,7 @@ class ScraperService {
     }
   }
 
-  /// レース名から過去10年分のレースIDリストをスクレイピングする (統計分析機能で使用)
-  static Future<List<String>> scrapePastRaceIdsFromSearch({
-    required String raceName,
-  }) async {
-    final searchUrl = await generateNetkeibaRaceSearchUrl(raceName: raceName);
-    final List<String> pastIds = [];
-    final currentYear = DateTime.now().year;
-
-    try {
-      final response = await http.get(Uri.parse(searchUrl), headers: _headers);
-      if (response.statusCode != 200) {
-        debugPrint('レース名検索ページの取得に失敗: $searchUrl (Status: ${response.statusCode})');
-        return [];
-      }
-
-      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
-      final document = html.parse(decodedBody);
-
-      final table = document.querySelector('table.race_table_01');
-      if (table == null) return [];
-
-      final rows = table.querySelectorAll('tr');
-
-      for (final row in rows) {
-        final cells = row.querySelectorAll('td');
-        if (cells.length < 5) continue;
-
-        final raceNameCell = cells[4].querySelector('a');
-        if (raceNameCell == null) continue;
-
-        final dateText = _safeGetText(cells[0]);
-        final yearMatch = RegExp(r'(\d{4})/\d{2}/\d{2}').firstMatch(dateText);
-        if (yearMatch != null) {
-          final year = int.parse(yearMatch.group(1)!);
-          if (year >= currentYear - 10 && year < currentYear) {
-            final href = raceNameCell.attributes['href'];
-            if (href != null) {
-              final id = RaceResultScraperService.getRaceIdFromUrl(href);
-              if (id != null) {
-                pastIds.add(id);
-              }
-            }
-          }
-        }
-      }
-      return pastIds;
-    } catch (e) {
-      debugPrint('Error fetching past race IDs by name: $e');
-      return [];
-    }
-  }
+  // [削除] 結果分析タブの廃止 Step4: レース名から過去10年のレースIDを集める scrapePastRaceIdsFromSearch を削除した（2026-09-04 の netkeiba の検索の仕様変更から1件も取れておらず、使っていたのはレース結果ページのペースの予想だけ） (v.2026.10.19+26101904)
 
   /// DB検索結果ページ（HTML）から過去のレース一覧情報を抽出する
   static List<Map<String, String>> scrapeRaceIdListFromDbPage(String htmlContent) {

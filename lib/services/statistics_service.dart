@@ -1,11 +1,10 @@
 // lib/services/statistics_service.dart
 
-import 'package:flutter/foundation.dart';
+// [削除] 結果分析タブの廃止 Step4: レース名検索で過去レースを集める関数を消したので、それだけに使っていた import（foundation・scraper_service）を外した (v.2026.10.19+26101904)
 import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/race_statistics_repository.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
-import 'package:hetaumakeiba_v2/services/scraper_service.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart';
@@ -80,59 +79,7 @@ class StatisticsService {
     return statsToSave;
   }
 
-  /// 分析のために、指定されたレースの過去結果リストを取得する
-  Future<List<RaceResult>> fetchPastRacesForAnalysis(String raceName, String raceId) async {
-    // scraper_serviceから全ての候補IDを取得
-    final pastRaceIdCandidates = await ScraperService.scrapePastRaceIdsFromSearch(
-      raceName: raceName,
-    );
-
-    if (pastRaceIdCandidates.isEmpty) {
-      debugPrint('警告: $raceName の過去レースID候補が見つかりませんでした。');
-      return [];
-    }
-
-    final List<RaceResult> pastResults = [];
-    for (final pastId in pastRaceIdCandidates) {
-      // まずDBから試みる
-      RaceResult? result = await _raceRepo.getRaceResult(pastId);
-      if (result == null) {
-        // DBになければスクレイピング
-        result = await RaceResultScraperService.scrapeRaceDetails('https://db.netkeiba.com/race/$pastId');
-        await Future.delayed(const Duration(milliseconds: 200)); // サーバー負荷軽減
-      }
-
-      // 照合ロジックを撤廃し、取得した結果をそのまま追加する
-      pastResults.add(result);
-    }
-
-    return pastResults;
-  }
-
-  // 外部から直接呼び出されるメインの処理
-  Future<RaceStatistics?> processAndSaveRaceStatistics(String raceId, String raceName) async {
-    // 1. 過去レース結果のリストを取得 (新メソッドを利用)
-    final pastResults = await fetchPastRacesForAnalysis(raceName, raceId);
-
-    if (pastResults.isEmpty) {
-      throw Exception('過去のレース結果を取得できませんでした。');
-    }
-
-    // 2. 統計データを計算
-    final statistics = _calculateStatistics(pastResults);
-
-    // 3. 計算結果をDBに保存するためのモデルを作成
-    final statsToSave = RaceStatistics(
-      raceId: raceId,
-      raceName: raceName,
-      statisticsJson: json.encode(statistics),
-      lastUpdatedAt: DateTime.now(),
-    );
-
-    // 4. DBに保存
-    await _raceStatsRepo.insertOrUpdateRaceStatistics(statsToSave);
-    return statsToSave;
-  }
+  // [削除] 結果分析タブの廃止 Step4: レース名検索で過去レースを集める fetchPastRacesForAnalysis と、それを使う古い統計の作成 processAndSaveRaceStatistics を削除した（過去分析は processAndSaveRaceStatisticsByIds を使う。レース結果ページのペースの予想だけが使っていた） (v.2026.10.19+26101904)
 
 
   // 取得したレース結果リストから統計を計算する
