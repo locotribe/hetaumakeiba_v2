@@ -31,6 +31,8 @@ import 'package:hetaumakeiba_v2/services/past_race_horse_fetch_service.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/past_race_horse_fetch_card.dart';
 // [追加] ローテ・血統タブのリフト化 Step3: 路線・父・母父ごとの表のカード (v.2026.10.16+26101613)
 import 'package:hetaumakeiba_v2/widgets/volatility_components/past_race_lift_table_card.dart';
+// [追加] ローテ・血統タブの見た目の調整 Step4: 折りたたみの部品 (v.2026.10.19+26101909)
+import 'package:hetaumakeiba_v2/widgets/volatility_components/collapsible_card_section.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/lap_time_chart_card.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/pedigree_cross_analysis_card.dart';
 import 'package:hetaumakeiba_v2/widgets/volatility_components/track_condition_trend_card.dart';
@@ -724,6 +726,19 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       );
     }
 
+    // [追加] ローテ・血統タブの見た目の調整 Step4: ローテ・血統タブは該当馬カードを一番上に置き、残りを折りたたむ並びにする。取得の進み具合が変わったらタブ全体を描き直す (v.2026.10.19+26101909)
+    if (factorKey == 'rotation' || factorKey == 'pedigree') {
+      return _buildTabContent(
+        child: ValueListenableBuilder<PastRaceHorseFetchProgress>(
+          valueListenable: PastRaceHorseFetchService.instance.progress,
+          builder: (context, progress, _) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _buildLiftTabChildren(factorKey, result, progress),
+          ),
+        ),
+      );
+    }
+
     // ファクターごとに、対応する「過去傾向カード」を該当馬カードの上に置く
     final Widget? trendCard = _buildBundleTrendCard(factorKey);
 
@@ -731,25 +746,12 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // [追加] 全出走馬の取得と読み込み Step2: ローテタブ・血統タブの上に、過去の全出走馬の戦績・血統の取得カードを置く (v.2026.10.16+26101609)
-          if (factorKey == 'rotation' || factorKey == 'pedigree') ...[
-            _buildPastRaceHorseFetchCard(),
-            const SizedBox(height: 16),
-          ],
+          // [削除] ローテ・血統タブの見た目の調整 Step4: ローテ・血統タブの取得カード・表・母父の該当馬は _buildLiftTabChildren へ移した (v.2026.10.19+26101909)
           if (trendCard != null) ...[
             trendCard,
             const SizedBox(height: 16),
           ],
-          // [追加] ローテ・血統タブのリフト化 Step3: ローテタブは路線の表、血統タブは父と母父の表 (v.2026.10.16+26101613)
-          ..._buildLiftTableCards(factorKey),
           FactorCandidatesCard(result: result),
-          // [追加] ローテ・血統タブのリフト化 Step2: 血統タブには、父の該当馬の下に母父の該当馬も出す (v.2026.10.16+26101612)
-          if (factorKey == 'pedigree' &&
-              _bundleFactors[BundleFactorSelector.damSireKey] != null) ...[
-            const SizedBox(height: 16),
-            FactorCandidatesCard(
-                result: _bundleFactors[BundleFactorSelector.damSireKey]!),
-          ],
         ],
       ),
     );
@@ -787,7 +789,53 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     );
   }
 
-  // [追加] ローテ・血統タブのリフト化 Step3: ローテタブには路線の表、血統タブには父と母父の表を返す。表がまだ無ければ何も返さない (v.2026.10.16+26101613)
+  // [追加] ローテ・血統タブの見た目の調整 Step4: ローテ・血統タブの並び。該当馬カードを一番上に置き、それ以外は閉じた見出しにする。
+  // 過去の出走馬のデータに未取得が残る（または数えている途中・取得中）ときだけ、取得カードを折りたたまずに一番上に置く (v.2026.10.19+26101909)
+  List<Widget> _buildLiftTabChildren(
+    String factorKey,
+    FactorCandidateResult result,
+    PastRaceHorseFetchProgress progress,
+  ) {
+    final plan = _pastRaceHorsePlan;
+    final needsFetch =
+        plan == null || !plan.isComplete || progress.isRunningFor(widget.raceId);
+
+    final sections = <Widget>[];
+    if (needsFetch) {
+      sections.add(_buildPastRaceHorseFetchCard());
+    }
+    sections.add(FactorCandidatesCard(result: result));
+    if (factorKey == 'pedigree' &&
+        _bundleFactors[BundleFactorSelector.damSireKey] != null) {
+      sections.add(
+          FactorCandidatesCard(result: _bundleFactors[BundleFactorSelector.damSireKey]!));
+    }
+    if (!needsFetch) {
+      sections.add(CollapsibleCardSection(
+        key: const ValueKey('fetchSection'),
+        title: '過去の全出走馬のデータ',
+        child: _buildPastRaceHorseFetchCard(),
+      ));
+    }
+    final trendCard = _buildBundleTrendCard(factorKey);
+    if (trendCard != null) {
+      sections.add(CollapsibleCardSection(
+        key: const ValueKey('trendSection'),
+        title: '過去レース 血統分析（馬場別）',
+        child: trendCard,
+      ));
+    }
+    sections.addAll(_buildLiftTableCards(factorKey));
+
+    final children = <Widget>[];
+    for (var i = 0; i < sections.length; i++) {
+      if (i > 0) children.add(const SizedBox(height: 16));
+      children.add(sections[i]);
+    }
+    return children;
+  }
+
+  // [修正] ローテ・血統タブの見た目の調整 Step4: 表のカードを閉じた見出しで包んで返す（間の余白は _buildLiftTabChildren が入れる）。表がまだ無ければ何も返さない (v.2026.10.19+26101909)
   List<Widget> _buildLiftTableCards(String factorKey) {
     final tables = _liftTables;
     if (tables == null) return const [];
@@ -795,33 +843,42 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     switch (factorKey) {
       case 'rotation':
         return [
-          PastRaceLiftTableCard(
+          CollapsibleCardSection(
+            key: const ValueKey('rotationTable'),
             title: '過去の出走馬の前走（路線別）',
-            rowHeader: '路線',
-            table: tables.rotation,
-            horseNames: horseNames,
-            noPastLabel: '過去に例の無い路線から来た馬',
+            child: PastRaceLiftTableCard(
+              title: '過去の出走馬の前走（路線別）',
+              rowHeader: '路線',
+              table: tables.rotation,
+              horseNames: horseNames,
+              noPastLabel: '過去に例の無い路線から来た馬',
+            ),
           ),
-          const SizedBox(height: 16),
         ];
       case 'pedigree':
         return [
-          PastRaceLiftTableCard(
+          CollapsibleCardSection(
+            key: const ValueKey('sireTable'),
             title: '過去の出走馬の父',
-            rowHeader: '父',
-            table: tables.sire,
-            horseNames: horseNames,
-            noPastLabel: '過去に出走例の無い父の馬',
+            child: PastRaceLiftTableCard(
+              title: '過去の出走馬の父',
+              rowHeader: '父',
+              table: tables.sire,
+              horseNames: horseNames,
+              noPastLabel: '過去に出走例の無い父の馬',
+            ),
           ),
-          const SizedBox(height: 16),
-          PastRaceLiftTableCard(
+          CollapsibleCardSection(
+            key: const ValueKey('damSireTable'),
             title: '過去の出走馬の母父',
-            rowHeader: '母父',
-            table: tables.damSire,
-            horseNames: horseNames,
-            noPastLabel: '過去に出走例の無い母父の馬',
+            child: PastRaceLiftTableCard(
+              title: '過去の出走馬の母父',
+              rowHeader: '母父',
+              table: tables.damSire,
+              horseNames: horseNames,
+              noPastLabel: '過去に出走例の無い母父の馬',
+            ),
           ),
-          const SizedBox(height: 16),
         ];
       default:
         return const [];
