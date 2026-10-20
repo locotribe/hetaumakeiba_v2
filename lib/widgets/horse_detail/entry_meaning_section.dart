@@ -178,6 +178,16 @@ class EntryMeaningSection extends StatelessWidget {
                           TextStyle(fontSize: 12, color: Colors.grey.shade700),
                     ),
                   ),
+                // [追加] 出走の意味 条件と騎手成績 Step3: 補足（勝ち馬との差・騎手のこの馬での成績）を灰色で出す（矢印なし） (v.2026.10.20+26102003)
+                if (line.detail != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      line.detail!,
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                    ),
+                  ),
               ],
             ),
           ),

@@ -15,6 +15,13 @@ import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
 import 'package:hetaumakeiba_v2/db/repositories/shutuba_table_cache_repository.dart';
 import 'package:hetaumakeiba_v2/logic/base_prize_lookup.dart';
 import 'package:hetaumakeiba_v2/logic/race_classification.dart';
+// [追加] 出走の意味 条件と騎手成績 Step3: 過去走のレースの全着順を読む (v.2026.10.20+26102003)
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
+import 'package:hetaumakeiba_v2/logic/condition_record.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
+
+/// 過去走のレースの全着順を1回に読む件数（SQLite の引数の上限とメモリのため分けて読む）
+const int kEntryMeaningRaceResultChunk = 500;
 
 class EntryMeaningService {
   final HorseRepository _horseRepository;
@@ -22,19 +29,23 @@ class EntryMeaningService {
   final EntryMeaningRepository _entryMeaningRepository;
   // [追加] 基本情報整理と本賞金照合 Step3: 重賞の本賞金を引く出馬表キャッシュ (v.2026.10.15+26101506)
   final ShutubaTableCacheRepository _shutubaTableCacheRepository;
+  // [追加] 出走の意味 条件と騎手成績 Step3: 過去走のレースの全着順 (v.2026.10.20+26102003)
+  final RaceRepository _raceRepository;
 
   EntryMeaningService({
     HorseRepository? horseRepository,
     RacePreparationRepository? preparationRepository,
     EntryMeaningRepository? entryMeaningRepository,
     ShutubaTableCacheRepository? shutubaTableCacheRepository,
+    RaceRepository? raceRepository,
   })  : _horseRepository = horseRepository ?? HorseRepository(),
         _preparationRepository =
             preparationRepository ?? RacePreparationRepository(),
         _entryMeaningRepository =
             entryMeaningRepository ?? EntryMeaningRepository(),
         _shutubaTableCacheRepository =
-            shutubaTableCacheRepository ?? ShutubaTableCacheRepository();
+            shutubaTableCacheRepository ?? ShutubaTableCacheRepository(),
+        _raceRepository = raceRepository ?? RaceRepository();
 
   /// 出走の意味を計算する。JRAの平地のレース（isSupported=true）だけ保存する（同じレースの保存は上書き）。
   ///
@@ -86,11 +97,34 @@ class EntryMeaningService {
       }
     }
 
+    // [追加] 出走の意味 条件と騎手成績 Step3: 全出走馬の過去走（JRAの平地・レース日より前）のレースの全着順を DB から500件ずつ読む。
+    // 通信はしない。読めなければ全着順なし（3着圏・掲示板圏は「全着順の無い走」）で計算を続ける (v.2026.10.20+26102003)
+    final raceResultsById = <String, RaceResult>{};
+    if (asOf != null) {
+      final raceIds = <String>{
+        for (final records in recordsByHorseId.values)
+          for (final record in jraFlatStartsBefore(records, asOf))
+            record.raceId,
+      }.toList();
+      try {
+        for (var i = 0; i < raceIds.length; i += kEntryMeaningRaceResultChunk) {
+          final end = i + kEntryMeaningRaceResultChunk < raceIds.length
+              ? i + kEntryMeaningRaceResultChunk
+              : raceIds.length;
+          raceResultsById.addAll(
+              await _raceRepository.getMultipleRaceResults(raceIds.sublist(i, end)));
+        }
+      } catch (_) {
+        raceResultsById.clear();
+      }
+    }
+
     final meanings = buildEntryMeaningsForRace(
       race: race,
       recordsByHorseId: recordsByHorseId,
       profilesByHorseId: profilesByHorseId,
       basePrizeManByRaceId: basePrizeManByRaceId,
+      raceResultsById: raceResultsById,
     );
 
     final statuses = await _preparationRepository.getForRace(race.raceId);

@@ -671,6 +671,10 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       case '同陣営':
         color = Colors.blueGrey.shade600;
         break;
+      // [追加] 出走の意味 条件と騎手成績 Step3: 条件（延長・短縮・芝ダ替わり・距離初・コース初）は青緑 (v.2026.10.20+26102003)
+      case '条件':
+        color = Colors.teal.shade700;
+        break;
       default:
         color = Colors.grey.shade700;
     }
