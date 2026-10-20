@@ -91,7 +91,11 @@ class ShutubaTableScraperService {
       return await completer.future;
     } finally {
       timer.cancel();
-      await headlessWebView.dispose();
+      // WebView側のタスクが残ったままdisposeすると例外が出るため、
+      // 少し待ってから破棄する
+      Future.delayed(const Duration(milliseconds: 500), () {
+        headlessWebView?.dispose();
+      });
     }
   }
 
@@ -171,7 +175,11 @@ class ShutubaTableScraperService {
       return await completer.future;
     } finally {
       timer.cancel();
-      await headlessWebView.dispose();
+      // WebView側のタスクが残ったままdisposeすると例外が出るため、
+      // 少し待ってから破棄する
+      Future.delayed(const Duration(milliseconds: 500), () {
+        headlessWebView?.dispose();
+      });
     }
   }
 
