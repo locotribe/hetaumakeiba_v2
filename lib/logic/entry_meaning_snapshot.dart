@@ -13,6 +13,8 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_preparation_status_model.dart';
+// [追加] 出走の意味 条件と騎手成績 Step2: 過去走のレースの全着順を受け取る (v.2026.10.20+26102002)
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 
 /// 出馬表（取消を含む）・過去走・プロフィールから、出走の意味をまとめて出す。
 ///
@@ -24,6 +26,8 @@ RaceEntryMeanings buildEntryMeaningsForRace({
   required Map<String, List<HorseRaceRecord>> recordsByHorseId,
   Map<String, HorseProfile> profilesByHorseId = const {},
   Map<String, List<int>> basePrizeManByRaceId = const {},
+  // [追加] 出走の意味 条件と騎手成績 Step2: 過去走のレースの全着順（レースID → 結果）。3着圏・掲示板圏と内外に使う (v.2026.10.20+26102002)
+  Map<String, RaceResult> raceResultsById = const {},
 }) {
   final classification = classifyRace(race);
   final circumstances = buildRaceCircumstances(
@@ -46,11 +50,19 @@ RaceEntryMeanings buildEntryMeaningsForRace({
   } else {
     campSignals = const <HorseCampSignals>[];
   }
+  // [修正] 出走の意味 条件と騎手成績 Step2: 条件の行のため、過去走・全着順と今回の芝ダ・距離・内外（courseInOut に「外」）も渡す (v.2026.10.20+26102002)
+  final trackType = race.trackType;
   return buildEntryMeanings(
     circumstances: circumstances,
     campSignals: campSignals,
     horses: race.horses,
     profilesByHorseId: profilesByHorseId,
+    recordsByHorseId: recordsByHorseId,
+    raceResultsById: raceResultsById,
+    conditionTrackType:
+        (trackType == '芝' || trackType == 'ダ') ? trackType : null,
+    conditionDistance: race.distanceValue ?? 0,
+    conditionIsOuterCourse: (race.courseInOut ?? '').contains('外'),
   );
 }
 
@@ -106,6 +118,11 @@ String entryMeaningGroupLabel(EntryMeaningKind kind) {
     case EntryMeaningKind.startsAfterLayoff:
     case EntryMeaningKind.tightInterval:
       return '間隔';
+    // [追加] 出走の意味 条件と騎手成績 Step2: 条件の行 (v.2026.10.20+26102002)
+    case EntryMeaningKind.previousRaceComparison:
+    case EntryMeaningKind.distanceRecord:
+    case EntryMeaningKind.courseRecord:
+      return '条件';
     case EntryMeaningKind.previousJockeyOnOtherHorse:
     case EntryMeaningKind.jockeyChange:
     case EntryMeaningKind.mainJockey:
@@ -158,6 +175,20 @@ String? entryMeaningBadgeLabel(EntryMeaningLine line) {
       }
     case EntryMeaningKind.jockeyChange:
       return '乗替';
+    // [追加] 出走の意味 条件と騎手成績 Step2: 条件のバッジ（同距離は付けない・実績なしは「距離初」「コース初」） (v.2026.10.20+26102002)
+    case EntryMeaningKind.previousRaceComparison:
+      {
+        final fact = line.fact;
+        if (fact.contains('障害から平地')) return '平地替わり';
+        if (fact.contains('ダートから芝')) return '芝替わり';
+        if (fact.contains('芝からダート')) return 'ダ替わり';
+        final change = RegExp(r'(\d+m(?:延長|短縮))').firstMatch(fact);
+        return change?.group(1);
+      }
+    case EntryMeaningKind.distanceRecord:
+      return line.fact.endsWith('実績なし') ? '距離初' : null;
+    case EntryMeaningKind.courseRecord:
+      return line.fact.endsWith('実績なし') ? 'コース初' : null;
     case EntryMeaningKind.sameOwner:
       return '同馬主';
     case EntryMeaningKind.sameStable:
@@ -206,6 +237,8 @@ Map<String, dynamic> entryMeaningLineToJson(EntryMeaningLine line) {
     'fact': line.fact,
     'interpretation': line.interpretation,
     'basis': line.basis.name,
+    // [追加] 出走の意味 条件と騎手成績 Step2: 補足は有るときだけ保存する (v.2026.10.20+26102002)
+    if (line.detail != null) 'detail': line.detail,
   };
 }
 
@@ -216,11 +249,14 @@ EntryMeaningLine? entryMeaningLineFromJson(Map<String, dynamic> json) {
   final fact = json['fact'];
   if (kind == null || basis == null || fact is! String) return null;
   final interpretation = json['interpretation'];
+  // [追加] 出走の意味 条件と騎手成績 Step2: 補足（古い保存には無い） (v.2026.10.20+26102002)
+  final detail = json['detail'];
   return EntryMeaningLine(
     kind: kind,
     fact: fact,
     interpretation: interpretation is String ? interpretation : null,
     basis: basis,
+    detail: detail is String ? detail : null,
   );
 }
 

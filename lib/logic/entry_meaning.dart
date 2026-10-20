@@ -6,6 +6,10 @@
 // 一覧と書き方は memory/陣営の本気度指数_決定事項.md の11章。DB・画面・通信には触れない (v.2026.10.3+26100305)
 
 import 'package:hetaumakeiba_v2/logic/camp_signals.dart';
+// [追加] 出走の意味 条件と騎手成績 Step2: 条件の行と騎手のこの馬での成績 (v.2026.10.20+26102002)
+import 'package:hetaumakeiba_v2/logic/condition_record.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/horse_circumstance.dart';
 import 'package:hetaumakeiba_v2/logic/race_classification.dart';
@@ -93,6 +97,16 @@ enum EntryMeaningKind {
   /// C5 間隔が詰まっている（27日以下）
   tightInterval,
 
+  // [追加] 出走の意味 条件と騎手成績 Step2: 条件の行3つ（C 間隔の後・D 騎手の前に出す） (v.2026.10.20+26102002)
+  /// 条件: 前走との距離の比較
+  previousRaceComparison,
+
+  /// 条件: 今回の距離の実績
+  distanceRecord,
+
+  /// 条件: 今回のコースの実績
+  courseRecord,
+
   /// D1 前走の騎手が同じレースの別馬に騎乗
   previousJockeyOnOtherHorse,
 
@@ -130,11 +144,16 @@ class EntryMeaningLine {
 
   final EntryMeaningBasis basis;
 
+  // [追加] 出走の意味 条件と騎手成績 Step2: 行の補足（勝ち馬との差・騎手のこの馬での成績）。無い行は null (v.2026.10.20+26102002)
+  /// 補足（事実と解釈の下に灰色で出す）。無い行は null
+  final String? detail;
+
   const EntryMeaningLine({
     required this.kind,
     required this.fact,
     required this.interpretation,
     required this.basis,
+    this.detail,
   });
 }
 
@@ -267,11 +286,18 @@ String _otherHorsesText(List<PredictionHorseDetail> others) {
 /// [campSignals] buildCampSignals の結果（馬IDで対応させる。無い馬は間隔・人の行を出さない）。
 /// [horses] 出馬表の出走馬（取消を含む）。出す順はこの順。
 /// [profilesByHorseId] 馬ID → 競走馬プロフィール（同じ馬主の判定に使う。無い馬は同じ馬主の行を出さない）。
+// [修正] 出走の意味 条件と騎手成績 Step2: 条件の行と騎手の成績のため、過去走・過去走のレースの全着順・今回の芝ダと距離と内外を任意で受け取る。
+// [conditionTrackType] が null（または「芝」「ダ」以外）のときは条件の行を出さない (v.2026.10.20+26102002)
 RaceEntryMeanings buildEntryMeanings({
   required RaceCircumstances circumstances,
   required List<HorseCampSignals> campSignals,
   required List<PredictionHorseDetail> horses,
   Map<String, HorseProfile> profilesByHorseId = const {},
+  Map<String, List<HorseRaceRecord>> recordsByHorseId = const {},
+  Map<String, RaceResult> raceResultsById = const {},
+  String? conditionTrackType,
+  int conditionDistance = 0,
+  bool conditionIsOuterCourse = false,
 }) {
   final race = circumstances.race;
   final raceDate = race.date;
@@ -527,6 +553,58 @@ RaceEntryMeanings buildEntryMeanings({
         ));
       }
 
+      // [追加] 出走の意味 条件と騎手成績 Step2: 条件（前走との比較・今回の距離とコースの実績）。事実だけ。補足に勝ち馬との差 (v.2026.10.20+26102002)
+      final horseRecords =
+          recordsByHorseId[horse.horseId] ?? const <HorseRaceRecord>[];
+      final trackType = conditionTrackType;
+      if (trackType != null) {
+        final condition = conditionRecordLinesOf(
+          records: horseRecords,
+          resultsById: raceResultsById,
+          raceDate: raceDate,
+          trackType: trackType,
+          distance: conditionDistance,
+          venueCode: race.venueCode,
+          isOuterCourse: conditionIsOuterCourse,
+        );
+        if (condition != null) {
+          final comparison = condition.comparison;
+          if (comparison != null) {
+            lines.add(EntryMeaningLine(
+              kind: EntryMeaningKind.previousRaceComparison,
+              fact: comparison,
+              interpretation: null,
+              basis: EntryMeaningBasis.fact,
+            ));
+          }
+          lines.add(EntryMeaningLine(
+            kind: EntryMeaningKind.distanceRecord,
+            fact: condition.distanceFact,
+            interpretation: null,
+            basis: EntryMeaningBasis.fact,
+            detail: condition.distanceDetail,
+          ));
+          final courseFact = condition.courseFact;
+          if (courseFact != null) {
+            lines.add(EntryMeaningLine(
+              kind: EntryMeaningKind.courseRecord,
+              fact: courseFact,
+              interpretation: null,
+              basis: EntryMeaningBasis.fact,
+              detail: condition.courseDetail,
+            ));
+          }
+        }
+      }
+
+      // [追加] 出走の意味 条件と騎手成績 Step2: 今回の騎手のこの馬での成績（JRAの平地）。乗り替わり・主戦の継続の行の補足 (v.2026.10.20+26102002)
+      final jockeyRecord = jockeyRecordTextOf(
+        records: horseRecords,
+        resultsById: raceResultsById,
+        raceDate: raceDate,
+        jockeyId: horse.jockeyId,
+      );
+
       // ---- D 人・仕上げ ----
       final rides = signals.ridesOnThisHorse;
       final isSeasonedMain = signals.isMainJockey && rides >= 2;
@@ -540,6 +618,8 @@ RaceEntryMeanings buildEntryMeanings({
           fact: '乗り替わり（前走 $previousName → 今回 ${horse.jockey}・$rideText$mainText）',
           interpretation: null,
           basis: EntryMeaningBasis.fact,
+          // [追加] 出走の意味 条件と騎手成績 Step2: 今回の騎手のこの馬での成績 (v.2026.10.20+26102002)
+          detail: jockeyRecord,
         ));
       }
 
@@ -569,6 +649,8 @@ RaceEntryMeanings buildEntryMeanings({
           fact: '主戦騎手の継続騎乗（この馬に${rides + 1}回目）',
           interpretation: null,
           basis: EntryMeaningBasis.fact,
+          // [追加] 出走の意味 条件と騎手成績 Step2: 今回の騎手のこの馬での成績 (v.2026.10.20+26102002)
+          detail: jockeyRecord,
         ));
       }
 
