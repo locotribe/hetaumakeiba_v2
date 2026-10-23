@@ -2,7 +2,8 @@
 
 class DbConstants {
   static const String dbName = 'hetaumakeiba_v2.db';
-  static const int dbVersion = 22;
+  // [修正] 出走の意味 調教の行 Step3: v22→v23（近況の表 horse_condition_posts を追加） (v.2026.10.24+26102403)
+  static const int dbVersion = 23;
 
   // --- Tables ---
   static const String tableQrData = 'qr_data';
@@ -33,6 +34,8 @@ class DbConstants {
   static const String tableNetkeibaTrainingReviews = 'netkeiba_training_reviews';
   static const String tableNetkeibaTrainingSessions = 'netkeiba_training_sessions';
   static const String tableEntryMeaningCache = 'entry_meaning_cache';
+  // [追加] 出走の意味 調教の行 Step3: netkeiba の近況の投稿 (v.2026.10.24+26102403)
+  static const String tableHorseConditionPosts = 'horse_condition_posts';
 
   // --- Common Columns ---
   static const String colId = 'id';

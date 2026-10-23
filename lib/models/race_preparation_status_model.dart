@@ -20,6 +20,10 @@ enum PreparationStep {
   /// 調教データ（pakara坂路 + ウッド）。
   training,
 
+  // [追加] 出走の意味 調教の行 Step3: 保存は名前の文字列なので DB は変わらない (v.2026.10.24+26102403)
+  /// 調教の遡り（pakara を前走の日まで）・netkeiba の競走馬調教ページ・近況。
+  trainingHistory,
+
   /// 同レースの過去10年統計。
   raceStatistics,
 }

@@ -6,6 +6,10 @@ import 'package:http/http.dart' as http;
 import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 import 'package:hetaumakeiba_v2/db/repositories/training_repository.dart';
+// [追加] 出走の意味 調教の行 Step3: pakara を前走の日まで遡る (v.2026.10.24+26102403)
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hetaumakeiba_v2/logic/pakara_backfill.dart';
+import 'package:hetaumakeiba_v2/logic/training_fetch_policy.dart';
 
 class TrainingDataService {
   final TrainingRepository _repository = TrainingRepository();
@@ -99,6 +103,80 @@ class TrainingDataService {
     // 取得した全データが存在すれば一括保存
     if (allRecords.isNotEmpty) {
       await _repository.insertTrainingTimes(allRecords);
+    }
+  }
+
+  // [追加] 出走の意味 調教の行 Step3: pakara の調教を前走の日まで遡って取り、保存する。
+  // [raceYmd] レース日（YYYYMMDD）、[lastStartByHorse] 馬ID → 前走の日（YYYYMMDD）。戻り値は保存した行数。
+  // 通信に失敗した馬には「取り終えた」印を付けず（次の機会に取り直す）、例外にもしない。印は SharedPreferences（pakara_backfill_馬ID_前走の日） (v.2026.10.24+26102403)
+  Future<int> backfillToLastStart({
+    required String raceId,
+    required String raceYmd,
+    required Map<String, String> lastStartByHorse,
+  }) async {
+    if (lastStartByHorse.isEmpty) return 0;
+    final prefs = await SharedPreferences.getInstance();
+    final runner = PakaraBackfillRunner(
+      fetchPage: (trackType, date, horseIds) => _fetchPakaraPage(
+        raceId: raceId,
+        trackType: trackType,
+        date: date,
+        horseIds: horseIds,
+      ),
+      saveRows: _repository.insertTrainingTimes,
+      isMarked: (horseId, lastStartYmd) async =>
+          prefs.getBool(pakaraBackfillPrefKey(horseId, lastStartYmd)) ?? false,
+      mark: (horseId, lastStartYmd) async {
+        await prefs.setBool(pakaraBackfillPrefKey(horseId, lastStartYmd), true);
+      },
+      waitInterval: () => Future.delayed(
+          const Duration(milliseconds: kPakaraRequestIntervalMs)),
+    );
+    final result = await runner.run(
+      raceYmd: raceYmd,
+      lastStartByHorse: lastStartByHorse,
+    );
+    debugPrint(
+        'TrainingDataService: pakara遡り 対象${result.targetCount}頭・要求${result.requestCount}回・保存${result.savedRows}行・取り切り${result.completedHorses}頭 (race=$raceId)');
+    return result.savedRows;
+  }
+
+  // [追加] 出走の意味 調教の行 Step3: pakara の1ページ（1種別・指定した日より前の最大10本）を取る。失敗は null (v.2026.10.24+26102403)
+  Future<List<TrainingTimeModel>?> _fetchPakaraPage({
+    required String raceId,
+    required String trackType,
+    required String date,
+    required List<String> horseIds,
+  }) async {
+    final params = generatePakaraApiParams(
+      raceId: raceId,
+      raceDate: date,
+      horseIds: horseIds,
+    );
+    final url =
+        trackType == 'ウッド' ? getPakaraWoodApiUrl() : getPakaraHanroApiUrl();
+    try {
+      final response = await http
+          .post(
+            Uri.parse(url),
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "X-Requested-With": "XMLHttpRequest",
+              "User-Agent":
+                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            },
+            body: params,
+          )
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        debugPrint(
+            'TrainingDataService: pakara HTTP ${response.statusCode} ($trackType $date)');
+        return null;
+      }
+      return parsePakaraResponse(response.body, trackType);
+    } catch (e) {
+      debugPrint('TrainingDataService: pakara遡りの取得に失敗 ($trackType $date): $e');
+      return null;
     }
   }
 }

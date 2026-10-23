@@ -26,6 +26,11 @@ import 'package:hetaumakeiba_v2/services/netkeiba_training_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 // [追加] 個別ラップ取得: 前走の個別ラップ (v.2026.9.23+26092304)
 import 'package:hetaumakeiba_v2/services/horse_laptime_service.dart';
+// [追加] 出走の意味 調教の行 Step3: 調教の遡り・近況のステップ (v.2026.10.24+26102403)
+import 'package:hetaumakeiba_v2/logic/pakara_backfill.dart';
+import 'package:hetaumakeiba_v2/logic/training_fetch_policy.dart';
+import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
+import 'package:hetaumakeiba_v2/services/horse_condition_post_service.dart';
 
 /// 1ステップ分の実処理。戻り値は取得できた件数(itemCount)。
 /// テストではネットワークを伴わない差し替え実装を注入する。
@@ -79,6 +84,8 @@ class RacePreparationService {
       PreparationStep.horsePerformance: _defaultHorsePerformance,
       PreparationStep.pastRaceResults: _defaultPastRaceResults,
       PreparationStep.training: _defaultTraining,
+      // [追加] 出走の意味 調教の行 Step3 (v.2026.10.24+26102403)
+      PreparationStep.trainingHistory: _defaultTrainingHistory,
     };
     if (stepExecutors != null) {
       _executors.addAll(stepExecutors);
@@ -97,6 +104,11 @@ class RacePreparationService {
     PreparationStep.pastRaceResults: [PreparationStep.horsePerformance],
     // 対象馬IDが出馬表取得時点で確定するため、出馬表の完了が前提。
     PreparationStep.training: [PreparationStep.shutuba],
+    // [追加] 出走の意味 調教の行 Step3: 前走の日は過去走から決まり、最初の pakara は training が取っているため、両方の完了が前提 (v.2026.10.24+26102403)
+    PreparationStep.trainingHistory: [
+      PreparationStep.horsePerformance,
+      PreparationStep.training,
+    ],
     // 過去10年統計はレース名から独立して検索するため依存なし
     // （ただし自動実行はしない。enqueuePreparation内のコメント参照）。
     PreparationStep.raceStatistics: [],
@@ -244,6 +256,9 @@ class RacePreparationService {
         return '戦績内レースの結果を取得';
       case PreparationStep.training:
         return '調教データを取得';
+      // [追加] 出走の意味 調教の行 Step3 (v.2026.10.24+26102403)
+      case PreparationStep.trainingHistory:
+        return '調教の遡り・近況を取得';
       case PreparationStep.raceStatistics:
         return '過去分析データ';
     }
@@ -397,6 +412,73 @@ class RacePreparationService {
       final records = await _trainingRepository.getTrainingTimesForHorse(horseId);
       total += records.length;
     }
+    return total;
+  }
+
+  // [追加] 出走の意味 調教の行 Step3: 調教の遡り・近況。
+  // レース日が今日より前、または読めないときは通信せずに 0件で完了する（結果から開いた古いレースで取りに行かない）。
+  // 次の3つを順に行う。どれかが失敗しても残りは続ける（失敗はログだけ。このステップは done になる）。戻り値は pakara の遡りで保存した行数＋近況の投稿数
+  // 1. pakara を前走の日まで遡る  2. netkeiba の競走馬調教ページ（全頭・ログイン中のみ・3秒間隔）  3. netkeiba の近況（全頭・3秒間隔） (v.2026.10.24+26102403)
+  Future<int> _defaultTrainingHistory({
+    required String raceId,
+    required String raceDate,
+    required List<String> horseIds,
+    required bool force,
+  }) async {
+    final raceYmd = _formatDateForApi(raceDate);
+    if (shouldSkipTrainingHistory(raceYmd, DateTime.now())) {
+      debugPrint(
+          'RacePreparationService: trainingHistory は通信しません (race=$raceId, 日付=$raceYmd)');
+      return 0;
+    }
+
+    int total = 0;
+
+    try {
+      final raceDay = DateTime(
+        int.parse(raceYmd.substring(0, 4)),
+        int.parse(raceYmd.substring(4, 6)),
+        int.parse(raceYmd.substring(6, 8)),
+      );
+      final recordsByHorseId = <String, List<HorseRaceRecord>>{};
+      for (final horseId in horseIds) {
+        recordsByHorseId[horseId] =
+            await _horseRepository.getHorsePerformanceRecords(horseId);
+      }
+      final targets = pakaraBackfillTargets(
+        recordsByHorseId: recordsByHorseId,
+        raceDay: raceDay,
+      );
+      total += await TrainingDataService().backfillToLastStart(
+        raceId: raceId,
+        raceYmd: raceYmd,
+        lastStartByHorse: targets,
+      );
+    } catch (e) {
+      debugPrint('RacePreparationService: pakara の遡りに失敗: $e');
+    }
+
+    try {
+      await NetkeibaTrainingService().fetchAndSaveHorseTrainings(
+        horseIds: horseIds,
+        raceId: raceId,
+        force: force,
+      );
+    } catch (e) {
+      debugPrint('RacePreparationService: 競走馬調教ページの取得に失敗: $e');
+    }
+
+    try {
+      await Future.delayed(
+          const Duration(milliseconds: kNetkeibaRequestIntervalMs));
+      total += await HorseConditionPostService()
+          .fetchAndSaveForHorses(horseIds, force: force);
+    } catch (e) {
+      debugPrint('RacePreparationService: 近況の取得に失敗: $e');
+    }
+
+    debugPrint(
+        'RacePreparationService: trainingHistory 完了 (race=$raceId, pakara遡り＋近況=$total件)');
     return total;
   }
 

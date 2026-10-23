@@ -380,6 +380,9 @@ class DbProvider {
     await _createNetkeibaTrainingTables(db);
 
     await _createEntryMeaningCacheTable(db);
+
+    // [追加] 出走の意味 調教の行 Step3: 近況の表 (v.2026.10.24+26102403)
+    await _createHorseConditionPostsTable(db);
   }
 
   // [修正] マイグレーション失敗時にエラーを握りつぶさず、rethrowで上位へ伝播させるよう全catchブロックを修正 (v.13.40.3)
@@ -716,6 +719,15 @@ class DbProvider {
         rethrow;
       }
     }
+    // [追加] 出走の意味 調教の行 Step3: 近況の表を足す (v.2026.10.24+26102403)
+    if (oldVersion < 23) {
+      try {
+        await _createHorseConditionPostsTable(db);
+      } catch (e) {
+        debugPrint('Migration error (v22->v23): $e');
+        rethrow;
+      }
+    }
   }
 
   Future<void> _createNetkeibaTrainingTables(Database db) async {
@@ -768,6 +780,21 @@ class DbProvider {
         meanings_json     TEXT NOT NULL,
         preparation_state TEXT NOT NULL,
         computed_at       TEXT NOT NULL
+      )
+    ''');
+  }
+
+  // [追加] 出走の意味 調教の行 Step3: netkeiba の近況の投稿。投稿の日時（YYYYMMDDHHmmss）と同じ日時の順で1行 (v.2026.10.24+26102403)
+  Future<void> _createHorseConditionPostsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableHorseConditionPosts}(
+        horse_id   TEXT NOT NULL,
+        posted_at  TEXT NOT NULL,
+        seq        INTEGER NOT NULL,
+        title      TEXT NOT NULL,
+        body       TEXT NOT NULL,
+        fetched_at TEXT NOT NULL,
+        PRIMARY KEY (horse_id, posted_at, seq)
       )
     ''');
   }

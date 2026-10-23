@@ -9,6 +9,8 @@ import 'package:charset_converter/charset_converter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hetaumakeiba_v2/db/repositories/netkeiba_training_repository.dart';
 import 'package:hetaumakeiba_v2/logic/netkeiba_training_parser.dart';
+// [追加] 出走の意味 調教の行 Step3: 全頭を取るときの間隔 (v.2026.10.24+26102403)
+import 'package:hetaumakeiba_v2/logic/training_fetch_policy.dart';
 import 'package:hetaumakeiba_v2/services/netkeiba_session_service.dart';
 
 // [追加] 調教タブ改修Step3: netkeiba の最終追切（調教ページ type=2）と厩舎コメントの取得・保存 (v.2026.9.22+26092212)
@@ -173,7 +175,9 @@ class NetkeibaTrainingService {
         continue;
       }
       await fetchAndSaveHorseTraining(horseId);
-      await Future.delayed(const Duration(milliseconds: 300));
+      // [修正] 出走の意味 調教の行 Step3: 全頭を続けて取るので間隔を 300ミリ秒から 3秒にした（取得ボタンの全頭取得も同じ） (v.2026.10.24+26102403)
+      await Future.delayed(
+          const Duration(milliseconds: kNetkeibaRequestIntervalMs));
     }
   }
 
