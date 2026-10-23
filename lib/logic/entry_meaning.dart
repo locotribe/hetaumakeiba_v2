@@ -8,6 +8,11 @@
 import 'package:hetaumakeiba_v2/logic/camp_signals.dart';
 // [追加] 出走の意味 条件と騎手成績 Step2: 条件の行と騎手のこの馬での成績 (v.2026.10.20+26102002)
 import 'package:hetaumakeiba_v2/logic/condition_record.dart';
+// [追加] 出走の意味 調教の行 Step2: 調教・近況の行 (v.2026.10.24+26102402)
+import 'package:hetaumakeiba_v2/logic/training_record.dart';
+import 'package:hetaumakeiba_v2/models/horse_condition_post_model.dart';
+import 'package:hetaumakeiba_v2/models/netkeiba_training_model.dart';
+import 'package:hetaumakeiba_v2/models/training_time_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';
@@ -20,6 +25,32 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 
 /// 同じクラスでの出走がこの数以上なら「◯◯クラスで今回◯走目」を出す（A2）
 const int kClassStayStartsToShow = 6;
+
+// [追加] 出走の意味 調教の行 Step2: 1頭分の調教・近況のデータ（DB から読んだもの）。調教・近況の行を出すために渡す (v.2026.10.24+26102402)
+class HorseTrainingInput {
+  /// pakara の坂路・ウッド（期間外を含んでよい）
+  final List<TrainingTimeModel> pakara;
+
+  /// netkeiba の調教（期間外・source は問わない）
+  final List<NetkeibaTrainingSession> netkeibaSessions;
+
+  /// このレースの最終追切の評価（A〜E）。無ければ null
+  final String? finalOikiriRank;
+
+  /// 近況の投稿
+  final List<HorseConditionPost> posts;
+
+  /// pakara を前走の日まで取り終えたか
+  final bool backfillComplete;
+
+  const HorseTrainingInput({
+    this.pakara = const [],
+    this.netkeibaSessions = const [],
+    this.finalOikiriRank,
+    this.posts = const [],
+    this.backfillComplete = true,
+  });
+}
 
 /// 根拠の印。
 enum EntryMeaningBasis {
@@ -34,6 +65,10 @@ enum EntryMeaningBasis {
 
   /// 規則の計算の限界（要確認）
   ruleLimit,
+
+  // [追加] 出走の意味 調教の行 Step2: アプリ独自の評価（時計と基準差からの判定。人の判断が入らない） (v.2026.10.24+26102402)
+  /// アプリ独自の評価
+  appEvaluation,
 }
 
 /// 根拠の印の表示名（「規則」「一般論」「事実」「規則の限界」）。
@@ -47,6 +82,9 @@ String entryMeaningBasisLabel(EntryMeaningBasis basis) {
       return '事実';
     case EntryMeaningBasis.ruleLimit:
       return '規則の限界';
+    // [追加] 出走の意味 調教の行 Step2 (v.2026.10.24+26102402)
+    case EntryMeaningBasis.appEvaluation:
+      return '独自評価';
   }
 }
 
@@ -106,6 +144,25 @@ enum EntryMeaningKind {
 
   /// 条件: 今回のコースの実績
   courseRecord,
+
+  // [追加] 出走の意味 調教の行 Step2: 調教・近況の行（条件の後・D 騎手の前に出す） (v.2026.10.24+26102402)
+  /// 調教: 前走後の坂路・ウッドの本数
+  trainingCount,
+
+  /// 調教: 調教のない期間
+  trainingGap,
+
+  /// 調教: アプリ独自の評価
+  trainingEvaluation,
+
+  /// 調教: netkeiba の追い切り
+  netkeibaTraining,
+
+  /// 調教: 数えている範囲の限界
+  trainingScope,
+
+  /// 近況: 前走後の放牧の投稿
+  conditionPost,
 
   /// D1 前走の騎手が同じレースの別馬に騎乗
   previousJockeyOnOtherHorse,
@@ -298,6 +355,8 @@ RaceEntryMeanings buildEntryMeanings({
   String? conditionTrackType,
   int conditionDistance = 0,
   bool conditionIsOuterCourse = false,
+  // [追加] 出走の意味 調教の行 Step2: 馬ID → 調教・近況のデータ。渡された馬（で前走の日が分かる馬）にだけ調教・近況の行を出す (v.2026.10.24+26102402)
+  Map<String, HorseTrainingInput> trainingByHorseId = const {},
 }) {
   final race = circumstances.race;
   final raceDate = race.date;
@@ -594,6 +653,73 @@ RaceEntryMeanings buildEntryMeanings({
               detail: condition.courseDetail,
             ));
           }
+        }
+      }
+
+      // [追加] 出走の意味 調教の行 Step2: 調教・近況（前走の後の本数・調教のない期間・アプリ独自の評価・netkeiba の追い切り・放牧の投稿）。事実と独自評価だけで解釈は付けない。
+      // 調教のデータを渡された馬で、前走の日が分かるときだけ出す。順番は 本数 → 調教のない期間 → 独自評価 → netkeiba → 数えている範囲 → 近況 (v.2026.10.24+26102402)
+      final trainingInput = trainingByHorseId[horse.horseId];
+      final previousStartDate = signals.lastStartDate;
+      if (trainingInput != null && previousStartDate != null) {
+        final training = trainingRecordLinesOf(
+          raceDate: raceDate,
+          previousStartDate: previousStartDate,
+          pakara: trainingInput.pakara,
+          netkeibaSessions: trainingInput.netkeibaSessions,
+          finalOikiriRank: trainingInput.finalOikiriRank,
+          posts: trainingInput.posts,
+          backfillComplete: trainingInput.backfillComplete,
+        );
+        lines.add(EntryMeaningLine(
+          kind: EntryMeaningKind.trainingCount,
+          fact: training.countFact,
+          interpretation: null,
+          basis: EntryMeaningBasis.fact,
+          detail: training.countDetail,
+        ));
+        final gapFact = training.gapFact;
+        if (gapFact != null) {
+          lines.add(EntryMeaningLine(
+            kind: EntryMeaningKind.trainingGap,
+            fact: gapFact,
+            interpretation: null,
+            basis: EntryMeaningBasis.fact,
+          ));
+        }
+        final evaluationFact = training.evaluationFact;
+        if (evaluationFact != null) {
+          lines.add(EntryMeaningLine(
+            kind: EntryMeaningKind.trainingEvaluation,
+            fact: evaluationFact,
+            interpretation: null,
+            basis: EntryMeaningBasis.appEvaluation,
+            detail: training.evaluationDetail,
+          ));
+        }
+        final netkeibaFact = training.netkeibaFact;
+        if (netkeibaFact != null) {
+          lines.add(EntryMeaningLine(
+            kind: EntryMeaningKind.netkeibaTraining,
+            fact: netkeibaFact,
+            interpretation: null,
+            basis: EntryMeaningBasis.fact,
+            detail: training.netkeibaDetail,
+          ));
+        }
+        lines.add(const EntryMeaningLine(
+          kind: EntryMeaningKind.trainingScope,
+          fact: kTrainingScopeNote,
+          interpretation: null,
+          basis: EntryMeaningBasis.ruleLimit,
+        ));
+        final postFact = training.postFact;
+        if (postFact != null) {
+          lines.add(EntryMeaningLine(
+            kind: EntryMeaningKind.conditionPost,
+            fact: postFact,
+            interpretation: null,
+            basis: EntryMeaningBasis.fact,
+          ));
         }
       }
 

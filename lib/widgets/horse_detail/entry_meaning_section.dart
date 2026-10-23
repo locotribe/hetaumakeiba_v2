@@ -40,6 +40,9 @@ class EntryMeaningSection extends StatelessWidget {
         return Colors.grey.shade600;
       case EntryMeaningBasis.ruleLimit:
         return Colors.red.shade700;
+      // [追加] 出走の意味 調教の行 Step2: アプリ独自の評価は紫 (v.2026.10.24+26102402)
+      case EntryMeaningBasis.appEvaluation:
+        return Colors.deepPurple.shade400;
     }
   }
 

@@ -28,6 +28,8 @@ RaceEntryMeanings buildEntryMeaningsForRace({
   Map<String, List<int>> basePrizeManByRaceId = const {},
   // [追加] 出走の意味 条件と騎手成績 Step2: 過去走のレースの全着順（レースID → 結果）。3着圏・掲示板圏と内外に使う (v.2026.10.20+26102002)
   Map<String, RaceResult> raceResultsById = const {},
+  // [追加] 出走の意味 調教の行 Step2: 馬ID → 調教・近況のデータ (v.2026.10.24+26102402)
+  Map<String, HorseTrainingInput> trainingByHorseId = const {},
 }) {
   final classification = classifyRace(race);
   final circumstances = buildRaceCircumstances(
@@ -63,6 +65,7 @@ RaceEntryMeanings buildEntryMeaningsForRace({
         (trackType == '芝' || trackType == 'ダ') ? trackType : null,
     conditionDistance: race.distanceValue ?? 0,
     conditionIsOuterCourse: (race.courseInOut ?? '').contains('外'),
+    trainingByHorseId: trainingByHorseId,
   );
 }
 
@@ -123,6 +126,15 @@ String entryMeaningGroupLabel(EntryMeaningKind kind) {
     case EntryMeaningKind.distanceRecord:
     case EntryMeaningKind.courseRecord:
       return '条件';
+    // [追加] 出走の意味 調教の行 Step2: 調教・近況の行 (v.2026.10.24+26102402)
+    case EntryMeaningKind.trainingCount:
+    case EntryMeaningKind.trainingGap:
+    case EntryMeaningKind.trainingEvaluation:
+    case EntryMeaningKind.netkeibaTraining:
+    case EntryMeaningKind.trainingScope:
+      return '調教';
+    case EntryMeaningKind.conditionPost:
+      return '近況';
     case EntryMeaningKind.previousJockeyOnOtherHorse:
     case EntryMeaningKind.jockeyChange:
     case EntryMeaningKind.mainJockey:
@@ -204,6 +216,13 @@ String? entryMeaningBadgeLabel(EntryMeaningLine line) {
     case EntryMeaningKind.firstBlinker:
     case EntryMeaningKind.raceClassChallengeCount:
     case EntryMeaningKind.raceUnjudgedCount:
+    // [追加] 出走の意味 調教の行 Step2: 調教・近況の行はバッジにしない (v.2026.10.24+26102402)
+    case EntryMeaningKind.trainingCount:
+    case EntryMeaningKind.trainingGap:
+    case EntryMeaningKind.trainingEvaluation:
+    case EntryMeaningKind.netkeibaTraining:
+    case EntryMeaningKind.trainingScope:
+    case EntryMeaningKind.conditionPost:
       return null;
   }
 }
@@ -330,11 +349,15 @@ class EntryMeaningSnapshot {
   /// 計算した日時
   final DateTime computedAt;
 
+  // [追加] 出走の意味 調教の行 Step2: 計算したときの調教・近況の指紋（trainingFingerprintOf を馬の順につないだ文字列）。古い保存には無い (v.2026.10.24+26102402)
+  final String? trainingFingerprint;
+
   const EntryMeaningSnapshot({
     required this.raceId,
     required this.meanings,
     required this.preparation,
     required this.computedAt,
+    this.trainingFingerprint,
   });
 
   /// その馬の出走の意味。無ければ null。
@@ -349,7 +372,12 @@ class EntryMeaningSnapshot {
   Map<String, Object?> toMap() {
     return {
       'race_id': raceId,
-      'meanings_json': jsonEncode(entryMeaningsToJson(meanings)),
+      // [修正] 出走の意味 調教の行 Step2: 指紋は同じ JSON の一番上の項目に入れる（表の列は足さない） (v.2026.10.24+26102402)
+      'meanings_json': jsonEncode({
+        ...entryMeaningsToJson(meanings),
+        if (trainingFingerprint != null)
+          'trainingFingerprint': trainingFingerprint,
+      }),
       'preparation_state': preparation.name,
       'computed_at': computedAt.toIso8601String(),
     };
@@ -372,9 +400,12 @@ class EntryMeaningSnapshot {
       decoded = null;
     }
     if (decoded is! Map) return null;
+    // [追加] 出走の意味 調教の行 Step2: 古い保存には指紋が無い (v.2026.10.24+26102402)
+    final fingerprint = decoded['trainingFingerprint'];
     return EntryMeaningSnapshot(
       raceId: raceId,
       meanings: entryMeaningsFromJson(Map<String, dynamic>.from(decoded)),
+      trainingFingerprint: fingerprint is String ? fingerprint : null,
       preparation: _enumByName(
               EntryMeaningPreparation.values, map['preparation_state']) ??
           EntryMeaningPreparation.inProgress,
