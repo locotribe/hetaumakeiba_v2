@@ -5,6 +5,8 @@ import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/services/track_conditions_scraper_service.dart';
 import 'package:hetaumakeiba_v2/services/cloud_sync_service.dart';
+// [追加] サーバー（GitHub Actions）の最後の実行をヘッダーに出すため (v.2026.10.24+26102405)
+import 'package:hetaumakeiba_v2/services/server_run_status_service.dart';
 import 'package:hetaumakeiba_v2/widgets/custom_background.dart';
 import 'package:hetaumakeiba_v2/widgets/track_condition_card.dart';
 import 'package:hetaumakeiba_v2/logic/track_condition_active_filter.dart';
@@ -24,11 +26,15 @@ class _TrackConditionPageState extends State<TrackConditionPage> {
   bool _isSyncing = false;
   bool _needsCloudSync = false;
   String _lastUpdatedTime = "--:--";
+  // [追加] サーバー（GitHub Actions）の最後の実行。取れないときは null (v.2026.10.24+26102405)
+  ServerRunStatus? _serverRunStatus;
 
   @override
   void initState() {
     super.initState();
     _checkAndAutoScrape();
+    // [追加] サーバーの最後の実行は、馬場データの読み込みとは別に取得する (v.2026.10.24+26102405)
+    _loadServerRunStatus();
   }
 
   Future<void> _checkAndAutoScrape() async {
@@ -138,6 +144,8 @@ class _TrackConditionPageState extends State<TrackConditionPage> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_track_condition_scrape_time', DateTime.now().toIso8601String());
 
+      // [追加] 更新のたびにサーバーの最後の実行も取り直す (v.2026.10.24+26102405)
+      _loadServerRunStatus();
       await loadData();
     } finally {
       if (mounted) {
@@ -147,6 +155,42 @@ class _TrackConditionPageState extends State<TrackConditionPage> {
         });
       }
     }
+  }
+
+  // [追加] サーバー（GitHub Actions）の最後の実行を取得してヘッダーに出す (v.2026.10.24+26102405)
+  Future<void> _loadServerRunStatus() async {
+    final status = await ServerRunStatusService().fetchLatest();
+    if (!mounted) return;
+    setState(() => _serverRunStatus = status);
+  }
+
+  // [追加] ヘッダーのサーバー表示（2行: 「サーバー」＋失敗・実行中と、実行を始めた日時）。失敗は赤、最後の実行から48時間を超えたら橙 (v.2026.10.24+26102405)
+  Widget _buildServerRunLabel() {
+    final status = _serverRunStatus;
+    final Color color = switch (ServerRunStatusService.levelOf(status, DateTime.now())) {
+      ServerRunLevel.failed => Colors.redAccent,
+      ServerRunLevel.stale => Colors.orangeAccent,
+      ServerRunLevel.normal => Colors.white70,
+      ServerRunLevel.unknown => Colors.white70,
+    };
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            ServerRunStatusService.headLabelOf(status),
+            style: TextStyle(fontSize: 10, color: color),
+          ),
+          Text(
+            ServerRunStatusService.timeLabelOf(status),
+            style: TextStyle(fontSize: 12, color: color),
+          ),
+        ],
+      ),
+    );
   }
 
   String _getCourseName(int id) {
@@ -164,7 +208,14 @@ class _TrackConditionPageState extends State<TrackConditionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('馬場状態'),
+        // [修正] タイトルの右（赤枠の位置）にサーバー（GitHub Actions）の最後の実行日時を出す (v.2026.10.24+26102405)
+        title: Row(
+          children: [
+            const Text('馬場状態'),
+            const SizedBox(width: 12),
+            Flexible(child: _buildServerRunLabel()),
+          ],
+        ),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         actions: [
