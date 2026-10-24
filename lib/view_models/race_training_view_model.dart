@@ -16,6 +16,9 @@ import 'package:hetaumakeiba_v2/services/netkeiba_session_service.dart';
 import 'package:hetaumakeiba_v2/services/netkeiba_training_service.dart';
 import 'package:hetaumakeiba_v2/services/scraping_manager.dart';
 import 'package:hetaumakeiba_v2/services/training_data_service.dart';
+// [追加] 出走の意味 調教の行 Step4: 脚色が付いた後の取り直しと、調教が変わった知らせ (v.2026.10.24+26102404)
+import 'package:hetaumakeiba_v2/logic/final_training_refetch.dart';
+import 'package:hetaumakeiba_v2/services/training_data_events.dart';
 import 'package:hetaumakeiba_v2/utils/training_date_utils.dart';
 
 // [追加] 馬詳細タブStep1: 調教タブ（training_tab.dart）の読み込み・取得の処理をここへ移した。
@@ -49,10 +52,14 @@ class RaceTrainingViewModel extends ChangeNotifier {
   /// 表示中の出走馬（親の再描画で差し替わるため、画面側から更新する）
   List<PredictionHorseDetail> horses;
 
+  // [追加] 出走の意味 調教の行 Step4: GⅠか（脚色が付く時刻が2日前になる）。直前の取り直しの時刻の判定に使う (v.2026.10.24+26102404)
+  final bool isG1;
+
   RaceTrainingViewModel({
     required this.raceId,
     required this.raceDate,
     required this.horses,
+    this.isG1 = false,
   });
 
   final TrainingRepository _repository = TrainingRepository();
@@ -197,6 +204,8 @@ class RaceTrainingViewModel extends ChangeNotifier {
       } catch (e) {
         debugPrint('TrainingTab: 競走馬調教ページの取得に失敗: $e');
       }
+      // [追加] 出走の意味 調教の行 Step4: 調教が変わったことを知らせる (v.2026.10.24+26102404)
+      TrainingDataEvents.notifyUpdated(raceId);
       if (!_disposed) {
         await load();
       }
@@ -218,7 +227,11 @@ class RaceTrainingViewModel extends ChangeNotifier {
       if (_disposed) return;
       _loadingHorseIds.remove(horseId);
       _notify();
-      if (result != null) await load(showSpinner: false);
+      if (result != null) {
+        // [修正] 出走の意味 調教の行 Step4: 調教が変わったことを知らせる (v.2026.10.24+26102404)
+        TrainingDataEvents.notifyUpdated(raceId);
+        await load(showSpinner: false);
+      }
     }, key: 'training_nk_horse:$horseId');
   }
 
@@ -248,7 +261,65 @@ class RaceTrainingViewModel extends ChangeNotifier {
         raceId: raceId,
         horseIds: horseIds,
       );
+      // [追加] 出走の意味 調教の行 Step4: 調教が変わったことを知らせる (v.2026.10.24+26102404)
+      TrainingDataEvents.notifyUpdated(raceId);
       if (!_disposed) await load(showSpinner: false);
     }, key: 'training_nk_race:$raceId');
+  }
+
+  // [追加] 出走の意味 調教の行 Step4: netkeiba の脚色が付いた後に、調教を1回だけ取り直す。
+  // 取り直す時刻は、GⅠはレースの2日前の13時、それ以外は前日の13時（finalTrainingRefetchTime）。今がその時刻より後で、レース日より前、
+  // かつその時刻より後に取り直した記録（SharedPreferences training_final_レースID）が無いときだけ行う。
+  // 取り直す内容: pakara（レース日・全頭）→ ログイン中なら netkeiba の最終追切・厩舎コメント → 全頭の競走馬調教ページ（force・3秒間隔）。
+  // 終わったら記録を書き、調教が変わったことを知らせる (v.2026.10.24+26102404)
+  Future<void> refetchFinalTrainingIfNeeded() async {
+    if (_disposed) return;
+    final raceDay = DateTime.tryParse(raceYmd);
+    if (raceDay == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final prefKey = 'training_final_$raceId';
+    final last = DateTime.tryParse(prefs.getString(prefKey) ?? '');
+    if (!shouldRefetchFinalTraining(
+      raceDay: raceDay,
+      isG1: isG1,
+      now: DateTime.now(),
+      lastRefetchedAt: last,
+    )) {
+      return;
+    }
+    final formattedDate = _formatDateForApi(raceDate);
+    final horseIds = horses.map((h) => h.horseId).toList();
+    final loggedIn = _isLoggedIn;
+    ScrapingManager().addRequest('直前の調教を取り直し', () async {
+      await _service.fetchAndSaveTrainingData(
+        raceId: raceId,
+        raceDate: formattedDate,
+        horseIds: horseIds,
+      );
+      if (loggedIn) {
+        try {
+          await NetkeibaTrainingService().fetchAndSaveRaceTraining(
+            raceId: raceId,
+            horseIds: horseIds,
+          );
+        } catch (e) {
+          debugPrint('TrainingTab: 直前の最終追切の取得に失敗: $e');
+        }
+        try {
+          await NetkeibaTrainingService().fetchAndSaveHorseTrainings(
+            horseIds: horseIds,
+            raceId: raceId,
+            force: true,
+          );
+        } catch (e) {
+          debugPrint('TrainingTab: 直前の競走馬調教ページの取得に失敗: $e');
+        }
+      }
+      final doneAt = DateTime.now().toIso8601String();
+      await prefs.setString(prefKey, doneAt);
+      debugPrint('RaceTrainingViewModel: 直前の調教を取り直しました (race=$raceId, isG1=$isG1)');
+      TrainingDataEvents.notifyUpdated(raceId);
+      if (!_disposed) await load(showSpinner: false);
+    }, key: 'training_final:$raceId');
   }
 }

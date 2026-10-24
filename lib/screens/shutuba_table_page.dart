@@ -38,6 +38,8 @@ import 'package:hetaumakeiba_v2/models/shutuba_table_cache_model.dart';
 import 'package:hetaumakeiba_v2/models/user_mark_model.dart';
 import 'package:hetaumakeiba_v2/services/horse_profile_sync_service.dart';
 import 'package:hetaumakeiba_v2/services/race_preparation_service.dart';
+// [追加] 出走の意味 調教の行 Step4: 調教・近況が変わった知らせ (v.2026.10.24+26102404)
+import 'package:hetaumakeiba_v2/services/training_data_events.dart';
 import 'package:hetaumakeiba_v2/services/shutuba_table_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
@@ -116,6 +118,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   // [追加] Phase 4-D: RacePreparationServiceの完了通知を購読し、戦績取得完了時に
   // 分析をローカル再計算するために保持する (v.2026.9.5+26090504)
   StreamSubscription<RacePreparationStepCompleted>? _preparationStepSubscription;
+  // [追加] 出走の意味 調教の行 Step4: 調教・近況が変わった知らせ（取得ボタン・馬を開いたときの取得・直前の取り直し）の購読 (v.2026.10.24+26102404)
+  StreamSubscription<String>? _trainingEventsSubscription;
 
   // [追加] 陣営の本気度指数 実施順6: 出走の意味の計算結果と、計算の重なりを防ぐ印 (v.2026.10.3+26100308)
   final EntryMeaningService _entryMeaningService = EntryMeaningService();
@@ -143,11 +147,22 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     _preparationStepSubscription =
         RacePreparationService.stepCompletedStream.listen((event) {
       if (event.raceId != widget.raceId) return;
+      // [追加] 出走の意味 調教の行 Step4: 調教・調教の遡りの完了では、調教・近況が変わったときだけ出走の意味を計算し直す (v.2026.10.24+26102404)
+      if (event.step == PreparationStep.training ||
+          event.step == PreparationStep.trainingHistory) {
+        unawaited(_refreshEntryMeaningsIfTrainingChanged());
+        return;
+      }
       if (event.step != PreparationStep.horsePerformance &&
           event.step != PreparationStep.pastRaceResults) {
         return;
       }
       _recomputeAnalysisFromCache();
+    });
+    // [追加] 出走の意味 調教の行 Step4 (v.2026.10.24+26102404)
+    _trainingEventsSubscription = TrainingDataEvents.updated.listen((raceId) {
+      if (raceId != widget.raceId) return;
+      unawaited(_refreshEntryMeaningsIfTrainingChanged());
     });
   }
 
@@ -242,6 +257,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
     _tabController.dispose();
     // [追加] Phase 4-D: RacePreparationServiceの完了通知の購読を解除する (v.2026.9.5+26090504)
     _preparationStepSubscription?.cancel();
+    // [追加] 出走の意味 調教の行 Step4 (v.2026.10.24+26102404)
+    _trainingEventsSubscription?.cancel();
     super.dispose();
   }
 
@@ -814,6 +831,23 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
       }
     } catch (e) {
       debugPrint('分析の再計算に失敗: $e');
+    }
+  }
+
+  // [追加] 出走の意味 調教の行 Step4: 調教・近況が、今の出走の意味を計算したときから変わっていれば計算し直す。
+  // レース結果があるレースは保存分だけを使うので何もしない。出馬表を読み終える前は何もしない（読み終えたときの計算に含まれる） (v.2026.10.24+26102404)
+  Future<void> _refreshEntryMeaningsIfTrainingChanged() async {
+    if (widget.raceResult != null) return;
+    final data = _predictionRaceData;
+    if (data == null) return;
+    try {
+      final changed = await _entryMeaningService.trainingChanged(
+          data, _entryMeaningSnapshot);
+      if (changed && mounted) {
+        unawaited(_refreshEntryMeanings());
+      }
+    } catch (e) {
+      debugPrint('調教・近況の変化の確認に失敗: $e');
     }
   }
 

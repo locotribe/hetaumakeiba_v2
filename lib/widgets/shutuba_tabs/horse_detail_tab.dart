@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_repository.dart';
 import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
 import 'package:hetaumakeiba_v2/logic/horse_detail_order.dart';
+// [追加] 出走の意味 調教の行 Step4: GⅠか（直前の調教の取り直しの時刻） (v.2026.10.24+26102404)
+import 'package:hetaumakeiba_v2/logic/race_classification.dart';
 import 'package:hetaumakeiba_v2/models/horse_memo_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
@@ -54,7 +56,8 @@ import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 enum _HorseDetailMenuAction { fetchTraining, bulkEditMemos, importMemos, exportMemos, exportAiData, exportPastData }
 
 /// 馬のページに表示する内容（ボタンで切り替え、馬を変えても保つ）
-enum _HorseDetailView { info, finalTraining, interimTraining, memo, condition }
+// [修正] 出走の意味 調教の行 Step4: 「最終追切」と「中間追切」を1つの「追切」（中間追切の画面。最終追切も時系列で入る）にまとめ、finalTraining を外した。全頭の最終追切は「全」で見る（オーナー指示） (v.2026.10.24+26102404)
+enum _HorseDetailView { info, interimTraining, memo, condition }
 
 /// 「全」ページに表示する内容（チップで切り替える。調教＝全頭の最終追い切り、比較（condition）＝今回条件ヒートマップ）
 // [修正] レーティング削除: 能力（全頭の Rt の表）を外した (v.2026.10.18+26101803)
@@ -108,7 +111,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
 
   /// 表示中の馬（全頭一覧のときは null）
   String? _currentHorseId;
-  _HorseDetailView _view = _HorseDetailView.finalTraining;
+  // [修正] 出走の意味 調教の行 Step4: 初期表示を「追切」にした (v.2026.10.24+26102404)
+  _HorseDetailView _view = _HorseDetailView.interimTraining;
 
   // [追加] 能力分析を馬詳細へ Step3: 「全」ページで選んでいるチップ（初期は調教。馬を切り替えても保つ） (v.2026.10.17+26101703)
   _AllHorsesView _allView = _AllHorsesView.training;
@@ -136,10 +140,14 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       raceId: widget.raceId,
       raceDate: widget.predictionRaceData.raceDate,
       horses: _horses,
+      // [追加] 出走の意味 調教の行 Step4 (v.2026.10.24+26102404)
+      isG1: classifyRace(widget.predictionRaceData).grade == RaceGradeLevel.g1,
     );
     _trainingViewModel
         .load()
-        .then((_) => _trainingViewModel.autoFetchRaceTrainingIfNeeded());
+        .then((_) => _trainingViewModel.autoFetchRaceTrainingIfNeeded())
+        // [追加] 出走の意味 調教の行 Step4: 脚色が付いた後の取り直し (v.2026.10.24+26102404)
+        .then((_) => _trainingViewModel.refetchFinalTrainingIfNeeded());
     // [追加] 出走馬データ読み込み統一 Step4: このレースの戦績を読み込み係が捨てたら（戦績・調教の取り直しなど）、
     // 好走条件・成長曲線の読み込みをやり直す (v.2026.10.16+26101621)
     _entrantDataSubscription =
@@ -392,11 +400,12 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
     }
   }
 
-  /// 全頭一覧でカードをタップしたとき: その馬のページへ移り、表示を「最終追切」にする
+  /// 全頭一覧でカードをタップしたとき: その馬のページへ移り、表示を「追切」にする
   void _selectHorseFromList(PredictionHorseDetail horse) {
     final index = _horses.indexWhere((h) => h.horseId == horse.horseId);
     if (index < 0) return;
-    setState(() => _view = _HorseDetailView.finalTraining);
+    // [修正] 出走の意味 調教の行 Step4: 「最終追切」をやめ「追切」にした (v.2026.10.24+26102404)
+    setState(() => _view = _HorseDetailView.interimTraining);
     _goToPage(index + 1, animate: false);
   }
 
@@ -815,8 +824,8 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   Widget _buildViewButtons() {
     const labels = {
       _HorseDetailView.info: '情報・血統',
-      _HorseDetailView.finalTraining: '最終追切',
-      _HorseDetailView.interimTraining: '中間追切',
+      // [修正] 出走の意味 調教の行 Step4: 最終追切と中間追切を「追切」にまとめた (v.2026.10.24+26102404)
+      _HorseDetailView.interimTraining: '追切',
       _HorseDetailView.memo: 'メモ',
       // [修正] レーティング削除: 能力（Rt）を外したので「好走条件」に戻した (v.2026.10.18+26101803)
       _HorseDetailView.condition: '好走条件',
@@ -957,9 +966,9 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
               );
             },
           ),
-          // [追加] 陣営の本気度指数 実施順6: 成長曲線の下（いちばん下）に「出走の意味」 (v.2026.10.3+26100308)
+          // [追加] 陣営の本気度指数 実施順6: 成長曲線の下（いちばん下）に「項目別情報」 (v.2026.10.3+26100308)
           const SizedBox(height: 12),
-          _sectionLabel('出走の意味'),
+          _sectionLabel('項目別情報'),
           EntryMeaningSection(
             horse: horse,
             snapshot: widget.entryMeaningSnapshot,
@@ -978,16 +987,7 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
       case _HorseDetailView.info:
         content = _buildInfoView(horse);
         break;
-      case _HorseDetailView.finalTraining:
-        content = AnimatedBuilder(
-          animation: _trainingViewModel,
-          builder: (context, _) => TrainingFinalView(
-            horse: horse,
-            viewModel: _trainingViewModel,
-            raceId: widget.raceId,
-          ),
-        );
-        break;
+      // [削除] 出走の意味 調教の行 Step4: 「最終追切」の表示（TrainingFinalView）を外した。最終追切は「追切」の時系列に入る (v.2026.10.24+26102404)
       case _HorseDetailView.interimTraining:
         content = AnimatedBuilder(
           animation: _trainingViewModel,

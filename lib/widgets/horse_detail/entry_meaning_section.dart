@@ -120,13 +120,17 @@ class EntryMeaningSection extends StatelessWidget {
     if (meaning.isScratched) {
       return _message('出走取消');
     }
-    if (meaning.lines.isEmpty) {
+    // [修正] 出走の意味 調教の行 Step4: 数えている範囲の注記（trainingScope）は全馬で同じ文なので画面に出さない（保存の中には残る。オーナー指示） (v.2026.10.24+26102404)
+    final lines = meaning.lines
+        .where((line) => line.kind != EntryMeaningKind.trainingScope)
+        .toList();
+    if (lines.isEmpty) {
       return _message('該当する事柄はありません');
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final line in meaning.lines)
+        for (final line in lines)
           _buildLine(entryMeaningGroupLabel(line.kind), line),
       ],
     );

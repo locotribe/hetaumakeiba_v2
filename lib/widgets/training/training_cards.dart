@@ -487,6 +487,10 @@ class TrainingRaceGroupView extends StatelessWidget {
     final review = this.review;
     final raceId = group.raceId;
     final canOpen = !group.isCurrent && raceId != null && raceId.isNotEmpty;
+    // [追加] 出走の意味 調教の行 Step4: 今回のレースでは、最終追切の調教の上に短評、下に厩舎コメントを出す（全頭の最終追切のカードと同じ並び。オーナー指示） (v.2026.10.24+26102404)
+    final finalEntry = group.isCurrent && raceId != null
+        ? pickFinalEntry(group.entries, raceId)
+        : null;
 
     final header = Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -541,13 +545,23 @@ class TrainingRaceGroupView extends StatelessWidget {
             )
           else
             header,
-          if (review?.shortReview != null)
+          // [修正] 出走の意味 調教の行 Step4: 最終追切が決まるとき（今回のレース）は、短評をその調教の上に出す (v.2026.10.24+26102404)
+          if (finalEntry == null && review?.shortReview != null)
             TrainingShortReview(text: review!.shortReview!),
-          for (final entry in group.entries)
+          for (final entry in group.entries) ...[
+            if (identical(entry, finalEntry) && review?.shortReview != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: TrainingShortReview(text: review!.shortReview!),
+              ),
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: TrainingSessionBlock(entry: entry),
             ),
+            // [追加] 出走の意味 調教の行 Step4: 最終追切の調教の下に厩舎コメント (v.2026.10.24+26102404)
+            if (identical(entry, finalEntry) && review?.stableComment != null)
+              TrainingStableComment(review: review!),
+          ],
         ],
       ),
     );

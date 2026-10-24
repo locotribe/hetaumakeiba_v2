@@ -279,7 +279,8 @@ TrainingRecordLines trainingRecordLinesOf({
       for (final e in _sortedCounts(loadCounts)) '${e.key}${e.value}',
       if (noLoad > 0) '脚色なし$noLoad',
     ];
-    netkeibaFact = 'netkeiba 追い切り ${sessions.length}本'
+    // [修正] 出走の意味 調教の行 Step4: 頭の「netkeiba」を外した（オーナー指示） (v.2026.10.24+26102404)
+    netkeibaFact = '追い切り ${sessions.length}本'
         '（${loadParts.join('・')}）'
         '${courses.join('・')}';
     final detailParts = <String>[
