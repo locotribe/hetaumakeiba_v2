@@ -538,6 +538,14 @@ PastRaceLiftTable buildRotationLiftTable({
   );
 }
 
+// [追加] 血統の名前の表記ゆれ: 同じ馬でも netkeiba の血統表から取り込んだ名前に生産国略字の括弧が付くときと付かないときがあるため、末尾の括弧を外して比べる (v.2026.10.25+26102503)
+/// 血統の名前を比べるときのキー。前後の空白を除き、末尾の生産国略字の括弧（半角・全角。中は英数字以外の1〜3文字）を外す。
+/// 例「Unbridled's Song (米)」→「Unbridled's Song」、「Monsun（独）」→「Monsun」。括弧の中が英数字のもの（例「(II)」）と、途中の括弧は外さない。
+String pedigreeNameKey(String name) => name
+    .trim()
+    .replaceFirst(RegExp(r'\s*[(（][^()（）A-Za-z0-9]{1,3}[)）]$'), '')
+    .trim();
+
 /// 血統（父、または [damSire] が true なら母父）ごとに数えた表。
 ///
 /// - 過去の出走: [pastRaces] の全出走馬（取消・除外と馬IDが空の行を除く。中止・失格は着外として数える）。
@@ -553,7 +561,8 @@ PastRaceLiftTable buildPedigreeLiftTable({
   String? nameOf(String horseId) {
     final profile = profiles[horseId];
     if (profile == null || profile.fatherName.trim().isEmpty) return null;
-    final name = (damSire ? profile.mfName : profile.fatherName).trim();
+    // [修正] 血統の名前の表記ゆれ: 末尾の生産国略字を外した名前で比べ、表示名もそれにする（説明の「そのまま比べる」は、この名前で比べる意味になった） (v.2026.10.25+26102503)
+    final name = pedigreeNameKey(damSire ? profile.mfName : profile.fatherName);
     return name.isEmpty ? null : name;
   }
 

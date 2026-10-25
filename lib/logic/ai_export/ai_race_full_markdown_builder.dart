@@ -10,6 +10,8 @@ import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_prize_summary.dart';
 import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';
 import 'package:hetaumakeiba_v2/utils/track_constants.dart';
+// [追加] AI分析データ デビュー: デビュー戦（戦績でいちばん古い走）を決める既存の関数を使う (v.2026.10.25+26102503)
+import 'package:hetaumakeiba_v2/logic/analysis/condition_aptitude_analyzer.dart' show ConditionAptitudeAnalyzer;
 
 /// 出力の粒度。要約=直近5走/最終追切1本、標準=直近10走/直近5本、全部=全走/全本＋個別ラップ・旧調教・統計JSON。
 enum AiExportGrain { summary, standard, full }
@@ -59,6 +61,7 @@ String formatAiExportedAt(DateTime t) {
 // [修正] AI分析データ 過去データ分離 Step2: 一次情報に「過去データ」（別ファイル）を加え、資料の読み方に過去データと出力日時の説明を追加 (v.2026.10.14+26101402)
 // [修正] AI分析データ 過去データ馬場・読み方: 資料の読み方に馬柱・調教・馬場の用語の説明を足し、過去データの説明に当日の馬場と読み方を足す (v.2026.10.14+26101406)
 // [修正] 過去データに父・母父別の成績: 過去データの説明に、末尾の父・母父別の表を足した (v.2026.10.25+26102502)
+// [修正] AI分析データ デビュー: 資料の読み方にデビューの行の説明を足した (v.2026.10.25+26102503)
 String _aiInstructionHeader() {
   return '''# この資料の使い方（AIへの依頼）
 
@@ -76,6 +79,7 @@ String _aiInstructionHeader() {
 - 調教の用語: 追切場所は 栗坂/美坂=栗東/美浦の坂路、ＣＷ=栗東のウッドチップコース、南Ｗ=美浦の南ウッドチップコース、芝=芝コース、ダ=ダートコース、Ｐ=ポリトラック。脚色は 馬也=馬なり（追わずに走らせる）、強め=少し追う、一杯=目一杯に追う、仕掛=ゴール前などで追い出す。評価は A＞B＞C＞D。併せ馬の「先着」「併入」「遅れ」は一緒に走った馬との比較で、秒数はその差。「一番時計」はその日その場所でいちばん速い時計。
 - 馬場の用語: 馬場状態は 良＜稍重＜重＜不良 の順に水分が多い。クッション値は芝の反発の強さで、JRAの目安は 7未満=軟らかめ、7〜8=やや軟らかめ、8〜10=標準、10〜12=やや硬め、12以上=硬め。含水率(%)はゴール前(G)と4コーナー(4C)の値で、高いほど湿っている（芝とダートで値の幅が違う）。
 - 通算獲得賞金: 過去成績の賞金列の合計（中央＋地方。外国は含まない）。JRAの収得賞金（クラス判定用）とは別の値。
+- デビュー: その馬の戦績でいちばん古い走（日付 開催 レース名（距離・頭数）/ 着順 / 馬体重）。戦績が無ければ「-」。生年月日は「血統詳細」の「誕生」にあり、今回やデビューのときの月齢はそこから数える。
 - コース情報: 周長・区間の距離（スタートからのm）・標高。標高はコースデータ上の相対値(m)で、勾配は区間内の平均。
 - 開催中の馬場推移: 同じ開催のJRA発表値（クッション値と、含水率 G=ゴール前/4C=4コーナー）を古い順に並べたもの。
 - 天気・馬場予測: 取得時刻の時点の天気予報と、それを使ったアプリの推定（予測含水率など）。確定値ではない。風速は m/s（元データの km/h を換算）。粒度「全部」では「予測含水率の根拠」（起点の測定・当日の加水と乾燥・地盤補正の内訳）も出す。
@@ -303,6 +307,16 @@ void _renderHorse(
   if (profile != null) {
     buf.writeln(
         '- 血統詳細: 性別 ${_t(profile.gender)} / 誕生 ${_t(profile.birthday)} / 生産者 ${_t(profile.breederName)} / 父父 ${_t(profile.ffName)} 父母 ${_t(profile.fmName)} 母父 ${_t(profile.mfName)} 母母 ${_t(profile.mmName)}');
+  }
+
+  // [追加] AI分析データ デビュー: 戦績でいちばん古い走（デビュー戦）を1行で出す。粒度に関係なく出す。戦績が無ければ「-」 (v.2026.10.25+26102503)
+  final debut = ConditionAptitudeAnalyzer.debutRecordOf(
+      d?.performance ?? const <HorseRaceRecord>[]);
+  if (debut == null) {
+    buf.writeln('- デビュー: -');
+  } else {
+    buf.writeln(
+        '- デビュー: ${_t(debut.date)} ${_t(debut.venue)} ${_cell(_t(debut.raceName))}（${_t(debut.distance)}・${_t(debut.numberOfHorses)}頭）/ 着順 ${_t(debut.rank)} / 馬体重 ${_t(debut.horseWeight)}');
   }
 
   final si = d?.speedIndex;
