@@ -357,6 +357,15 @@ Future<void> exportPastRaceDataAsMarkdown(
     recordsByHorseId[horseId] =
         await horseRepository.getHorsePerformanceRecords(horseId);
   }
+  // [追加] 過去データに父・母父別の成績: 今回の出走馬（取消を除く）の「馬番 馬名」と血統。表の「今回の該当馬」に使う。取得はしない（DBにある分だけ） (v.2026.10.25+26102502)
+  final currentHorseLabelById = <String, String>{};
+  for (final h in raceData.horses) {
+    if (h.isScratched || h.horseId.trim().isEmpty) continue;
+    currentHorseLabelById[h.horseId] = '${h.horseNumber} ${h.horseName}';
+    if (profileByHorseId.containsKey(h.horseId)) continue;
+    final profile = await horseRepository.getHorseProfile(h.horseId);
+    if (profile != null) profileByHorseId[h.horseId] = profile;
+  }
 
   final markdown = buildPastRaceMarkdown(
     raceId: raceId,
@@ -369,6 +378,8 @@ Future<void> exportPastRaceDataAsMarkdown(
     // [追加] 過去データに血統と前走 (v.2026.10.18+26101804)
     profileByHorseId: profileByHorseId,
     recordsByHorseId: recordsByHorseId,
+    // [追加] 過去データに父・母父別の成績 (v.2026.10.25+26102502)
+    currentHorseLabelById: currentHorseLabelById,
   );
 
   final mdName = buildExportFileName(

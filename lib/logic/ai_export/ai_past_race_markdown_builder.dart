@@ -2,8 +2,13 @@
 // [追加] AI分析データ 過去データ分離 Step3: アプリに取り込んだ過去の同じレースの結果から「過去データ」のMarkdownを組み立てる純粋関数。DB/I/Oなし。アプリの集計値は出さず、各年の結果をそのまま出す (v.2026.10.14+26101403)
 // [修正] AI分析データ 過去データ馬場・読み方: 各年にレース当日のJRA発表の馬場（クッション値・含水率）を足し、先頭に「この資料の読み方」（列・記号・用語）を出す (v.2026.10.14+26101406)
 // [追加] 過去データに血統と前走: 全着順の表に血統6列（父・母・父父・父母・母父・母母）を足し、表のすぐ下に各馬の前走（その年のレースより前に実際に出走した一番新しい走）の表を出す (v.2026.10.18+26101804)
+// [追加] 過去データに父・母父別の成績: 全レースのあとに、過去の出走馬を父・母父ごとに数えた表（過去分析「ローテ・血統」タブの血統の表と同じ buildPedigreeLiftTable）を出す (v.2026.10.25+26102502)
 
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_race_full_markdown_builder.dart';
+// [追加] 過去データに父・母父別の成績 (v.2026.10.25+26102502)
+import 'package:hetaumakeiba_v2/logic/analysis/factor_candidate_selector.dart' show FactorMetric;
+// [追加] 過去データに父・母父別の成績 (v.2026.10.25+26102502)
+import 'package:hetaumakeiba_v2/logic/analysis/past_race_lift.dart' show PastRaceLiftTable, buildPedigreeLiftTable;
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/earned_prize_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/parse.dart';
@@ -33,7 +38,7 @@ String _pd(double? v) {
 /// 過去データの先頭に置く「この資料の読み方」（固定文言）。AI が列・記号・用語を取り違えないようにする。
 String _pastReadingGuide() {
   return '''## この資料の読み方（列・記号・用語）
-- この資料は、今回と同じレースの過去の結果（アプリに取り込んだ年だけ。新しい順）。アプリが集計した値は入れていない。「-」は不明・該当なし。
+- この資料は、今回と同じレースの過去の結果（アプリに取り込んだ年だけ。新しい順）。アプリの集計は末尾の「父別・母父別の成績」だけで、ほかは各年の結果をそのまま載せている。「-」は不明・該当なし。
 - raceId は12桁で「年4桁・競馬場2桁・開催回2桁・開催日目2桁・レース番号2桁」。競馬場は 01札幌 02函館 03福島 04新潟 05東京 06中山 07中京 08京都 09阪神 10小倉。
 - 各年の見出しは「日付 競馬場 レース名」。レース名と違う条件があるときだけ見出しの下に条件の行を出す。
 - コース・天候・馬場: 例「芝右 外1400m」＝芝・右回り・外回り・1400m（ダ＝ダート、障＝障害）。馬場状態は 良＜稍重＜重＜不良 の順に水分が多い。発走は発走時刻。
@@ -45,6 +50,7 @@ String _pastReadingGuide() {
 - 血統の列（全着順の表の右端）: 父 / 母 / 父父 / 父母 / 母父 / 母母（2代までの血統。アプリに血統を取り込んでいない馬は「-」）。
 - 各馬の前走（全着順の表のすぐ下）: その年のこのレースより前に、その馬が実際に出走した一番新しい走（取消・除外の走は飛ばす）。この年に取消・除外だった馬は載せない。戦績をアプリに取り込んでいない馬は「（戦績未取得）」、それより前に走っていない馬は「（初出走）」。
   列: この年の着順 / この年の馬番 / 馬名 / 日付 / 開催（例「2福島7」＝2回福島7日目）/ 天気 / R / レース名 / 頭数 / 枠 / 馬番 / 単勝（オッズ・倍）/ 人気 / 着順 / 騎手 / 斤量(kg) / 距離（例「芝1800」）/ 馬場 / タイム / 着差（秒。勝った走はマイナスで2着との差）/ 通過 / ペース（そのレースの前半3F-後半3F）/ 上り / 馬体重(kg。括弧は前走からの増減)/ 勝ち馬(2着馬)（その走で1着なら2着の馬、それ以外は勝ち馬）/ 賞金（万円）。
+- 父別・母父別の成績（末尾）: この資料の全レースの出走馬（取消・除外を除く。中止・失格は着外）を、父・母父ごとに数えたもの（アプリの過去分析「ローテ・血統」タブの血統の表と同じ数え方）。同じ馬が複数の年に出ていれば、その数だけ数える（延べ）。血統を取り込んでいない馬は数えない。着度数は 1着-2着-3着-着外。倍率(勝/連/複)は、その行の勝率・連対率・複勝率を全体の率で割ったもの（1より大きいほど全体より好走）。単回・複回は、その行の馬を毎回100円ずつ買ったときの単勝・複勝の回収率（単勝はオッズ、複勝は払戻しから。払戻しの無いレースは除く）。行は3着以内の多い順で、過去に1頭だけの行は、その馬が3着以内のときだけ出す。出走の少ない行の率は偶然の影響が大きい。「今回の該当馬」は、今回の出走馬（取消を除く）のうち同じ父（母父）の馬（馬番 馬名）。系統（サンデーサイレンス系など）では数えていない。
 ''';
 }
 
@@ -61,6 +67,8 @@ String buildPastRaceMarkdown({
   // [追加] 過去データに血統と前走: 馬ID → プロフィール（血統）、馬ID → 戦績。無い馬は「-」・「（戦績未取得）」 (v.2026.10.18+26101804)
   Map<String, HorseProfile> profileByHorseId = const {},
   Map<String, List<HorseRaceRecord>> recordsByHorseId = const {},
+  // [追加] 過去データに父・母父別の成績: 今回の出走馬（取消を除く）の馬ID → 「馬番 馬名」。表の「今回の該当馬」に使う。血統は profileByHorseId から読む (v.2026.10.25+26102502)
+  Map<String, String> currentHorseLabelById = const {},
 }) {
   final sorted = [...pastResults]
     ..sort((a, b) => b.raceId.compareTo(a.raceId));
@@ -86,6 +94,9 @@ String buildPastRaceMarkdown({
         profileByHorseId: profileByHorseId,
         recordsByHorseId: recordsByHorseId);
   }
+  // [追加] 過去データに父・母父別の成績: 全レースのあとに父別・母父別の表を出す (v.2026.10.25+26102502)
+  _renderPedigreeLiftSection(
+      buf, sorted, profileByHorseId, currentHorseLabelById);
   return buf.toString();
 }
 
@@ -231,4 +242,115 @@ void _renderPreviousRuns(
     ].map((v) => _pcell(_pt(v))).join(' | ');
     buf.writeln('$head | $cells |');
   }
+}
+
+// [追加] 過去データに父・母父別の成績: 節「父別・母父別の成績（アプリの集計）」。表は buildPedigreeLiftTable（血統タブと同じ部品）で作る (v.2026.10.25+26102502)
+/// 全レース（[races]）の出走馬を、父・母父ごとに数えた表を出す。
+/// 今回の出走馬は [currentHorseLabelById] のキー（馬ID）。血統は [profileByHorseId] から読む。
+void _renderPedigreeLiftSection(
+  StringBuffer buf,
+  List<RaceResult> races,
+  Map<String, HorseProfile> profileByHorseId,
+  Map<String, String> currentHorseLabelById,
+) {
+  final currentIds = currentHorseLabelById.keys.toList();
+  buf.writeln('## 父別・母父別の成績（アプリの集計）');
+  buf.writeln();
+  _renderPedigreeLiftTable(
+    buf,
+    title: '父別',
+    rowHeader: '父',
+    table: buildPedigreeLiftTable(
+      pastRaces: races,
+      profiles: profileByHorseId,
+      currentHorseIds: currentIds,
+      damSire: false,
+    ),
+    currentHorseLabelById: currentHorseLabelById,
+  );
+  _renderPedigreeLiftTable(
+    buf,
+    title: '母父別',
+    rowHeader: '母父',
+    table: buildPedigreeLiftTable(
+      pastRaces: races,
+      profiles: profileByHorseId,
+      currentHorseIds: currentIds,
+      damSire: true,
+    ),
+    currentHorseLabelById: currentHorseLabelById,
+  );
+}
+
+/// 率(%)を小数1桁で。例 '33.3%'
+String _liftRate(double v) => '${v.toStringAsFixed(1)}%';
+
+/// 倍率を小数2桁で。例 '1.25'。無ければ '-'
+String _liftRatio(double? v) => v == null ? '-' : v.toStringAsFixed(2);
+
+/// 回収率(%)を整数で。計算できないときは '-'。例 '132%'
+String _liftReturn(double? v) => v == null ? '-' : '${v.toStringAsFixed(0)}%';
+
+/// 父別または母父別の表1つ（見出し・数えた頭数・全体の率・表・表に無い今回の出走馬）。
+void _renderPedigreeLiftTable(
+  StringBuffer buf, {
+  required String title,
+  required String rowHeader,
+  required PastRaceLiftTable table,
+  required Map<String, String> currentHorseLabelById,
+}) {
+  buf.writeln('### $title');
+  if (table.countedStarts == 0) {
+    buf.writeln(
+        '（過去の出走馬の血統がアプリにありません。過去分析「ローテ・血統」タブの取得カードで取得すると出ます）');
+    buf.writeln();
+    return;
+  }
+  final baseline = table.baseline;
+  final overall = table.overallReturns;
+  buf.writeln(
+      '- 数えた過去の出走: 延べ${table.countedStarts}頭${table.missingStarts > 0 ? '（血統が無く数えていない 延べ${table.missingStarts}頭）' : ''}');
+  buf.writeln(
+      '- 全体: 勝率 ${_liftRate(baseline.rate(FactorMetric.win))} / 連対率 ${_liftRate(baseline.rate(FactorMetric.place))} / 複勝率 ${_liftRate(baseline.rate(FactorMetric.show))} / 単回 ${_liftReturn(overall.winReturn)} / 複回 ${_liftReturn(overall.showReturn)}');
+
+  final rows = table.shownRowsByShow;
+  final shownKeys = {for (final row in rows) row.key};
+  if (rows.isEmpty) {
+    buf.writeln('- 表に出せる行がありません（過去の出走が2頭以上、または3着以内が1頭以上の行だけ出す）');
+  } else {
+    buf.writeln();
+    buf.writeln(
+        '| $rowHeader | 着度数 | 勝率 | 連対率 | 複勝率 | 倍率(勝/連/複) | 単回 | 複回 | 今回の該当馬 |');
+    buf.writeln('|---|---|---|---|---|---|---|---|---|');
+    for (final row in rows) {
+      final lifts = table.liftsOf(row);
+      final current = [
+        for (final id in row.currentHorseIds) currentHorseLabelById[id] ?? id,
+      ].join('、');
+      buf.writeln(
+          '| ${_pcell(row.label)} | ${row.recordText} | ${_liftRate(row.rateFor(FactorMetric.win))} | ${_liftRate(row.rateFor(FactorMetric.place))} | ${_liftRate(row.rateFor(FactorMetric.show))} | ${_liftRatio(lifts[FactorMetric.win])}/${_liftRatio(lifts[FactorMetric.place])}/${_liftRatio(lifts[FactorMetric.show])} | ${_liftReturn(row.returns.winReturn)} | ${_liftReturn(row.returns.showReturn)} | ${current.isEmpty ? '-' : _pcell(current)} |');
+    }
+  }
+
+  // 今回の出走馬のうち、表に行が無い馬（過去に同じ区分の出走が無い、または表に出す基準に届かない）と、血統が無く区分が決まらない馬
+  final notShown = <String>[];
+  final noPedigree = <String>[];
+  for (final entry in currentHorseLabelById.entries) {
+    final row = table.rowOf(entry.key);
+    if (row == null) {
+      noPedigree.add(entry.value);
+    } else if (!shownKeys.contains(row.key)) {
+      notShown.add(row.total == 0
+          ? '${entry.value}（${row.label}・過去の出走なし）'
+          : '${entry.value}（${row.label}・過去の出走 ${row.total}頭 ${row.recordText}）');
+    }
+  }
+  if (notShown.isNotEmpty || noPedigree.isNotEmpty) buf.writeln();
+  if (notShown.isNotEmpty) {
+    buf.writeln('- 表に無い今回の出走馬: ${_pcell(notShown.join('、'))}');
+  }
+  if (noPedigree.isNotEmpty) {
+    buf.writeln('- 血統が無く区分が決まらない今回の出走馬: ${_pcell(noPedigree.join('、'))}');
+  }
+  buf.writeln();
 }
