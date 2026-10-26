@@ -145,36 +145,36 @@ class EntryMeaningSection extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // [修正] 馬詳細の表示修正: 根拠の印を本文の後ろから左端のラベルの下へ移し、左列を2行（ラベル／印）にした。幅60に収まらない印だけ縮める (v.2026.10.26+26102601)
           SizedBox(
             width: 60,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: _buildBasisBadge(line.basis, color),
+                ),
+              ],
             ),
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: line.fact,
-                        style: const TextStyle(
-                            fontSize: 13, color: Colors.black87),
-                      ),
-                      const WidgetSpan(child: SizedBox(width: 4)),
-                      WidgetSpan(
-                        alignment: PlaceholderAlignment.middle,
-                        child: _buildBasisBadge(line.basis, color),
-                      ),
-                    ],
-                  ),
+                Text(
+                  line.fact,
+                  style: const TextStyle(fontSize: 13, color: Colors.black87),
                 ),
                 if (interpretation != null)
                   Padding(

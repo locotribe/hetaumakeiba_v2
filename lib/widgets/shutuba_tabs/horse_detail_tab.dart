@@ -567,14 +567,31 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
             ),
             borderRadius: BorderRadius.circular(4),
           ),
-          child: Text(
-            horse.horseNumber > 0 ? '${horse.horseNumber}' : '-',
-            style: TextStyle(
-              color: hasGate ? horse.gateNumber.gateTextColor : Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
+          // [修正] 馬詳細の表示修正: 馬番が無い（枠順確定前）ときは「-」ではなく馬名の先頭3文字を小さく出す。馬名も無ければ「-」 (v.2026.10.26+26102601)
+          child: horse.horseNumber > 0
+              ? Text(
+                  '${horse.horseNumber}',
+                  style: TextStyle(
+                    color: hasGate ? horse.gateNumber.gateTextColor : Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                )
+              : Text(
+                  horse.horseName.isEmpty
+                      ? '-'
+                      : (horse.horseName.length > 3
+                          ? horse.horseName.substring(0, 3)
+                          : horse.horseName),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                  style: TextStyle(
+                    color: hasGate ? horse.gateNumber.gateTextColor : Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 9,
+                  ),
+                ),
         ),
       ),
     );
@@ -1010,7 +1027,7 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
         content = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _sectionLabel('好走条件'),
+            // [削除] 馬詳細の表示修正: 見出し「好走条件」を出さない（上のボタンで分かるため） (v.2026.10.26+26102601)
             FutureBuilder<Map<String, List<HorseRaceRecord>>>(
           future: _allPastRecords(),
           builder: (context, snapshot) {

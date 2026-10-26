@@ -99,8 +99,7 @@ class ConditionSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ヘッダー（総成績）
-        Text('${horse.horseNumber}番 ${horse.horseName}',
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        // [削除] 馬詳細の表示修正: 「N番 馬名」の行を出さない（ページの上の馬名で分かるため） (v.2026.10.26+26102601)
         // [追加] 馬詳細タブ 表示項目変更 Step2: デビュー戦の1行（表題は「メイクデビュー」で固定） (v.2026.10.15+26101501)
         if (debut != null) ...[
           const SizedBox(height: 2),
@@ -129,15 +128,8 @@ class ConditionSection extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 6),
-        // [修正] 好走条件の改良 Step4: 見出しを「得意条件」にし、右に並べ替えのチップ（標準／勝率／複勝率／出走数） (v.2026.10.18+26101802)
-        Row(
-          children: [
-            const Text('得意条件',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),
-            const SizedBox(width: 8),
-            Expanded(child: _buildSortChips()),
-          ],
-        ),
+        // [修正] 馬詳細の表示修正: 見出し「得意条件」を外し、並べ替えのチップ（標準／勝率／複勝率／出走数）だけを左から出す (v.2026.10.26+26102601)
+        _buildSortChips(),
         const Divider(height: 8),
 
         // カテゴリ一覧
