@@ -1,8 +1,11 @@
 // lib/logic/analysis/game_race_engine.dart
-// [追加] 展開シミュゲーム式移植Step1: ウマ娘のレース計算式を移植した展開シミュのエンジン(1レース・1回ぶん)。
-// 設計は memory/展開シミュ_ゲーム式移植_設計書.md の3章・4章。DB / I/O / UI に触れない純粋ロジック (v.2026.10.27+26102701)
+// [修正] 展開シミュゲーム式移植Step2: レーン(横の位置)・前と横の詰まり・追い越し・最終コーナーの外への振り出し・
+// コーナーで外を回る距離・坂を追加し、校正値を測り直した。設計は memory/展開シミュ_ゲーム式移植_設計書.md の3章・4章 (v.2026.10.27+26102702)
+// ウマ娘のレース計算式を移植した展開シミュのエンジン(1レース・1回ぶん)。DB / I/O / UI に触れない純粋ロジック。
 
 import 'dart:math' as math;
+
+import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 
 /// 1頭ぶんの能力値(ゲームの単位)。
 class GameHorseAbility {
@@ -12,13 +15,13 @@ class GameHorseAbility {
   /// スタミナ(最大HPの上乗せに使う)
   final double stamina;
 
-  /// パワー(加速に使う)
+  /// パワー(加速・上り坂・横の移動に使う)
   final double power;
 
   /// 根性(スパートの速度・終盤のHP消費・最低速度に使う)
   final double guts;
 
-  /// 賢さ(掛かり・ポジションキープ・スパートの判断・区間ごとの乱数に使う)
+  /// 賢さ(掛かり・ポジションキープ・スパートの判断・区間ごとの乱数・下り坂に使う)
   final double wit;
 
   /// 脚質(連続値)。0.0=逃げ、1.0=先行、2.0=差し、3.0=追込
@@ -118,28 +121,36 @@ class GameRaceConfig {
   /// スパートの候補を賢さの確率で選ぶか(false なら最も速い候補を選ぶ)
   final bool spurtAccept;
 
+  /// レーン(横の位置・前と横の詰まり・追い越し・外を回る距離)を入れるか
+  final bool lanes;
+
+  /// 坂(上り坂の減速・下り坂モード)を入れるか
+  final bool slopes;
+
   const GameRaceConfig({
     required this.paceMult,
     required this.lateAdj,
     this.spurtMult = 1.0,
-    this.hpConsK = 20.0,
+    this.hpConsK = 21.0,
     this.groundHp = 1.0,
     this.witRandom = true,
     this.rushed = true,
     this.positionKeep = true,
     this.spurtAccept = true,
+    this.lanes = true,
+    this.slopes = true,
   });
 
   /// 芝の校正値(設計書4章)
   static const GameRaceConfig turf = GameRaceConfig(
     paceMult: 1.03,
-    lateAdj: [0.03, 0.01, -0.01, -0.03],
+    lateAdj: [0.0, 0.0, 0.0, 0.0],
   );
 
   /// ダートの校正値(設計書4章)
   static const GameRaceConfig dirt = GameRaceConfig(
-    paceMult: 1.09,
-    lateAdj: [0.03, 0.01, -0.01, -0.03],
+    paceMult: 1.08,
+    lateAdj: [0.0, 0.0, 0.0, 0.0],
   );
 
   GameRaceConfig copyWith({
@@ -149,6 +160,8 @@ class GameRaceConfig {
     bool? rushed,
     bool? positionKeep,
     bool? spurtAccept,
+    bool? lanes,
+    bool? slopes,
   }) {
     return GameRaceConfig(
       paceMult: paceMult ?? this.paceMult,
@@ -160,16 +173,149 @@ class GameRaceConfig {
       rushed: rushed ?? this.rushed,
       positionKeep: positionKeep ?? this.positionKeep,
       spurtAccept: spurtAccept ?? this.spurtAccept,
+      lanes: lanes ?? this.lanes,
+      slopes: slopes ?? this.slopes,
     );
   }
 }
 
-/// 位置の記録1点(ゲームの時間・スタートからの距離)。
+/// コーナー1つ(スタートからの距離で、開始・終了と、内ラチの半径)。
+class GameRaceCorner {
+  final double start;
+  final double end;
+  final double radius;
+
+  const GameRaceCorner(this.start, this.end, this.radius);
+}
+
+/// エンジンが使うコースの形(コーナーと標高)。距離はすべてスタートからの距離(m)。
+class GameRaceCourse {
+  /// これ未満の勾配(%)は平坦とみなす
+  static const double slopeMinPercent = 1.0;
+
+  /// 標高を取り出す間隔(m)
+  static const double elevationStep = 25.0;
+
+  final List<GameRaceCorner> corners;
+
+  /// (スタートからの距離, 標高) の点。距離の昇順
+  final List<ElevationPoint> elevation;
+
+  const GameRaceCourse({required this.corners, required this.elevation});
+
+  /// コーナーも坂も無いコース
+  static const GameRaceCourse flat = GameRaceCourse(corners: [], elevation: []);
+
+  /// アプリのコースデータから作る。コーナー1つは90度とみなし、半径 = 長さ ÷ (π/2)。
+  /// 標高は、ゴールからの距離(1周の長さで割った余り)で基礎データから引く。
+  factory GameRaceCourse.fromRaceCourseData(RaceCourseData data) {
+    final distance = data.raceDistance.toDouble();
+    final corners = <GameRaceCorner>[];
+    for (final s in data.sections) {
+      if (s.name.startsWith('corner_') && s.endDistance > s.startDistance) {
+        corners.add(GameRaceCorner(s.startDistance, s.endDistance,
+            (s.endDistance - s.startDistance) / (math.pi / 2.0)));
+      }
+    }
+    final points = data.baseData.points;
+    final lap = data.baseData.lapDistance;
+    final elevation = <ElevationPoint>[];
+    if (points.isNotEmpty) {
+      double x = 0.0;
+      while (x <= distance + 1e-9) {
+        final dg = distance - x;
+        final b = lap > 0 ? dg % lap : dg;
+        elevation.add(
+            ElevationPoint(distance: x, elevation: _interpBase(points, b)));
+        x += elevationStep;
+      }
+    }
+    return GameRaceCourse(corners: corners, elevation: elevation);
+  }
+
+  static double _interpBase(List<ElevationPoint> points, double d) {
+    if (d <= points.first.distance) return points.first.elevation;
+    if (d >= points.last.distance) return points.last.elevation;
+    for (int k = 0; k < points.length - 1; k++) {
+      final a = points[k];
+      final b = points[k + 1];
+      if (a.distance <= d && d <= b.distance) {
+        if (b.distance == a.distance) return a.elevation;
+        return a.elevation +
+            (b.elevation - a.elevation) *
+                (d - a.distance) /
+                (b.distance - a.distance);
+      }
+    }
+    return points.last.elevation;
+  }
+
+  /// 最初のコーナーの開始(無ければ無限大)
+  double get firstCornerStart =>
+      corners.isEmpty ? double.infinity : corners.first.start;
+
+  /// 最終コーナーの開始(無ければ無限大)
+  double get finalCornerStart =>
+      corners.isEmpty ? double.infinity : corners.last.start;
+
+  /// 最終コーナーの終了(無ければ負の無限大)
+  double get finalCornerEnd =>
+      corners.isEmpty ? double.negativeInfinity : corners.last.end;
+
+  /// その距離がコーナーなら内ラチの半径、そうでなければ0
+  double cornerRadiusAt(double x) {
+    for (final c in corners) {
+      if (c.start <= x && x < c.end) return c.radius;
+    }
+    return 0.0;
+  }
+
+  /// その距離の標高(線形補間)
+  double elevationAt(double x) {
+    final p = elevation;
+    if (p.isEmpty) return 0.0;
+    if (x <= p.first.distance) return p.first.elevation;
+    if (x >= p.last.distance) return p.last.elevation;
+    int lo = 0;
+    int hi = p.length - 1;
+    final guess = (x / elevationStep).floor();
+    if (guess >= 0 &&
+        guess + 1 < p.length &&
+        p[guess].distance <= x &&
+        x < p[guess + 1].distance) {
+      lo = guess;
+      hi = guess + 1;
+    }
+    while (hi - lo > 1) {
+      final mid = (lo + hi) ~/ 2;
+      if (p[mid].distance <= x) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    final x0 = p[lo].distance;
+    final e0 = p[lo].elevation;
+    final x1 = p[hi].distance;
+    final e1 = p[hi].elevation;
+    return x1 == x0 ? e0 : e0 + (e1 - e0) * (x - x0) / (x1 - x0);
+  }
+
+  /// 進む向きの勾配(%)。上りが正。前後25mの標高差から求め、絶対値が1%未満は0とする。
+  double slopePercentAt(double x) {
+    final s = (elevationAt(x + 25.0) - elevationAt(x - 25.0)) / 50.0 * 100.0;
+    return s.abs() >= slopeMinPercent ? s : 0.0;
+  }
+}
+
+/// 位置の記録1点(ゲームの時間・スタートからの距離・内ラチからの横の位置)。
+/// 横の位置の単位はコース幅(1コース幅 = 11.25m)。
 class GameRacePoint {
   final double time;
   final double distance;
+  final double lane;
 
-  const GameRacePoint(this.time, this.distance);
+  const GameRacePoint(this.time, this.distance, this.lane);
 }
 
 /// 1回ぶんの結果。時間はゲームの単位(実時間への換算は呼び出し側)。
@@ -203,6 +349,15 @@ class GameRaceEngine {
   /// 1回の更新の時間(秒)
   static const double dt = 1.0 / fps;
 
+  /// 1コース幅(m)
+  static const double courseWidthMeters = 11.25;
+
+  /// 1頭ぶんの横幅(コース幅の単位)
+  static const double horseLane = 1.0 / 18.0;
+
+  /// 横の位置の上限(コース幅の単位)
+  static const double maxLane = 1.0;
+
   /// 脚質ごとの速度係数(序盤・中盤・終盤)。逃げ・先行・差し・追込の順
   static const List<List<double>> speedCoef = [
     [1.000, 0.980, 0.962],
@@ -231,6 +386,12 @@ class GameRaceEngine {
 
   /// ポジションキープのモードごとの速度倍率(通常・ペースアップ・ペースダウン・スピードアップ・追い抜き)
   static const List<double> pkMult = [1.0, 1.04, 0.915, 1.04, 1.05];
+
+  /// 序盤に内へ寄る力の脚質ごとの値(m/s)
+  static const List<double> forceInStyle = [0.02, 0.01, 0.01, 0.03];
+
+  /// 外へ動くときのレーン選びの点数の係数(序盤・中盤・終盤)。内へは1.0
+  static const List<double> laneOutCoef = [100.0, 1.0, 1.15];
 
   static double _log10(double x) => math.log(x) / math.ln10;
 
@@ -267,14 +428,16 @@ class GameRaceEngine {
     return (style.clamp(0.0, 3.0).toDouble() + 0.5).floor();
   }
 
-  /// 1回走らせる。[distance] はレースの距離(m)。
-  /// 乱数は「発走前(馬ごとに 出遅れ・掛かるか・掛かる区間・区間内の位置・賢さの乱数24個)」
-  /// 「毎フレーム(掛かりの解除 → ポジションキープ → スパートの候補選び、それぞれ馬番の順)」の順に引く。
+  /// 1回走らせる。[distance] はレースの距離(m)。[horses] の順はゲートの内からの順(馬番順)。
+  /// 乱数は「発走前(馬ごとに 出遅れ・掛かるか・掛かる区間・区間内の位置・賢さの乱数24個・内へ寄る力)」
+  /// 「毎フレーム(掛かりの解除 → ポジションキープ → スパートの候補選び → 最終コーナーの振り出し先
+  /// → 下り坂モード、それぞれ馬番の順)」の順に引く。
   static GameRaceRunResult simulate({
     required double distance,
     required List<GameHorseAbility> horses,
     required GameRaceConfig config,
     required GameRaceRandom random,
+    GameRaceCourse course = GameRaceCourse.flat,
     int traceEveryFrames = 15,
   }) {
     final d = distance;
@@ -282,6 +445,7 @@ class GameRaceEngine {
     final vb = 22.0 - d / 1000.0;
     final secLen = d / 24.0;
     final cf = 0.0008 * (d - 1000) + 1.0;
+    const hl = horseLane;
 
     final ac = <List<double>>[];
     final sd = <int>[];
@@ -290,7 +454,7 @@ class GameRaceEngine {
     final minSpeed = <double>[];
     final base = <List<double>>[];
     final spurtMax = <double>[];
-    final accelBase = <double>[];
+    final powerRoot = <double>[];
     final pkLo = <double>[];
     final pkHi = <double>[];
     final witMax = <double>[];
@@ -314,7 +478,7 @@ class GameRaceEngine {
       spurtMax.add((vb * c[2] + 0.01 * vb) * config.spurtMult +
           h.speedAdd +
           math.pow(450.0 * g, 0.597).toDouble() * 0.0001);
-      accelBase.add(0.0006 * math.sqrt(500.0 * h.power));
+      powerRoot.add(math.sqrt(500.0 * h.power));
       pkLo.add(cls == 1 ? pkLow[cls] : pkLow[cls] * cf);
       pkHi.add(pkHigh[cls] * cf);
       final w = h.wit;
@@ -334,6 +498,7 @@ class GameRaceEngine {
     final willRush = <bool>[];
     final rushPos = <double>[];
     final witRand = <List<double>>[];
+    final forceIn = <double>[];
     for (int i = 0; i < n; i++) {
       delay.add(random.nextDouble() * 0.1);
       final u = random.nextDouble();
@@ -346,6 +511,14 @@ class GameRaceEngine {
         row.add(config.witRandom ? witMax[i] - 0.0065 + 0.0065 * w : 0.0);
       }
       witRand.add(row);
+      forceIn.add(random.nextDouble() * 0.1 + forceInStyle[sd[i]]);
+    }
+
+    // ゲートの位置(内から馬の順)。10番目以降・14番目以降は外へずらす
+    var lane = <double>[];
+    for (int i = 0; i < n; i++) {
+      final adj = i + 1 >= 14 ? 1.86 : (i + 1 >= 10 ? 0.6 : 0.0);
+      lane.add((i + adj) * hl);
     }
 
     final pos = List<double>.filled(n, 0.0);
@@ -366,12 +539,30 @@ class GameRaceEngine {
     final spurtSet = List<bool>.filled(n, false);
     final spurtV = List<double>.filled(n, 0.0);
     final spurtFrom = List<double>.filled(n, double.infinity);
+    final tgtLane = List<double>.from(lane);
+    final laneSpeed = List<double>.filled(n, 0.0);
+    final otTimer = List<double>.filled(n, 0.0);
+    final needUpdate = List<bool>.filled(n, true);
+    final extraLane = List<double?>.filled(n, null);
+    final lastTgt = List<double>.filled(n, 0.0);
+    final downMode = List<bool>.filled(n, false);
     final traces = List<List<GameRacePoint>>.generate(
-        n, (_) => [const GameRacePoint(0.0, 0.0)]);
+        n, (i) => [GameRacePoint(0.0, 0.0, lane[i])]);
     final sec = List<int>.filled(n, 0);
     final phase = List<int>.filled(n, 0);
     final mult = List<double>.filled(n, 1.0);
+    final rank = List<int>.filled(n, 0);
     final order = List<int>.generate(n, (i) => i);
+    final slope = List<double>.filled(n, 0.0);
+    final cap = List<double>.filled(n, double.infinity);
+    final blockIn = List<bool>.filled(n, false);
+    final blockOut = List<bool>.filled(n, false);
+    final inRoom = List<double>.filled(n, 0.0);
+    final outRoom = List<double>.filled(n, maxLane);
+    final vis = <int>[];
+    final targets = <int>[];
+    final crowd = <int>[];
+    final inCrowd = List<bool>.filled(n, false);
 
     final tMax = d / (vb * 0.6) + 30.0;
     int frame = 0;
@@ -415,6 +606,13 @@ class GameRaceEngine {
       for (int i = 0; i < n; i++) {
         mult[i] = 1.0;
       }
+      order.sort((a, b) {
+        final c = pos[b].compareTo(pos[a]);
+        return c != 0 ? c : a.compareTo(b);
+      });
+      for (int r = 0; r < n; r++) {
+        rank[order[r]] = r;
+      }
       if (config.positionKeep) {
         int pm = -1;
         double pmPos = double.negativeInfinity;
@@ -424,10 +622,6 @@ class GameRaceEngine {
             pmPos = pos[i];
           }
         }
-        order.sort((a, b) {
-          final c = pos[b].compareTo(pos[a]);
-          return c != 0 ? c : a.compareTo(b);
-        });
         final first = order[0];
         final secondPos = n > 1 ? pos[order[1]] : pos[first];
         for (int i = 0; i < n; i++) {
@@ -533,7 +727,219 @@ class GameRaceEngine {
         spurtFrom[i] = d - 60.0 - chosen.distance;
       }
 
-      // 4) 速度・HP・位置
+      // 4) 最終コーナーに入った馬の振り出し先
+      for (int i = 0; i < n; i++) {
+        if (config.lanes &&
+            extraLane[i] == null &&
+            started[i] &&
+            pos[i] >= course.finalCornerStart) {
+          extraLane[i] = (lane[i] / 0.1).clamp(0.0, 1.0).toDouble() * 0.5 +
+              random.nextDouble() * 0.1;
+        }
+      }
+
+      // 5) 下り坂モード(1秒ごと)
+      for (int i = 0; i < n; i++) {
+        slope[i] = config.slopes ? course.slopePercentAt(pos[i]) : 0.0;
+      }
+      if (config.slopes && frame % fps == 0) {
+        for (int i = 0; i < n; i++) {
+          if (!started[i] || finished[i]) continue;
+          if (downMode[i]) {
+            if (slope[i] >= 0 || random.nextDouble() < 0.2) {
+              downMode[i] = false;
+            }
+          } else if (slope[i] < 0) {
+            if (random.nextDouble() < horses[i].wit * 0.0004) {
+              downMode[i] = true;
+            }
+          }
+        }
+      }
+
+      // 6) 前と横の詰まり・レーンの選び方(フレーム開始時の位置で判定)
+      for (int i = 0; i < n; i++) {
+        cap[i] = double.infinity;
+        blockIn[i] = false;
+        blockOut[i] = false;
+        inRoom[i] = 0.0;
+        outRoom[i] = maxLane;
+      }
+      if (config.lanes) {
+        for (int i = 0; i < n; i++) {
+          if (!started[i] || finished[i]) continue;
+          int fb = -1;
+          double fbd = double.infinity;
+          double innerLim = 0.0;
+          double outerLim = maxLane;
+          vis.clear();
+          for (int j = 0; j < n; j++) {
+            if (j == i || finished[j]) continue;
+            final dg = pos[j] - pos[i];
+            if (dg > 20.0 || dg <= -1.05) continue;
+            final lg = lane[j] - lane[i];
+            if (0.0 < dg &&
+                dg < 2.0 &&
+                lg.abs() <= (1.0 - 0.6 * dg / 2.0) * 0.75 * hl &&
+                dg < fbd) {
+              fb = j;
+              fbd = dg;
+            }
+            if (dg.abs() < 1.05 && lg.abs() < 2.0 * hl) {
+              if (lg < 0) {
+                innerLim = math.max(innerLim, lane[j] + hl);
+              } else if (lg > 0) {
+                outerLim = math.min(outerLim, lane[j] - hl);
+              }
+            }
+            if (0.0 <= dg &&
+                dg <= 20.0 &&
+                lg.abs() <= ((dg / 20.0) * 11.5 * hl + 2.0 * hl) / 2.0) {
+              vis.add(j);
+            }
+          }
+          inRoom[i] = innerLim;
+          outRoom[i] = outerLim;
+          blockIn[i] = lane[i] <= innerLim + 1e-9;
+          blockOut[i] = lane[i] >= outerLim - 1e-9;
+          if (fb >= 0) {
+            cap[i] = (0.988 + 0.012 * fbd / 2.0) * v[fb];
+          }
+          // 追い越しの対象
+          targets.clear();
+          for (final j in vis) {
+            final dg = pos[j] - pos[i];
+            if (j == fb) {
+              targets.add(j);
+              continue;
+            }
+            if (1.0 <= dg &&
+                dg <= 20.0 &&
+                v[i] > v[j] &&
+                dg / (v[i] - v[j]) < 15.0 &&
+                lastTgt[j] < lastTgt[i]) {
+              targets.add(j);
+            }
+          }
+          final noOtZone = phase[i] < 2 &&
+              course.firstCornerStart - 200.0 <= pos[i] &&
+              pos[i] < course.firstCornerStart;
+          if (targets.isNotEmpty && !noOtZone) {
+            otTimer[i] = 1.5;
+          } else {
+            otTimer[i] = math.max(otTimer[i] - dt, 0.0);
+          }
+          final overtake = targets.isNotEmpty && !noOtZone;
+          if (!overtake && otTimer[i] > 0.0 && !noOtZone) continue;
+          final diff = tgtLane[i] - lane[i];
+          final blockedDir =
+              (diff < 0 && blockIn[i]) || (diff > 0 && blockOut[i]);
+          if (!(needUpdate[i] || diff.abs() < 0.5 * hl || blockedDir)) {
+            continue;
+          }
+          needUpdate[i] = false;
+          final p = phase[i];
+          final finalStraight = pos[i] >= course.finalCornerEnd;
+          if (overtake) {
+            final cands = <double>[];
+            double farEdge = pos[i];
+            for (final j in targets) {
+              for (int k = 0; k < n; k++) {
+                inCrowd[k] = false;
+              }
+              crowd.clear();
+              crowd.add(j);
+              inCrowd[j] = true;
+              bool changed = true;
+              while (changed) {
+                changed = false;
+                for (int k = 0; k < n; k++) {
+                  if (inCrowd[k] || k == i || finished[k]) continue;
+                  if ((pos[k] - pos[j]).abs() <= 3.0 &&
+                      crowd.any((c) => (lane[k] - lane[c]).abs() < 2.0 * hl)) {
+                    crowd.add(k);
+                    inCrowd[k] = true;
+                    changed = true;
+                  }
+                }
+              }
+              double loL = double.infinity;
+              double hiL = double.negativeInfinity;
+              double edgePos = double.negativeInfinity;
+              for (final c in crowd) {
+                loL = math.min(loL, lane[c]);
+                hiL = math.max(hiL, lane[c]);
+                edgePos = math.max(edgePos, pos[c]);
+              }
+              farEdge = math.max(farEdge, edgePos);
+              for (final cand in [loL - hl, hiL + hl]) {
+                if (cand < 0.0 || cand > maxLane) continue;
+                bool bad = false;
+                for (final k in vis) {
+                  if (pos[i] <= pos[k] &&
+                      pos[k] <= edgePos + 0.5 &&
+                      (lane[k] - cand).abs() < 0.8 * hl) {
+                    bad = true;
+                    break;
+                  }
+                }
+                if (!bad) cands.add(cand);
+              }
+            }
+            final extra = (p < 2 && lane[i] >= hl) ? lane[i] - hl : lane[i];
+            bool extraBad = false;
+            for (final k in vis) {
+              if (pos[i] < pos[k] &&
+                  pos[k] <= farEdge + 0.5 &&
+                  (lane[k] - extra).abs() < 0.8 * hl) {
+                extraBad = true;
+                break;
+              }
+            }
+            if (!extraBad) cands.add(extra);
+            double? best;
+            double bestScore = double.infinity;
+            for (final cand in cands) {
+              if (cand < lane[i] && blockIn[i]) continue;
+              if (cand > lane[i] && blockOut[i]) continue;
+              final coef = cand > lane[i] ? laneOutCoef[p] : 1.0;
+              final score = (cand - lane[i]).abs() * coef;
+              if (score < bestScore) {
+                best = cand;
+                bestScore = score;
+              }
+            }
+            double chosenLane = best ?? lane[i];
+            final ex = extraLane[i];
+            if (ex != null &&
+                chosenLane < ex &&
+                !blockOut[i] &&
+                finalStraight) {
+              chosenLane = ex;
+            }
+            tgtLane[i] = chosenLane;
+          } else {
+            final ex = extraLane[i];
+            if (hp[i] <= 0) {
+              tgtLane[i] = lane[i];
+            } else if (mode[i] == 2) {
+              tgtLane[i] = 0.18;
+            } else if (finalStraight &&
+                ex != null &&
+                ex > lane[i] &&
+                !blockOut[i]) {
+              tgtLane[i] = ex;
+            } else if (p < 2 && !blockIn[i]) {
+              tgtLane[i] = lane[i] > 0.05 ? 0.05 : lane[i];
+            } else {
+              tgtLane[i] = lane[i];
+            }
+          }
+        }
+      }
+
+      // 7) 速度・HP・位置・レーン
+      final newLane = List<double>.from(lane);
       for (int i = 0; i < n; i++) {
         if (!started[i] || finished[i]) continue;
         final p = phase[i];
@@ -545,10 +951,23 @@ class GameRaceEngine {
         if (p == 2 && spurtSet[i] && pos[i] >= spurtFrom[i]) {
           tgt = spurtV[i];
         }
+        if (config.lanes && p == 0 && lane[i] > 0.12 && !blockIn[i]) {
+          tgt += forceIn[i];
+        }
+        final uphill = config.slopes && slope[i] > 0;
+        if (uphill) {
+          tgt -= slope[i] * 200.0 / horses[i].power;
+        }
+        if (config.slopes && downMode[i]) {
+          tgt += 0.3 + slope[i].abs() / 10.0;
+        }
+        tgt = math.min(tgt, cap[i]);
+        lastTgt[i] = tgt;
         final out = hp[i] <= 0;
         if (out) tgt = minSpeed[i];
         if (!dash[i]) tgt = math.max(tgt, minSpeed[i]);
-        final acc = accelBase[i] * ac[i][p] + (dash[i] ? 24.0 : 0.0);
+        final acc = (uphill ? 0.0004 : 0.0006) * powerRoot[i] * ac[i][p] +
+            (dash[i] ? 24.0 : 0.0);
         double dec = decel[p];
         if (mode[i] == 2) dec = -0.5;
         if (out) dec = -1.2;
@@ -562,14 +981,55 @@ class GameRaceEngine {
           nv = math.min(nv, 0.85 * vb);
           if (nv >= 0.85 * vb - 1e-9) dash[i] = false;
         }
-        final stat = (rushing[i] ? 1.6 : 1.0) * (mode[i] == 2 ? 0.6 : 1.0);
+        final stat = (rushing[i] ? 1.6 : 1.0) *
+            (mode[i] == 2 ? 0.6 : 1.0) *
+            ((config.slopes && downMode[i]) ? 0.4 : 1.0);
         final gm = p == 2 ? gutsMod[i] : 1.0;
         final e = nv - vb + 12.0;
         hp[i] -=
             config.hpConsK * (e * e) / 144.0 * stat * gm * config.groundHp * dt;
         final prev = pos[i];
-        pos[i] = prev + nv * dt;
+        final radius = config.lanes ? course.cornerRadiusAt(prev) : 0.0;
+        double adv = nv * dt;
+        if (radius > 0) {
+          adv = adv * radius / (radius + lane[i] * courseWidthMeters);
+        }
+        pos[i] = prev + adv;
         v[i] = nv;
+        // レーンの移動
+        if (config.lanes) {
+          final diff = tgtLane[i] - lane[i];
+          if (diff.abs() < 1e-9) {
+            laneSpeed[i] = 0.0;
+          } else {
+            double tls = 0.02 * (0.3 + 0.001 * horses[i].power);
+            if (p < 2 && pos[i] < course.firstCornerStart) {
+              tls *= 1.0 + lane[i] / maxLane * 0.05;
+            }
+            if (p == 2) {
+              tls *= 1.0 + rank[i] * 0.01;
+            }
+            laneSpeed[i] = math.min(laneSpeed[i] + 0.03 * dt, tls);
+            final sp = math.min(laneSpeed[i], 0.6);
+            if (diff > 0) {
+              if (!blockOut[i]) {
+                final nl = math.min(
+                    math.min(lane[i] + sp * dt, tgtLane[i]), outRoom[i]);
+                newLane[i] = math.max(nl, lane[i]);
+              }
+            } else {
+              if (!blockIn[i]) {
+                final nl = math.max(
+                    math.max(
+                        math.max(
+                            lane[i] - sp * (1.0 + lane[i]) * dt, tgtLane[i]),
+                        inRoom[i]),
+                    0.0);
+                newLane[i] = math.min(nl, lane[i]);
+              }
+            }
+          }
+        }
         final step = math.max(pos[i] - prev, 1e-9);
         if (t1000[i] == null && prev < 1000.0 && 1000.0 <= pos[i]) {
           t1000[i] = t - dt + (1000.0 - prev) / step * dt;
@@ -582,11 +1042,29 @@ class GameRaceEngine {
           final ft = t - dt + (d - prev) / step * dt;
           finish[i] = ft;
           finished[i] = true;
-          traces[i].add(GameRacePoint(ft, d));
+          traces[i].add(GameRacePoint(ft, d, newLane[i]));
         } else if (frame % traceEveryFrames == 0) {
-          traces[i].add(GameRacePoint(t, pos[i]));
+          traces[i].add(GameRacePoint(t, pos[i], newLane[i]));
         }
       }
+
+      // 8) 重なったら外の馬を外へ押し出す
+      if (config.lanes) {
+        for (int i = 0; i < n; i++) {
+          for (int j = i + 1; j < n; j++) {
+            if (finished[i] || finished[j] || !started[i] || !started[j]) {
+              continue;
+            }
+            if ((pos[i] - pos[j]).abs() < 0.4 &&
+                (newLane[i] - newLane[j]).abs() < 0.4 * hl) {
+              final o = newLane[i] > newLane[j] ? i : j;
+              newLane[o] = math.min(newLane[o] + 0.4 * hl, maxLane);
+              needUpdate[o] = true;
+            }
+          }
+        }
+      }
+      lane = newLane;
     }
 
     return GameRaceRunResult(
