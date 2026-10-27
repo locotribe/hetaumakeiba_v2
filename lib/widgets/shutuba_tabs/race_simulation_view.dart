@@ -72,6 +72,8 @@ class RaceSimulationView extends StatefulWidget {
   // [追加] 0-9b-3 ペース手動選択用 (v.2026.7.27+26072707)
   final String selectedPace;
   final ValueChanged<String> onPaceChanged;
+  // [追加] 展開シミュゲーム式移植Step4b: 再生の下の「使用データ」カードとステータス表を出すか。新しい展開シミュは、条件とステータスを別のカードで出すので false にする (v.2026.10.27+26102705)
+  final bool showLegacyPanels;
 
   const RaceSimulationView({
     super.key,
@@ -100,6 +102,8 @@ class RaceSimulationView extends StatefulWidget {
     required this.onSourceChanged,
     this.selectedPace = 'ミドルペース',
     required this.onPaceChanged,
+    // [追加] 展開シミュゲーム式移植Step4b (v.2026.10.27+26102705)
+    this.showLegacyPanels = true,
   });
 
   @override
@@ -202,7 +206,8 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
       );
       if (frame.distanceFromGoal < minDist) minDist = frame.distanceFromGoal;
     }
-    return minDist;
+    // [修正] 展開シミュゲーム式移植Step4b: ゴールした後も馬が走り続ける再生があるので、残り距離と高低差グラフの点はゴール(0)で止める (v.2026.10.27+26102705)
+    return minDist < 0.0 ? 0.0 : minDist;
   }
 
   @override
@@ -456,6 +461,8 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
         ),
 
         // [追加] 0-9(b) 使用データカード（展開予想の根拠を常時表示） (v.2026.7.27+26072703)
+        // [修正] 展開シミュゲーム式移植Step4b: showLegacyPanels が false のときは出さない (v.2026.10.27+26102705)
+        if (widget.showLegacyPanels)
         Container(
           margin: const EdgeInsets.only(bottom: 8.0),
           padding: const EdgeInsets.all(8.0),
@@ -511,7 +518,8 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
         ),
 
         // ── ステータス表（シークバー下）──
-        if (widget.horses.isNotEmpty)
+        // [修正] 展開シミュゲーム式移植Step4b: showLegacyPanels が false のときは出さない (v.2026.10.27+26102705)
+        if (widget.showLegacyPanels && widget.horses.isNotEmpty)
           Container(
             margin: const EdgeInsets.only(bottom: 8.0),
             decoration: BoxDecoration(

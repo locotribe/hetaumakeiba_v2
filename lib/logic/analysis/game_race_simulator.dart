@@ -93,6 +93,9 @@ class GameRaceSimulator {
   static const double top3CalibrationTurf = 0.55;
   static const double top3CalibrationDirt = 0.5;
 
+  /// [追加] 展開シミュゲーム式移植Step4b: 代表の1回を選ぶとき、表の上位3頭の着順のずれを何倍に数えるか (v.2026.10.27+26102705)
+  static const double representativeTopWeight = 4.0;
+
   /// [abilities] の馬を [runs] 回走らせてまとめる。1回ごとに当日の出来(揺らぎ)を加える。
   /// 乱数は「1回ごとに 当日の出来 → エンジン」の順に [random] から引く。
   static GameRaceSummary run({
@@ -191,16 +194,41 @@ class GameRaceSimulator {
       raw3Sum += x;
     }
 
-    // 代表の1回: 通過点ごとの順位が平均に最も近い回
-    int best = 0;
+    // [修正] 展開シミュゲーム式移植Step4b: 代表の1回の選び方を変えた。結果の表と再生の着順が食い違って見えたため。
+    // 表の並び(補正した勝率の高い順、同じなら平均着順の良い順)の1番の馬が勝った回の中から、
+    // コーナーの順位が平均に近く、着順が表の並びに近い回を選ぶ(表の上位3頭の着順のずれは4倍に数える)。
+    // 1番の馬が勝った回が無ければ全部の回から選ぶ (v.2026.10.27+26102705)
+    final tableOrder = List<int>.generate(n, (i) => i)
+      ..sort((a, b) {
+        final c = raw[b].compareTo(raw[a]);
+        if (c != 0) return c;
+        final m = rankSum[a].compareTo(rankSum[b]);
+        return m != 0 ? m : a.compareTo(b);
+      });
+    final tableRank = List<int>.filled(n, 0);
+    for (int k = 0; k < n; k++) {
+      tableRank[tableOrder[k]] = k + 1;
+    }
+    final top = tableOrder.first;
+    final topWon = [
+      for (int r = 0; r < runs; r++)
+        if (ranks[r][top] == 1) r
+    ];
+    final candidates =
+        topWon.isNotEmpty ? topWon : List<int>.generate(runs, (r) => r);
+    int best = candidates.first;
     double bestScore = double.infinity;
-    for (int r = 0; r < runs; r++) {
+    for (final r in candidates) {
       double s = 0.0;
-      for (int k = 0; k < cps.length; k++) {
+      for (int k = 0; k < cps.length - 1; k++) {
         for (int i = 0; i < n; i++) {
           final dlt = cpRanks[r][k][i] - cpSum[k][i] / runs;
           s += dlt * dlt;
         }
+      }
+      for (int i = 0; i < n; i++) {
+        final dlt = (ranks[r][i] - tableRank[i]).toDouble();
+        s += (tableRank[i] <= 3 ? representativeTopWeight : 1.0) * dlt * dlt;
       }
       if (s < bestScore) {
         best = r;

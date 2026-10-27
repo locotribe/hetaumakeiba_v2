@@ -1,47 +1,45 @@
 // lib/widgets/shutuba_tabs/race_simulation_tab.dart
+// [修正] 展開シミュゲーム式移植Step4b: 全面的に作り直した。計算を順位スコアの方式からゲーム式エンジン(多数回)に替え、
+// 「シミュ／評価」の切り替えと評価(相対評価)を外した。画面は「再生・結果」「条件」「ステータス」のチップで切り替える。
+// 設計は memory/展開シミュ_ゲーム式移植_設計書.md の6章・7章 (v.2026.10.27+26102705)
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/db/course_elevations.dart';
-// [修正] 出走馬データ読み込み統一 Step4: 戦績と騎手成績は読み込み係（RaceEntrantDataService）から受け取るので、HorseRepository の import を外した (v.2026.10.16+26101621)
-import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_simulation_params_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/horse_speed_index_repository.dart';
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
-import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
-// [追加] 展開シミュ骨格整理Step7: 棒グラフ「スタ」に3角と同じスタミナを使う (v.2026.10.10+26101005)
-import 'package:hetaumakeiba_v2/logic/analysis/aptitude_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/race_analyzer.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
-// [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
-import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
-// [追加] 展開シミュ一般論見直しStep2: 末脚の算出・ペース自動判定・実測定数 (v.2026.9.29+26092906)
-import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
-// [追加] 展開シミュ骨格整理Step3: 前に行く力(連続値) (v.2026.10.10+26101001)
 import 'package:hetaumakeiba_v2/logic/analysis/early_position_calculator.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_ability_builder.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_display.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_engine.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_inputs.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_reference.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_simulator.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/speed_index_calculator.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_speed_index_model.dart';
-// [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
-import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
+import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
-// [削除] 出走馬データ読み込み統一 Step4: 騎手成績は読み込み係が計算するので、JockeyAnalysisService の import を外した (v.2026.10.16+26101621)
+import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/game_sim_panels.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_view.dart';
-// [追加] 好走条件・個別成績・相対評価の移動 Step4: 「評価」チップで出す相対評価（出走馬分析から移した。中身は今までの一覧のまま） (v.2026.10.17+26101709)
-import 'package:hetaumakeiba_v2/widgets/horse_stats_tabs/relative_battle_tab.dart';
 
-/// 「展開シミュ」タブ：コース平面図上で展開予想アニメーションを表示する。
+/// 「展開シミュ」タブ：ゲーム式エンジンで多数回走らせ、勝率・複勝率と代表の1回の再生を出す。
 class RaceSimulationTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
   final List<PredictionHorseDetail> horses;
-  // [追加] 0-9b-1 使用データカードの予測/過去平均ソース用（shutuba_table_page.dartから共有、天気取得の二重化を防ぐ） (v.2026.7.27+26072704)
+  // 馬場のデータの「予測」用(shutuba_table_page.dart から共有し、天気の取得を二重にしない)
   final Future<TrackConditionRecord?>? trackConditionFuture;
   final Future<Map<String, dynamic>?>? pinpointWeatherFuture;
   final TrackConditionRecord? cachedPrevRecord;
@@ -60,149 +58,131 @@ class RaceSimulationTabWidget extends StatefulWidget {
       _RaceSimulationTabWidgetState();
 }
 
-// [追加] 0-9b-2 重い取得(1回のみ)の結果をキャッシュする内部クラス (v.2026.7.27+26072705)
-class _CachedSimInputs {
-  final String venueCode;
+/// 重い読み込み(1回だけ)の結果。
+class _GameSimInputs {
   final int distance;
-  final String trackTypeKey;
   final bool isDirt;
-  final double trackSpeedMultiplier;
+  final String trackTypeKey;
   final RaceCourseData? raceCourse;
   final CourseDiagramData diagram;
-  final List<PredictionHorseDetail> horsesForSim;
-  final Map<String, List<HorseRaceRecord>> allPastRecords;
-  final Map<String, HorseSimulationParams> simulationParams;
-  // [追加] フェーズ5-2 スピード指数(simulationParamsと同一経路でRaceSimulationEngine.buildへ転送) (v.2026.7.30+26073001)
-  final Map<String, HorseSpeedIndex> speedIndexParams;
-  // [追加] 改善Phase7 枠順が発表済みかどうか (v.2026.9.18+26091802)
+  final GameRaceCourse course;
+
+  /// 走らせる馬(馬番の順。枠順の発表前は仮の馬番)
+  final List<PredictionHorseDetail> horses;
   final bool gatesConfirmed;
-  // [追加] 展開シミュ騎手要素Step2 騎手の強さ・相性・乗り替わり方向(キーは馬番) (v.2026.9.29+26092902)
-  final Map<String, HorseJockeyFactor> jockeyFactorParams;
-  // [追加] 展開シミュ一般論見直しStep2 割引き後の末脚(キーは馬番) (v.2026.9.29+26092906)
-  final Map<String, HorseFinishKick> finishKickParams;
-  // [追加] 展開シミュ骨格整理Step3 前に行く力(キーは馬番) (v.2026.10.10+26101001)
-  final Map<String, HorseEarlyPosition> earlyPositionParams;
-  // [追加] 展開シミュ骨格整理Step7 棒グラフの値(キーは馬番) (v.2026.10.10+26101005)
-  final Map<String, HorseSimBarValues> barValues;
-  // [追加] 展開シミュ一般論見直しStep2 面子から自動判定したペース(日本語ラベル) (v.2026.9.29+26092906)
-  final String autoPace;
-  final String? predictedPace;
-  final String? trackConditionText;
+  final List<GameHorseAbility> abilities;
+  final List<double?> staminaIndexes;
+
+  /// 同じレース名・同じ競馬場・芝ダ・距離の過去レース(新しい順)
+  final List<GamePastRaceTime> pastRaces;
+
+  /// 当日に発表された馬場状態。無ければ null
+  final String? officialGoing;
   final bool hasActualToday;
   final double? actualCushion;
   final double? actualMoisture;
-  final String? actualDate;
   final double? predictedCushion;
   final double? predictedMoisture;
   final double? trendCushion;
   final double? trendMoisture;
 
-  const _CachedSimInputs({
-    required this.venueCode,
+  const _GameSimInputs({
     required this.distance,
-    required this.trackTypeKey,
     required this.isDirt,
-    required this.trackSpeedMultiplier,
+    required this.trackTypeKey,
     required this.raceCourse,
     required this.diagram,
-    required this.horsesForSim,
-    required this.allPastRecords,
-    required this.simulationParams,
-    required this.speedIndexParams,
+    required this.course,
+    required this.horses,
     required this.gatesConfirmed,
-    required this.jockeyFactorParams,
-    // [追加] 展開シミュ一般論見直しStep2 (v.2026.9.29+26092906)
-    required this.finishKickParams,
-    // [追加] 展開シミュ骨格整理Step3 (v.2026.10.10+26101001)
-    required this.earlyPositionParams,
-    // [追加] 展開シミュ骨格整理Step7 (v.2026.10.10+26101005)
-    required this.barValues,
-    required this.autoPace,
-    required this.predictedPace,
-    required this.trackConditionText,
+    required this.abilities,
+    required this.staminaIndexes,
+    required this.pastRaces,
+    required this.officialGoing,
     required this.hasActualToday,
     required this.actualCushion,
     required this.actualMoisture,
-    required this.actualDate,
     required this.predictedCushion,
     required this.predictedMoisture,
     required this.trendCushion,
     required this.trendMoisture,
   });
+
+  bool get hasPredicted => predictedCushion != null || predictedMoisture != null;
+  bool get hasTrend => trendCushion != null || trendMoisture != null;
 }
 
-class _RaceSimulationLoadResult {
-  final CourseDiagramData diagram;
-  final List<CourseApproach>? approachPaths;
-  final double raceDistance;
-  final RaceSimulationData simulationData;
-  final bool isLeftHanded;
-  final String trackTypeKey;
-  final RaceCourseData? raceCourse;
-  final Map<String, HorseSimulationParams> simulationParams;
-  final List<PredictionHorseDetail> horses;
-  // [追加] 展開シミュ騎手要素Step3 棒グラフ表示用(キーは馬番) (v.2026.9.29+26092903)
-  final Map<String, HorseJockeyFactor> jockeyFactorParams;
-  // [追加] 0-9(b) 使用データカード表示用 (v.2026.7.27+26072703)
-  final String? predictedPace;
-  final String? trackConditionText;
-  final double? cushionValue;
-  final double? moistureValue;
-  final double trackBias;
-  final String? trackConditionDate;
-  // [追加] 0-9b-1 クッション値/含水率の使用ソースラベル（実測(当日)/予測/過去平均） (v.2026.7.27+26072704)
-  final String biasSourceLabel;
+/// 今出している100回の結果と、そのときの条件。
+class _ShownResult {
+  final GameRaceSummary summary;
 
-  const _RaceSimulationLoadResult({
-    required this.diagram,
-    required this.approachPaths,
-    required this.raceDistance,
-    required this.simulationData,
-    required this.isLeftHanded,
-    required this.trackTypeKey,
-    required this.raceCourse,
-    required this.simulationParams,
-    required this.horses,
-    required this.jockeyFactorParams,
-    this.predictedPace,
-    this.trackConditionText,
-    this.cushionValue,
-    this.moistureValue,
-    this.trackBias = 0.0,
-    this.trackConditionDate,
-    this.biasSourceLabel = '—',
+  /// 走らせたときのペース倍率
+  final double paceMult;
+
+  /// 走らせたときの馬場状態
+  final String going;
+
+  /// 同じ馬場状態で、既定のペースで走らせたときの勝ち時計の平均(ゲームの単位)。時計の換算の基準
+  final double baselineWinnerTime;
+
+  const _ShownResult({
+    required this.summary,
+    required this.paceMult,
+    required this.going,
+    required this.baselineWinnerTime,
   });
 }
 
 class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     with AutomaticKeepAliveClientMixin {
-  // [削除] 出走馬データ読み込み統一 Step4: 戦績は読み込み係から受け取るので、HorseRepository のフィールドを外した (v.2026.10.16+26101621)
   final HorseSimulationParamsRepository _simParamsRepo =
       HorseSimulationParamsRepository();
-  // [追加] フェーズ5-2 スピード指数の読み出し用 (v.2026.7.30+26073001)
   final HorseSpeedIndexRepository _speedIndexRepo = HorseSpeedIndexRepository();
-  // [追加] 馬場状態補正用 (v2026.6.25)
   final TrackConditionRepository _trackConditionRepo =
       TrackConditionRepository();
+  final RaceRepository _raceRepo = RaceRepository();
 
-  // [追加] 0-9b-2 重い取得(Phase A)は1回のみ・build再実行(Phase B)はキャッシュ済み入力を使い回す (v.2026.7.27+26072705)
-  Future<_CachedSimInputs?>? _inputsFuture;
-  _CachedSimInputs? _cachedInputs;
-  // [修正] 0-9b-2不具合修正 直前の表示結果を保持し、再ビルド中もスクロール領域ごと置換しないようにする (v.2026.7.27+26072706)
-  _RaceSimulationLoadResult? _lastResult;
-  bool _isRebuilding = false;
+  /// 走らせる回数
+  static const int _runs = GameRaceSimulator.defaultRuns;
 
-  // [修正] 0-9b-3 自由入力を廃止しペース手動選択に置き換え。クッション値/含水率のソース切替のみセッション内保持 (v.2026.7.27+26072707)
-  TrackBiasSource _selectedSource = TrackBiasSource.actual;
-  // [追加] 0-9b-3 ペース手動選択State。初期値はアプリ予想ペース（セッション内のみ保持） (v.2026.7.27+26072707)
-  late String _selectedPace;
+  /// スライダーの範囲を、今の値から最低でもこの秒数は外へ取る
+  static const double _sliderPad = 0.5;
 
-  // [追加] 0-9b-2不具合修正 スクロール位置を再ビルドをまたいで保持するコントローラー (v.2026.7.27+26072706)
-  late final ScrollController _scrollController;
+  /// 1000m通過からペース倍率を求めるときの補正の強さ(通過の比のこの乗数)。
+  /// 比そのまま(1乗)だと、ねらいの約75%しか動かない。1.3乗で、ねらい±2.5秒でも0.2秒以内に入った(試験台の東京芝2000m・ダート1600mで実測)
+  static const double _paceCorrectionPower = 1.3;
 
-  // [追加] 好走条件・個別成績・相対評価の移動 Step4: 「評価」を出しているか（初期はシミュ）。評価は初めて押したときに作り、以後は切り替えても残す (v.2026.10.17+26101709)
-  bool _showEvaluation = false;
-  bool _evaluationOpened = false;
+  /// 過去の1000m通過が無いときの、1000m通過のスライダーの幅(シミュの値から ± 秒)
+  static const double _first1000FallbackHalf = 3.0;
+
+  Future<_GameSimInputs?>? _inputsFuture;
+  _GameSimInputs? _inputs;
+
+  TrackBiasSource _source = TrackBiasSource.actual;
+  String _going = '良';
+  double? _cushion;
+  double? _winnerSeconds;
+
+  /// 1000m通過のスライダーで選んだ値(秒)。null のときは今の結果の値を出す
+  double? _first1000Target;
+
+  _ShownResult? _shown;
+  bool _isRunning = false;
+  String? _runError;
+
+  /// 再生に出している1回
+  RaceSimulationData? _playData;
+  int _playId = 0;
+  int _altCount = 0;
+  bool _isAltRun = false;
+
+  /// 出している区分(0=再生・結果、1=条件、2=ステータス)
+  int _section = 0;
+
+  static const List<String> _sectionLabels = ['再生・結果', '条件', 'ステータス'];
+
+  /// 枠順の発表前に再生と表で使う枠番(白で統一し、枠の色をつけない)
+  static const int _plainGate = 1;
 
   @override
   bool get wantKeepAlive => true;
@@ -210,114 +190,348 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
-    // [追加] 0-9b-3 ペース手動選択の初期値はアプリ予想ペース (v.2026.7.27+26072707)
-    _selectedPace = _appPredictedPace();
     _startLoad();
-  }
-
-  // [追加] 0-9b-3 アプリの予想ペースを取得（無ければミドルペース） (v.2026.7.27+26072707)
-  String _appPredictedPace() {
-    return widget.predictionRaceData.racePacePrediction?.predictedPace ??
-        'ミドルペース';
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
   }
 
   @override
   void didUpdateWidget(RaceSimulationTabWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    // [修正] raceId変更 or 更新ボタン押下後にlegStyleProfileが揃った場合に再ロード (v.13.43.0)
+    // レースが変わったとき、または脚質の情報が後から揃ったときに読み直す
     final oldHasLegStyle =
         oldWidget.horses.any((h) => h.legStyleProfile != null);
     final newHasLegStyle =
         widget.horses.any((h) => h.legStyleProfile != null);
-
     if (widget.predictionRaceData.raceId != oldWidget.predictionRaceData.raceId ||
         (!oldHasLegStyle && newHasLegStyle)) {
       setState(() {
-        _cachedInputs = null;
-        _lastResult = null;
-        _isRebuilding = false;
-        _selectedSource = TrackBiasSource.actual;
-        // [修正] 0-9b-3 raceId変更時は新レースの予想ペースへリセット (v.2026.7.27+26072707)
-        _selectedPace = _appPredictedPace();
+        _inputs = null;
+        _shown = null;
+        _playData = null;
+        _first1000Target = null;
+        _winnerSeconds = null;
+        _cushion = null;
+        _runError = null;
+        _isRunning = false;
         _startLoad();
       });
     }
   }
 
-  // [追加] 0-9b-2 Phase A(重い取得)を起動し、完了後に自動ソース選択とPhase B(build)を1度だけ実行 (v.2026.7.27+26072705)
+  int get _seed => GameRaceInputs.seedOf(widget.predictionRaceData.raceId);
+
   void _startLoad() {
     final future = _fetchInputs();
     _inputsFuture = future;
-    future.then((cached) {
-      if (!mounted || cached == null) return;
+    future.then((inputs) {
+      if (!mounted || inputs == null || _inputsFuture != future) return;
       setState(() {
-        _cachedInputs = cached;
-        _selectedSource = _autoSelectSource(cached);
-        // [追加] 展開シミュ一般論見直しStep2 ペース選択の初期値を、面子から
-        // 自動判定した結果にする。ユーザーは3つのボタンで従来どおり上書きできる (v.2026.9.29+26092906)
-        _selectedPace = cached.autoPace;
+        _inputs = inputs;
+        _source = _autoSelectSource(inputs);
+        _cushion = _cushionOf(inputs, _source);
+        _going = _goingDefaultOf(inputs, _source);
+        _winnerSeconds = _defaultWinnerOf(inputs, _going, _cushion);
       });
-      _triggerRebuild(cached);
+      _run();
     });
   }
 
-  // [追加] 0-9b-2 0-9b-1と同じ優先順（実測(当日)>予測>過去平均）で初期ソースを決定 (v.2026.7.27+26072705)
-  TrackBiasSource _autoSelectSource(_CachedSimInputs cached) {
-    if (cached.hasActualToday) return TrackBiasSource.actual;
-    if (cached.predictedMoisture != null) return TrackBiasSource.predicted;
-    if (cached.trendCushion != null || cached.trendMoisture != null) {
-      return TrackBiasSource.trend;
+  /// 馬場のデータの初期値。実測(当日) > 予測 > 過去平均 の順
+  TrackBiasSource _autoSelectSource(_GameSimInputs inputs) {
+    if (inputs.hasActualToday) return TrackBiasSource.actual;
+    if (inputs.hasPredicted) return TrackBiasSource.predicted;
+    if (inputs.hasTrend) return TrackBiasSource.trend;
+    return TrackBiasSource.actual;
+  }
+
+  double? _moistureOf(_GameSimInputs inputs, TrackBiasSource source) {
+    switch (source) {
+      case TrackBiasSource.actual:
+        return inputs.actualMoisture;
+      case TrackBiasSource.predicted:
+        return inputs.predictedMoisture;
+      case TrackBiasSource.trend:
+        return inputs.trendMoisture;
     }
-    return TrackBiasSource.actual; // どのソースにも値がない場合のフォールバック('—'表示・trackBias=0)
   }
 
-  // [修正] 0-9b-2不具合修正 Phase Bを実行し、完了後に直前の表示結果を差し替える（失敗時は直前の表示を維持） (v.2026.7.27+26072706)
-  void _triggerRebuild(_CachedSimInputs cached) {
+  /// その馬場のデータのクッション値。芝だけ。無ければ過去レースの平均、それも無ければ null
+  double? _cushionOf(_GameSimInputs inputs, TrackBiasSource source) {
+    if (inputs.isDirt) return null;
+    final double? v;
+    switch (source) {
+      case TrackBiasSource.actual:
+        v = inputs.actualCushion;
+        break;
+      case TrackBiasSource.predicted:
+        v = inputs.predictedCushion;
+        break;
+      case TrackBiasSource.trend:
+        v = inputs.trendCushion;
+        break;
+    }
+    final valid = GameRaceInputs.validCushion(v);
+    if (valid != null) return valid;
+    final past = [
+      for (final r in inputs.pastRaces)
+        if (GameRaceInputs.validCushion(r.cushion) != null) r.cushion!
+    ];
+    if (past.isEmpty) return null;
+    final mean = past.reduce((a, b) => a + b) / past.length;
+    return (mean * 10).round() / 10.0;
+  }
+
+  /// 馬場状態の初期値。当日の発表 > 馬場のデータの含水率から見込む馬場 > 良
+  String _goingDefaultOf(_GameSimInputs inputs, TrackBiasSource source) {
+    return inputs.officialGoing ??
+        GameRaceInputs.goingOfMoisture(
+            _moistureOf(inputs, source), inputs.isDirt) ??
+        '良';
+  }
+
+  GameRaceReference? _referenceOf(
+      _GameSimInputs inputs, String going, double? cushion) {
+    return GameRaceReference.fromPastRaces(
+          inputs.pastRaces,
+          distance: inputs.distance,
+          isDirt: inputs.isDirt,
+          going: going,
+          cushion: cushion,
+        ) ??
+        GameRaceReference.fallback(
+          distance: inputs.distance,
+          isDirt: inputs.isDirt,
+          year: parseRaceDateForSpeedIndex(widget.predictionRaceData.raceDate)
+                  ?.year ??
+              DateTime.now().year,
+          venueName: widget.predictionRaceData.venue,
+          going: going,
+        );
+  }
+
+  /// 走破タイムの初期値(秒)。過去レースも基準タイムも無ければ、シミュの時計のまま(結果が出るまでは null)
+  double? _defaultWinnerOf(
+      _GameSimInputs inputs, String going, double? cushion) {
+    final ref = _referenceOf(inputs, going, cushion);
+    if (ref != null) return (ref.defaultWinnerSeconds * 10).round() / 10.0;
+    return _shown?.baselineWinnerTime;
+  }
+
+  GameRaceConfig _baseConfigOf(_GameSimInputs inputs) =>
+      inputs.isDirt ? GameRaceConfig.dirt : GameRaceConfig.turf;
+
+  Future<GameRaceSummary> _simulate(
+      _GameSimInputs inputs, GameRaceConfig config, int seed, int runs) {
+    return GameRaceSimulator.runInBackground(
+      distance: inputs.distance.toDouble(),
+      abilities: inputs.abilities,
+      config: config,
+      seed: seed,
+      winCalibration: inputs.isDirt
+          ? GameRaceSimulator.winCalibrationDirt
+          : GameRaceSimulator.winCalibrationTurf,
+      top3Calibration: inputs.isDirt
+          ? GameRaceSimulator.top3CalibrationDirt
+          : GameRaceSimulator.top3CalibrationTurf,
+      course: inputs.course,
+      runs: runs,
+    );
+  }
+
+  /// 今の条件で走らせる。馬場状態が変わっていれば、まず既定のペースで走らせて時計の基準を取り直す。
+  /// 1000m通過が選ばれていれば、そこからペース倍率を求めてもう一度走らせる。
+  Future<void> _run({bool showResult = false}) async {
+    final inputs = _inputs;
+    if (inputs == null || _isRunning) return;
+    final going = _going;
+    final target = _first1000Target;
     setState(() {
-      _isRebuilding = true;
+      _isRunning = true;
+      _runError = null;
     });
-    _rebuild(cached).then((result) {
+    try {
+      final base = _baseConfigOf(inputs);
+      final groundHp = GameRaceInputs.groundHpOf(going, inputs.isDirt);
+      final shown = _shown;
+      GameRaceSummary summary;
+      double paceMult;
+      double baselineWinner;
+      if (shown == null || shown.going != going) {
+        summary =
+            await _simulate(inputs, base.copyWith(groundHp: groundHp), _seed, _runs);
+        paceMult = base.paceMult;
+        baselineWinner = summary.meanWinnerTime;
+      } else {
+        summary = shown.summary;
+        paceMult = shown.paceMult;
+        baselineWinner = shown.baselineWinnerTime;
+      }
+      if (!mounted) return;
+      final winnerSeconds = _winnerSeconds ?? baselineWinner;
+      final leader = summary.meanLeader1000;
+      if (target != null && leader != null) {
+        final scale = winnerSeconds / baselineWinner;
+        paceMult = paceMult *
+            math.pow(leader * scale / target, _paceCorrectionPower).toDouble();
+        summary = await _simulate(
+          inputs,
+          base.copyWith(paceMult: paceMult, groundHp: groundHp),
+          _seed,
+          _runs,
+        );
+      }
       if (!mounted) return;
       setState(() {
-        _isRebuilding = false;
-        if (result != null) {
-          _lastResult = result;
-        }
+        _shown = _ShownResult(
+          summary: summary,
+          paceMult: paceMult,
+          going: going,
+          baselineWinnerTime: baselineWinner,
+        );
+        _winnerSeconds ??= (baselineWinner * 10).round() / 10.0;
+        if (_first1000Target == target) _first1000Target = null;
+        _isRunning = false;
+        _isAltRun = false;
+        if (showResult) _section = 0;
+        _setPlayback(inputs, summary.representative);
       });
+    } catch (e) {
+      debugPrint('展開シミュ: 走らせるのに失敗: $e');
+      if (!mounted) return;
+      setState(() {
+        _isRunning = false;
+        _runError = '走らせるのに失敗しました';
+      });
+    }
+  }
+
+  /// 同じ条件で1回だけ走らせ、再生をその回に替える(結果の表はそのまま)
+  Future<void> _showAnotherRun() async {
+    final inputs = _inputs;
+    final shown = _shown;
+    if (inputs == null || shown == null || _isRunning) return;
+    setState(() => _isRunning = true);
+    try {
+      _altCount++;
+      final one = await _simulate(
+        inputs,
+        _baseConfigOf(inputs).copyWith(
+          paceMult: shown.paceMult,
+          groundHp: GameRaceInputs.groundHpOf(shown.going, inputs.isDirt),
+        ),
+        _seed + 1000 + _altCount,
+        1,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isRunning = false;
+        _isAltRun = true;
+        _setPlayback(inputs, one.representative);
+      });
+    } catch (e) {
+      debugPrint('展開シミュ: 別の回を走らせるのに失敗: $e');
+      if (!mounted) return;
+      setState(() => _isRunning = false);
+    }
+  }
+
+  void _showRepresentative() {
+    final inputs = _inputs;
+    final shown = _shown;
+    if (inputs == null || shown == null) return;
+    setState(() {
+      _isAltRun = false;
+      _setPlayback(inputs, shown.summary.representative);
     });
   }
 
-  // [追加] 0-9b-2 ソース切替コールバック（再取得はせずPhase Bのみ再実行） (v.2026.7.27+26072705)
+  /// 1回ぶんの記録を、今の再生の形にする(setState の中で呼ぶ)
+  void _setPlayback(_GameSimInputs inputs, GameRaceRunResult run) {
+    final points = GameRaceInputs.withOverrun(GameRaceDisplay.trackPointsOf(
+      run,
+      distance: inputs.distance.toDouble(),
+      timeScale: _timeScale ?? 1.0,
+    ));
+    _playData = RaceSimulationData(
+      horseTracks: [
+        for (int i = 0; i < inputs.horses.length; i++)
+          RaceSimHorseTrack(
+            horseNumber: inputs.horses[i].horseNumber.toString(),
+            gateNumber: _gateOf(inputs, i),
+            snapshots: [
+              for (final p in points[i])
+                RaceSimSnapshot(
+                  time: p.time,
+                  distanceFromGoal: p.distanceFromGoal,
+                  laneRank: p.laneRank,
+                ),
+            ],
+          ),
+      ],
+      developmentTexts: const {},
+      totalTime: GameRaceDisplay.totalTimeOf(points),
+    );
+    _playId++;
+  }
+
+  int _gateOf(_GameSimInputs inputs, int i) =>
+      inputs.gatesConfirmed ? inputs.horses[i].gateNumber : _plainGate;
+
+  /// ゲームの時間から実時間への倍率。結果が出るまでは null
+  double? get _timeScale {
+    final shown = _shown;
+    final w = _winnerSeconds;
+    if (shown == null || w == null) return null;
+    return w / shown.baselineWinnerTime;
+  }
+
+  bool get _isPending {
+    final shown = _shown;
+    if (shown == null) return false;
+    return shown.going != _going || _first1000Target != null;
+  }
+
   void _onSourceChanged(TrackBiasSource source) {
-    if (_cachedInputs == null) return;
+    final inputs = _inputs;
+    if (inputs == null) return;
     setState(() {
-      _selectedSource = source;
+      _source = source;
+      _cushion = _cushionOf(inputs, source) ?? _cushion;
+      _going = _goingDefaultOf(inputs, source);
+      _winnerSeconds = _defaultWinnerOf(inputs, _going, _cushion);
     });
-    _triggerRebuild(_cachedInputs!);
   }
 
-  // [追加] 0-9b-3 ペース手動選択コールバック（再取得はせずPhase Bのみ再実行） (v.2026.7.27+26072707)
-  void _onPaceChanged(String pace) {
-    if (_cachedInputs == null) return;
+  void _onGoingChanged(String going) {
+    final inputs = _inputs;
+    if (inputs == null) return;
     setState(() {
-      _selectedPace = pace;
+      _going = going;
+      if (!inputs.isDirt) {
+        final fromSource = _cushionOfSourceOnly(inputs);
+        _cushion = (going == _goingDefaultOf(inputs, _source) &&
+                fromSource != null)
+            ? fromSource
+            : (GameRaceInputs.typicalCushion[going] ?? _cushion);
+      }
+      _winnerSeconds = _defaultWinnerOf(inputs, going, _cushion);
     });
-    _triggerRebuild(_cachedInputs!);
   }
+
+  void _onCushionChanged(double cushion) {
+    final inputs = _inputs;
+    if (inputs == null) return;
+    setState(() {
+      _cushion = (cushion * 10).round() / 10.0;
+      _winnerSeconds = _defaultWinnerOf(inputs, _going, _cushion);
+    });
+  }
+
+  // ───────────────────────── 読み込み ─────────────────────────
 
   String _mapToTrackTypeKey() {
     final tt = widget.predictionRaceData.trackType ?? '';
     final dir = widget.predictionRaceData.direction ?? '';
     final inOut = widget.predictionRaceData.courseInOut ?? '';
-
     if (tt.contains('ダ')) return 'dirt';
     if (dir.contains('直')) return 'shiba_straight';
     if (inOut.contains('外')) return 'shiba_outer';
@@ -325,94 +539,33 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     return 'shiba';
   }
 
-  /// 馬場状態から速度補正係数を導出する（Cascade Fallback）。
-  /// ① JRA公式 trackCondition → ② クッション値(芝)/含水率(ダート) → ③ 1.0（補正なし）
-  static double _deriveTrackSpeedMultiplier({
-    required String? trackConditionText,
-    required bool isDirt,
-    required TrackConditionRecord? record,
-  }) {
-    // ① JRA公式発表の馬場状態テキスト
-    if (trackConditionText != null) {
-      switch (trackConditionText) {
-        case '良': return 1.00;
-        case '稍重': return 1.03;
-        case '重': return 1.06;
-        case '不良': return 1.10;
-      }
-    }
-    // ② TrackConditionRecord からの推定
-    if (record != null) {
-      if (isDirt) {
-        final m = record.moistureDirtGoal;
-        if (m != null) {
-          if (m <= 9.0) return 1.00;   // 良(乾燥)
-          if (m <= 13.0) return 1.03;  // 稍重相当
-          if (m <= 16.0) return 1.06;  // 重相当
-          return 1.10;                  // 不良相当
-        }
-      } else {
-        // 芝: クッション値優先（良馬場内の速度差を区別できる唯一の指標）
-        final c = record.cushionValue;
-        if (c != null) {
-          if (c >= 10.0) return 0.98;  // 高速良馬場
-          if (c >= 9.0) return 1.00;   // 標準良
-          if (c >= 8.0) return 1.02;   // 稍重傾向
-          return 1.04;                  // 重傾向以上
-        }
-        // クッション値なし → 含水率で代替推定
-        final m = record.moistureTurfGoal;
-        if (m != null) {
-          if (m <= 13.0) return 1.00;  // 良
-          if (m <= 17.0) return 1.03;  // 稍重
-          if (m <= 21.0) return 1.06;  // 重
-          return 1.10;                  // 不良
-        }
-      }
-    }
-    // ③ データなし
-    return 1.0;
-  }
-
-  // [追加] 0-9b-2 Phase A: 重い取得(過去成績・コース図・パラメータ・馬場レコード・予測値・過去平均)を1回だけ行う (v.2026.7.27+26072705)
-  Future<_CachedSimInputs?> _fetchInputs() async {
-    final venueCode = widget.predictionRaceData.raceId.length >= 6
-        ? widget.predictionRaceData.raceId.substring(4, 6)
-        : null;
-    final distance = int.tryParse(
-        widget.predictionRaceData.distanceValue?.toString() ?? '');
+  /// 重い読み込み(過去成績・コース図・指数・騎手成績・馬場のデータ・同じレースの過去の時計)を1回だけ行う
+  Future<_GameSimInputs?> _fetchInputs() async {
+    final race = widget.predictionRaceData;
+    final venueCode = race.raceId.length >= 6 ? race.raceId.substring(4, 6) : null;
+    final distance = int.tryParse(race.distanceValue?.toString() ?? '');
     if (venueCode == null || distance == null) return null;
 
     final trackTypeKey = _mapToTrackTypeKey();
-
-    // [修正] 馬場状態補正: 競馬場コード＋開催日でDBから当日のクッション値・含水率を取得 (v.2026.9.19+26091901)
     final isDirt = trackTypeKey == 'dirt';
-    TrackConditionRecord? trackConditionRecord;
-    final raceIdStr = widget.predictionRaceData.raceId;
-    if (raceIdStr.length >= 10) {
-      trackConditionRecord = await _trackConditionRepo.getTrackConditionForRace(
-        raceId: raceIdStr,
-        raceDate: widget.predictionRaceData.raceDate,
+
+    // 馬場のデータ: 実測(当日)
+    TrackConditionRecord? record;
+    if (race.raceId.length >= 10) {
+      record = await _trackConditionRepo.getTrackConditionForRace(
+        raceId: race.raceId,
+        raceDate: race.raceDate,
       );
     }
-    final trackSpeedMultiplier = _deriveTrackSpeedMultiplier(
-      trackConditionText: widget.predictionRaceData.trackCondition,
-      isDirt: isDirt,
-      record: trackConditionRecord,
-    );
+    final hasActualToday = isDirt
+        ? record?.moistureDirtGoal != null
+        : (record?.cushionValue != null || record?.moistureTurfGoal != null);
+    final actualCushion =
+        isDirt ? null : GameRaceInputs.validCushion(record?.cushionValue);
+    final actualMoisture =
+        isDirt ? record?.moistureDirtGoal : record?.moistureTurfGoal;
 
-    // [追加] 0-9b-2 実測(当日)ソース候補値（トグル無効化判定にも使う） (v.2026.7.27+26072705)
-    final bool hasActualToday = isDirt
-        ? trackConditionRecord?.moistureDirtGoal != null
-        : (trackConditionRecord?.cushionValue != null ||
-            trackConditionRecord?.moistureTurfGoal != null);
-    final double? actualCushion = trackConditionRecord?.cushionValue;
-    final double? actualMoisture = isDirt
-        ? trackConditionRecord?.moistureDirtGoal
-        : trackConditionRecord?.moistureTurfGoal;
-    final String? actualDate = trackConditionRecord?.date;
-
-    // [追加] 0-9b-2 予測ソース候補値: weather_analyzerの既存算出結果を再利用（天気取得自体はshutuba_table_page.dartで1回のみ） (v.2026.7.27+26072705)
+    // 馬場のデータ: 予測(天気の取得は shutuba_table_page.dart で1回だけ)
     double? predictedCushion;
     double? predictedMoisture;
     if (widget.pinpointWeatherFuture != null &&
@@ -422,22 +575,22 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         final baselineRecord = await widget.trackConditionFuture;
         final raceTime = pinpointData?['raceTime'];
         if (raceTime != null && baselineRecord != null) {
-          final analysisResult = WeatherAnalyzer.analyzeTrackConditionInsights(
+          final analysis = WeatherAnalyzer.analyzeTrackConditionInsights(
             venueCode: venueCode,
-            trackType: widget.predictionRaceData.trackType ?? '芝',
+            trackType: race.trackType ?? '芝',
             currentRecord: baselineRecord,
             cachedRecord: widget.cachedPrevRecord,
             expectedPrecipitation:
                 (raceTime['precipitation'] as num?)?.toDouble() ?? 0.0,
-            expectedRadiation:
-                (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,
-            expectedSoilMoisture:
-                (raceTime['soilMoisture'] as num?)?.toDouble(),
+            expectedRadiation: (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,
+            expectedSoilMoisture: (raceTime['soilMoisture'] as num?)?.toDouble(),
             dailyWeather: pinpointData?['daily'] ?? const [],
-            raceDateStr: widget.predictionRaceData.raceDate,
+            raceDateStr: race.raceDate,
           );
-          predictedCushion = isDirt ? null : analysisResult.predictedCushion;
-          predictedMoisture = analysisResult.predictedMoisture;
+          predictedCushion = isDirt
+              ? null
+              : GameRaceInputs.validCushion(analysis.predictedCushion);
+          predictedMoisture = analysis.predictedMoisture;
         }
       } catch (_) {
         predictedCushion = null;
@@ -445,164 +598,143 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       }
     }
 
-    // [追加] 0-9b-2 過去平均ソース候補値: 当該競馬場の直近レコードから軽量算出 (v.2026.7.27+26072705)
+    // 馬場のデータ: 過去平均(その競馬場の直近の記録)
     final recentRecords =
         await _trackConditionRepo.getRecentTrackConditionsForVenue(venueCode);
-    final trendMap = {
+    final trend = TrackConditionTrendAnalyzer().analyze({
       for (final r in recentRecords) r.trackConditionId.toString(): r
-    };
-    final trend = TrackConditionTrendAnalyzer().analyze(trendMap);
+    });
     final avgMoisture = isDirt ? trend.avgDirtMoisture : trend.avgTurfMoisture;
     final double? trendCushion =
-        isDirt ? null : (trend.avgCushion > 0 ? trend.avgCushion : null);
+        isDirt ? null : GameRaceInputs.validCushion(trend.avgCushion);
     final double? trendMoisture = avgMoisture > 0 ? avgMoisture : null;
 
+    // コース
     var raceCourse =
         CourseElevations.findRaceCourse(venueCode, distance, trackTypeKey);
     if (raceCourse == null && trackTypeKey == 'shiba') {
       raceCourse =
           CourseElevations.findRaceCourse(venueCode, distance, 'shiba_inner');
     }
-
     final diagram = await CourseDiagramService.instance
         .getCourseDiagram(venueCode, distance, trackTypeKey);
     if (diagram == null) return null;
+    final course = raceCourse != null
+        ? GameRaceCourse.fromRaceCourseData(raceCourse)
+        : GameRaceCourse.flat;
 
+    // 出走馬(馬番の順。ゲートの位置は並びの順で決まる)
     final activeHorses = widget.horses.where((h) => !h.isScratched).toList();
     if (activeHorses.isEmpty) return null;
-
-    // [追加] 改善Phase7 全馬 horseNumber=0 なら枠順発表前(仮枠番)と判定する (v.2026.9.18+26091802)
     final gatesConfirmed = !activeHorses.every((h) => h.horseNumber == 0);
-    final horsesForSim = gatesConfirmed
-        ? activeHorses
-        : RaceSimulationEngine.assignTempNumbers(activeHorses);
+    final horses = (gatesConfirmed
+        ? List<PredictionHorseDetail>.from(activeHorses)
+        : RaceSimulationEngine.assignTempNumbers(activeHorses))
+      ..sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
 
-    // [修正] 出走馬データ読み込み統一 Step4: 戦績は読み込み係が1回だけ読んだ、今回のレース日より前の走（そのレース自身の行も除く）を使う。
-    // 過去のレースを開いたとき、そのレースや後の走が展開シミュの計算に入っていた (v.2026.10.16+26101621)
-    final entrantData =
-        await RaceEntrantDataService.instance.load(widget.predictionRaceData);
-    final allPastRecords = <String, List<HorseRaceRecord>>{
-      for (final horse in horsesForSim)
-        horse.horseId: entrantData.recordsOf(horse.horseId),
+    // 戦績と騎手成績(今回のレース日より前の走だけ)
+    final entrantData = await RaceEntrantDataService.instance.load(race);
+    final records = <String, List<HorseRaceRecord>>{
+      for (final h in horses) h.horseId: entrantData.recordsOf(h.horseId),
     };
-
-    final horseIds = horsesForSim.map((h) => h.horseId).toList();
+    final horseIds = horses.map((h) => h.horseId).toList();
     final paramsByHorseId = await _simParamsRepo.getByHorseIds(horseIds);
-    final simulationParams = <String, HorseSimulationParams>{};
-    for (final horse in horsesForSim) {
-      final params = paramsByHorseId[horse.horseId] ??
-          SimulationParamsCalculator.calculate(
-            horse.horseId,
-            allPastRecords[horse.horseId] ?? [],
-          );
-      simulationParams[horse.horseNumber.toString()] = params;
-    }
-
-    // [追加] フェーズ5-2 スピード指数をsimulationParamsと同じ経路(DB優先・無ければ算出フォールバック)で構築 (v.2026.7.30+26073001)
     final speedIndexByHorseId = await _speedIndexRepo.getByHorseIds(horseIds);
-    final raceDateForSpeedIndex =
-        parseRaceDateForSpeedIndex(widget.predictionRaceData.raceDate);
-    final speedIndexParams = <String, HorseSpeedIndex>{};
-    for (final horse in horsesForSim) {
-      final speedIndex = speedIndexByHorseId[horse.horseId] ??
-          SpeedIndexCalculator.calculate(
-            horse.horseId,
-            allPastRecords[horse.horseId] ?? [],
-            asOf: raceDateForSpeedIndex,
-          );
-      speedIndexParams[horse.horseNumber.toString()] = speedIndex;
-    }
+    final asOf = parseRaceDateForSpeedIndex(race.raceDate);
 
-    // [追加] 展開シミュ騎手要素Step2: 騎手の強さ・相性・乗り替わり方向を算出する。
-    // 騎手統計はDB全レース結果の走査を伴うため1回だけ行い、失敗しても展開シミュ自体は継続する (v.2026.9.29+26092902)
-    // [修正] 出走馬データ読み込み統一 Step4: 騎手成績は読み込み係が1回だけ計算したもの（今回の騎手・前走の騎手・戦績のいちばん上の行の騎手。
-    // 相対評価と共用）を使う。計算に失敗したときは空で、展開シミュはそのまま続ける（今までと同じ） (v.2026.10.16+26101621)
-    final Map<String, JockeyStats> jockeyStatsForSim = entrantData.jockeyStats;
-    final jockeyFactorParams = JockeyFactorCalculator.calculate(
-      horses: horsesForSim,
-      allPastRecords: allPastRecords,
-      jockeyStats: jockeyStatsForSim,
-    );
-
-    // [追加] 展開シミュ一般論見直しStep2 過去走の上がり3Fから割引き後の末脚を求め、
-    // 面子の脚質分布からペースを自動判定する。DB追加取得はしない (v.2026.9.29+26092906)
-    final finishKickParams = <String, HorseFinishKick>{};
-    for (final horse in horsesForSim) {
-      finishKickParams[horse.horseNumber.toString()] =
-          RaceFinishCalculator.calculateKick(
-              allPastRecords[horse.horseId] ?? const []);
-    }
-    // [追加] 展開シミュ骨格整理Step3 過去走の最初のコーナーの通過順位率から前に行く力を求める。
-    // 過去走が少ない馬は脚質割合と混ぜる。DB追加取得はしない (v.2026.10.10+26101001)
-    final earlyPositionParams = <String, HorseEarlyPosition>{};
-    for (final horse in horsesForSim) {
-      earlyPositionParams[horse.horseNumber.toString()] =
-          EarlyPositionCalculator.calculate(
-        allPastRecords[horse.horseId] ?? const [],
-        styleDistribution: horse.legStyleProfile?.styleDistribution ??
+    final sources = <GameAbilitySource>[];
+    final staminaIndexes = <double?>[];
+    for (final h in horses) {
+      final rec = records[h.horseId] ?? const <HorseRaceRecord>[];
+      final params = paramsByHorseId[h.horseId] ??
+          SimulationParamsCalculator.calculate(h.horseId, rec);
+      final speedIndex = speedIndexByHorseId[h.horseId] ??
+          SpeedIndexCalculator.calculate(h.horseId, rec, asOf: asOf);
+      final kick = RaceFinishCalculator.calculateKick(rec);
+      final early = EarlyPositionCalculator.calculate(
+        rec,
+        styleDistribution: h.legStyleProfile?.styleDistribution ??
             const <String, double>{},
-        primaryStyle: horse.legStyleProfile?.primaryStyle,
+        primaryStyle: h.legStyleProfile?.primaryStyle,
       );
+      final jockey = entrantData.jockeyStats[h.jockeyId];
+      final hasSpeedIndex = speedIndex.sampleCount > 0;
+      sources.add(GameAbilitySource(
+        speedIndex: hasSpeedIndex ? speedIndex.recentAvgIndex : null,
+        speedIndexConfidence: hasSpeedIndex ? speedIndex.confidence : null,
+        earlyRate: early.rate,
+        kickSeconds: kick.kickSeconds,
+        staminaIndex: params.staminaIndex,
+        jockeyShowRate: GameRaceInputs.jockeyShowRateOf(jockey?.overallStats),
+      ));
+      staminaIndexes.add(params.staminaIndex);
     }
-    // [追加] 展開シミュ骨格整理Step7 棒グラフ「テン」「終い」「スタ」の値を、動きに使う値と同じものにする。
-    // テン=前に行く力 / 終い=0.5＋割引き後の末脚(秒) / スタ=3角で使うスタミナ÷100。いずれも0〜1に丸める (v.2026.10.10+26101005)
-    final barValues = <String, HorseSimBarValues>{};
-    for (final horse in horsesForSim) {
-      final key = horse.horseNumber.toString();
-      final double staminaScore = AptitudeAnalyzer.evaluateStaminaFit(
-        horse,
-        widget.predictionRaceData,
-        allPastRecords[horse.horseId] ?? const [],
-      );
-      barValues[key] = HorseSimBarValues(
-        ten: earlyPositionParams[key]?.barValue ?? 0.0,
-        kick: (0.5 + (finishKickParams[key]?.kickSeconds ?? 0.0))
-            .clamp(0.0, 1.0)
-            .toDouble(),
-        stamina: (staminaScore / 100.0).clamp(0.0, 1.0).toDouble(),
-      );
-    }
-    final autoPace = RaceFinishCalculator.paceLabel(
-      RaceFinishCalculator.predictPace(
-        styleDistributions: horsesForSim
-            .map((h) =>
-                h.legStyleProfile?.styleDistribution ??
-                const <String, double>{})
-            .toList(),
-        distanceMeters: distance,
-        surface: isDirt ? SimSurface.dirt : SimSurface.turf,
-      ),
-    );
+    final abilities = GameAbilityBuilder.build(sources);
 
-    return _CachedSimInputs(
-      venueCode: venueCode,
+    // 同じレース名の過去レースの時計(失敗しても過去の時計なしで続ける)
+    final pastRaces = <GamePastRaceTime>[];
+    try {
+      if (race.raceName.trim().isNotEmpty) {
+        final found = await _raceRepo.searchRaceResultsByName(race.raceName.trim());
+        final matched = GameRaceInputs.latestRaces([
+          for (final r in found)
+            if (GameRaceInputs.pastRaceTimeOf(
+                  r,
+                  venueCode: venueCode,
+                  distance: distance,
+                  isDirt: isDirt,
+                  before: asOf,
+                  excludeRaceId: race.raceId,
+                ) !=
+                null)
+              r,
+        ]);
+        for (final r in matched) {
+          final t = GameRaceInputs.pastRaceTimeOf(
+            r,
+            venueCode: venueCode,
+            distance: distance,
+            isDirt: isDirt,
+            before: asOf,
+            excludeRaceId: race.raceId,
+          )!;
+          double? cushion;
+          if (!isDirt && r.raceId.length >= 10) {
+            final tc = await _trackConditionRepo.getTrackConditionForRace(
+              raceId: r.raceId,
+              raceDate: r.raceDate,
+            );
+            cushion = GameRaceInputs.validCushion(tc?.cushionValue);
+          }
+          pastRaces.add(GamePastRaceTime(
+            raceId: t.raceId,
+            winnerSeconds: t.winnerSeconds,
+            first1000Seconds: t.first1000Seconds,
+            going: t.going,
+            cushion: cushion,
+          ));
+        }
+      }
+    } catch (e) {
+      debugPrint('展開シミュ: 過去レースの時計の読み込みに失敗: $e');
+    }
+
+    return _GameSimInputs(
       distance: distance,
-      trackTypeKey: trackTypeKey,
       isDirt: isDirt,
-      trackSpeedMultiplier: trackSpeedMultiplier,
+      trackTypeKey: trackTypeKey,
       raceCourse: raceCourse,
       diagram: diagram,
-      horsesForSim: horsesForSim,
-      allPastRecords: allPastRecords,
-      simulationParams: simulationParams,
-      speedIndexParams: speedIndexParams,
-      // [追加] 改善Phase7 (v.2026.9.18+26091802)
+      course: course,
+      horses: horses,
       gatesConfirmed: gatesConfirmed,
-      // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
-      jockeyFactorParams: jockeyFactorParams,
-      // [追加] 展開シミュ一般論見直しStep2 (v.2026.9.29+26092906)
-      finishKickParams: finishKickParams,
-      // [追加] 展開シミュ骨格整理Step3 (v.2026.10.10+26101001)
-      earlyPositionParams: earlyPositionParams,
-      // [追加] 展開シミュ骨格整理Step7 (v.2026.10.10+26101005)
-      barValues: barValues,
-      autoPace: autoPace,
-      predictedPace: widget.predictionRaceData.racePacePrediction?.predictedPace,
-      trackConditionText: widget.predictionRaceData.trackCondition,
+      abilities: abilities,
+      staminaIndexes: staminaIndexes,
+      pastRaces: pastRaces,
+      officialGoing: GameRaceReference.normalizeGoing(race.trackCondition),
       hasActualToday: hasActualToday,
       actualCushion: actualCushion,
       actualMoisture: actualMoisture,
-      actualDate: actualDate,
       predictedCushion: predictedCushion,
       predictedMoisture: predictedMoisture,
       trendCushion: trendCushion,
@@ -610,216 +742,355 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     );
   }
 
-  // [追加] 0-9b-2 Phase B: 選択中ソース(または自由入力)からtrackBiasを算出し、キャッシュ済み入力でRaceSimulationEngine.buildのみ再実行 (v.2026.7.27+26072705)
-  Future<_RaceSimulationLoadResult?> _rebuild(_CachedSimInputs cached) async {
-    double? selectedCushion;
-    double? selectedMoisture;
-    String? selectedDate;
-    String biasSourceLabel;
+  // ───────────────────────── 画面 ─────────────────────────
 
-    switch (_selectedSource) {
-      case TrackBiasSource.actual:
-        selectedCushion = cached.actualCushion;
-        selectedMoisture = cached.actualMoisture;
-        selectedDate = cached.actualDate;
-        biasSourceLabel = '実測(当日)';
-        break;
-      case TrackBiasSource.predicted:
-        selectedCushion = cached.predictedCushion;
-        selectedMoisture = cached.predictedMoisture;
-        biasSourceLabel = '予測';
-        break;
-      case TrackBiasSource.trend:
-        selectedCushion = cached.trendCushion;
-        selectedMoisture = cached.trendMoisture;
-        biasSourceLabel = '過去平均';
-        break;
-    }
-
-    final trackBias = (selectedCushion != null || selectedMoisture != null)
-        ? RaceAnalyzer.calcTrackBias(
-            cushionValue: selectedCushion,
-            moistureTurfGoal: cached.isDirt ? null : selectedMoisture,
-            moistureDirtGoal: cached.isDirt ? selectedMoisture : null,
-            isDirt: cached.isDirt,
-          )
-        : 0.0;
-
-    final simulationData = await RaceSimulationEngine.build(
-      raceData: widget.predictionRaceData,
-      horses: cached.horsesForSim,
-      allPastRecords: cached.allPastRecords,
-      raceCourse: cached.raceCourse,
-      raceDistance: cached.distance.toDouble(),
-      simulationParams: cached.simulationParams,
-      // [追加] フェーズ5-2 スピード指数(build()自身は不使用、内部転送のみ) (v.2026.7.30+26073001)
-      speedIndexParams: cached.speedIndexParams,
-      // [追加] 馬場状態補正 (v2026.6.25)
-      trackSpeedMultiplier: cached.trackSpeedMultiplier,
-      // [追加] 0-9 馬場バイアス (v.2026.7.27+26072702)
-      trackBias: trackBias,
-      // [追加] 0-9b-3 ペース手動選択 (v.2026.7.27+26072707)
-      paceOverride: _selectedPace,
-      // [追加] 改善Phase7 (v.2026.9.18+26091802)
-      gatesConfirmed: cached.gatesConfirmed,
-      // [追加] 展開シミュ騎手要素Step2 (v.2026.9.29+26092902)
-      jockeyFactorParams: cached.jockeyFactorParams,
-      // [追加] 展開シミュ一般論見直しStep2 選択中のペースと馬場から実測定数を引いて渡す (v.2026.9.29+26092906)
-      finishKickParams: cached.finishKickParams,
-      // [追加] 展開シミュ骨格整理Step3 (v.2026.10.10+26101001)
-      earlyPositionParams: cached.earlyPositionParams,
-      // [修正] 展開シミュ一般論見直しStep4 定数を今回の距離帯でも引く (v.2026.9.29+26092907)
-      finishConstants: RaceFinishCalculator.constantsFor(
-        cached.isDirt ? SimSurface.dirt : SimSurface.turf,
-        RaceFinishCalculator.bandOfMeters(cached.distance),
-        RaceFinishCalculator.paceFromLabel(_selectedPace),
-      ),
-    );
-    if (simulationData == null) return null;
-
-    return _RaceSimulationLoadResult(
-      diagram: cached.diagram,
-      approachPaths: cached.raceCourse?.approachPath,
-      raceDistance: cached.distance.toDouble(),
-      simulationData: simulationData,
-      // raceCourse未取得時は右回り扱い（JRAは右回りコースが多数派）
-      isLeftHanded: cached.raceCourse?.isLeftHanded ?? false,
-      trackTypeKey: cached.trackTypeKey,
-      raceCourse: cached.raceCourse,
-      simulationParams: cached.simulationParams,
-      horses: cached.horsesForSim,
-      // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
-      jockeyFactorParams: cached.jockeyFactorParams,
-      predictedPace: cached.predictedPace,
-      trackConditionText: cached.trackConditionText,
-      cushionValue: selectedCushion,
-      moistureValue: selectedMoisture,
-      trackBias: trackBias,
-      trackConditionDate: selectedDate,
-      biasSourceLabel: biasSourceLabel,
-    );
-  }
-
-  // [修正] 好走条件・個別成績・相対評価の移動 Step4: いちばん上に「シミュ／評価」のチップを置いた。シミュは今までの表示（_buildSimulation）、
-  // 評価は出走馬分析の相対評価。切り替えてもどちらの表示（スクロール位置・並べ替え）も残す (v.2026.10.17+26101709)
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildModeChips(),
-        Expanded(
-          child: IndexedStack(
-            index: _showEvaluation ? 1 : 0,
-            sizing: StackFit.expand,
-            children: [
-              _buildSimulation(),
-              _evaluationOpened
-                  ? RelativeBattleTab(
-                      horses: widget.predictionRaceData.horses,
-                      raceData: widget.predictionRaceData,
-                    )
-                  : const SizedBox.shrink(),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // [追加] 好走条件・個別成績・相対評価の移動 Step4: 「シミュ／評価」のチップ（馬詳細の「全」ページのチップと同じ見た目） (v.2026.10.17+26101709)
-  Widget _buildModeChips() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-      child: Wrap(
-        spacing: 8,
-        children: [
-          ChoiceChip(
-            label: const Text('シミュ', style: TextStyle(fontSize: 12)),
-            selected: !_showEvaluation,
-            visualDensity: VisualDensity.compact,
-            onSelected: (_) => setState(() => _showEvaluation = false),
-          ),
-          ChoiceChip(
-            label: const Text('評価', style: TextStyle(fontSize: 12)),
-            selected: _showEvaluation,
-            visualDensity: VisualDensity.compact,
-            onSelected: (_) => setState(() {
-              _showEvaluation = true;
-              _evaluationOpened = true;
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // [修正] 好走条件・個別成績・相対評価の移動 Step4: 今までの build の中身（展開シミュの表示）。中身は変えていない (v.2026.10.17+26101709)
-  Widget _buildSimulation() {
-    return FutureBuilder<_CachedSimInputs?>(
+    return FutureBuilder<_GameSimInputs?>(
       future: _inputsFuture,
-      builder: (context, inputsSnapshot) {
-        if (inputsSnapshot.connectionState != ConnectionState.done) {
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
-        final cached = inputsSnapshot.data;
-        if (cached == null) {
+        final inputs = snapshot.data;
+        if (inputs == null) {
           return const Center(child: Text('展開シミュレーションを表示できません'));
         }
-        // [修正] 0-9b-2不具合修正 直前の表示結果(_lastResult)が無い＝真の初回ロード待ちのときのみ
-        // 全画面スピナーにする。ソース切替等の再ビルド中は前回の表示をそのまま保持する (v.2026.7.27+26072706)
-        final result = _lastResult;
-        if (result == null) {
-          return const Center(child: CircularProgressIndicator());
+        final shown = _shown;
+        if (shown == null || _playData == null) {
+          if (_runError != null) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_runError!),
+                  const SizedBox(height: 8),
+                  OutlinedButton(onPressed: _run, child: const Text('もう一度')),
+                ],
+              ),
+            );
+          }
+          return const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 12),
+                Text('$_runs回走らせています…',
+                    style: TextStyle(fontSize: 12, color: Colors.black54)),
+              ],
+            ),
+          );
         }
-        return SingleChildScrollView(
-          // [修正] 0-9b-2不具合修正 State保持のControllerとPageStorageKeyでスクロール位置を維持 (v.2026.7.27+26072706)
-          key: const PageStorageKey('race_simulation_scroll'),
-          controller: _scrollController,
-          padding: const EdgeInsets.all(8.0),
+        final views = <GameSimHorseView>[
+          for (int i = 0; i < inputs.horses.length; i++)
+            GameSimHorseView(
+              horseNumber: inputs.horses[i].horseNumber,
+              gateNumber: _gateOf(inputs, i),
+              horseName: inputs.horses[i].horseName,
+              ability: inputs.abilities[i],
+              staminaIndex: inputs.staminaIndexes[i],
+              summary: shown.summary.horses[i],
+            ),
+        ];
+        return Container(
+          color: const Color(0xFFF1F6EF),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // [追加] 0-9b-2不具合修正 再ビルド中のみ表示する控えめなインライン表示 (v.2026.7.27+26072706)
-              if (_isRebuilding)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 4.0),
-                  child: LinearProgressIndicator(minHeight: 2),
+              _buildSectionChips(),
+              if (_isRunning) const LinearProgressIndicator(minHeight: 2),
+              if (_runError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
+                  child: Text(_runError!,
+                      style: const TextStyle(fontSize: 12, color: Colors.red)),
                 ),
-              RaceSimulationView(
-                diagram: result.diagram,
-                simulationData: result.simulationData,
-                raceDistance: result.raceDistance,
-                approachPaths: result.approachPaths,
-                isLeftHanded: result.isLeftHanded,
-                trackTypeKey: result.trackTypeKey,
-                raceCourse: result.raceCourse,
-                simulationParams: result.simulationParams,
-                horses: result.horses,
-                // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
-                jockeyFactorParams: result.jockeyFactorParams,
-                // [追加] 展開シミュ骨格整理Step7 (v.2026.10.10+26101005)
-                barValues: cached.barValues,
-                predictedPace: result.predictedPace,
-                trackConditionText: result.trackConditionText,
-                cushionValue: result.cushionValue,
-                moistureValue: result.moistureValue,
-                trackBias: result.trackBias,
-                trackConditionDate: result.trackConditionDate,
-                biasSourceLabel: result.biasSourceLabel,
-                // [追加] 0-9b-2 ソース切替の配線 (v.2026.7.27+26072705)
-                selectedSource: _selectedSource,
-                hasActualToday: cached.hasActualToday,
-                onSourceChanged: _onSourceChanged,
-                // [追加] 0-9b-3 ペース手動選択の配線 (v.2026.7.27+26072707)
-                selectedPace: _selectedPace,
-                onPaceChanged: _onPaceChanged,
+              Expanded(
+                child: IndexedStack(
+                  index: _section,
+                  sizing: StackFit.expand,
+                  children: [
+                    _sectionScroll(0, [
+                      _buildPlaybackCard(inputs),
+                      GameSimResultCard(
+                        horses: views,
+                        runs: shown.summary.runs,
+                        timesText: _timesTextOf(shown),
+                        checkpointHeader: GameRaceInputs.checkpointHeaderOf(
+                            inputs.course.corners.length),
+                        cornerCount: inputs.course.corners.length,
+                      ),
+                    ]),
+                    _sectionScroll(1, [_buildConditionCard(inputs, shown)]),
+                    _sectionScroll(2, [GameSimStatusCard(horses: views)]),
+                  ],
+                ),
               ),
             ],
           ),
         );
       },
     );
+  }
+
+  /// 区分の切り替えチップ(画面のいちばん上。スクロールしても残る)
+  Widget _buildSectionChips() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          for (int k = 0; k < _sectionLabels.length; k++)
+            ChoiceChip(
+              label: Text(_sectionLabels[k], style: const TextStyle(fontSize: 12)),
+              selected: _section == k,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) => setState(() => _section = k),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 区分ごとのスクロール(位置は区分ごとに残る)
+  Widget _sectionScroll(int k, List<Widget> children) {
+    return SingleChildScrollView(
+      key: PageStorageKey('race_simulation_scroll_$k'),
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
+  }
+
+  Widget _buildPlaybackCard(_GameSimInputs inputs) {
+    return GameSimCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(_isAltRun ? '別の1回を再生' : '代表の1回を再生',
+                  style:
+                      const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _isAltRun ? '同じ条件で走らせ直した1回' : '全回のうち平均に最も近い回',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 11, color: GameSimColors.subText),
+                ),
+              ),
+            ],
+          ),
+          if (!inputs.gatesConfirmed)
+            const Padding(
+              padding: EdgeInsets.only(top: 4.0),
+              child: Text('枠順の発表前なので、馬番は仮(馬名の順)',
+                  style: TextStyle(fontSize: 11, color: GameSimColors.subText)),
+            ),
+          const SizedBox(height: 6),
+          RaceSimulationView(
+            key: ValueKey('game_sim_play_$_playId'),
+            diagram: inputs.diagram,
+            simulationData: _playData!,
+            raceDistance: inputs.distance.toDouble(),
+            approachPaths: inputs.raceCourse?.approachPath,
+            // コースデータが無いときは右回り扱い(JRAは右回りが多い)
+            isLeftHanded: inputs.raceCourse?.isLeftHanded ?? false,
+            trackTypeKey: inputs.trackTypeKey,
+            raceCourse: inputs.raceCourse,
+            horses: inputs.horses,
+            onSourceChanged: (_) {},
+            onPaceChanged: (_) {},
+            showLegacyPanels: false,
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (_isAltRun)
+                TextButton(
+                  onPressed: _isRunning ? null : _showRepresentative,
+                  child: const Text('代表の回に戻す', style: TextStyle(fontSize: 12)),
+                ),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: GameSimColors.primary,
+                  side: const BorderSide(color: GameSimColors.primary),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: _isRunning ? null : _showAnotherRun,
+                child: const Text('別の回を見る', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _timesTextOf(_ShownResult shown) {
+    final scale = _timeScale ?? 1.0;
+    final s = shown.summary;
+    final parts = <String>[
+      '勝ち時計 ${GameRaceReference.formatTime(s.meanWinnerTime * scale)}',
+      if (s.meanLeader1000 != null)
+        '1000m ${(s.meanLeader1000! * scale).toStringAsFixed(1)}',
+      '上がり ${(s.meanWinnerLast600 * scale).toStringAsFixed(1)}',
+    ];
+    return parts.join(' ・ ');
+  }
+
+  /// [lo]〜[hi] を、[value] ± [_sliderPad] が入るように広げ、0.1秒刻みに丸める
+  (double, double) _rangeOf(double lo, double hi, double value) {
+    final a = lo < value - _sliderPad ? lo : value - _sliderPad;
+    final b = hi > value + _sliderPad ? hi : value + _sliderPad;
+    return ((a * 10).floor() / 10.0, (b * 10).ceil() / 10.0);
+  }
+
+  String _sourceLabelOf(TrackBiasSource source) {
+    switch (source) {
+      case TrackBiasSource.actual:
+        return '実測(当日)';
+      case TrackBiasSource.predicted:
+        return '予測';
+      case TrackBiasSource.trend:
+        return '過去平均';
+    }
+  }
+
+  Widget _buildConditionCard(_GameSimInputs inputs, _ShownResult shown) {
+    final ref = _referenceOf(inputs, _going, _cushion);
+    final scale = _timeScale ?? 1.0;
+    final winner = _winnerSeconds ?? shown.baselineWinnerTime;
+
+    // 走破タイム
+    final double wLo;
+    final double wHi;
+    final String winnerNote;
+    if (ref != null && !ref.isFallback) {
+      wLo = ref.sliderWinnerMin;
+      wHi = ref.sliderWinnerMax;
+      winnerNote = '過去(同じレース名・${ref.races.length}レース): '
+          '最速 ${GameRaceReference.formatTime(ref.winnerMin)} ・ '
+          '平均 ${GameRaceReference.formatTime(ref.winnerMean)} ・ '
+          '最遅 ${GameRaceReference.formatTime(ref.winnerMax)}。'
+          '初期値は馬場状態・クッション値をそろえた平均。';
+    } else if (ref != null) {
+      wLo = ref.sliderWinnerMin;
+      wHi = ref.sliderWinnerMax;
+      winnerNote = '同じレースの過去の時計が足りないので、スピード指数の基準タイム(OP級)を初期値にした。';
+    } else {
+      wLo = shown.baselineWinnerTime - 2.0;
+      wHi = shown.baselineWinnerTime + 2.0;
+      winnerNote = '基準にする時計が無いので、シミュの時計をそのまま初期値にした。';
+    }
+    final (winnerMin, winnerMax) = _rangeOf(wLo, wHi, winner);
+
+    // 1000m通過
+    final leader = shown.summary.meanLeader1000;
+    final double? first1000 =
+        leader == null ? null : (_first1000Target ?? leader * scale);
+    double f1Min = 0.0;
+    double f1Max = 0.0;
+    String first1000Note = '初期値は面子から出たシミュのペース。';
+    if (first1000 != null) {
+      final double lo;
+      final double hi;
+      if (ref != null &&
+          ref.sliderFirst1000Min != null &&
+          ref.sliderFirst1000Max != null) {
+        lo = ref.sliderFirst1000Min!;
+        hi = ref.sliderFirst1000Max!;
+        first1000Note = '過去: 最速 ${ref.first1000Min!.toStringAsFixed(1)} ・ '
+            '平均 ${ref.first1000Mean!.toStringAsFixed(1)} ・ '
+            '最遅 ${ref.first1000Max!.toStringAsFixed(1)}。$first1000Note';
+      } else {
+        lo = first1000 - _first1000FallbackHalf;
+        hi = first1000 + _first1000FallbackHalf;
+      }
+      (f1Min, f1Max) = _rangeOf(lo, hi, first1000);
+    }
+
+    // クッション値
+    double cMin = 0.0;
+    double cMax = 0.0;
+    if (_cushion != null) {
+      (cMin, cMax) = GameRaceInputs.cushionRangeOf(inputs.pastRaces, [
+        _cushion,
+        inputs.actualCushion,
+        inputs.predictedCushion,
+        inputs.trendCushion,
+      ]);
+    }
+    final sourceCushion = inputs.isDirt ? null : _cushionOfSourceOnly(inputs);
+    final cushionLabel = sourceCushion != null && sourceCushion == _cushion
+        ? _sourceLabelOf(_source)
+        : (sourceCushion == null ? '過去レースの平均' : '手で変更');
+
+    // 馬場状態の説明
+    final String goingNote;
+    if (inputs.officialGoing != null) {
+      goingNote = '初期値は当日の発表(${inputs.officialGoing})。';
+    } else if (_moistureOf(inputs, _source) != null) {
+      goingNote = '初期値は${_sourceLabelOf(_source)}の含水率から見込んだ馬場。';
+    } else {
+      goingNote = '馬場のデータが無いので、初期値は良。';
+    }
+
+    return GameSimConditionCard(
+      winnerNote: winnerNote,
+      winnerSeconds: winner,
+      winnerMin: winnerMin,
+      winnerMax: winnerMax,
+      onWinnerChanged: (v) =>
+          setState(() => _winnerSeconds = (v * 10).round() / 10.0),
+      first1000Seconds: first1000,
+      first1000Min: f1Min,
+      first1000Max: f1Max,
+      first1000Note: first1000Note,
+      onFirst1000Changed: (v) =>
+          setState(() => _first1000Target = (v * 10).round() / 10.0),
+      cushion: _cushion,
+      cushionMin: cMin,
+      cushionMax: cMax,
+      cushionSourceLabel: cushionLabel,
+      onCushionChanged: _onCushionChanged,
+      going: _going,
+      goingNote: '$goingNote 重・不良はスタミナの消費が増える(ゲームの値)。',
+      onGoingChanged: _onGoingChanged,
+      source: _source,
+      hasActual: inputs.hasActualToday,
+      hasPredicted: inputs.hasPredicted,
+      hasTrend: inputs.hasTrend,
+      onSourceChanged: _onSourceChanged,
+      runs: _runs,
+      isRunning: _isRunning,
+      isPending: _isPending,
+      onRun: () => _run(showResult: true),
+    );
+  }
+
+  /// 選んでいる馬場のデータそのもののクッション値(過去レースの平均で埋めない)
+  double? _cushionOfSourceOnly(_GameSimInputs inputs) {
+    final double? v;
+    switch (_source) {
+      case TrackBiasSource.actual:
+        v = inputs.actualCushion;
+        break;
+      case TrackBiasSource.predicted:
+        v = inputs.predictedCushion;
+        break;
+      case TrackBiasSource.trend:
+        v = inputs.trendCushion;
+        break;
+    }
+    return GameRaceInputs.validCushion(v);
   }
 }
