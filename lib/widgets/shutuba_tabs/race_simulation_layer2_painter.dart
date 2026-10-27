@@ -1,6 +1,7 @@
 // lib/widgets/shutuba_tabs/race_simulation_layer2_painter.dart
 
 import 'package:flutter/material.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_display.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
@@ -96,6 +97,8 @@ class RaceSimulationLayer2Painter extends CustomPainter {
       viewportSize: size,
       isLeftHanded: isLeftHanded,
       distanceFromGoal: anchorDist,
+      // [追加] 展開シミュゲーム式移植Step4e追補: スタート直後もLayer1と同じ位置に置く (v.2026.10.27+26102708)
+      raceDistance: raceDistance,
     );
 
     // ── Y座標計算 (laneRank直接マッピング・MVPバージョン) ──
@@ -114,7 +117,12 @@ class RaceSimulationLayer2Painter extends CustomPainter {
     final double topY = innerRailY + _markerRadius + 2.0;
     final double bottomY = size.height - _markerRadius - 2.0;
     final double availableHeight = bottomY - topY;
-    final double laneRankRange = maxLaneRank - minLaneRank;
+    // [修正] 展開シミュゲーム式移植Step4e: 縦の位置の基準を、毎回いちばん内の馬から内ラチ(横の位置0)に固定する。
+    // いちばん内の馬が動くたびに全馬の縦の位置が一緒に動いていたため (v.2026.10.27+26102708)
+    final double innerRef = minLaneRank < GameRaceDisplay.laneRankAtRail
+        ? minLaneRank
+        : GameRaceDisplay.laneRankAtRail;
+    final double laneRankRange = maxLaneRank - innerRef;
     // [修正] 改善Phase10 縦も横と同じ縮尺(1レーン=1m)にする。
     // 全馬が収まらない場合に間隔を圧縮するフォールバックは従来どおり残す (v.2026.9.18+26091802)
     // [修正] 改善Phase11 内外方向は実寸のlateralExaggeration倍で描く (v.2026.9.18+26091802)
@@ -138,7 +146,7 @@ class RaceSimulationLayer2Painter extends CustomPainter {
         ..sort((a, b) => b.laneRank.compareTo(a.laneRank));
       for (final frame in sorted) {
         final screenY =
-            topY + (frame.laneRank - minLaneRank) * effectiveSpacingY;
+            topY + (frame.laneRank - innerRef) * effectiveSpacingY;
         _drawHorseMarker(
             canvas, Offset(screenXByHorse[frame.horseNumber]!, screenY), frame);
       }
@@ -154,7 +162,7 @@ class RaceSimulationLayer2Painter extends CustomPainter {
     // (終い瞬発力で広がり量を決めていた)を外し、エンジンが当たり判定済みのレーンだけで描く (v.2026.10.10+26101004)
     for (final frame in sortedForDraw) {
       final screenX = screenXByHorse[frame.horseNumber]!;
-      final laneFromInner = frame.laneRank - minLaneRank;
+      final laneFromInner = frame.laneRank - innerRef;
 
       final screenY = (topY + laneFromInner * effectiveSpacingY)
           .clamp(topY, bottomY);

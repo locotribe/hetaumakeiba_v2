@@ -110,6 +110,9 @@ class GameRaceSimulator {
   /// [追加] 展開シミュゲーム式移植Step4c: 平均の走りで、前後がこの距離(m)より近く横が1頭分未満の2頭は、外の馬を1頭分外へ出す (v.2026.10.27+26102706)
   static const double averageRunGap = 2.0;
 
+  /// [追加] 展開シミュゲーム式移植Step4e: 平均の走りで、横のずらし方を前後この点数ずつ平均してなめらかにする (v.2026.10.27+26102708)
+  static const int averageRunSmooth = 2;
+
   /// [abilities] の馬を [runs] 回走らせてまとめる。1回ごとに当日の出来(揺らぎ)を加える。
   /// 乱数は「1回ごとに 当日の出来 → エンジン」の順に [random] から引く。
   static GameRaceSummary run({
@@ -279,7 +282,10 @@ class GameRaceSimulator {
   /// [追加] 展開シミュゲーム式移植Step4c: 平均の走りを作る。結果の表(全回の平均)と再生の着順をそろえるため。
   /// 馬ごとに、ゴールした回だけで「[averageRunStep] mごとの通過時刻と横の位置」を平均し、
   /// [averageRunInterval] 秒ごとの位置に直す。平均すると横の位置が重なりやすいので、時刻ごとに前の馬から順に置き、
-  /// 前後 [averageRunGap] m未満・横1頭分未満の馬がいれば、その馬の1頭分外へずらす。
+  /// 前後 [averageRunGap] m未満・横1頭分未満の馬がいれば、平均の位置から内外1頭分までずらす。
+  /// [修正] 展開シミュゲーム式移植Step4e: 1頭分ずつ外へ重ねてずらすと、スタート直後などに外ラチ側まで飛んで画面で上下に激しく動いたため、
+  /// ずらし方の候補を「前の時刻と同じ → ずらさない → 1頭分外 → 1頭分内」に限り、どれも空いていなければずらさない(重なってよい)。
+  /// さらにずらし方を前後 [averageRunSmooth] 点ずつ平均してなめらかにする (v.2026.10.27+26102708)
   /// 1回もゴールしなかった馬は、1回目の記録をそのまま使う(ゴールの時刻は null) (v.2026.10.27+26102706)
   static GameRaceRunResult averageRunOf(
     List<GameRaceRunResult> results,
@@ -287,6 +293,7 @@ class GameRaceSimulator {
     double step = averageRunStep,
     double interval = averageRunInterval,
     double gap = averageRunGap,
+    int smooth = averageRunSmooth,
   }) {
     final n = results.first.finishTimes.length;
     final grid = <double>[0.0];
@@ -342,11 +349,14 @@ class GameRaceSimulator {
       pts[i] = row;
     }
 
-    // 重なりをほどく(前の馬から順に置く)
+    // 重なりをほどく(前の馬から順に置き、平均の位置から内外1頭分までずらす)
     int kMax = 0;
     for (final row in pts) {
       if (row != null && row.length > kMax) kMax = row.length;
     }
+    const hl = GameRaceEngine.horseLane;
+    final off = List<double>.filled(n, 0.0);
+    final offs = List<List<double>>.generate(n, (_) => <double>[]);
     for (int k = 0; k < kMax; k++) {
       final live = [
         for (int i = 0; i < n; i++)
@@ -358,22 +368,51 @@ class GameRaceSimulator {
       final placed = <int>[];
       for (final i in live) {
         final d = pts[i]![k][1];
-        double lane = pts[i]![k][2];
-        for (int it = 0; it < n; it++) {
-          int? hit;
+        final own = pts[i]![k][2];
+        final cands = <double>[];
+        for (final o in [off[i], 0.0, hl, -hl]) {
+          if (cands.every((c) => (o - c).abs() > 1e-12)) cands.add(o);
+        }
+        double chosen = 0.0;
+        for (final o in cands) {
+          final lane = own + o;
+          if (lane < 0.0 || lane > GameRaceEngine.maxLane) continue;
+          bool free = true;
           for (final p in placed) {
             if ((d - pts[p]![k][1]).abs() < gap &&
-                (lane - pts[p]![k][2]).abs() < GameRaceEngine.horseLane - 1e-12) {
-              hit = p;
+                (lane - pts[p]![k][2]).abs() < hl - 1e-12) {
+              free = false;
               break;
             }
           }
-          if (hit == null) break;
-          lane = math.min(pts[hit]![k][2] + GameRaceEngine.horseLane,
-              GameRaceEngine.maxLane);
+          if (free) {
+            chosen = o;
+            break;
+          }
         }
-        pts[i]![k][2] = lane;
+        off[i] = chosen;
+        offs[i].add(chosen);
+        pts[i]![k][2] = own + chosen;
         placed.add(i);
+      }
+    }
+    // ずらし方を前後 [smooth] 点ずつ平均してなめらかにする
+    for (int i = 0; i < n; i++) {
+      final row = pts[i];
+      if (row == null) continue;
+      final o = offs[i];
+      final m = o.length;
+      // [修正] 展開シミュゲーム式移植Step4e追補: 0秒(ゲート)の位置はならさない。ならすとゲートの並びがばらけたため (v.2026.10.27+26102708)
+      for (int k = 1; k < m; k++) {
+        final lo = math.max(0, k - smooth);
+        final hi = math.min(m, k + smooth + 1);
+        double sum = 0.0;
+        for (int q = lo; q < hi; q++) {
+          sum += o[q];
+        }
+        final sm = sum / (hi - lo);
+        row[k][2] =
+            (row[k][2] - o[k] + sm).clamp(0.0, GameRaceEngine.maxLane).toDouble();
       }
     }
 

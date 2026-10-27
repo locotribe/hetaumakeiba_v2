@@ -135,6 +135,12 @@ class GameRaceConfig {
   /// [追加] 展開シミュゲーム式移植Step4d: 根性600のときの √(200×根性)×0.001 (v.2026.10.27+26102707)
   static const double minSpeedGutsRef = 0.3464;
 
+  /// [追加] 展開シミュゲーム式移植Step4e追補: 最終コーナーの振り出し先(コース幅の割合)の作り方。
+  /// null はゲームのまま「min(内ラチからの距離/0.1, 1)×0.5 + 乱数(0〜0.1)」で、直線で全馬がコースの真ん中あたりへ動く。
+  /// 値があるときは「min(今の横の位置 × この値 + 乱数(0〜0.1), 1)」で、4コーナーを出たときの内ラチからの距離に比例して扇のように広がる
+  /// (内の馬は内寄りに、外の馬ほど外へ)。着順の相関・脚質のバランスはほとんど変わらない(設計書 8-1 の Step4e) (v.2026.10.27+26102708)
+  final double? finalCornerFan;
+
   const GameRaceConfig({
     required this.paceMult,
     required this.lateAdj,
@@ -148,6 +154,7 @@ class GameRaceConfig {
     this.lanes = true,
     this.slopes = true,
     this.minSpeedGutsScale = 1.0,
+    this.finalCornerFan,
   });
 
   /// 芝の校正値(設計書4章)
@@ -156,6 +163,8 @@ class GameRaceConfig {
     paceMult: 1.03,
     lateAdj: [0.0, 0.0, 0.0, 0.0],
     minSpeedGutsScale: 4.0,
+    // [追加] 展開シミュゲーム式移植Step4e追補: 直線で、内ラチからの距離の3倍へ扇のように広がる (v.2026.10.27+26102708)
+    finalCornerFan: 3.0,
   );
 
   /// ダートの校正値(設計書4章)
@@ -164,6 +173,8 @@ class GameRaceConfig {
     paceMult: 1.08,
     lateAdj: [0.0, 0.0, 0.0, 0.0],
     minSpeedGutsScale: 4.0,
+    // [追加] 展開シミュゲーム式移植Step4e追補: 直線で、内ラチからの距離の3倍へ扇のように広がる (v.2026.10.27+26102708)
+    finalCornerFan: 3.0,
   );
 
   GameRaceConfig copyWith({
@@ -189,6 +200,7 @@ class GameRaceConfig {
       lanes: lanes ?? this.lanes,
       slopes: slopes ?? this.slopes,
       minSpeedGutsScale: minSpeedGutsScale,
+      finalCornerFan: finalCornerFan,
     );
   }
 }
@@ -750,8 +762,12 @@ class GameRaceEngine {
             extraLane[i] == null &&
             started[i] &&
             pos[i] >= course.finalCornerStart) {
-          extraLane[i] = (lane[i] / 0.1).clamp(0.0, 1.0).toDouble() * 0.5 +
-              random.nextDouble() * 0.1;
+          // [修正] 展開シミュゲーム式移植Step4e追補: 扇の広がりを指定したときは、今の横の位置に比例させる(乱数の引き方は変えない) (v.2026.10.27+26102708)
+          final u = random.nextDouble();
+          final fan = config.finalCornerFan;
+          extraLane[i] = fan == null
+              ? (lane[i] / 0.1).clamp(0.0, 1.0).toDouble() * 0.5 + u * 0.1
+              : math.min(lane[i] * fan + u * 0.1, maxLane);
         }
       }
 

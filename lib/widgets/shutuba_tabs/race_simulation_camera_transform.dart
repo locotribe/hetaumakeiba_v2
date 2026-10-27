@@ -47,6 +47,14 @@ class RaceSimulationCameraTransform {
   /// [goalAnchorRatio] へ少しずつ移す(急に画面が動かないように) (v.2026.10.27+26102706)
   static const double goalAnchorBlendMeters = 100.0;
 
+  /// [追加] 展開シミュゲーム式移植Step4e追補: スタートのときに、先頭(ゲート)を画面の横方向のどこに置くかの比率(進行方向側から)。
+  /// ゴールと同じく進行方向側から70%(左回りなら左から30%)に置き、走っていく先を広く見せる (v.2026.10.27+26102708)
+  static const double startAnchorRatio = 0.70;
+
+  /// [追加] 展開シミュゲーム式移植Step4e追補: スタートからこの距離(m)までに、基準の位置を [startAnchorRatio] から
+  /// [leaderAnchorRatio] へ少しずつ移す (v.2026.10.27+26102708)
+  static const double startAnchorBlendMeters = 100.0;
+
   /// [追加] 展開シミュゲーム式移植Step4c: カメラの基準にする「ゴールまでの距離」。先頭がゴールした後はゴール(0)で止める (v.2026.10.27+26102706)
   static double cameraDistanceFor(double leaderDistanceFromGoal) =>
       leaderDistanceFromGoal < 0.0 ? 0.0 : leaderDistanceFromGoal;
@@ -56,12 +64,22 @@ class RaceSimulationCameraTransform {
   /// (v.2026.9.18+26091802)
   /// [修正] 展開シミュゲーム式移植Step4c: [distanceFromGoal](カメラの基準の距離)がゴールの [goalAnchorBlendMeters] m
   /// 手前を切ったら、ゴールで [goalAnchorRatio] になるように比率を移す (v.2026.10.27+26102706)
+  /// [修正] 展開シミュゲーム式移植Step4e追補: [raceDistance] も渡されたときは、スタートから [startAnchorBlendMeters] mまでは
+  /// [startAnchorRatio] から [leaderAnchorRatio] へ比率を移す (v.2026.10.27+26102708)
   static double anchorXFor({
     required Size viewportSize,
     required bool isLeftHanded,
     double? distanceFromGoal,
+    double? raceDistance,
   }) {
     double r = leaderAnchorRatio;
+    if (distanceFromGoal != null && raceDistance != null) {
+      final fromStart = raceDistance - distanceFromGoal;
+      if (fromStart < startAnchorBlendMeters) {
+        final f = (fromStart <= 0.0 ? 0.0 : fromStart) / startAnchorBlendMeters;
+        r = startAnchorRatio + (leaderAnchorRatio - startAnchorRatio) * f;
+      }
+    }
     if (distanceFromGoal != null && distanceFromGoal < goalAnchorBlendMeters) {
       final f = (distanceFromGoal <= 0.0 ? 0.0 : distanceFromGoal) /
           goalAnchorBlendMeters;
@@ -120,6 +138,7 @@ class RaceSimulationCameraTransform {
       viewportSize: viewportSize,
       isLeftHanded: isLeftHanded,
       distanceFromGoal: refDistanceFromGoal,
+      raceDistance: raceDistance,
     );
     final targetRailY = viewportSize.height * _railOffsetRatio;
 
