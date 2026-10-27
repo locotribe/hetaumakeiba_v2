@@ -60,8 +60,12 @@ class GameRaceSummary {
   /// 代表の1回の番号(0始まり)
   final int representativeIndex;
 
-  /// 代表の1回の結果(再生に使う)
+  /// 代表の1回の結果
   final GameRaceRunResult representative;
+
+  /// [追加] 展開シミュゲーム式移植Step4c: 平均の走り(各馬の、距離ごとの通過時刻と横の位置を全回で平均した1回ぶんの記録)。
+  /// 再生の既定に使う (v.2026.10.27+26102706)
+  final GameRaceRunResult averageRun;
 
   const GameRaceSummary({
     required this.runs,
@@ -72,6 +76,7 @@ class GameRaceSummary {
     required this.meanWinnerLast600,
     required this.representativeIndex,
     required this.representative,
+    required this.averageRun,
   });
 
   /// 実時間への倍率。[referenceWinnerSeconds] は基準の勝ち時計(秒)。
@@ -95,6 +100,15 @@ class GameRaceSimulator {
 
   /// [追加] 展開シミュゲーム式移植Step4b: 代表の1回を選ぶとき、表の上位3頭の着順のずれを何倍に数えるか (v.2026.10.27+26102705)
   static const double representativeTopWeight = 4.0;
+
+  /// [追加] 展開シミュゲーム式移植Step4c: 平均の走りを作るときの距離の刻み(m) (v.2026.10.27+26102706)
+  static const double averageRunStep = 10.0;
+
+  /// [追加] 展開シミュゲーム式移植Step4c: 平均の走りの位置を記録する間隔(ゲームの秒) (v.2026.10.27+26102706)
+  static const double averageRunInterval = 1.0;
+
+  /// [追加] 展開シミュゲーム式移植Step4c: 平均の走りで、前後がこの距離(m)より近く横が1頭分未満の2頭は、外の馬を1頭分外へ出す (v.2026.10.27+26102706)
+  static const double averageRunGap = 2.0;
 
   /// [abilities] の馬を [runs] 回走らせてまとめる。1回ごとに当日の出来(揺らぎ)を加える。
   /// 乱数は「1回ごとに 当日の出来 → エンジン」の順に [random] から引く。
@@ -258,7 +272,153 @@ class GameRaceSimulator {
       meanWinnerLast600: last600Count > 0 ? last600Sum / last600Count : 0.0,
       representativeIndex: best,
       representative: results[best],
+      averageRun: averageRunOf(results, distance),
     );
+  }
+
+  /// [追加] 展開シミュゲーム式移植Step4c: 平均の走りを作る。結果の表(全回の平均)と再生の着順をそろえるため。
+  /// 馬ごとに、ゴールした回だけで「[averageRunStep] mごとの通過時刻と横の位置」を平均し、
+  /// [averageRunInterval] 秒ごとの位置に直す。平均すると横の位置が重なりやすいので、時刻ごとに前の馬から順に置き、
+  /// 前後 [averageRunGap] m未満・横1頭分未満の馬がいれば、その馬の1頭分外へずらす。
+  /// 1回もゴールしなかった馬は、1回目の記録をそのまま使う(ゴールの時刻は null) (v.2026.10.27+26102706)
+  static GameRaceRunResult averageRunOf(
+    List<GameRaceRunResult> results,
+    double distance, {
+    double step = averageRunStep,
+    double interval = averageRunInterval,
+    double gap = averageRunGap,
+  }) {
+    final n = results.first.finishTimes.length;
+    final grid = <double>[0.0];
+    for (int j = 1; j * step < distance - 1e-9; j++) {
+      grid.add(j * step);
+    }
+    grid.add(distance);
+
+    // 距離ごとの平均の通過時刻と横の位置
+    final curveT = List<List<double>?>.filled(n, null);
+    final curveL = List<List<double>?>.filled(n, null);
+    for (int i = 0; i < n; i++) {
+      final valid = [
+        for (final r in results)
+          if (r.finishTimes[i] != null) r
+      ];
+      if (valid.isEmpty) continue;
+      final t = List<double>.filled(grid.length, 0.0);
+      final l = List<double>.filled(grid.length, 0.0);
+      for (final r in valid) {
+        final tr = r.traces[i];
+        int k = 1;
+        t[0] += tr[0].time;
+        l[0] += tr[0].lane;
+        for (int j = 1; j < grid.length; j++) {
+          final x = grid[j];
+          while (!(tr[k - 1].distance < x && x <= tr[k].distance)) {
+            k++;
+          }
+          final a = tr[k - 1];
+          final b = tr[k];
+          final f = (x - a.distance) / (b.distance - a.distance);
+          t[j] += a.time + f * (b.time - a.time);
+          l[j] += a.lane + f * (b.lane - a.lane);
+        }
+      }
+      final m = valid.length.toDouble();
+      curveT[i] = [for (final x in t) x / m];
+      curveL[i] = [for (final x in l) x / m];
+    }
+
+    // 一定の間隔の時刻で、距離と横の位置を出す
+    final pts = List<List<List<double>>?>.filled(n, null);
+    for (int i = 0; i < n; i++) {
+      final t = curveT[i];
+      final l = curveL[i];
+      if (t == null || l == null) continue;
+      final row = <List<double>>[];
+      for (int k = 0; k * interval < t.last - 1e-9; k++) {
+        final time = k * interval;
+        row.add([time, _interp(t, grid, time), _interp(t, l, time)]);
+      }
+      pts[i] = row;
+    }
+
+    // 重なりをほどく(前の馬から順に置く)
+    int kMax = 0;
+    for (final row in pts) {
+      if (row != null && row.length > kMax) kMax = row.length;
+    }
+    for (int k = 0; k < kMax; k++) {
+      final live = [
+        for (int i = 0; i < n; i++)
+          if (pts[i] != null && k < pts[i]!.length) i
+      ]..sort((a, b) {
+          final c = pts[b]![k][1].compareTo(pts[a]![k][1]);
+          return c != 0 ? c : a.compareTo(b);
+        });
+      final placed = <int>[];
+      for (final i in live) {
+        final d = pts[i]![k][1];
+        double lane = pts[i]![k][2];
+        for (int it = 0; it < n; it++) {
+          int? hit;
+          for (final p in placed) {
+            if ((d - pts[p]![k][1]).abs() < gap &&
+                (lane - pts[p]![k][2]).abs() < GameRaceEngine.horseLane - 1e-12) {
+              hit = p;
+              break;
+            }
+          }
+          if (hit == null) break;
+          lane = math.min(pts[hit]![k][2] + GameRaceEngine.horseLane,
+              GameRaceEngine.maxLane);
+        }
+        pts[i]![k][2] = lane;
+        placed.add(i);
+      }
+    }
+
+    final finish = <double?>[];
+    final t1000 = <double?>[];
+    final t600 = <double?>[];
+    final traces = <List<GameRacePoint>>[];
+    for (int i = 0; i < n; i++) {
+      final t = curveT[i];
+      final l = curveL[i];
+      if (t == null || l == null) {
+        finish.add(null);
+        t1000.add(null);
+        t600.add(null);
+        traces.add(results.first.traces[i]);
+        continue;
+      }
+      finish.add(t.last);
+      t1000.add(distance >= 1000.0 ? _interp(grid, t, 1000.0) : null);
+      t600.add(distance >= 600.0 ? _interp(grid, t, distance - 600.0) : null);
+      final tr = <GameRacePoint>[
+        for (final p in pts[i]!) GameRacePoint(p[0], p[1], p[2])
+      ];
+      final lastLane = tr.isNotEmpty ? tr.last.lane : l.last;
+      tr.add(GameRacePoint(t.last, distance, lastLane));
+      traces.add(tr);
+    }
+    return GameRaceRunResult(
+      finishTimes: finish,
+      time1000: t1000,
+      time600: t600,
+      traces: traces,
+    );
+  }
+
+  /// [xs](増える並び)で [x] を挟む区間の線形補間。端の外は端の値
+  static double _interp(List<double> xs, List<double> ys, double x) {
+    if (x <= xs.first) return ys.first;
+    for (int j = 1; j < xs.length; j++) {
+      if (x <= xs[j]) {
+        final f = (x - xs[j - 1]) / (xs[j] - xs[j - 1]);
+        return ys[j - 1] + f * (ys[j] - ys[j - 1]);
+      }
+    }
+    return ys.last;
   }
 
   /// [run] を別スレッド(Isolate)で行う。画面を止めないためにアプリからはこちらを使う。

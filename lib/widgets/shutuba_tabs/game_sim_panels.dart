@@ -109,7 +109,130 @@ class _CardTitle extends StatelessWidget {
   }
 }
 
-/// ① 100回走らせた結果(勝率・複勝率・平均の通過順)
+/// [追加] 展開シミュゲーム式移植Step4c: 再生している1回の結果(着順・通過順・時計)。「別の回を見る」で再生と一緒に入れ替わる (v.2026.10.27+26102706)
+class GameSimRunResultCard extends StatelessWidget {
+  /// 入力の馬の順([GameRunRow.index] で引く)
+  final List<GameSimHorseView> horses;
+
+  /// 着順の順の行
+  final List<GameRunRow> rows;
+
+  /// 見出しの右の補足(「平均の走り」など)
+  final String note;
+
+  /// 表の下の説明。無ければ出さない
+  final String? footnote;
+  final String checkpointHeader;
+  final int cornerCount;
+
+  const GameSimRunResultCard({
+    super.key,
+    required this.horses,
+    required this.rows,
+    required this.note,
+    this.footnote,
+    required this.checkpointHeader,
+    required this.cornerCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const head = TextStyle(fontSize: 11, color: GameSimColors.subText);
+    final winner = rows.isEmpty ? null : rows.first.finishSeconds;
+    return GameSimCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _CardTitle('この再生の結果', note),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2.0),
+            child: Row(
+              children: [
+                const SizedBox(width: 24, child: Text('着', style: head)),
+                const SizedBox(width: 30, child: Text('#', style: head)),
+                const Expanded(child: Text('馬名', style: head)),
+                SizedBox(
+                    width: 64,
+                    child: Text(checkpointHeader,
+                        style: head, textAlign: TextAlign.right)),
+                const SizedBox(
+                    width: 52,
+                    child: Text('時計', style: head, textAlign: TextAlign.right)),
+              ],
+            ),
+          ),
+          for (final r in rows) _row(r, winner),
+          if (footnote != null) ...[
+            const SizedBox(height: 6),
+            Text(footnote!,
+                style: const TextStyle(fontSize: 11, color: GameSimColors.subText)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _row(GameRunRow r, double? winner) {
+    final h = horses[r.index];
+    const num = TextStyle(
+        fontSize: 13, fontFeatures: [FontFeature.tabularFigures()]);
+    final f = r.finishSeconds;
+    final String time;
+    if (f == null) {
+      time = '-';
+    } else if (r.rank == 1 || winner == null) {
+      time = GameRaceReference.formatTime(f);
+    } else {
+      time = '+${(f - winner).toStringAsFixed(1)}';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 5.0, horizontal: 2.0),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: GameSimColors.rowLine)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 24,
+            child: Text('${r.rank}',
+                style: num.copyWith(fontWeight: FontWeight.bold)),
+          ),
+          SizedBox(
+            width: 30,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: HorseNumberBadge(
+                  horseNumber: h.horseNumber,
+                  gateNumber: h.gateNumber,
+                  size: 22),
+            ),
+          ),
+          Expanded(
+            child: Text(h.horseName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          ),
+          SizedBox(
+            width: 64,
+            child: Text(
+              GameRaceInputs.checkpointTextOf(r.checkpointRanks, cornerCount),
+              textAlign: TextAlign.right,
+              style: num.copyWith(fontSize: 12, color: GameSimColors.subText),
+            ),
+          ),
+          SizedBox(
+            width: 52,
+            child: Text(time, textAlign: TextAlign.right, style: num),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ① シミュレーションの結果(全回の勝率・複勝率・平均の通過順)
 class GameSimResultCard extends StatelessWidget {
   final List<GameSimHorseView> horses;
   final int runs;
@@ -141,7 +264,8 @@ class GameSimResultCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _CardTitle('$runs回走らせた結果'),
+          // [修正] 展開シミュゲーム式移植Step4c: 見出しに回数と「走らせた」を使わない (v.2026.10.27+26102706)
+          const _CardTitle('シミュレーションの結果', '全回の平均'),
           const SizedBox(height: 2),
           Text(timesText,
               style: const TextStyle(
@@ -171,9 +295,9 @@ class GameSimResultCard extends StatelessWidget {
           ),
           for (final h in rows) _row(h),
           const SizedBox(height: 6),
-          const Text(
-            '勝率・複勝率は、走らせたままの割合を実際の結果に合わせて補正した値。通過順は全回の平均。',
-            style: TextStyle(fontSize: 11, color: GameSimColors.subText),
+          Text(
+            '勝率・複勝率は、$runs回のシミュレーションの割合を実際の結果に合わせて補正した値。通過順は全回の平均。',
+            style: const TextStyle(fontSize: 11, color: GameSimColors.subText),
           ),
         ],
       ),
@@ -375,7 +499,7 @@ class _PillButton extends StatelessWidget {
   }
 }
 
-/// ② 条件を動かす(走破タイム・1000m通過・クッション値のスライダー、馬場状態、馬場のデータ、走らせるボタン)
+/// ② 条件を動かす(走破タイム・1000m通過・クッション値のスライダー、馬場状態、馬場のデータ、シミュレーションのボタン)
 class GameSimConditionCard extends StatelessWidget {
   /// 過去レースの説明(「過去(同じレース名・10レース): 最速 … 」)
   final String winnerNote;
@@ -409,10 +533,9 @@ class GameSimConditionCard extends StatelessWidget {
   final bool hasTrend;
   final ValueChanged<TrackBiasSource> onSourceChanged;
 
-  final int runs;
   final bool isRunning;
 
-  /// 走らせ直しが必要な変更があるか(ボタンを押せるか)
+  /// シミュレーションし直しが必要な変更があるか(ボタンを押せるか)
   final bool isPending;
   final VoidCallback onRun;
 
@@ -441,7 +564,6 @@ class GameSimConditionCard extends StatelessWidget {
     required this.hasPredicted,
     required this.hasTrend,
     required this.onSourceChanged,
-    required this.runs,
     required this.isRunning,
     required this.isPending,
     required this.onRun,
@@ -511,7 +633,7 @@ class GameSimConditionCard extends StatelessWidget {
               middleText: 'スロー ← ミドル → ハイ',
               maxText: first1000Max.toStringAsFixed(1),
               note:
-                  '$first1000Note 速くすると前の馬がバテやすくなり、展開と着順が変わる(走らせ直すと反映)。',
+                  '$first1000Note 速くすると前の馬がバテやすくなり、展開と着順が変わる(シミュレーションし直すと反映)。',
               onChanged: isRunning ? null : onFirst1000Changed,
               reversed: true,
             ),
@@ -577,21 +699,22 @@ class GameSimConditionCard extends StatelessWidget {
                               strokeWidth: 2, color: Colors.white),
                         ),
                         SizedBox(width: 10),
-                        Text('走らせています…',
+                        // [修正] 展開シミュゲーム式移植Step4c: ボタンを押した後の表示を「計算しています…」にし、ボタンの文字に回数を使わない (v.2026.10.27+26102706)
+                        Text('計算しています…',
                             style: TextStyle(
                                 fontSize: 15, fontWeight: FontWeight.bold)),
                       ],
                     )
-                  : Text('この条件で$runs回走らせる',
-                      style: const TextStyle(
+                  : const Text('この条件でシミュレーションする',
+                      style: TextStyle(
                           fontSize: 15, fontWeight: FontWeight.bold)),
             ),
           ),
           const SizedBox(height: 6),
           Text(
             isPending
-                ? '1000m通過・馬場状態の変更は、走らせ直すと結果と再生に反映される。'
-                : '今の結果はこの条件で走らせたもの。',
+                ? '1000m通過・馬場状態の変更は、シミュレーションし直すと結果と再生に反映される。'
+                : '今の結果はこの条件でシミュレーションしたもの。',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 11, color: GameSimColors.subText),
           ),

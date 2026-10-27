@@ -514,11 +514,11 @@ class GameRaceEngine {
       forceIn.add(random.nextDouble() * 0.1 + forceInStyle[sd[i]]);
     }
 
-    // ゲートの位置(内から馬の順)。10番目以降・14番目以降は外へずらす
+    // [修正] 展開シミュゲーム式移植Step4c: ゲートは内から馬の順に1頭分ずつ均等に並べる。
+    // ゲームの外枠の補正(10番目以降+0.6頭分・14番目以降+1.86頭分)は、再生でゲートの並びに隙間ができるため使わない (v.2026.10.27+26102706)
     var lane = <double>[];
     for (int i = 0; i < n; i++) {
-      final adj = i + 1 >= 14 ? 1.86 : (i + 1 >= 10 ? 0.6 : 0.0);
-      lane.add((i + adj) * hl);
+      lane.add(i * hl);
     }
 
     final pos = List<double>.filled(n, 0.0);

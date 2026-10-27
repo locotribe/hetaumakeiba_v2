@@ -35,7 +35,7 @@ import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/game_sim_panels.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_view.dart';
 
-/// 「展開シミュ」タブ：ゲーム式エンジンで多数回走らせ、勝率・複勝率と代表の1回の再生を出す。
+/// 「展開シミュ」タブ：ゲーム式エンジンで多数回走らせ、勝率・複勝率と平均の走りの再生を出す。
 class RaceSimulationTabWidget extends StatefulWidget {
   final PredictionRaceData predictionRaceData;
   final List<PredictionHorseDetail> horses;
@@ -125,11 +125,16 @@ class _ShownResult {
   /// 同じ馬場状態で、既定のペースで走らせたときの勝ち時計の平均(ゲームの単位)。時計の換算の基準
   final double baselineWinnerTime;
 
+  /// [追加] 展開シミュゲーム式移植Step4c: 同じ馬場状態で、既定のペースで走らせたときの先頭の1000m通過の平均(ゲームの単位)。
+  /// 過去の1000m通過が無いときのスライダーの範囲の基準 (v.2026.10.27+26102706)
+  final double? baselineLeader1000;
+
   const _ShownResult({
     required this.summary,
     required this.paceMult,
     required this.going,
     required this.baselineWinnerTime,
+    required this.baselineLeader1000,
   });
 }
 
@@ -145,7 +150,7 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
   /// 走らせる回数
   static const int _runs = GameRaceSimulator.defaultRuns;
 
-  /// スライダーの範囲を、今の値から最低でもこの秒数は外へ取る
+  /// スライダーの範囲を、初期値から最低でもこの秒数は外へ取る
   static const double _sliderPad = 0.5;
 
   /// 1000m通過からペース倍率を求めるときの補正の強さ(通過の比のこの乗数)。
@@ -172,6 +177,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
 
   /// 再生に出している1回
   RaceSimulationData? _playData;
+
+  /// [追加] 展開シミュゲーム式移植Step4c: 再生に出している1回の記録(「この再生の結果」の表に使う) (v.2026.10.27+26102706)
+  GameRaceRunResult? _playRun;
   int _playId = 0;
   int _altCount = 0;
   bool _isAltRun = false;
@@ -355,15 +363,18 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       GameRaceSummary summary;
       double paceMult;
       double baselineWinner;
+      double? baselineLeader;
       if (shown == null || shown.going != going) {
         summary =
             await _simulate(inputs, base.copyWith(groundHp: groundHp), _seed, _runs);
         paceMult = base.paceMult;
         baselineWinner = summary.meanWinnerTime;
+        baselineLeader = summary.meanLeader1000;
       } else {
         summary = shown.summary;
         paceMult = shown.paceMult;
         baselineWinner = shown.baselineWinnerTime;
+        baselineLeader = shown.baselineLeader1000;
       }
       if (!mounted) return;
       final winnerSeconds = _winnerSeconds ?? baselineWinner;
@@ -386,25 +397,27 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
           paceMult: paceMult,
           going: going,
           baselineWinnerTime: baselineWinner,
+          baselineLeader1000: baselineLeader,
         );
         _winnerSeconds ??= (baselineWinner * 10).round() / 10.0;
         if (_first1000Target == target) _first1000Target = null;
         _isRunning = false;
         _isAltRun = false;
         if (showResult) _section = 0;
-        _setPlayback(inputs, summary.representative);
+        // [修正] 展開シミュゲーム式移植Step4c: 再生の既定を、代表の1回から平均の走りに替えた (v.2026.10.27+26102706)
+        _setPlayback(inputs, summary.averageRun);
       });
     } catch (e) {
       debugPrint('展開シミュ: 走らせるのに失敗: $e');
       if (!mounted) return;
       setState(() {
         _isRunning = false;
-        _runError = '走らせるのに失敗しました';
+        _runError = 'シミュレーションに失敗しました';
       });
     }
   }
 
-  /// 同じ条件で1回だけ走らせ、再生をその回に替える(結果の表はそのまま)
+  /// 同じ条件で1回だけ走らせ、再生と「この再生の結果」の表をその回に替える(全回の結果の表はそのまま)
   Future<void> _showAnotherRun() async {
     final inputs = _inputs;
     final shown = _shown;
@@ -434,13 +447,14 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     }
   }
 
-  void _showRepresentative() {
+  // [修正] 展開シミュゲーム式移植Step4c: 戻す先を代表の1回から平均の走りに替えた (v.2026.10.27+26102706)
+  void _showAverage() {
     final inputs = _inputs;
     final shown = _shown;
     if (inputs == null || shown == null) return;
     setState(() {
       _isAltRun = false;
-      _setPlayback(inputs, shown.summary.representative);
+      _setPlayback(inputs, shown.summary.averageRun);
     });
   }
 
@@ -470,6 +484,7 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       developmentTexts: const {},
       totalTime: GameRaceDisplay.totalTimeOf(points),
     );
+    _playRun = run;
     _playId++;
   }
 
@@ -751,7 +766,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       future: _inputsFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
+          // [修正] 展開シミュゲーム式移植Step4c: 読み込み中も文字を出す (v.2026.10.27+26102706)
+          return _buildLoading();
         }
         final inputs = snapshot.data;
         if (inputs == null) {
@@ -771,18 +787,10 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
               ),
             );
           }
-          return const Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 12),
-                Text('$_runs回走らせています…',
-                    style: TextStyle(fontSize: 12, color: Colors.black54)),
-              ],
-            ),
-          );
+          return _buildLoading();
         }
+        final scale = _timeScale ?? 1.0;
+        final playRun = _playRun;
         final views = <GameSimHorseView>[
           for (int i = 0; i < inputs.horses.length; i++)
             GameSimHorseView(
@@ -814,6 +822,23 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
                   children: [
                     _sectionScroll(0, [
                       _buildPlaybackCard(inputs),
+                      // [追加] 展開シミュゲーム式移植Step4c: 再生している1回の着順の表。「別の回を見る」で一緒に入れ替わる (v.2026.10.27+26102706)
+                      if (playRun != null)
+                        GameSimRunResultCard(
+                          horses: views,
+                          rows: GameRaceDisplay.runRowsOf(
+                            playRun,
+                            checkpoints: shown.summary.checkpoints,
+                            timeScale: scale,
+                          ),
+                          note: _isAltRun ? '別の1回' : '平均の走り',
+                          footnote: _isAltRun
+                              ? null
+                              : '時計は各馬の全回の平均。下の「勝ち時計」は勝った馬の時計の平均なので、少し速い。',
+                          checkpointHeader: GameRaceInputs.checkpointHeaderOf(
+                              inputs.course.corners.length),
+                          cornerCount: inputs.course.corners.length,
+                        ),
                       GameSimResultCard(
                         horses: views,
                         runs: shown.summary.runs,
@@ -832,6 +857,21 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
           ),
         );
       },
+    );
+  }
+
+  /// [追加] 展開シミュゲーム式移植Step4c: 読み込み中とシミュレーション中(結果がまだ無いとき)の表示 (v.2026.10.27+26102706)
+  Widget _buildLoading() {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 12),
+          Text('展開をシミュレーションしています…',
+              style: TextStyle(fontSize: 12, color: Colors.black54)),
+        ],
+      ),
     );
   }
 
@@ -874,13 +914,13 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(_isAltRun ? '別の1回を再生' : '代表の1回を再生',
+              Text(_isAltRun ? '別の1回を再生' : '平均の走りを再生',
                   style:
                       const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  _isAltRun ? '同じ条件で走らせ直した1回' : '全回のうち平均に最も近い回',
+                  _isAltRun ? '同じ条件でシミュレーションし直した1回' : '各馬の全回の平均の走り',
                   textAlign: TextAlign.right,
                   style: const TextStyle(fontSize: 11, color: GameSimColors.subText),
                 ),
@@ -914,8 +954,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
             children: [
               if (_isAltRun)
                 TextButton(
-                  onPressed: _isRunning ? null : _showRepresentative,
-                  child: const Text('代表の回に戻す', style: TextStyle(fontSize: 12)),
+                  onPressed: _isRunning ? null : _showAverage,
+                  child: const Text('平均の走りに戻す', style: TextStyle(fontSize: 12)),
                 ),
               OutlinedButton(
                 style: OutlinedButton.styleFrom(
@@ -947,10 +987,12 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     return parts.join(' ・ ');
   }
 
-  /// [lo]〜[hi] を、[value] ± [_sliderPad] が入るように広げ、0.1秒刻みに丸める
-  (double, double) _rangeOf(double lo, double hi, double value) {
-    final a = lo < value - _sliderPad ? lo : value - _sliderPad;
-    final b = hi > value + _sliderPad ? hi : value + _sliderPad;
+  // [修正] 展開シミュゲーム式移植Step4c: スライダーの範囲を、動かしている今の値ではなく初期値から作る。
+  // 今の値から作っていたため、端まで動かすたびに範囲が広がっていた (v.2026.10.27+26102706)
+  /// [lo]〜[hi] を、初期値 [initial] ± [_sliderPad] が入るように広げ、0.1秒刻みに丸める
+  (double, double) _rangeOf(double lo, double hi, double initial) {
+    final a = lo < initial - _sliderPad ? lo : initial - _sliderPad;
+    final b = hi > initial + _sliderPad ? hi : initial + _sliderPad;
     return ((a * 10).floor() / 10.0, (b * 10).ceil() / 10.0);
   }
 
@@ -969,6 +1011,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     final ref = _referenceOf(inputs, _going, _cushion);
     final scale = _timeScale ?? 1.0;
     final winner = _winnerSeconds ?? shown.baselineWinnerTime;
+    // 走破タイムの初期値(今の馬場状態・クッション値)。範囲はこの値と過去レースから作り、動かしても変わらない
+    final winnerInitial =
+        _defaultWinnerOf(inputs, _going, _cushion) ?? shown.baselineWinnerTime;
 
     // 走破タイム
     final double wLo;
@@ -991,16 +1036,21 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       wHi = shown.baselineWinnerTime + 2.0;
       winnerNote = '基準にする時計が無いので、シミュの時計をそのまま初期値にした。';
     }
-    final (winnerMin, winnerMax) = _rangeOf(wLo, wHi, winner);
+    final (winnerMin, winnerMax) = _rangeOf(wLo, wHi, winnerInitial);
 
     // 1000m通過
     final leader = shown.summary.meanLeader1000;
     final double? first1000 =
         leader == null ? null : (_first1000Target ?? leader * scale);
+    // 1000m通過の初期値(既定のペースで走らせたときの通過を、走破タイムの初期値で換算した値)
+    final baseLeader = shown.baselineLeader1000;
+    final double? first1000Initial = baseLeader == null
+        ? first1000
+        : baseLeader * winnerInitial / shown.baselineWinnerTime;
     double f1Min = 0.0;
     double f1Max = 0.0;
     String first1000Note = '初期値は面子から出たシミュのペース。';
-    if (first1000 != null) {
+    if (first1000 != null && first1000Initial != null) {
       final double lo;
       final double hi;
       if (ref != null &&
@@ -1012,10 +1062,10 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
             '平均 ${ref.first1000Mean!.toStringAsFixed(1)} ・ '
             '最遅 ${ref.first1000Max!.toStringAsFixed(1)}。$first1000Note';
       } else {
-        lo = first1000 - _first1000FallbackHalf;
-        hi = first1000 + _first1000FallbackHalf;
+        lo = first1000Initial - _first1000FallbackHalf;
+        hi = first1000Initial + _first1000FallbackHalf;
       }
-      (f1Min, f1Max) = _rangeOf(lo, hi, first1000);
+      (f1Min, f1Max) = _rangeOf(lo, hi, first1000Initial);
     }
 
     // クッション値
@@ -1029,10 +1079,18 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         inputs.trendCushion,
       ]);
     }
+    // [修正] 展開シミュゲーム式移植Step4c: 馬場状態のボタンで入れた値のときは「良のよくある値」などと出す (v.2026.10.27+26102706)
     final sourceCushion = inputs.isDirt ? null : _cushionOfSourceOnly(inputs);
-    final cushionLabel = sourceCushion != null && sourceCushion == _cushion
-        ? _sourceLabelOf(_source)
-        : (sourceCushion == null ? '過去レースの平均' : '手で変更');
+    final String cushionLabel;
+    if (sourceCushion != null && sourceCushion == _cushion) {
+      cushionLabel = _sourceLabelOf(_source);
+    } else if (GameRaceInputs.typicalCushion[_going] == _cushion) {
+      cushionLabel = '$_goingのよくある値';
+    } else if (sourceCushion == null && _cushionOf(inputs, _source) == _cushion) {
+      cushionLabel = '過去レースの平均';
+    } else {
+      cushionLabel = '手で変更';
+    }
 
     // 馬場状態の説明
     final String goingNote;
@@ -1046,12 +1104,13 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
 
     return GameSimConditionCard(
       winnerNote: winnerNote,
-      winnerSeconds: winner,
+      // [修正] 展開シミュゲーム式移植Step4c: 値はスライダーの範囲の中に収めて出す (v.2026.10.27+26102706)
+      winnerSeconds: winner.clamp(winnerMin, winnerMax).toDouble(),
       winnerMin: winnerMin,
       winnerMax: winnerMax,
       onWinnerChanged: (v) =>
           setState(() => _winnerSeconds = (v * 10).round() / 10.0),
-      first1000Seconds: first1000,
+      first1000Seconds: first1000?.clamp(f1Min, f1Max).toDouble(),
       first1000Min: f1Min,
       first1000Max: f1Max,
       first1000Note: first1000Note,
@@ -1070,7 +1129,6 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       hasPredicted: inputs.hasPredicted,
       hasTrend: inputs.hasTrend,
       onSourceChanged: _onSourceChanged,
-      runs: _runs,
       isRunning: _isRunning,
       isPending: _isPending,
       onRun: () => _run(showResult: true),

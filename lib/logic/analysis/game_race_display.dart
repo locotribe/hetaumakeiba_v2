@@ -3,6 +3,7 @@
 // 設計は memory/展開シミュ_ゲーム式移植_設計書.md の7章 (v.2026.10.27+26102704)
 
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_engine.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_simulator.dart';
 
 /// 再生用の1点(実時間の秒・ゴールまでの距離 m・横の位置)。
 /// 横の位置は今の再生と同じ「laneRank」(1 ≒ 1m。内ラチは約 -9.5)。
@@ -14,8 +15,60 @@ class GameRaceTrackPoint {
   const GameRaceTrackPoint(this.time, this.distanceFromGoal, this.laneRank);
 }
 
+/// [追加] 展開シミュゲーム式移植Step4c: 再生している1回の結果の表の1行(着順の順に並べる) (v.2026.10.27+26102706)
+class GameRunRow {
+  /// 馬の番号(入力の馬の順。0始まり)
+  final int index;
+
+  /// 着順(1始まり)
+  final int rank;
+
+  /// 走破時計(実時間の秒)。ゴールしなかった馬は null
+  final double? finishSeconds;
+
+  /// 通過点ごとの順位(通過点は [GameRaceSummary.checkpoints] の順)
+  final List<double> checkpointRanks;
+
+  const GameRunRow({
+    required this.index,
+    required this.rank,
+    required this.finishSeconds,
+    required this.checkpointRanks,
+  });
+}
+
 class GameRaceDisplay {
   GameRaceDisplay._();
+
+  /// [追加] 展開シミュゲーム式移植Step4c: 1回ぶんの結果を、着順の順の表の行にする。[timeScale] はゲームの時間から実時間への倍率 (v.2026.10.27+26102706)
+  static List<GameRunRow> runRowsOf(
+    GameRaceRunResult run, {
+    required List<double> checkpoints,
+    required double timeScale,
+  }) {
+    final n = run.finishTimes.length;
+    final ranks = GameRaceSimulator.rankOrder(run.finishTimes);
+    final cpRanks = [
+      for (final cp in checkpoints)
+        GameRaceSimulator.rankOrder([
+          for (final tr in run.traces) GameRaceSimulator.crossingTime(tr, cp)
+        ])
+    ];
+    final rows = <GameRunRow>[
+      for (int i = 0; i < n; i++)
+        GameRunRow(
+          index: i,
+          rank: ranks[i],
+          finishSeconds: run.finishTimes[i] == null
+              ? null
+              : run.finishTimes[i]! * timeScale,
+          checkpointRanks: [
+            for (final cr in cpRanks) cr[i].toDouble(),
+          ],
+        )
+    ]..sort((a, b) => a.rank.compareTo(b.rank));
+    return rows;
+  }
 
   /// 内ラチにぴったり付いた馬(横の位置0)の laneRank。今の再生の内ラチ(約 -9.5)から馬の半分(約0.5m)外
   static const double laneRankAtRail = -9.0;

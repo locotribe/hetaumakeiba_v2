@@ -39,14 +39,35 @@ class RaceSimulationCameraTransform {
   /// Layer2も同じ値を参照して描画基準を揃える (v.2026.9.18+26091802)
   static const double leaderAnchorRatio = 0.35;
 
+  /// [追加] 展開シミュゲーム式移植Step4c: 先頭がゴールしたときに、ゴールを画面の横方向のどこで止めるかの比率(進行方向側から)。
+  /// 進行方向側から70%(左回りなら左から30%)で止め、ゴールを通過した馬が前の広い所へ流れていくのを見せる (v.2026.10.27+26102706)
+  static const double goalAnchorRatio = 0.70;
+
+  /// [追加] 展開シミュゲーム式移植Step4c: 先頭がゴールのこの距離(m)手前から、基準の位置を [leaderAnchorRatio] から
+  /// [goalAnchorRatio] へ少しずつ移す(急に画面が動かないように) (v.2026.10.27+26102706)
+  static const double goalAnchorBlendMeters = 100.0;
+
+  /// [追加] 展開シミュゲーム式移植Step4c: カメラの基準にする「ゴールまでの距離」。先頭がゴールした後はゴール(0)で止める (v.2026.10.27+26102706)
+  static double cameraDistanceFor(double leaderDistanceFromGoal) =>
+      leaderDistanceFromGoal < 0.0 ? 0.0 : leaderDistanceFromGoal;
+
   /// [追加] 改善Phase12 先頭馬を固定する画面X座標を返す。
   /// 右回りは進行方向が画面左なので左から35%、左回りは右から35%(=左から65%)に置く
   /// (v.2026.9.18+26091802)
+  /// [修正] 展開シミュゲーム式移植Step4c: [distanceFromGoal](カメラの基準の距離)がゴールの [goalAnchorBlendMeters] m
+  /// 手前を切ったら、ゴールで [goalAnchorRatio] になるように比率を移す (v.2026.10.27+26102706)
   static double anchorXFor({
     required Size viewportSize,
     required bool isLeftHanded,
+    double? distanceFromGoal,
   }) {
-    final ratio = isLeftHanded ? (1.0 - leaderAnchorRatio) : leaderAnchorRatio;
+    double r = leaderAnchorRatio;
+    if (distanceFromGoal != null && distanceFromGoal < goalAnchorBlendMeters) {
+      final f = (distanceFromGoal <= 0.0 ? 0.0 : distanceFromGoal) /
+          goalAnchorBlendMeters;
+      r = goalAnchorRatio + (leaderAnchorRatio - goalAnchorRatio) * f;
+    }
+    final ratio = isLeftHanded ? (1.0 - r) : r;
     return viewportSize.width * ratio;
   }
 
@@ -98,6 +119,7 @@ class RaceSimulationCameraTransform {
     final anchorX = anchorXFor(
       viewportSize: viewportSize,
       isLeftHanded: isLeftHanded,
+      distanceFromGoal: refDistanceFromGoal,
     );
     final targetRailY = viewportSize.height * _railOffsetRatio;
 

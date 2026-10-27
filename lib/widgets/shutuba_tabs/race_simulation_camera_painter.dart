@@ -124,15 +124,18 @@ class RaceSimulationCameraPainter extends CustomPainter {
     // refPosは、basePosition(生のedgePoints補間値)ではなく、位置のジグザグ
     // ノイズを平滑化した座標を使う(ミニマップ側のleader.basePositionは
     // そのまま=従来通り)。これにより画面全体の水平方向の微振動を抑える。
+    // [修正] 展開シミュゲーム式移植Step4c: 先頭がゴールした後はカメラをゴールで止め、後ろの馬がゴールを通過するのを見せる (v.2026.10.27+26102706)
+    final cameraDist =
+        RaceSimulationCameraTransform.cameraDistanceFor(leader.distanceFromGoal);
     final refPos = coords.smoothedPositionForRaceDistance(
-      leader.distanceFromGoal,
+      cameraDist,
       raceDistance: raceDistance,
       approach: approach,
     );
 
     final transform = RaceSimulationCameraTransform.compute(
       refPos: refPos,
-      refDistanceFromGoal: leader.distanceFromGoal,
+      refDistanceFromGoal: cameraDist,
       viewportSize: size,
       isLeftHanded: isLeftHanded,
       coords: coords,

@@ -90,10 +90,12 @@ class RaceSimulationLayer2Painter extends CustomPainter {
     // [修正] 改善Phase12 Layer1(コース・ゴール線)は先頭馬を基準に描いているのに対し、
     // Layer2は馬群の中心を基準にしていたため、馬群の広がりの半分だけマーカーが
     // 進行方向へずれて描かれていた。先頭馬基準に統一する (v.2026.9.18+26091802)
-    final anchorDist = leadDist;
+    // [修正] 展開シミュゲーム式移植Step4c: Layer1と同じく、先頭がゴールした後はゴールを基準に止める (v.2026.10.27+26102706)
+    final anchorDist = RaceSimulationCameraTransform.cameraDistanceFor(leadDist);
     final anchorX = RaceSimulationCameraTransform.anchorXFor(
       viewportSize: size,
       isLeftHanded: isLeftHanded,
+      distanceFromGoal: anchorDist,
     );
 
     // ── Y座標計算 (laneRank直接マッピング・MVPバージョン) ──
