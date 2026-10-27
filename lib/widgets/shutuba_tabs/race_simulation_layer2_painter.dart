@@ -1,11 +1,10 @@
 // lib/widgets/shutuba_tabs/race_simulation_layer2_painter.dart
+// [修正] 展開シミュゲーム式移植Step5: 旧方式のエンジンを消したので、描画の定数を RaceSimulationData から読む (v.2026.10.27+26102709)
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_display.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
-import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/utils/gate_color_utils.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_camera_transform.dart';
@@ -28,7 +27,6 @@ class RaceSimulationLayer2Painter extends CustomPainter {
   final RaceSimulationData simulationData;
   final double currentTime;
   final bool isLeftHanded;
-  final Map<String, HorseSimulationParams> simulationParams;
   // [追加] 候補A: コーナー遠心力・最終直線広がりに使用 (v2026.6.25)
   final RaceCourseData? raceCourse;
 
@@ -51,7 +49,6 @@ class RaceSimulationLayer2Painter extends CustomPainter {
     required this.simulationData,
     required this.currentTime,
     required this.isLeftHanded,
-    this.simulationParams = const {},
     this.raceCourse,
   });
 
@@ -66,8 +63,8 @@ class RaceSimulationLayer2Painter extends CustomPainter {
               coords,
               raceDistance,
               approach,
-              RaceSimulationEngine.laneSpacingPx,
-              RaceSimulationEngine.innerMarginPx,
+              RaceSimulationData.laneSpacingPx,
+              RaceSimulationData.innerMarginPx,
             ))
         .toList();
 

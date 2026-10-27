@@ -1,8 +1,8 @@
 // lib/widgets/shutuba_tabs/race_simulation_camera_painter.dart
+// [修正] 展開シミュゲーム式移植Step5: 旧方式のエンジンを消したので、描画の定数を RaceSimulationData から読む (v.2026.10.27+26102709)
 // [追加] 展開予想アニメーション デュアルビュー: メインカメラビュー描画 (v.1.0)
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
@@ -112,8 +112,8 @@ class RaceSimulationCameraPainter extends CustomPainter {
               coords,
               raceDistance,
               approach,
-              RaceSimulationEngine.laneSpacingPx,
-              RaceSimulationEngine.innerMarginPx,
+              RaceSimulationData.laneSpacingPx,
+              RaceSimulationData.innerMarginPx,
             ))
         .toList();
     var leader = frames.first;

@@ -5,6 +5,7 @@
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_display.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_reference.dart';
 import 'package:hetaumakeiba_v2/models/jockey_stats_model.dart';
+import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 
@@ -268,5 +269,68 @@ class GameRaceInputs {
     final take = cornerCount >= 2 ? 3 : 2;
     final start = meanRanks.length > take ? meanRanks.length - take : 0;
     return meanRanks.sublist(start).map((r) => r.round().toString()).join('-');
+  }
+
+  /// [追加] 展開シミュゲーム式移植Step5: 旧方式のエンジン(RaceSimulationEngine.assignTempNumbers)から、そのまま移した (v.2026.10.27+26102709)
+  /// 枠順発表前（全馬 horseNumber=0）のときに呼ぶ仮番号付与ヘルパー。
+  /// 馬名のあいうえお順でソートし、1 始まりの連番を割り当てる。
+  /// 上限なし（19頭・20頭以上でも動作する）。
+  static List<PredictionHorseDetail> assignTempNumbers(
+      List<PredictionHorseDetail> horses) {
+    final sorted = List<PredictionHorseDetail>.from(horses)
+      ..sort((a, b) => a.horseName.compareTo(b.horseName));
+    return sorted.asMap().entries.map((entry) {
+      final tempNum = entry.key + 1;
+      final tempGate = ((tempNum - 1) ~/ 2) + 1;
+      final h = entry.value;
+      return PredictionHorseDetail(
+        horseId: h.horseId,
+        horseNumber: tempNum,
+        gateNumber: tempGate,
+        horseName: h.horseName,
+        sexAndAge: h.sexAndAge,
+        jockey: h.jockey,
+        jockeyId: h.jockeyId,
+        carriedWeight: h.carriedWeight,
+        trainerName: h.trainerName,
+        trainerAffiliation: h.trainerAffiliation,
+        odds: h.odds,
+        effectiveOdds: h.effectiveOdds,
+        popularity: h.popularity,
+        horseWeight: h.horseWeight,
+        userMark: h.userMark,
+        userMemo: h.userMemo,
+        isScratched: h.isScratched,
+        predictionScore: h.predictionScore,
+        conditionFit: h.conditionFit,
+        distanceCourseAptitudeStats: h.distanceCourseAptitudeStats,
+        trackAptitudeLabel: h.trackAptitudeLabel,
+        bestTimeStats: h.bestTimeStats,
+        fastestAgariStats: h.fastestAgariStats,
+        bestCourseTimeStats: h.bestCourseTimeStats,
+        fastestCourseAgariStats: h.fastestCourseAgariStats,
+        overallScore: h.overallScore,
+        expectedValue: h.expectedValue,
+        legStyleProfile: h.legStyleProfile,
+        previousHorseWeight: h.previousHorseWeight,
+        previousJockey: h.previousJockey,
+        // [追加] 馬データ再生成時に前走騎手IDを引き継ぐ (v.2026.9.21+26092102)
+        previousJockeyId: h.previousJockeyId,
+        ownerName: h.ownerName,
+        ownerId: h.ownerId,
+        ownerImageLocalPath: h.ownerImageLocalPath,
+        breederName: h.breederName,
+        fatherName: h.fatherName,
+        motherName: h.motherName,
+        mfName: h.mfName,
+        jockeyComboStats: h.jockeyComboStats,
+        // ▼ [修正] 再構築時に競馬新聞マークが false にリセットされる不具合を修正 (v.2026.7.28+26072805)
+        isBlinker: h.isBlinker,
+        isFirstBlinker: h.isFirstBlinker,
+        isMaruGai: h.isMaruGai,
+        isMaruChi: h.isMaruChi,
+        // ▲ [修正]
+      );
+    }).toList();
   }
 }

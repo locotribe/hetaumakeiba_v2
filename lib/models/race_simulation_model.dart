@@ -29,7 +29,7 @@ class RaceSimSnapshot {
 /// 1頭分の、ある時点(currentTime)における絶対座標スナップショット。
 /// rawPositionは生ピクセル座標（レーン分散オフセット適用後）、basePositionは
 /// レーン分散オフセット適用前のコース中心線上の点、distanceFromGoalは
-/// 「ゴールからの絶対残距離」。これらの値はRaceSimulationEngineが計算した
+/// 「ゴールからの絶対残距離」。これらの値はエンジンが計算した
 /// 絶対座標系の値そのものであり、描画レイヤーの回転・ズーム変換が適用される前の値。
 class RaceSimFrame {
   final String horseNumber;
@@ -56,7 +56,7 @@ class RaceSimHorseTrack {
   final int gateNumber;
 
   /// time昇順。要素数はレース距離に依存する
-  /// (RaceSimulationEngineが7点のキーフレームを100m刻みにリサンプリングして生成する)
+  /// (展開シミュの再生の点。ゲーム式エンジンの記録から作る)
   final List<RaceSimSnapshot> snapshots;
 
   const RaceSimHorseTrack({
@@ -115,6 +115,14 @@ class RaceSimHorseTrack {
 
 /// 展開予想アニメーション全体のデータ。
 class RaceSimulationData {
+  /// [追加] 展開シミュゲーム式移植Step5: 旧方式のエンジン(race_simulation_engine.dart)を消したので、描画で使う定数をここへ移した (v.2026.10.27+26102709)
+  /// レーン1つあたりの横方向オフセット(px)。coords.pixelsPerMeter≈0.5(1px≈2m)であるため、0.5px≈1m間隔とする。
+  static const double laneSpacingPx = 0.5;
+
+  /// [追加] 展開シミュゲーム式移植Step5: 同上 (v.2026.10.27+26102709)
+  /// 内ラチ境界から走路側への固定マージン(px)。coords.pixelsPerMeter≈0.5(1px≈2m)であるため、4.75px≈9.5m相当。
+  static const double innerMarginPx = 4.75;
+
   final List<RaceSimHorseTrack> horseTracks;
 
   /// 1-2コーナー/3コーナー/4コーナーの隊列文字列（UI表示用）

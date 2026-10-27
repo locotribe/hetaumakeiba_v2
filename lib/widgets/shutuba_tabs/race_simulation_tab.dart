@@ -2,6 +2,7 @@
 // [修正] 展開シミュゲーム式移植Step4b: 全面的に作り直した。計算を順位スコアの方式からゲーム式エンジン(多数回)に替え、
 // 「シミュ／評価」の切り替えと評価(相対評価)を外した。画面は「再生・結果」「条件」「ステータス」のチップで切り替える。
 // 設計は memory/展開シミュ_ゲーム式移植_設計書.md の6章・7章 (v.2026.10.27+26102705)
+// [修正] 展開シミュゲーム式移植Step5: 旧方式のエンジンを消したので、仮の馬番は GameRaceInputs.assignTempNumbers を使い、再生の旧方式の引数を外した (v.2026.10.27+26102709)
 
 import 'dart:math' as math;
 
@@ -20,7 +21,6 @@ import 'package:hetaumakeiba_v2/logic/analysis/game_race_inputs.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_reference.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_simulator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/speed_index_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
@@ -644,7 +644,7 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     final gatesConfirmed = !activeHorses.every((h) => h.horseNumber == 0);
     final horses = (gatesConfirmed
         ? List<PredictionHorseDetail>.from(activeHorses)
-        : RaceSimulationEngine.assignTempNumbers(activeHorses))
+        : GameRaceInputs.assignTempNumbers(activeHorses))
       ..sort((a, b) => a.horseNumber.compareTo(b.horseNumber));
 
     // 戦績と騎手成績(今回のレース日より前の走だけ)
@@ -944,10 +944,6 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
             isLeftHanded: inputs.raceCourse?.isLeftHanded ?? false,
             trackTypeKey: inputs.trackTypeKey,
             raceCourse: inputs.raceCourse,
-            horses: inputs.horses,
-            onSourceChanged: (_) {},
-            onPaceChanged: (_) {},
-            showLegacyPanels: false,
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,

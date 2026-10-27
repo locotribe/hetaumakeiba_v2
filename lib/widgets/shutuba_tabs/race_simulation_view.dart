@@ -1,16 +1,12 @@
 // lib/widgets/shutuba_tabs/race_simulation_view.dart
+// [修正] 展開シミュゲーム式移植Step5: 旧方式(順位スコア)の「使用データ」カード・ステータス表と、そのための引数を外した (v.2026.10.27+26102709)
 
 import 'package:flutter/material.dart';
-import 'package:hetaumakeiba_v2/logic/analysis/race_simulation_engine.dart';
-// [追加] 展開シミュ騎手要素Step3: 棒グラフ用の騎手要素 (v.2026.9.29+26092903)
-import 'package:hetaumakeiba_v2/logic/analysis/jockey_factor_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/elevation_logic.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/elevation_model.dart';
-import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/course_diagram_painter.dart';
-import 'package:hetaumakeiba_v2/models/horse_simulation_params_model.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_camera_painter.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_elevation_painter.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_layer2_painter.dart';
@@ -18,25 +14,6 @@ import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_painter.dar
 
 // [修正] 0-9b-3 自由入力(manual)を廃止し実測/予測/過去平均の3種に (v.2026.7.27+26072707)
 enum TrackBiasSource { actual, predicted, trend }
-
-/// [追加] 展開シミュ骨格整理Step7 棒グラフ「テン」「終い」「スタ」の値(0.0〜1.0)。
-/// 動きに使う値と同じものを入れる (v.2026.10.10+26101005)
-class HorseSimBarValues {
-  /// テン: 前に行く力(前に行く馬ほど大きい)
-  final double ten;
-
-  /// 終い: 0.5 ＋ 割引き後の末脚(秒)を0〜1に丸めたもの(直線で伸びる馬ほど大きい)
-  final double kick;
-
-  /// スタ: 3角で使うスタミナ(evaluateStaminaFit ÷ 100)
-  final double stamina;
-
-  const HorseSimBarValues({
-    required this.ten,
-    required this.kick,
-    required this.stamina,
-  });
-}
 
 /// 展開予想アニメーションのデュアルビュー表示ウィジェット。
 ///
@@ -50,31 +27,6 @@ class RaceSimulationView extends StatefulWidget {
   final bool isLeftHanded;
   final String trackTypeKey;
   final RaceCourseData? raceCourse;
-  final Map<String, HorseSimulationParams> simulationParams;
-  final List<PredictionHorseDetail> horses;
-  // [追加] 展開シミュ騎手要素Step3 騎手の強さ・相性・乗り替わり方向(キーは馬番) (v.2026.9.29+26092903)
-  final Map<String, HorseJockeyFactor> jockeyFactorParams;
-  // [追加] 展開シミュ骨格整理Step7 棒グラフの値(キーは馬番)。空なら従来どおりの値で描く (v.2026.10.10+26101005)
-  final Map<String, HorseSimBarValues> barValues;
-  // [追加] 0-9(b) 使用データカード表示用 (v.2026.7.27+26072703)
-  final String? predictedPace;
-  final String? trackConditionText;   // 馬場状態(良/稍重/重/不良)
-  final double? cushionValue;         // 芝のみ
-  final double? moistureValue;        // 芝:ゴール前芝含水 / ダート:ゴール前ダート含水
-  final double trackBias;             // 0-9aの算出値(既定0.0)
-  final String? trackConditionDate;   // 計測日（実測のときのみ非null）
-  // [追加] 0-9b-1 クッション値/含水率の使用ソースラベル（実測(当日)/予測/過去平均） (v.2026.7.27+26072704)
-  final String biasSourceLabel;
-  // [追加] 0-9b-2 ソース切替用 (v.2026.7.27+26072705)
-  final TrackBiasSource selectedSource;
-  final bool hasActualToday;
-  final ValueChanged<TrackBiasSource> onSourceChanged;
-  // [追加] 0-9b-3 ペース手動選択用 (v.2026.7.27+26072707)
-  final String selectedPace;
-  final ValueChanged<String> onPaceChanged;
-  // [追加] 展開シミュゲーム式移植Step4b: 再生の下の「使用データ」カードとステータス表を出すか。新しい展開シミュは、条件とステータスを別のカードで出すので false にする (v.2026.10.27+26102705)
-  final bool showLegacyPanels;
-
   const RaceSimulationView({
     super.key,
     required this.diagram,
@@ -84,26 +36,6 @@ class RaceSimulationView extends StatefulWidget {
     required this.isLeftHanded,
     required this.trackTypeKey,
     this.raceCourse,
-    this.simulationParams = const {},
-    this.horses = const [],
-    // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
-    this.jockeyFactorParams = const {},
-    // [追加] 展開シミュ骨格整理Step7 (v.2026.10.10+26101005)
-    this.barValues = const {},
-    this.predictedPace,
-    this.trackConditionText,
-    this.cushionValue,
-    this.moistureValue,
-    this.trackBias = 0.0,
-    this.trackConditionDate,
-    this.biasSourceLabel = '—',
-    this.selectedSource = TrackBiasSource.actual,
-    this.hasActualToday = false,
-    required this.onSourceChanged,
-    this.selectedPace = 'ミドルペース',
-    required this.onPaceChanged,
-    // [追加] 展開シミュゲーム式移植Step4b (v.2026.10.27+26102705)
-    this.showLegacyPanels = true,
   });
 
   @override
@@ -201,8 +133,8 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
         widget.diagram.coords,
         widget.raceDistance,
         _approach,
-        RaceSimulationEngine.laneSpacingPx,
-        RaceSimulationEngine.innerMarginPx,
+        RaceSimulationData.laneSpacingPx,
+        RaceSimulationData.innerMarginPx,
       );
       if (frame.distanceFromGoal < minDist) minDist = frame.distanceFromGoal;
     }
@@ -365,7 +297,6 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
                       simulationData: widget.simulationData,
                       currentTime: currentTime,
                       isLeftHanded: widget.isLeftHanded,
-                      simulationParams: widget.simulationParams,
                       raceCourse: widget.raceCourse,
                     ),
                     size: Size.infinite,
@@ -460,380 +391,7 @@ class _RaceSimulationViewState extends State<RaceSimulationView>
           ),
         ),
 
-        // [追加] 0-9(b) 使用データカード（展開予想の根拠を常時表示） (v.2026.7.27+26072703)
-        // [修正] 展開シミュゲーム式移植Step4b: showLegacyPanels が false のときは出さない (v.2026.10.27+26102705)
-        if (widget.showLegacyPanels)
-        Container(
-          margin: const EdgeInsets.only(bottom: 8.0),
-          padding: const EdgeInsets.all(8.0),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '使用データ',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black54,
-                ),
-              ),
-              const SizedBox(height: 4),
-              // [追加] 0-9b-2 クッション値/含水率のソース切替トグル (v.2026.7.27+26072705)
-              _buildSourceToggle(),
-              const SizedBox(height: 4),
-              _buildDataRow('予想ペース', widget.predictedPace ?? '—'),
-              // [追加] 0-9b-3 ペース手動選択（スロー/ミドル/ハイ。初期値はアプリ予想ペース） (v.2026.7.27+26072707)
-              _buildPaceSelector(),
-              const SizedBox(height: 4),
-              _buildDataRow('距離・コース', _buildCourseLabel()),
-              _buildDataRow('馬場状態', widget.trackConditionText ?? '—'),
-              _buildDataRow(
-                'クッション値',
-                widget.trackTypeKey == 'dirt'
-                    ? '—'
-                    : (widget.cushionValue != null
-                        ? '${widget.cushionValue!.toStringAsFixed(1)}（${widget.biasSourceLabel}）'
-                        : '—'),
-              ),
-              _buildDataRow(
-                '含水率',
-                widget.moistureValue != null
-                    ? '${widget.moistureValue!.toStringAsFixed(1)}%（${widget.biasSourceLabel}）'
-                    : '—',
-              ),
-              _buildDataRow(
-                'トラックバイアス',
-                '${widget.trackBias.toStringAsFixed(2)}（${_trackBiasLabel(widget.trackBias)}）',
-              ),
-              // [修正] 0-9b-1 計測日は実測のときのみ表示（予測・過去平均・なしのときは行自体を出さない） (v.2026.7.27+26072704)
-              if (widget.trackConditionDate != null)
-                _buildDataRow('計測日', widget.trackConditionDate!),
-            ],
-          ),
-        ),
-
-        // ── ステータス表（シークバー下）──
-        // [修正] 展開シミュゲーム式移植Step4b: showLegacyPanels が false のときは出さない (v.2026.10.27+26102705)
-        if (widget.showLegacyPanels && widget.horses.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(bottom: 8.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildStatusHeader(),
-                const Divider(height: 1),
-                ...widget.horses.map((horse) {
-                  final params =
-                      widget.simulationParams[horse.horseNumber.toString()];
-                  // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
-                  final jockeyFactor =
-                      widget.jockeyFactorParams[horse.horseNumber.toString()];
-                  // [修正] 展開シミュ骨格整理Step7 棒の値を渡す (v.2026.10.10+26101005)
-                  return _buildStatusRow(horse, params, jockeyFactor,
-                      widget.barValues[horse.horseNumber.toString()]);
-                }),
-                // [追加] 展開シミュ騎手要素Step3: 騎手・相性の反映の強さと、乗替の印の意味 (v.2026.9.29+26092903)
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 6.0),
-                  child: Text(
-                    '騎手・相性は直線でごく弱く反映（最大約5m）。乗替: 継=継続騎乗／替=乗り替わり／初=初騎乗、↑↓は前走騎手より実績が高い／低い。薄い棒はサンプル少',
-                    style: TextStyle(fontSize: 9, color: Colors.black54),
-                  ),
-                ),
-              ],
-            ),
-          ),
       ],
-    );
-  }
-
-  Widget _buildStatusHeader() {
-    const style = TextStyle(
-      fontSize: 9,
-      fontWeight: FontWeight.bold,
-      color: Colors.black54,
-    );
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 3.0),
-      child: Row(
-        children: [
-          SizedBox(width: 22, child: Text('#', style: style)),
-          Expanded(flex: 3, child: Text('馬名', style: style)),
-          SizedBox(
-              width: 30,
-              child: Text('脚質', style: style, textAlign: TextAlign.center)),
-          // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
-          SizedBox(
-              width: 30,
-              child: Text('乗替', style: style, textAlign: TextAlign.center)),
-          Expanded(
-              flex: 2,
-              child: Text('テン', style: style, textAlign: TextAlign.center)),
-          Expanded(
-              flex: 2,
-              child: Text('終い', style: style, textAlign: TextAlign.center)),
-          Expanded(
-              flex: 2,
-              child: Text('スタ', style: style, textAlign: TextAlign.center)),
-          // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
-          Expanded(
-              flex: 2,
-              child: Text('騎手', style: style, textAlign: TextAlign.center)),
-          Expanded(
-              flex: 2,
-              child: Text('相性', style: style, textAlign: TextAlign.center)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusRow(
-      PredictionHorseDetail horse, HorseSimulationParams? params,
-      // [修正] 展開シミュ骨格整理Step7 棒の値を受け取る(無ければ従来どおり) (v.2026.10.10+26101005)
-      [HorseJockeyFactor? jockeyFactor, HorseSimBarValues? barValue]) {
-    const numStyle =
-        TextStyle(fontSize: 10, fontWeight: FontWeight.bold);
-    const nameStyle = TextStyle(fontSize: 10);
-    const legStyleTextStyle =
-        TextStyle(fontSize: 9, color: Colors.black87);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
-      child: Row(
-        children: [
-          SizedBox(
-              width: 22,
-              child: Text(horse.horseNumber.toString(), style: numStyle)),
-          Expanded(
-              flex: 3,
-              child: Text(horse.horseName,
-                  style: nameStyle, overflow: TextOverflow.ellipsis)),
-          SizedBox(
-              width: 30,
-              child: Text(params?.legStyle ?? '不明',
-                  style: legStyleTextStyle, textAlign: TextAlign.center)),
-          // [追加] 展開シミュ騎手要素Step3 (v.2026.9.29+26092903)
-          _buildRideMark(jockeyFactor),
-          // [修正] 展開シミュ骨格整理Step7 棒の値があれば、動きに使う値(テン=前に行く力・
-          // 終い=割引き後の末脚・スタ=3角のスタミナ)で描く (v.2026.10.10+26101005)
-          Expanded(
-              flex: 2,
-              child: _buildBar(
-                  barValue?.ten ?? params?.tenAccelIndex ?? 0, Colors.orange)),
-          Expanded(
-              flex: 2,
-              child: _buildBar(
-                  barValue?.kick ?? params?.finishingPower ?? 0, Colors.blue)),
-          Expanded(
-              flex: 2,
-              child: _buildBar(
-                  barValue?.stamina ?? params?.staminaIndex ?? 0,
-                  Colors.green)),
-          // [追加] 展開シミュ騎手要素Step3: 騎手の強さ・相性の棒（統計なし・サンプル少は薄く表示） (v.2026.9.29+26092903)
-          Expanded(
-              flex: 2,
-              child: _buildFactorBar(
-                  jockeyFactor?.strengthRatio ?? 0,
-                  Colors.deepPurple,
-                  jockeyFactor?.strengthIsLowSample ?? true)),
-          Expanded(
-              flex: 2,
-              child: _buildFactorBar(jockeyFactor?.comboRatio ?? 0,
-                  Colors.pink, jockeyFactor?.comboIsLowSample ?? true)),
-        ],
-      ),
-    );
-  }
-
-  // [追加] 0-9b-2 クッション値/含水率のソース切替トグルを組み立てる (v.2026.7.27+26072705)
-  Widget _buildSourceToggle() {
-    const options = <TrackBiasSource, String>{
-      TrackBiasSource.actual: '実測(当日)',
-      TrackBiasSource.predicted: '予測',
-      TrackBiasSource.trend: '過去平均',
-    };
-    return Wrap(
-      spacing: 4.0,
-      runSpacing: 4.0,
-      children: options.entries.map((entry) {
-        final source = entry.key;
-        final isSelected = widget.selectedSource == source;
-        final isEnabled =
-            source != TrackBiasSource.actual || widget.hasActualToday;
-        return OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-            minimumSize: const Size(0, 24),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            side: BorderSide(
-              color: !isEnabled
-                  ? Colors.grey.shade300
-                  : (isSelected ? Colors.green.shade700 : Colors.grey.shade400),
-            ),
-            foregroundColor: !isEnabled
-                ? Colors.grey.shade400
-                : (isSelected ? Colors.green.shade700 : Colors.grey.shade600),
-          ),
-          onPressed: isEnabled ? () => widget.onSourceChanged(source) : null,
-          child: Text(entry.value, style: const TextStyle(fontSize: 10)),
-        );
-      }).toList(),
-    );
-  }
-
-  // [追加] 0-9b-3 ペース手動選択（スロー/ミドル/ハイ の3ボタン。自動ボタンは無し） (v.2026.7.27+26072707)
-  Widget _buildPaceSelector() {
-    const options = <String, String>{
-      'スローペース': 'スロー',
-      'ミドルペース': 'ミドル',
-      'ハイペース': 'ハイ',
-    };
-    return Wrap(
-      spacing: 4.0,
-      runSpacing: 4.0,
-      children: options.entries.map((entry) {
-        final pace = entry.key;
-        final isSelected = widget.selectedPace == pace;
-        return OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-            minimumSize: const Size(0, 24),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            side: BorderSide(
-              color: isSelected ? Colors.green.shade700 : Colors.grey.shade400,
-            ),
-            foregroundColor:
-                isSelected ? Colors.green.shade700 : Colors.grey.shade600,
-          ),
-          onPressed: () => widget.onPaceChanged(pace),
-          child: Text(entry.value, style: const TextStyle(fontSize: 10)),
-        );
-      }).toList(),
-    );
-  }
-
-  // [追加] 0-9(b) 使用データカード: ラベル:値の1行を組み立てる (v.2026.7.27+26072703)
-  Widget _buildDataRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1.5),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 84,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 10, color: Colors.black54),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // [追加] 0-9(b) 使用データカード: 距離・コース表記を組み立てる (v.2026.7.27+26072703)
-  String _buildCourseLabel() {
-    final surface = widget.trackTypeKey == 'dirt' ? 'ダ' : '芝';
-    final distanceText = '$surface${widget.raceDistance.round()}m';
-    if (widget.trackTypeKey == 'shiba_straight') {
-      return '$distanceText・直線';
-    }
-    final direction = widget.isLeftHanded ? '左' : '右';
-    String inOut = '';
-    if (widget.trackTypeKey == 'shiba_outer') inOut = '外';
-    if (widget.trackTypeKey == 'shiba_inner') inOut = '内';
-    return inOut.isEmpty
-        ? '$distanceText・$direction'
-        : '$distanceText・$direction・$inOut';
-  }
-
-  // [追加] 0-9(b) トラックバイアス値→ラベル変換 (v.2026.7.27+26072703)
-  String _trackBiasLabel(double b) {
-    if (b >= 0.5) return '前有利';
-    if (b >= 0.15) return 'やや前有利';
-    if (b > -0.15) return 'フラット';
-    if (b > -0.5) return 'やや差し有利';
-    return '差し有利';
-  }
-
-  Widget _buildBar(double value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4.0),
-      child: LinearProgressIndicator(
-        value: value.clamp(0.0, 1.0),
-        minHeight: 6,
-        backgroundColor: Colors.grey.shade200,
-        valueColor: AlwaysStoppedAnimation<Color>(color),
-      ),
-    );
-  }
-
-  // [追加] 展開シミュ騎手要素Step3: 統計なし・サンプル少の棒を薄く表示する (v.2026.9.29+26092903)
-  Widget _buildFactorBar(double value, Color color, bool faded) {
-    return Opacity(
-      opacity: faded ? 0.3 : 1.0,
-      child: _buildBar(value, color),
-    );
-  }
-
-  // [追加] 展開シミュ騎手要素Step3: 継続騎乗(継)/乗り替わり(替)/初騎乗(初)の印。
-  // 矢印は前走騎手より実績が高い(↑)/低い(↓) (v.2026.9.29+26092903)
-  Widget _buildRideMark(HorseJockeyFactor? factor) {
-    String label = '－';
-    Color color = Colors.grey;
-    if (factor != null) {
-      final double? dir = factor.changeDirection;
-      final String arrow =
-          dir == null ? '' : (dir > 0.25 ? '↑' : (dir < -0.25 ? '↓' : ''));
-      switch (factor.rideType) {
-        case JockeyRideType.continued:
-          label = '継';
-          color = Colors.blueGrey;
-          break;
-        case JockeyRideType.changed:
-          label = '替$arrow';
-          color = Colors.orange.shade800;
-          break;
-        case JockeyRideType.firstRide:
-          label = '初$arrow';
-          color = Colors.orange.shade800;
-          break;
-        case JockeyRideType.unknown:
-          break;
-      }
-      if (arrow == '↑') {
-        color = Colors.green.shade700;
-      } else if (arrow == '↓') {
-        color = Colors.red.shade700;
-      }
-    }
-    return SizedBox(
-      width: 30,
-      child: Text(
-        label,
-        style: TextStyle(
-            fontSize: 9, fontWeight: FontWeight.bold, color: color),
-        textAlign: TextAlign.center,
-      ),
     );
   }
 }
