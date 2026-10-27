@@ -127,6 +127,14 @@ class GameRaceConfig {
   /// 坂(上り坂の減速・下り坂モード)を入れるか
   final bool slopes;
 
+  /// [追加] 展開シミュゲーム式移植Step4d: 最低速度(HPが尽きたときの目標速度)の根性の項の倍率(ゲームは1.0)。
+  /// 最低速度 = 0.85×基準速度 + √(200×根性)×0.001×倍率 − [minSpeedGutsRef]×(倍率−1)。根性600の馬は倍率によらず同じ。
+  /// 倍率を上げると、HPが尽きた後も根性(末脚)の差で差が動く (v.2026.10.27+26102707)
+  final double minSpeedGutsScale;
+
+  /// [追加] 展開シミュゲーム式移植Step4d: 根性600のときの √(200×根性)×0.001 (v.2026.10.27+26102707)
+  static const double minSpeedGutsRef = 0.3464;
+
   const GameRaceConfig({
     required this.paceMult,
     required this.lateAdj,
@@ -139,18 +147,23 @@ class GameRaceConfig {
     this.spurtAccept = true,
     this.lanes = true,
     this.slopes = true,
+    this.minSpeedGutsScale = 1.0,
   });
 
   /// 芝の校正値(設計書4章)
+  // [修正] 展開シミュゲーム式移植Step4d: 最低速度の根性の項を4倍にした (v.2026.10.27+26102707)
   static const GameRaceConfig turf = GameRaceConfig(
     paceMult: 1.03,
     lateAdj: [0.0, 0.0, 0.0, 0.0],
+    minSpeedGutsScale: 4.0,
   );
 
   /// ダートの校正値(設計書4章)
+  // [修正] 展開シミュゲーム式移植Step4d: 最低速度の根性の項を4倍にした (v.2026.10.27+26102707)
   static const GameRaceConfig dirt = GameRaceConfig(
     paceMult: 1.08,
     lateAdj: [0.0, 0.0, 0.0, 0.0],
+    minSpeedGutsScale: 4.0,
   );
 
   GameRaceConfig copyWith({
@@ -175,6 +188,7 @@ class GameRaceConfig {
       spurtAccept: spurtAccept ?? this.spurtAccept,
       lanes: lanes ?? this.lanes,
       slopes: slopes ?? this.slopes,
+      minSpeedGutsScale: minSpeedGutsScale,
     );
   }
 }
@@ -469,7 +483,10 @@ class GameRaceEngine {
       maxHp.add(0.8 * _interpHp(h.style) * h.stamina + d);
       final g = h.guts;
       gutsMod.add(1.0 + 200.0 / math.sqrt(600.0 * g));
-      minSpeed.add(0.85 * vb + math.sqrt(200.0 * g) * 0.001);
+      // [修正] 展開シミュゲーム式移植Step4d: 根性の項に倍率をかける(根性600で変わらないように引く) (v.2026.10.27+26102707)
+      minSpeed.add(0.85 * vb +
+          math.sqrt(200.0 * g) * 0.001 * config.minSpeedGutsScale -
+          GameRaceConfig.minSpeedGutsRef * (config.minSpeedGutsScale - 1.0));
       base.add([
         vb * c[0] * config.paceMult,
         vb * c[1] * config.paceMult,
