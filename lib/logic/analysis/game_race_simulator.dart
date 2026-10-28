@@ -7,6 +7,8 @@ import 'dart:math' as math;
 
 import 'package:hetaumakeiba_v2/logic/analysis/game_ability_builder.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_engine.dart';
+// [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_tuning.dart';
 
 /// 1頭ぶんの集計。
 class GameHorseSummary {
@@ -67,6 +69,12 @@ class GameRaceSummary {
   /// 再生の既定に使う (v.2026.10.27+26102706)
   final GameRaceRunResult averageRun;
 
+  /// [追加] 展開シミュ改良Step3(案D): 回ごとに散らした先頭の1000m通過のずれ(秒。正 = 遅い。回の順)。散らさなければ空 (v.2026.10.28+26102803)
+  final List<double> paceOffsets;
+
+  /// [追加] 展開シミュ改良Step3(案D): 回ごとの着順(回の順 → 馬の順。1始まり)。ペース別の勝率(改良Step5)に使う (v.2026.10.28+26102803)
+  final List<List<int>> runRanks;
+
   const GameRaceSummary({
     required this.runs,
     required this.checkpoints,
@@ -77,6 +85,9 @@ class GameRaceSummary {
     required this.representativeIndex,
     required this.representative,
     required this.averageRun,
+    // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
+    this.paceOffsets = const [],
+    this.runRanks = const [],
   });
 
   /// 実時間への倍率。[referenceWinnerSeconds] は基準の勝ち時計(秒)。
@@ -115,6 +126,8 @@ class GameRaceSimulator {
 
   /// [abilities] の馬を [runs] 回走らせてまとめる。1回ごとに当日の出来(揺らぎ)を加える。
   /// 乱数は「1回ごとに 当日の出来 → エンジン」の順に [random] から引く。
+  /// [修正] 展開シミュ改良Step3(案D): [paceScatterSd] が0より大きいときは、1回ごとに当日の出来より先に正規乱数を1つ引き、
+  /// 先頭の1000m通過を「正規乱数 × [paceScatterSd]」秒ずらすペース倍率で走らせる(GamePacePredictor.paceMultOf)。0 なら今までと同じ (v.2026.10.28+26102803)
   static GameRaceSummary run({
     required double distance,
     required List<GameHorseAbility> abilities,
@@ -124,6 +137,7 @@ class GameRaceSimulator {
     required double top3Calibration,
     GameRaceCourse course = GameRaceCourse.flat,
     int runs = defaultRuns,
+    double paceScatterSd = 0.0,
   }) {
     final n = abilities.length;
     final cps = checkpointsFor(distance, course);
@@ -141,12 +155,23 @@ class GameRaceSimulator {
     double last600Sum = 0.0;
     int last600Count = 0;
 
+    // [追加] 展開シミュ改良Step3(案D) (v.2026.10.28+26102803)
+    final paceOffsets = <double>[];
     for (int r = 0; r < runs; r++) {
+      // [追加] 展開シミュ改良Step3(案D): 回ごとにペースを散らす (v.2026.10.28+26102803)
+      var runConfig = config;
+      if (paceScatterSd > 0.0) {
+        final off = GameAbilityBuilder.normal(random) * paceScatterSd;
+        paceOffsets.add(off);
+        runConfig = config.copyWith(
+            paceMult: GamePacePredictor.paceMultOf(config.paceMult, off));
+      }
       final h = GameAbilityBuilder.applyFormNoise(abilities, random);
       final res = GameRaceEngine.simulate(
         distance: distance,
         horses: h,
-        config: config,
+        // [修正] 展開シミュ改良Step3: 回ごとの設定 (v.2026.10.28+26102803)
+        config: runConfig,
         random: random,
         course: course,
       );
@@ -276,6 +301,9 @@ class GameRaceSimulator {
       representativeIndex: best,
       representative: results[best],
       averageRun: averageRunOf(results, distance),
+      // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
+      paceOffsets: paceOffsets,
+      runRanks: ranks,
     );
   }
 
@@ -471,6 +499,8 @@ class GameRaceSimulator {
     required double top3Calibration,
     GameRaceCourse course = GameRaceCourse.flat,
     int runs = defaultRuns,
+    // [追加] 展開シミュ改良Step3(案D) (v.2026.10.28+26102803)
+    double paceScatterSd = 0.0,
   }) {
     return Isolate.run(() => run(
           distance: distance,
@@ -481,6 +511,8 @@ class GameRaceSimulator {
           top3Calibration: top3Calibration,
           course: course,
           runs: runs,
+          // [追加] 展開シミュ改良Step3(案D) (v.2026.10.28+26102803)
+          paceScatterSd: paceScatterSd,
         ));
   }
 

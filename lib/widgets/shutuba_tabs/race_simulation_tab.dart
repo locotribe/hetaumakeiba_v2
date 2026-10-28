@@ -17,11 +17,15 @@ import 'package:hetaumakeiba_v2/logic/analysis/early_position_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_ability_builder.dart';
 // [追加] 展開シミュ改良Step2 (v.2026.10.28+26102802)
 import 'package:hetaumakeiba_v2/logic/analysis/game_aptitude.dart';
+// [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
+import 'package:hetaumakeiba_v2/logic/analysis/game_course_rail.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_display.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_inputs.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_reference.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_simulator.dart';
+// [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_tuning.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/race_finish_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/simulation_params_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/speed_index_calculator.dart';
@@ -75,6 +79,15 @@ class _GameSimInputs {
   final List<GameHorseAbility> abilities;
   final List<double?> staminaIndexes;
 
+  /// [追加] 展開シミュ改良Step3(案C): 使用コースと内の馬場の傷み。表に無いレースは null (v.2026.10.28+26102803)
+  final GameCourseRailInfo? railInfo;
+
+  /// [追加] 展開シミュ改良Step3(案D): 出走馬の顔ぶれから当てた、いつものペースからのずれ(秒。正 = 遅い)。当てられなければ null (v.2026.10.28+26102803)
+  final double? paceDeviation;
+
+  /// [追加] 展開シミュ改良Step3: このレースのエンジンの設定の調整(改良Step3 では off) (v.2026.10.28+26102803)
+  final GameRaceTuning tuning;
+
   /// 同じレース名・同じ競馬場・芝ダ・距離の過去レース(新しい順)
   final List<GamePastRaceTime> pastRaces;
 
@@ -99,6 +112,10 @@ class _GameSimInputs {
     required this.gatesConfirmed,
     required this.abilities,
     required this.staminaIndexes,
+    // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
+    required this.railInfo,
+    required this.paceDeviation,
+    required this.tuning,
     required this.pastRaces,
     required this.officialGoing,
     required this.hasActualToday,
@@ -326,11 +343,18 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     return _shown?.baselineWinnerTime;
   }
 
-  GameRaceConfig _baseConfigOf(_GameSimInputs inputs) =>
-      inputs.isDirt ? GameRaceConfig.dirt : GameRaceConfig.turf;
+  // [修正] 展開シミュ改良Step3: 芝・ダートの設定に、このレースの調整(内の馬場・砂かぶり・傷み・当てたペース)を入れる。
+  // 改良Step3 では GameRaceTuning.of が off なので、今までと同じ (v.2026.10.28+26102803)
+  GameRaceConfig _baseConfigOf(_GameSimInputs inputs) => inputs.tuning.apply(
+        inputs.isDirt ? GameRaceConfig.dirt : GameRaceConfig.turf,
+        rail: inputs.railInfo,
+        paceDeviation: inputs.paceDeviation,
+      );
 
+  // [修正] 展開シミュ改良Step3(案D): 回ごとにペースを散らす幅 [paceScatterSd] を渡せるようにした(既定は散らさない) (v.2026.10.28+26102803)
   Future<GameRaceSummary> _simulate(
-      _GameSimInputs inputs, GameRaceConfig config, int seed, int runs) {
+      _GameSimInputs inputs, GameRaceConfig config, int seed, int runs,
+      {double paceScatterSd = 0.0}) {
     return GameRaceSimulator.runInBackground(
       distance: inputs.distance.toDouble(),
       abilities: inputs.abilities,
@@ -344,6 +368,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
           : GameRaceSimulator.top3CalibrationTurf,
       course: inputs.course,
       runs: runs,
+      // [追加] 展開シミュ改良Step3(案D) (v.2026.10.28+26102803)
+      paceScatterSd: paceScatterSd,
     );
   }
 
@@ -368,7 +394,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       double? baselineLeader;
       if (shown == null || shown.going != going) {
         summary =
-            await _simulate(inputs, base.copyWith(groundHp: groundHp), _seed, _runs);
+            // [修正] 展開シミュ改良Step3(案D): 既定のペースで走らせるときだけ、回ごとにペースを散らす(1000m通過を選んだときは散らさない) (v.2026.10.28+26102803)
+            await _simulate(inputs, base.copyWith(groundHp: groundHp), _seed, _runs,
+                paceScatterSd: inputs.tuning.paceScatterSd);
         paceMult = base.paceMult;
         baselineWinner = summary.meanWinnerTime;
         baselineLeader = summary.meanLeader1000;
@@ -775,6 +803,10 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       gatesConfirmed: gatesConfirmed,
       abilities: abilities,
       staminaIndexes: staminaIndexes,
+      // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
+      railInfo: GameCourseRail.infoOf(race.raceId),
+      paceDeviation: GamePacePredictor.deviationOf(sources, isDirt: isDirt),
+      tuning: GameRaceTuning.of(isDirt: isDirt),
       pastRaces: pastRaces,
       officialGoing: GameRaceReference.normalizeGoing(race.trackCondition),
       hasActualToday: hasActualToday,

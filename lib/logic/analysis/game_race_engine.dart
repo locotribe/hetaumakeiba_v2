@@ -176,6 +176,10 @@ class GameRaceConfig {
   /// false は内へ寄るのを止めるだけ (v.2026.10.28+26102801)
   final bool wearAvoidOut;
 
+  /// [追加] 展開シミュ改良Step3(案C): コーナー(曲線部)で使う傷みのしきい値。京都・阪神は直線部と曲線部で内柵の移動幅が違うため。
+  /// null は [wearThresholds] と同じ (v.2026.10.28+26102803)
+  final List<double>? wearThresholdsCurve;
+
   const GameRaceConfig({
     required this.paceMult,
     required this.lateAdj,
@@ -201,6 +205,8 @@ class GameRaceConfig {
     this.wearTimeScale = 1.2,
     this.wearAvoid,
     this.wearAvoidOut = false,
+    // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
+    this.wearThresholdsCurve,
   });
 
   /// 芝の校正値(設計書4章)
@@ -243,6 +249,8 @@ class GameRaceConfig {
     double? wearTimeScale,
     double? wearAvoid,
     bool? wearAvoidOut,
+    // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
+    List<double>? wearThresholdsCurve,
   }) {
     return GameRaceConfig(
       paceMult: paceMult ?? this.paceMult,
@@ -269,6 +277,8 @@ class GameRaceConfig {
       wearTimeScale: wearTimeScale ?? this.wearTimeScale,
       wearAvoid: wearAvoid ?? this.wearAvoid,
       wearAvoidOut: wearAvoidOut ?? this.wearAvoidOut,
+      // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
+      wearThresholdsCurve: wearThresholdsCurve ?? this.wearThresholdsCurve,
     );
   }
 }
@@ -664,16 +674,19 @@ class GameRaceEngine {
     // [追加] 展開シミュ改良Step1(案C): 内の馬場の傷み。避けるときの境目(内柵からの距離。コース幅の割合)。
     // 傷みが [GameRaceConfig.wearAvoid] 以下になるのは、大きい方から数えて (wearAvoid÷wearUnit) 番目のしきい値より外 (v.2026.10.28+26102801)
     final wearThr = config.wearThresholds ?? const <double>[];
-    final hasWear = wearThr.isNotEmpty;
-    double? wearEdge;
+    // [修正] 展開シミュ改良Step3: コーナーでは曲線部のしきい値を使う。境目も直線部・曲線部それぞれに作る (v.2026.10.28+26102803)
+    final wearThrCurve = config.wearThresholdsCurve ?? wearThr;
+    final hasWear = wearThr.isNotEmpty || wearThrCurve.isNotEmpty;
     final wearAvoid = config.wearAvoid;
-    if (hasWear && wearAvoid != null) {
+    double? edgeOf(List<double> thr) {
+      if (thr.isEmpty || wearAvoid == null) return null;
       final kOk = (wearAvoid / config.wearUnit + 1e-9).toInt();
-      final ts = List<double>.from(wearThr)..sort((a, b) => b.compareTo(a));
-      if (ts.length > kOk) {
-        wearEdge = ts[kOk] / courseWidthMeters;
-      }
+      final ts = List<double>.from(thr)..sort((a, b) => b.compareTo(a));
+      return ts.length > kOk ? ts[kOk] / courseWidthMeters : null;
     }
+
+    final wearEdge = edgeOf(wearThr);
+    final wearEdgeCurve = edgeOf(wearThrCurve);
 
     final tMax = d / (vb * 0.6) + 30.0;
     int frame = 0;
@@ -1047,7 +1060,10 @@ class GameRaceEngine {
             } else if (p < 2 && !blockIn[i]) {
               tgtLane[i] = lane[i] > 0.05 ? 0.05 : lane[i];
               // [追加] 展開シミュ改良Step1(案C): 傷んだ内を避ける。境目より内へは寄らない(外へ出る指定なら境目まで出る) (v.2026.10.28+26102801)
-              final edge = wearEdge;
+              // [修正] 展開シミュ改良Step3: コーナーにいれば曲線部の境目 (v.2026.10.28+26102803)
+              final edge = (config.lanes && course.cornerRadiusAt(pos[i]) > 0)
+                  ? wearEdgeCurve
+                  : wearEdge;
               if (edge != null && tgtLane[i] < edge) {
                 if (config.wearAvoidOut) {
                   tgtLane[i] = edge;
@@ -1126,7 +1142,8 @@ class GameRaceEngine {
         if (hasWear && config.lanes) {
           final m = lane[i] * courseWidthMeters;
           int c = 0;
-          for (final th in wearThr) {
+          // [修正] 展開シミュ改良Step3: コーナーでは曲線部のしきい値 (v.2026.10.28+26102803)
+          for (final th in (radius > 0 ? wearThrCurve : wearThr)) {
             if (th > m) c++;
           }
           if (c > 0) {
