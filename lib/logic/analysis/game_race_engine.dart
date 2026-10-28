@@ -141,6 +141,41 @@ class GameRaceConfig {
   /// (内の馬は内寄りに、外の馬ほど外へ)。着順の相関・脚質のバランスはほとんど変わらない(設計書 8-1 の Step4e) (v.2026.10.27+26102708)
   final double? finalCornerFan;
 
+  /// [追加] 展開シミュ改良Step1(案C): 内ラチ付近の馬場の進みにくさ(m/s)。内ラチで この値、内ラチから [innerBand] で0になる。
+  /// 正 = 内が悪い、負 = 内が良い(芝の採用案は −0.05)。0 で今までと同じ (v.2026.10.28+26102801)
+  final double innerBias;
+
+  /// [追加] 展開シミュ改良Step1(案C): [innerBias] が効く幅(コース幅の割合。既定4頭分) (v.2026.10.28+26102801)
+  final double innerBand;
+
+  /// [追加] 展開シミュ改良Step1(案C): 砂をかぶる(ダート)。前 [kickDistance] m 以内・横 [kickLanes] 頭分未満に馬がいると、
+  /// 進みがこの値(m/s)だけ遅くなる(ダートの採用案は0.3)。0 で今までと同じ (v.2026.10.28+26102801)
+  final double kickback;
+
+  /// [追加] 展開シミュ改良Step1(案C): 砂をかぶる前の馬との距離(m) (v.2026.10.28+26102801)
+  final double kickDistance;
+
+  /// [追加] 展開シミュ改良Step1(案C): 砂をかぶる横の幅(頭分) (v.2026.10.28+26102801)
+  final double kickLanes;
+
+  /// [追加] 展開シミュ改良Step1(案C・オーナーの式): コースの位置ごとの内の馬場の傷み。今日の内柵からの距離(m)のしきい値の並び
+  /// (過去の使用日ごとに1つ)。内柵から m の位置の傷み = [wearUnit] 秒/200m × (m より大きいしきい値の数)。null・空 で今までと同じ (v.2026.10.28+26102801)
+  final List<double>? wearThresholds;
+
+  /// [追加] 展開シミュ改良Step1(案C): 傷み1つぶんの遅れ(実際の秒/200m。オーナーの式は0.01) (v.2026.10.28+26102801)
+  final double wearUnit;
+
+  /// [追加] 展開シミュ改良Step1(案C): 実際の秒 ÷ エンジンの秒(傷みの秒をエンジンの時間に直すのに使う。約1.2) (v.2026.10.28+26102801)
+  final double wearTimeScale;
+
+  /// [追加] 展開シミュ改良Step1(案C): 序盤・中盤に内へ寄るとき、傷みがこの値(秒/200m)以下の所までしか寄らない。
+  /// null はゲームのまま(傷みを見ない) (v.2026.10.28+26102801)
+  final double? wearAvoid;
+
+  /// [追加] 展開シミュ改良Step1(案C): true なら、傷んだ内にいる馬は序盤・中盤に [wearAvoid] の所まで外へ出る。
+  /// false は内へ寄るのを止めるだけ (v.2026.10.28+26102801)
+  final bool wearAvoidOut;
+
   const GameRaceConfig({
     required this.paceMult,
     required this.lateAdj,
@@ -155,6 +190,17 @@ class GameRaceConfig {
     this.slopes = true,
     this.minSpeedGutsScale = 1.0,
     this.finalCornerFan,
+    // [追加] 展開シミュ改良Step1(案C): 既定値は今までと同じ結果になる値 (v.2026.10.28+26102801)
+    this.innerBias = 0.0,
+    this.innerBand = 4.0 / 18.0,
+    this.kickback = 0.0,
+    this.kickDistance = 5.0,
+    this.kickLanes = 1.0,
+    this.wearThresholds,
+    this.wearUnit = 0.01,
+    this.wearTimeScale = 1.2,
+    this.wearAvoid,
+    this.wearAvoidOut = false,
   });
 
   /// 芝の校正値(設計書4章)
@@ -186,6 +232,17 @@ class GameRaceConfig {
     bool? spurtAccept,
     bool? lanes,
     bool? slopes,
+    // [追加] 展開シミュ改良Step1(案C): 内の馬場・砂かぶり・傷みもレースごとに差し替えられるようにする(null は元のまま) (v.2026.10.28+26102801)
+    double? innerBias,
+    double? innerBand,
+    double? kickback,
+    double? kickDistance,
+    double? kickLanes,
+    List<double>? wearThresholds,
+    double? wearUnit,
+    double? wearTimeScale,
+    double? wearAvoid,
+    bool? wearAvoidOut,
   }) {
     return GameRaceConfig(
       paceMult: paceMult ?? this.paceMult,
@@ -201,6 +258,17 @@ class GameRaceConfig {
       slopes: slopes ?? this.slopes,
       minSpeedGutsScale: minSpeedGutsScale,
       finalCornerFan: finalCornerFan,
+      // [追加] 展開シミュ改良Step1(案C) (v.2026.10.28+26102801)
+      innerBias: innerBias ?? this.innerBias,
+      innerBand: innerBand ?? this.innerBand,
+      kickback: kickback ?? this.kickback,
+      kickDistance: kickDistance ?? this.kickDistance,
+      kickLanes: kickLanes ?? this.kickLanes,
+      wearThresholds: wearThresholds ?? this.wearThresholds,
+      wearUnit: wearUnit ?? this.wearUnit,
+      wearTimeScale: wearTimeScale ?? this.wearTimeScale,
+      wearAvoid: wearAvoid ?? this.wearAvoid,
+      wearAvoidOut: wearAvoidOut ?? this.wearAvoidOut,
     );
   }
 }
@@ -593,6 +661,20 @@ class GameRaceEngine {
     final crowd = <int>[];
     final inCrowd = List<bool>.filled(n, false);
 
+    // [追加] 展開シミュ改良Step1(案C): 内の馬場の傷み。避けるときの境目(内柵からの距離。コース幅の割合)。
+    // 傷みが [GameRaceConfig.wearAvoid] 以下になるのは、大きい方から数えて (wearAvoid÷wearUnit) 番目のしきい値より外 (v.2026.10.28+26102801)
+    final wearThr = config.wearThresholds ?? const <double>[];
+    final hasWear = wearThr.isNotEmpty;
+    double? wearEdge;
+    final wearAvoid = config.wearAvoid;
+    if (hasWear && wearAvoid != null) {
+      final kOk = (wearAvoid / config.wearUnit + 1e-9).toInt();
+      final ts = List<double>.from(wearThr)..sort((a, b) => b.compareTo(a));
+      if (ts.length > kOk) {
+        wearEdge = ts[kOk] / courseWidthMeters;
+      }
+    }
+
     final tMax = d / (vb * 0.6) + 30.0;
     int frame = 0;
     double t = 0.0;
@@ -964,6 +1046,17 @@ class GameRaceEngine {
               tgtLane[i] = ex;
             } else if (p < 2 && !blockIn[i]) {
               tgtLane[i] = lane[i] > 0.05 ? 0.05 : lane[i];
+              // [追加] 展開シミュ改良Step1(案C): 傷んだ内を避ける。境目より内へは寄らない(外へ出る指定なら境目まで出る) (v.2026.10.28+26102801)
+              final edge = wearEdge;
+              if (edge != null && tgtLane[i] < edge) {
+                if (config.wearAvoidOut) {
+                  tgtLane[i] = edge;
+                } else {
+                  tgtLane[i] = lane[i] >= edge
+                      ? math.min(math.max(edge, tgtLane[i]), lane[i])
+                      : lane[i];
+                }
+              }
             } else {
               tgtLane[i] = lane[i];
             }
@@ -1024,6 +1117,36 @@ class GameRaceEngine {
         final prev = pos[i];
         final radius = config.lanes ? course.cornerRadiusAt(prev) : 0.0;
         double adv = nv * dt;
+        // [追加] 展開シミュ改良Step1(案C): 内ラチ付近の進みにくさ → 内の馬場の傷み → 砂かぶり の順に進みを直す(参照実装 simref2.py と同じ順) (v.2026.10.28+26102801)
+        if (config.innerBias != 0.0 && config.lanes) {
+          adv -= config.innerBias *
+              math.max(0.0, 1.0 - lane[i] / config.innerBand) *
+              dt;
+        }
+        if (hasWear && config.lanes) {
+          final m = lane[i] * courseWidthMeters;
+          int c = 0;
+          for (final th in wearThr) {
+            if (th > m) c++;
+          }
+          if (c > 0) {
+            adv = adv /
+                (1.0 + c * config.wearUnit * nv / (200.0 * config.wearTimeScale));
+          }
+        }
+        if (config.kickback != 0.0 && config.lanes) {
+          for (int j = 0; j < n; j++) {
+            if (j != i &&
+                started[j] &&
+                !finished[j] &&
+                0.0 < pos[j] - prev &&
+                pos[j] - prev < config.kickDistance &&
+                (lane[j] - lane[i]).abs() < config.kickLanes * hl) {
+              adv -= config.kickback * dt;
+              break;
+            }
+          }
+        }
         if (radius > 0) {
           adv = adv * radius / (radius + lane[i] * courseWidthMeters);
         }
