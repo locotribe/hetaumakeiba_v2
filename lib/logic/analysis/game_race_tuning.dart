@@ -138,6 +138,13 @@ class GameRaceTuning {
   /// 案D: 回ごとに先頭の1000m通過を散らす標準偏差(秒)。0 で散らさない
   final double paceScatterSd;
 
+  /// [追加] 展開シミュ改良Step4: 序盤・中盤のペース倍率(当てたペースを入れる前の値)。null は芝・ダートの設定(GameRaceConfig.turf・dirt)のまま (v.2026.10.29+26102901)
+  final double? paceMult;
+
+  /// [追加] 展開シミュ改良Step4: 勝率・3着以内率の補正。null は GameRaceSimulator の値(winCalibrationTurf など)のまま (v.2026.10.29+26102901)
+  final double? winCalibration;
+  final double? top3Calibration;
+
   const GameRaceTuning({
     this.innerBias = 0.0,
     this.kickback = 0.0,
@@ -146,6 +153,10 @@ class GameRaceTuning {
     this.wearAvoidOut = false,
     this.pacePredictStrength = 0.0,
     this.paceScatterSd = 0.0,
+    // [追加] 展開シミュ改良Step4 (v.2026.10.29+26102901)
+    this.paceMult,
+    this.winCalibration,
+    this.top3Calibration,
   });
 
   /// 今までと同じ(どれも効かせない)
@@ -167,8 +178,32 @@ class GameRaceTuning {
     paceScatterSd: 1.0,
   );
 
-  /// アプリで使う値。改良Step3 は仕組みを入れるだけなので、芝・ダートとも [off](改良Step4 で効かせる)
-  static GameRaceTuning of({required bool isDirt}) => off;
+  /// [追加] 展開シミュ改良Step4: 全部の仕組みを入れた状態で決め直した値(芝)。仮の値に、ペース倍率1.05と勝率の補正(α0.35・β0.35)を足した (v.2026.10.29+26102901)
+  static const GameRaceTuning tunedTurf = GameRaceTuning(
+    innerBias: -0.05,
+    useWear: true,
+    wearAvoid: 0.04,
+    pacePredictStrength: 1.0,
+    paceScatterSd: 1.0,
+    paceMult: 1.05,
+    winCalibration: 0.35,
+    top3Calibration: 0.35,
+  );
+
+  /// [追加] 展開シミュ改良Step4: 同じく(ダート)。砂かぶり 0.3 m/s、ペースを当てる、散らし1秒、ペース倍率1.1、α0.5・β0.5 (v.2026.10.29+26102901)
+  static const GameRaceTuning tunedDirt = GameRaceTuning(
+    kickback: 0.3,
+    pacePredictStrength: 1.0,
+    paceScatterSd: 1.0,
+    paceMult: 1.1,
+    winCalibration: 0.5,
+    top3Calibration: 0.5,
+  );
+
+  /// アプリで使う値。改良Step3 は off だった。
+  /// [修正] 展開シミュ改良Step4: 芝は [tunedTurf]、ダートは [tunedDirt] を効かせる (v.2026.10.29+26102901)
+  static GameRaceTuning of({required bool isDirt}) =>
+      isDirt ? tunedDirt : tunedTurf;
 
   /// [base] に、このレースの調整を入れた設定。[rail] は使用コースと傷み、[paceDeviation] は当てたペースのずれ(秒)
   GameRaceConfig apply(
@@ -177,6 +212,8 @@ class GameRaceTuning {
     double? paceDeviation,
   }) {
     var c = base;
+    // [追加] 展開シミュ改良Step4: ペース倍率を先に入れる(当てたペースはこの値からずらす) (v.2026.10.29+26102901)
+    if (paceMult != null) c = c.copyWith(paceMult: paceMult);
     if (innerBias != 0.0) c = c.copyWith(innerBias: innerBias);
     if (kickback != 0.0) c = c.copyWith(kickback: kickback);
     if (useWear && rail != null) {

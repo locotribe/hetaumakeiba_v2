@@ -96,8 +96,28 @@ class GameAbilityTuning {
     speedNoiseSd: 0.25,
   );
 
-  /// アプリで使う値。改良Step2〜3 は仕組みを入れるだけなので、芝・ダートとも [off](改良Step4 で効かせる)
-  static GameAbilityTuning of({required bool isDirt}) => off;
+  /// [追加] 展開シミュ改良Step4: 全部の仕組みを入れた状態で決め直した値(芝)。適性の強さ0.8、斤量0.2秒/kg+過去走の補正、スタミナ+150、揺らぎ0.25 (v.2026.10.29+26102901)
+  static const GameAbilityTuning tunedTurf = GameAbilityTuning(
+    aptitudeStrength: 0.8,
+    weightSecondsPerKg: 0.2,
+    weightPastNormalize: true,
+    staminaAdd: 150.0,
+    speedNoiseSd: 0.25,
+  );
+
+  /// [追加] 展開シミュ改良Step4: 同じく(ダート)。適性の強さ1.6、ほかは芝と同じ (v.2026.10.29+26102901)
+  static const GameAbilityTuning tunedDirt = GameAbilityTuning(
+    aptitudeStrength: 1.6,
+    weightSecondsPerKg: 0.2,
+    weightPastNormalize: true,
+    staminaAdd: 150.0,
+    speedNoiseSd: 0.25,
+  );
+
+  /// アプリで使う値。改良Step2〜3 は off だった。
+  /// [修正] 展開シミュ改良Step4: 芝は [tunedTurf]、ダートは [tunedDirt] を効かせる (v.2026.10.29+26102901)
+  static GameAbilityTuning of({required bool isDirt}) =>
+      isDirt ? tunedDirt : tunedTurf;
 }
 
 class GameAbilityBuilder {

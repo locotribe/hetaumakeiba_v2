@@ -85,7 +85,8 @@ class _GameSimInputs {
   /// [追加] 展開シミュ改良Step3(案D): 出走馬の顔ぶれから当てた、いつものペースからのずれ(秒。正 = 遅い)。当てられなければ null (v.2026.10.28+26102803)
   final double? paceDeviation;
 
-  /// [追加] 展開シミュ改良Step3: このレースのエンジンの設定の調整(改良Step3 では off) (v.2026.10.28+26102803)
+  /// [追加] 展開シミュ改良Step3: このレースのエンジンの設定の調整 (v.2026.10.28+26102803)
+  /// [修正] 展開シミュ改良Step4: GameRaceTuning.of の決め直した値(勝率・3着以内率の補正も含む) (v.2026.10.29+26102901)
   final GameRaceTuning tuning;
 
   /// 同じレース名・同じ競馬場・芝ダ・距離の過去レース(新しい順)
@@ -343,8 +344,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     return _shown?.baselineWinnerTime;
   }
 
-  // [修正] 展開シミュ改良Step3: 芝・ダートの設定に、このレースの調整(内の馬場・砂かぶり・傷み・当てたペース)を入れる。
-  // 改良Step3 では GameRaceTuning.of が off なので、今までと同じ (v.2026.10.28+26102803)
+  // [修正] 展開シミュ改良Step3: 芝・ダートの設定に、このレースの調整(内の馬場・砂かぶり・傷み・当てたペース)を入れる (v.2026.10.28+26102803)
+  // [修正] 展開シミュ改良Step4: GameRaceTuning.of で決め直した値(ペース倍率を含む)を効かせる (v.2026.10.29+26102901)
   GameRaceConfig _baseConfigOf(_GameSimInputs inputs) => inputs.tuning.apply(
         inputs.isDirt ? GameRaceConfig.dirt : GameRaceConfig.turf,
         rail: inputs.railInfo,
@@ -360,12 +361,15 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       abilities: inputs.abilities,
       config: config,
       seed: seed,
-      winCalibration: inputs.isDirt
-          ? GameRaceSimulator.winCalibrationDirt
-          : GameRaceSimulator.winCalibrationTurf,
-      top3Calibration: inputs.isDirt
-          ? GameRaceSimulator.top3CalibrationDirt
-          : GameRaceSimulator.top3CalibrationTurf,
+      // [修正] 展開シミュ改良Step4: 勝率・3着以内率の補正は、このレースの調整に値があればそれを使う (v.2026.10.29+26102901)
+      winCalibration: inputs.tuning.winCalibration ??
+          (inputs.isDirt
+              ? GameRaceSimulator.winCalibrationDirt
+              : GameRaceSimulator.winCalibrationTurf),
+      top3Calibration: inputs.tuning.top3Calibration ??
+          (inputs.isDirt
+              ? GameRaceSimulator.top3CalibrationDirt
+              : GameRaceSimulator.top3CalibrationTurf),
       course: inputs.course,
       runs: runs,
       // [追加] 展開シミュ改良Step3(案D) (v.2026.10.28+26102803)
@@ -737,7 +741,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       ));
       staminaIndexes.add(params.staminaIndex);
     }
-    // [修正] 展開シミュ改良Step2: 能力値の調整を渡す。改良Step2〜3 は GameAbilityTuning.of が off なので、結果は今までと同じ (v.2026.10.28+26102802)
+    // [修正] 展開シミュ改良Step2: 能力値の調整を渡す (v.2026.10.28+26102802)
+    // [修正] 展開シミュ改良Step4: GameAbilityTuning.of で決め直した値を効かせる (v.2026.10.29+26102901)
     final abilities = GameAbilityBuilder.build(
       sources,
       tuning: GameAbilityTuning.of(isDirt: isDirt),
