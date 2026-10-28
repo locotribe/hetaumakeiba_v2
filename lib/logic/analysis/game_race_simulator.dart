@@ -30,6 +30,9 @@ class GameHorseSummary {
   /// 通過点ごとの平均順位(1始まり。通過点は [GameRaceSummary.checkpoints] の順)
   final List<double> meanCheckpointRanks;
 
+  /// [追加] 展開シミュ改良Step5a(案E): なぜこの勝率か の数え上げの全回の平均。数えていなければ null (v.2026.10.29+26102902)
+  final GameHorseStatsMean? stats;
+
   const GameHorseSummary({
     required this.wins,
     required this.top3,
@@ -37,6 +40,35 @@ class GameHorseSummary {
     required this.winProb,
     required this.top3Prob,
     required this.meanCheckpointRanks,
+    // [追加] 展開シミュ改良Step5a (v.2026.10.29+26102902)
+    this.stats,
+  });
+}
+
+/// [追加] 展開シミュ改良Step5a(案E): 1頭ぶんの、なぜこの勝率か の数え上げ(GameRunHorseStats)の全回の平均。距離は m (v.2026.10.29+26102902)
+class GameHorseStatsMean {
+  final double cornerLoss;
+  final double blockLoss;
+  final double staminaLoss;
+
+  /// HPが尽きた回の割合(0〜1)
+  final double staminaOutRate;
+
+  /// HPが尽きた所(ゴールまでの距離 m)の、尽きた回だけの平均。尽きた回が無ければ null
+  final double? staminaOutAt;
+  final double innerGain;
+  final double wearLoss;
+  final double kickLoss;
+
+  const GameHorseStatsMean({
+    required this.cornerLoss,
+    required this.blockLoss,
+    required this.staminaLoss,
+    required this.staminaOutRate,
+    required this.staminaOutAt,
+    required this.innerGain,
+    required this.wearLoss,
+    required this.kickLoss,
   });
 }
 
@@ -75,6 +107,9 @@ class GameRaceSummary {
   /// [追加] 展開シミュ改良Step3(案D): 回ごとの着順(回の順 → 馬の順。1始まり)。ペース別の勝率(改良Step5)に使う (v.2026.10.28+26102803)
   final List<List<int>> runRanks;
 
+  /// [追加] 展開シミュ改良Step5a(案E): 回ごとの先頭の1000m通過(ゲームの単位。回の順)。1000m未満のレースは null。散らしたペースの幅を出すのに使う (v.2026.10.29+26102902)
+  final List<double?> runLeader1000;
+
   const GameRaceSummary({
     required this.runs,
     required this.checkpoints,
@@ -88,6 +123,8 @@ class GameRaceSummary {
     // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
     this.paceOffsets = const [],
     this.runRanks = const [],
+    // [追加] 展開シミュ改良Step5a (v.2026.10.29+26102902)
+    this.runLeader1000 = const [],
   });
 
   /// 実時間への倍率。[referenceWinnerSeconds] は基準の勝ち時計(秒)。
@@ -95,11 +132,158 @@ class GameRaceSummary {
       referenceWinnerSeconds / meanWinnerTime;
 }
 
+/// [追加] 展開シミュ改良Step5a(案E): 1つの組(何回か)を走らせた結果 (v.2026.10.29+26102902)
+class GameRaceBlock {
+  final List<GameRaceRunResult> results;
+
+  /// 回ごとに散らしたペースのずれ(秒)。散らさなければ空
+  final List<double> paceOffsets;
+
+  const GameRaceBlock({required this.results, required this.paceOffsets});
+}
+
+/// [追加] 展開シミュ改良Step5a(案E): 途中の結果 (v.2026.10.29+26102902)
+class GameRaceProgress {
+  /// 終わった回数
+  final int runsDone;
+
+  /// 全部の回数
+  final int runsTotal;
+
+  /// 馬ごとの集計(入力の馬の順。数え上げの平均 stats は null)
+  final List<GameHorseSummary> horses;
+
+  const GameRaceProgress({
+    required this.runsDone,
+    required this.runsTotal,
+    required this.horses,
+  });
+}
+
+/// [追加] 展開シミュ改良Step5a(案E): 走らせた結果を数える([GameRaceSimulator.summarize] と [GameRaceSimulator.progressOf] で使う)。
+/// 数え方・足す順は Step4 までの run と同じ (v.2026.10.29+26102902)
+class _Tally {
+  final int runs;
+  final int n;
+  final List<List<int>> ranks = [];
+  final List<List<List<int>>> cpRanks = [];
+  final List<int> wins;
+  final List<int> top3;
+  final List<double> rankSum;
+  final List<List<double>> cpSum;
+  double winnerTimeSum = 0.0;
+  double leaderSum = 0.0;
+  int leaderCount = 0;
+  double last600Sum = 0.0;
+  int last600Count = 0;
+
+  /// 回ごとの先頭の1000m通過
+  final List<double?> leaders = [];
+
+  _Tally(this.runs, this.n, int cpCount)
+      : wins = List<int>.filled(n, 0),
+        top3 = List<int>.filled(n, 0),
+        rankSum = List<double>.filled(n, 0.0),
+        cpSum = List<List<double>>.generate(
+            cpCount, (_) => List<double>.filled(n, 0.0));
+
+  static _Tally of(List<GameRaceRunResult> results, List<double> cps) {
+    final t =
+        _Tally(results.length, results.first.finishTimes.length, cps.length);
+    final n = t.n;
+    for (final res in results) {
+      final rk = GameRaceSimulator.rankOrder(res.finishTimes);
+      t.ranks.add(rk);
+      for (int i = 0; i < n; i++) {
+        if (rk[i] == 1) t.wins[i]++;
+        if (rk[i] <= 3) t.top3[i]++;
+        t.rankSum[i] += rk[i];
+      }
+      final perCp = <List<int>>[];
+      for (int k = 0; k < cps.length; k++) {
+        final times = <double?>[
+          for (final tr in res.traces) GameRaceSimulator.crossingTime(tr, cps[k])
+        ];
+        final cr = GameRaceSimulator.rankOrder(times);
+        perCp.add(cr);
+        for (int i = 0; i < n; i++) {
+          t.cpSum[k][i] += cr[i];
+        }
+      }
+      t.cpRanks.add(perCp);
+      int winner = 0;
+      for (int i = 0; i < n; i++) {
+        if (rk[i] == 1) winner = i;
+      }
+      t.winnerTimeSum += res.finishTimes[winner] ?? 0.0;
+      double? lead;
+      for (final x in res.time1000) {
+        if (x != null && (lead == null || x < lead)) lead = x;
+      }
+      t.leaders.add(lead);
+      if (lead != null) {
+        t.leaderSum += lead;
+        t.leaderCount++;
+      }
+      final f = res.finishTimes[winner];
+      final t6 = res.time600[winner];
+      if (f != null && t6 != null) {
+        t.last600Sum += f - t6;
+        t.last600Count++;
+      }
+    }
+    return t;
+  }
+
+  /// 補正した勝率の元の値(合計で割る前)
+  List<double> rawWin(double calibration) => [
+        for (int i = 0; i < n; i++)
+          math.pow((wins[i] + 0.5) / (runs + 0.5 * n), calibration).toDouble()
+      ];
+
+  /// 補正した3着以内率の元の値(合計で割る前)
+  List<double> rawTop3(double calibration) => [
+        for (int i = 0; i < n; i++)
+          math.pow((top3[i] + 0.5) / (runs + 0.5 * n), calibration).toDouble()
+      ];
+
+  /// 馬ごとの集計。勝率は合計1.0、3着以内率は合計3.0にそろえて1.0で打ち止め
+  List<GameHorseSummary> horsesOf(
+      List<double> raw, List<double> raw3, List<GameHorseStatsMean>? stats) {
+    double rawSum = 0.0;
+    for (final x in raw) {
+      rawSum += x;
+    }
+    double raw3Sum = 0.0;
+    for (final x in raw3) {
+      raw3Sum += x;
+    }
+    return [
+      for (int i = 0; i < n; i++)
+        GameHorseSummary(
+          wins: wins[i],
+          top3: top3[i],
+          meanRank: rankSum[i] / runs,
+          winProb: raw[i] / rawSum,
+          top3Prob: math.min(raw3[i] / raw3Sum * 3.0, 1.0),
+          meanCheckpointRanks: [
+            for (int k = 0; k < cpSum.length; k++) cpSum[k][i] / runs
+          ],
+          stats: stats?[i],
+        )
+    ];
+  }
+}
+
 class GameRaceSimulator {
   GameRaceSimulator._();
 
   /// 既定の回数
   static const int defaultRuns = 100;
+
+  /// [追加] 展開シミュ改良Step5a(案E): 既定の組の数(100回を20回ずつ)と、組ごとの乱数の種の間隔 (v.2026.10.29+26102902)
+  static const int defaultBlocks = 5;
+  static const int blockSeedStep = 100003;
 
   /// 勝率の補正(芝・ダート)。設計書5章
   static const double winCalibrationTurf = 0.6;
@@ -128,6 +312,7 @@ class GameRaceSimulator {
   /// 乱数は「1回ごとに 当日の出来 → エンジン」の順に [random] から引く。
   /// [修正] 展開シミュ改良Step3(案D): [paceScatterSd] が0より大きいときは、1回ごとに当日の出来より先に正規乱数を1つ引き、
   /// 先頭の1000m通過を「正規乱数 × [paceScatterSd]」秒ずらすペース倍率で走らせる(GamePacePredictor.paceMultOf)。0 なら今までと同じ (v.2026.10.28+26102803)
+  /// [修正] 展開シミュ改良Step5a(案E): 走らせる所を [runBlock]、まとめる所を [summarize] に分けた(結果は今までと同じ) (v.2026.10.29+26102902)
   static GameRaceSummary run({
     required double distance,
     required List<GameHorseAbility> abilities,
@@ -139,22 +324,37 @@ class GameRaceSimulator {
     int runs = defaultRuns,
     double paceScatterSd = 0.0,
   }) {
-    final n = abilities.length;
-    final cps = checkpointsFor(distance, course);
-    final results = <GameRaceRunResult>[];
-    final ranks = <List<int>>[];
-    final cpRanks = <List<List<int>>>[];
-    final wins = List<int>.filled(n, 0);
-    final top3 = List<int>.filled(n, 0);
-    final rankSum = List<double>.filled(n, 0.0);
-    final cpSum = List<List<double>>.generate(
-        cps.length, (_) => List<double>.filled(n, 0.0));
-    double winnerTimeSum = 0.0;
-    double leaderSum = 0.0;
-    int leaderCount = 0;
-    double last600Sum = 0.0;
-    int last600Count = 0;
+    final block = runBlock(
+      distance: distance,
+      abilities: abilities,
+      config: config,
+      random: random,
+      course: course,
+      runs: runs,
+      paceScatterSd: paceScatterSd,
+    );
+    return summarize(
+      distance: distance,
+      results: block.results,
+      paceOffsets: block.paceOffsets,
+      winCalibration: winCalibration,
+      top3Calibration: top3Calibration,
+      course: course,
+    );
+  }
 
+  /// [追加] 展開シミュ改良Step5a(案E): [abilities] の馬を [runs] 回走らせた結果と、回ごとに散らしたペースのずれ。
+  /// 乱数の引き方は [run] と同じ(参照実装 simagg.py の run_block) (v.2026.10.29+26102902)
+  static GameRaceBlock runBlock({
+    required double distance,
+    required List<GameHorseAbility> abilities,
+    required GameRaceConfig config,
+    required GameRaceRandom random,
+    GameRaceCourse course = GameRaceCourse.flat,
+    int runs = defaultRuns,
+    double paceScatterSd = 0.0,
+  }) {
+    final results = <GameRaceRunResult>[];
     // [追加] 展開シミュ改良Step3(案D) (v.2026.10.28+26102803)
     final paceOffsets = <double>[];
     for (int r = 0; r < runs; r++) {
@@ -167,74 +367,34 @@ class GameRaceSimulator {
             paceMult: GamePacePredictor.paceMultOf(config.paceMult, off));
       }
       final h = GameAbilityBuilder.applyFormNoise(abilities, random);
-      final res = GameRaceEngine.simulate(
+      results.add(GameRaceEngine.simulate(
         distance: distance,
         horses: h,
         // [修正] 展開シミュ改良Step3: 回ごとの設定 (v.2026.10.28+26102803)
         config: runConfig,
         random: random,
         course: course,
-      );
-      results.add(res);
-      final rk = rankOrder(res.finishTimes);
-      ranks.add(rk);
-      for (int i = 0; i < n; i++) {
-        if (rk[i] == 1) wins[i]++;
-        if (rk[i] <= 3) top3[i]++;
-        rankSum[i] += rk[i];
-      }
-      final perCp = <List<int>>[];
-      for (int k = 0; k < cps.length; k++) {
-        final times = <double?>[
-          for (final tr in res.traces) crossingTime(tr, cps[k])
-        ];
-        final cr = rankOrder(times);
-        perCp.add(cr);
-        for (int i = 0; i < n; i++) {
-          cpSum[k][i] += cr[i];
-        }
-      }
-      cpRanks.add(perCp);
-      int winner = 0;
-      for (int i = 0; i < n; i++) {
-        if (rk[i] == 1) winner = i;
-      }
-      winnerTimeSum += res.finishTimes[winner] ?? 0.0;
-      double? lead;
-      for (final t in res.time1000) {
-        if (t != null && (lead == null || t < lead)) lead = t;
-      }
-      if (lead != null) {
-        leaderSum += lead;
-        leaderCount++;
-      }
-      final f = res.finishTimes[winner];
-      final t6 = res.time600[winner];
-      if (f != null && t6 != null) {
-        last600Sum += f - t6;
-        last600Count++;
-      }
+      ));
     }
+    return GameRaceBlock(results: results, paceOffsets: paceOffsets);
+  }
 
-    // 補正した勝率
-    final raw = <double>[
-      for (int i = 0; i < n; i++)
-        math.pow((wins[i] + 0.5) / (runs + 0.5 * n), winCalibration).toDouble()
-    ];
-    double rawSum = 0.0;
-    for (final x in raw) {
-      rawSum += x;
-    }
-
-    // 補正した3着以内率(合計が3.0になるようにそろえ、1.0で打ち止め)
-    final raw3 = <double>[
-      for (int i = 0; i < n; i++)
-        math.pow((top3[i] + 0.5) / (runs + 0.5 * n), top3Calibration).toDouble()
-    ];
-    double raw3Sum = 0.0;
-    for (final x in raw3) {
-      raw3Sum += x;
-    }
+  /// [追加] 展開シミュ改良Step5a(案E): 走らせた結果([results]。1回以上)をまとめる。Step4 までの [run] の後半と同じ計算に、
+  /// 回ごとの先頭の1000m通過([GameRaceSummary.runLeader1000])と、なぜこの勝率か の数え上げの平均([GameHorseSummary.stats])を足した。
+  /// 参照実装は simagg.py の summarize (v.2026.10.29+26102902)
+  static GameRaceSummary summarize({
+    required double distance,
+    required List<GameRaceRunResult> results,
+    required List<double> paceOffsets,
+    required double winCalibration,
+    required double top3Calibration,
+    GameRaceCourse course = GameRaceCourse.flat,
+  }) {
+    final runs = results.length;
+    final cps = checkpointsFor(distance, course);
+    final t = _Tally.of(results, cps);
+    final n = t.n;
+    final raw = t.rawWin(winCalibration);
 
     // [修正] 展開シミュゲーム式移植Step4b: 代表の1回の選び方を変えた。結果の表と再生の着順が食い違って見えたため。
     // 表の並び(補正した勝率の高い順、同じなら平均着順の良い順)の1番の馬が勝った回の中から、
@@ -244,7 +404,7 @@ class GameRaceSimulator {
       ..sort((a, b) {
         final c = raw[b].compareTo(raw[a]);
         if (c != 0) return c;
-        final m = rankSum[a].compareTo(rankSum[b]);
+        final m = t.rankSum[a].compareTo(t.rankSum[b]);
         return m != 0 ? m : a.compareTo(b);
       });
     final tableRank = List<int>.filled(n, 0);
@@ -254,7 +414,7 @@ class GameRaceSimulator {
     final top = tableOrder.first;
     final topWon = [
       for (int r = 0; r < runs; r++)
-        if (ranks[r][top] == 1) r
+        if (t.ranks[r][top] == 1) r
     ];
     final candidates =
         topWon.isNotEmpty ? topWon : List<int>.generate(runs, (r) => r);
@@ -264,12 +424,12 @@ class GameRaceSimulator {
       double s = 0.0;
       for (int k = 0; k < cps.length - 1; k++) {
         for (int i = 0; i < n; i++) {
-          final dlt = cpRanks[r][k][i] - cpSum[k][i] / runs;
+          final dlt = t.cpRanks[r][k][i] - t.cpSum[k][i] / runs;
           s += dlt * dlt;
         }
       }
       for (int i = 0; i < n; i++) {
-        final dlt = (ranks[r][i] - tableRank[i]).toDouble();
+        final dlt = (t.ranks[r][i] - tableRank[i]).toDouble();
         s += (tableRank[i] <= 3 ? representativeTopWeight : 1.0) * dlt * dlt;
       }
       if (s < bestScore) {
@@ -278,33 +438,248 @@ class GameRaceSimulator {
       }
     }
 
-    final horses = <GameHorseSummary>[
-      for (int i = 0; i < n; i++)
-        GameHorseSummary(
-          wins: wins[i],
-          top3: top3[i],
-          meanRank: rankSum[i] / runs,
-          winProb: raw[i] / rawSum,
-          top3Prob: math.min(raw3[i] / raw3Sum * 3.0, 1.0),
-          meanCheckpointRanks: [
-            for (int k = 0; k < cps.length; k++) cpSum[k][i] / runs
-          ],
-        )
-    ];
     return GameRaceSummary(
       runs: runs,
       checkpoints: cps,
-      horses: horses,
-      meanWinnerTime: winnerTimeSum / runs,
-      meanLeader1000: leaderCount > 0 ? leaderSum / leaderCount : null,
-      meanWinnerLast600: last600Count > 0 ? last600Sum / last600Count : 0.0,
+      horses: t.horsesOf(raw, t.rawTop3(top3Calibration), statsMeanOf(results)),
+      meanWinnerTime: t.winnerTimeSum / runs,
+      meanLeader1000: t.leaderCount > 0 ? t.leaderSum / t.leaderCount : null,
+      meanWinnerLast600:
+          t.last600Count > 0 ? t.last600Sum / t.last600Count : 0.0,
       representativeIndex: best,
       representative: results[best],
       averageRun: averageRunOf(results, distance),
       // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
       paceOffsets: paceOffsets,
-      runRanks: ranks,
+      runRanks: t.ranks,
+      // [追加] 展開シミュ改良Step5a (v.2026.10.29+26102902)
+      runLeader1000: t.leaders,
     );
+  }
+
+  /// [追加] 展開シミュ改良Step5a(案E): 途中の結果(勝率・3着以内率・平均着順・平均の通過順)。[summarize] と同じ計算で、
+  /// 代表の1回・平均の走り・数え上げの平均は作らない (v.2026.10.29+26102902)
+  static GameRaceProgress progressOf(
+    List<GameRaceRunResult> results, {
+    required double distance,
+    required double winCalibration,
+    required double top3Calibration,
+    required int runsTotal,
+    GameRaceCourse course = GameRaceCourse.flat,
+  }) {
+    final t = _Tally.of(results, checkpointsFor(distance, course));
+    return GameRaceProgress(
+      runsDone: results.length,
+      runsTotal: runsTotal,
+      horses: t.horsesOf(
+          t.rawWin(winCalibration), t.rawTop3(top3Calibration), null),
+    );
+  }
+
+  /// [追加] 展開シミュ改良Step5a(案E): なぜこの勝率か の数え上げを、馬ごとに全回で平均する。数え上げが無ければ null。
+  /// 参照実装は simagg.py の stats_mean (v.2026.10.29+26102902)
+  static List<GameHorseStatsMean>? statsMeanOf(
+      List<GameRaceRunResult> results) {
+    if (results.isEmpty || results.first.stats.isEmpty) return null;
+    final runs = results.length;
+    final n = results.first.stats.length;
+    return [
+      for (int i = 0; i < n; i++) _statsMeanOne(results, i, runs),
+    ];
+  }
+
+  static GameHorseStatsMean _statsMeanOne(
+      List<GameRaceRunResult> results, int i, int runs) {
+    double corner = 0.0;
+    double block = 0.0;
+    double stamina = 0.0;
+    double inner = 0.0;
+    double wear = 0.0;
+    double kick = 0.0;
+    int outCount = 0;
+    double outSum = 0.0;
+    for (final r in results) {
+      final s = r.stats[i];
+      corner += s.cornerLoss;
+      block += s.blockLoss;
+      stamina += s.staminaLoss;
+      inner += s.innerGain;
+      wear += s.wearLoss;
+      kick += s.kickLoss;
+      final o = s.staminaOutAt;
+      if (o != null) {
+        outCount++;
+        outSum += o;
+      }
+    }
+    return GameHorseStatsMean(
+      cornerLoss: corner / runs,
+      blockLoss: block / runs,
+      staminaLoss: stamina / runs,
+      staminaOutRate: outCount / runs,
+      staminaOutAt: outCount > 0 ? outSum / outCount : null,
+      innerGain: inner / runs,
+      wearLoss: wear / runs,
+      kickLoss: kick / runs,
+    );
+  }
+
+  /// [追加] 展開シミュ改良Step5a(案E): [runs] 回を [blocks] 個の組に分けたときの、組ごとの回数(余りは前の組から1回ずつ) (v.2026.10.29+26102902)
+  static List<int> blockSizes(int runs, int blocks) {
+    final b = math.max(1, math.min(blocks, runs));
+    return [
+      for (int k = 0; k < b; k++) runs ~/ b + (k < runs % b ? 1 : 0),
+    ];
+  }
+
+  /// [追加] 展開シミュ改良Step5a(案E): [k] 番目の組の乱数の種 (v.2026.10.29+26102902)
+  static int blockSeedOf(int seed, int k) => seed + k * blockSeedStep;
+
+  /// [追加] 展開シミュ改良Step5a(案E): アプリで使う乱数(dart:math) (v.2026.10.29+26102902)
+  static GameRaceRandom dartRandomOf(int seed) => GameRaceDartRandom(seed);
+
+  /// [追加] 展開シミュ改良Step5a(案E): [runs] 回を [blocks] 個の組に分け、組ごとに別の乱数(種 [blockSeedOf]、乱数は [randomOf])で
+  /// 走らせて、組の順につないでまとめる。[runParallel] と同じ結果を、この場で(1本で)作る。参照実装は simagg.py の run_blocks (v.2026.10.29+26102902)
+  static GameRaceSummary runBlocks({
+    required double distance,
+    required List<GameHorseAbility> abilities,
+    required GameRaceConfig config,
+    required int seed,
+    required double winCalibration,
+    required double top3Calibration,
+    GameRaceCourse course = GameRaceCourse.flat,
+    int runs = defaultRuns,
+    int blocks = defaultBlocks,
+    double paceScatterSd = 0.0,
+    GameRaceRandom Function(int seed) randomOf = dartRandomOf,
+  }) {
+    final results = <GameRaceRunResult>[];
+    final offsets = <double>[];
+    final sizes = blockSizes(runs, blocks);
+    for (int k = 0; k < sizes.length; k++) {
+      final b = runBlock(
+        distance: distance,
+        abilities: abilities,
+        config: config,
+        random: randomOf(blockSeedOf(seed, k)),
+        course: course,
+        runs: sizes[k],
+        paceScatterSd: paceScatterSd,
+      );
+      results.addAll(b.results);
+      offsets.addAll(b.paceOffsets);
+    }
+    return summarize(
+      distance: distance,
+      results: results,
+      paceOffsets: offsets,
+      winCalibration: winCalibration,
+      top3Calibration: top3Calibration,
+      course: course,
+    );
+  }
+
+  /// [追加] 展開シミュ改良Step5a(案E): [runBlocks] を、組ごとに別スレッド(Isolate)で同時に走らせる。画面を止めず、速くするためにアプリからはこちらを使う。
+  /// 組が終わるたびに、それまでに終わった組の結果で [onProgress] を呼ぶ(終わる順は決まっていない。全部終わったときは呼ばない)。
+  /// 最後のまとめ([summarize])も別スレッドで行い、組の順につなぐので、結果は [runBlocks] と同じ (v.2026.10.29+26102902)
+  static Future<GameRaceSummary> runParallel({
+    required double distance,
+    required List<GameHorseAbility> abilities,
+    required GameRaceConfig config,
+    required int seed,
+    required double winCalibration,
+    required double top3Calibration,
+    GameRaceCourse course = GameRaceCourse.flat,
+    int runs = defaultRuns,
+    int blocks = defaultBlocks,
+    double paceScatterSd = 0.0,
+    void Function(GameRaceProgress progress)? onProgress,
+    GameRaceRandom Function(int seed) randomOf = dartRandomOf,
+  }) async {
+    final sizes = blockSizes(runs, blocks);
+    final done = List<GameRaceBlock?>.filled(sizes.length, null);
+    await Future.wait([
+      for (int k = 0; k < sizes.length; k++)
+        _blockInBackground(
+          distance: distance,
+          abilities: abilities,
+          config: config,
+          seed: blockSeedOf(seed, k),
+          course: course,
+          runs: sizes[k],
+          paceScatterSd: paceScatterSd,
+          randomOf: randomOf,
+        ).then((b) {
+          done[k] = b;
+          if (onProgress == null) return;
+          final sofar = <GameRaceRunResult>[
+            for (final x in done)
+              if (x != null) ...x.results
+          ];
+          if (sofar.length >= runs) return;
+          onProgress(progressOf(
+            sofar,
+            distance: distance,
+            winCalibration: winCalibration,
+            top3Calibration: top3Calibration,
+            runsTotal: runs,
+            course: course,
+          ));
+        }),
+    ]);
+    final results = <GameRaceRunResult>[
+      for (final b in done) ...b!.results
+    ];
+    final offsets = <double>[for (final b in done) ...b!.paceOffsets];
+    return _summarizeInBackground(
+      distance: distance,
+      results: results,
+      paceOffsets: offsets,
+      winCalibration: winCalibration,
+      top3Calibration: top3Calibration,
+      course: course,
+    );
+  }
+
+  /// 1つの組を別スレッドで走らせる(別スレッドへ渡すのは引数だけにするため、関数を分けた)
+  static Future<GameRaceBlock> _blockInBackground({
+    required double distance,
+    required List<GameHorseAbility> abilities,
+    required GameRaceConfig config,
+    required int seed,
+    required GameRaceCourse course,
+    required int runs,
+    required double paceScatterSd,
+    required GameRaceRandom Function(int seed) randomOf,
+  }) {
+    return Isolate.run(() => runBlock(
+          distance: distance,
+          abilities: abilities,
+          config: config,
+          random: randomOf(seed),
+          course: course,
+          runs: runs,
+          paceScatterSd: paceScatterSd,
+        ));
+  }
+
+  /// まとめを別スレッドで行う
+  static Future<GameRaceSummary> _summarizeInBackground({
+    required double distance,
+    required List<GameRaceRunResult> results,
+    required List<double> paceOffsets,
+    required double winCalibration,
+    required double top3Calibration,
+    required GameRaceCourse course,
+  }) {
+    return Isolate.run(() => summarize(
+          distance: distance,
+          results: results,
+          paceOffsets: paceOffsets,
+          winCalibration: winCalibration,
+          top3Calibration: top3Calibration,
+          course: course,
+        ));
   }
 
   /// [追加] 展開シミュゲーム式移植Step4c: 平均の走りを作る。結果の表(全回の平均)と再生の着順をそろえるため。

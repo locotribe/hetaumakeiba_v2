@@ -120,6 +120,24 @@ class GameAbilityTuning {
       isDirt ? tunedDirt : tunedTurf;
 }
 
+/// [追加] 展開シミュ改良Step5a(案E): 終盤の速度加算(m/s)の内訳(GameAbilityBuilder.speedPartsOf) (v.2026.10.29+26102902)
+class GameSpeedParts {
+  /// スピード指数の分(出走馬の平均との差 × 信頼度 × 0.06)
+  final double speedIndex;
+
+  /// 適性の点数の分(案B)
+  final double aptitude;
+
+  /// 斤量のスキルと過去走の斤量の補正の分
+  final double weight;
+
+  const GameSpeedParts({
+    required this.speedIndex,
+    required this.aptitude,
+    required this.weight,
+  });
+}
+
 class GameAbilityBuilder {
   GameAbilityBuilder._();
 
@@ -243,6 +261,75 @@ class GameAbilityBuilder {
         style: styleOfRate(rate),
         noiseScale: noiseScale,
         speedDisplay: 800.0 + speedDisplayPerPoint * (siEff - mean),
+      ));
+    }
+    return out;
+  }
+
+  /// [追加] 展開シミュ改良Step5a(案E): [build] の終盤の速度加算(m/s)のうち、スピード指数・適性の点数・斤量のそれぞれの分。
+  /// [build] と同じ式で作る(speedBase + 3つの和 = 揺らぎの前の speedAdd)。なぜこの勝率か に使う。参照実装は reasonref.py の speed_parts (v.2026.10.29+26102902)
+  static List<GameSpeedParts> speedPartsOf(
+    List<GameAbilitySource> sources, {
+    GameAbilityTuning tuning = GameAbilityTuning.off,
+    double? distance,
+  }) {
+    final weightGains = List<double>.filled(sources.length, 0.0);
+    final hasWeightSkill = tuning.weightSecondsPerKg != 0.0 && distance != null;
+    if (hasWeightSkill) {
+      double? maxWc;
+      double pastSum = 0.0;
+      int pastN = 0;
+      for (final s in sources) {
+        final w = s.carriedWeight;
+        if (w != null && (maxWc == null || w > maxWc)) maxWc = w;
+        final p = s.pastCarriedWeight;
+        if (p != null) {
+          pastSum += p;
+          pastN++;
+        }
+      }
+      final pastMean = pastN > 0 ? pastSum / pastN : null;
+      final k = tuning.weightSecondsPerKg;
+      for (int i = 0; i < sources.length; i++) {
+        final w = sources[i].carriedWeight;
+        double g = (w != null && maxWc != null)
+            ? k * (maxWc - w) * distance / 2000.0
+            : 0.0;
+        final p = sources[i].pastCarriedWeight;
+        if (tuning.weightPastNormalize && p != null && pastMean != null) {
+          g = g + k * (p - pastMean) * distance / 2000.0;
+        }
+        weightGains[i] = g;
+      }
+    }
+    double sum = 0.0;
+    int count = 0;
+    for (final s in sources) {
+      if (s.speedIndex != null) {
+        sum += s.speedIndex!;
+        count++;
+      }
+    }
+    final mean = count > 0 ? sum / count : defaultSpeedIndex;
+    final out = <GameSpeedParts>[];
+    for (int i = 0; i < sources.length; i++) {
+      final s = sources[i];
+      final conf = (s.speedIndex != null && s.speedIndexConfidence != null)
+          ? s.speedIndexConfidence!
+          : 0.0;
+      final siEff =
+          mean + (s.speedIndex != null ? (s.speedIndex! - mean) * conf : 0.0);
+      double weight = 0.0;
+      if (hasWeightSkill) {
+        final vb = 22.0 - distance / 1000.0;
+        weight = vb * vb * (weightGains[i] / weightTimeScale) / (distance / 3.0);
+      }
+      out.add(GameSpeedParts(
+        speedIndex: speedPerIndexPoint * (siEff - mean),
+        aptitude: tuning.aptitudeStrength != 0.0
+            ? tuning.aptitudeStrength * (s.aptitudeScore ?? 0.0)
+            : 0.0,
+        weight: weight,
       ));
     }
     return out;

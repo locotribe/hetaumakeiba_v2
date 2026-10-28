@@ -422,6 +422,41 @@ class GameRacePoint {
   const GameRacePoint(this.time, this.distance, this.lane);
 }
 
+/// [追加] 展開シミュ改良Step5a(案E): 1回ぶん・1頭ぶんの「なぜこの勝率か」の数え上げ。距離はすべて m(ゴールまでに得した・損した距離)。
+/// 結果(着順・時計)には影響しない (v.2026.10.29+26102902)
+class GameRunHorseStats {
+  /// コーナーで外を回って損した距離
+  final double cornerLoss;
+
+  /// 前が詰まって目標速度が下がった分の距離(目安)
+  final double blockLoss;
+
+  /// HPが尽きた後、尽きる前の目標速度より遅くなった分の距離
+  final double staminaLoss;
+
+  /// HPが尽きた所(ゴールまでの距離 m)。尽きなければ null
+  final double? staminaOutAt;
+
+  /// 内ラチ付近で得した距離(GameRaceConfig.innerBias)
+  final double innerGain;
+
+  /// 傷んだ内を通って損した距離(GameRaceConfig.wearThresholds)
+  final double wearLoss;
+
+  /// 砂をかぶって損した距離(GameRaceConfig.kickback)
+  final double kickLoss;
+
+  const GameRunHorseStats({
+    required this.cornerLoss,
+    required this.blockLoss,
+    required this.staminaLoss,
+    required this.staminaOutAt,
+    required this.innerGain,
+    required this.wearLoss,
+    required this.kickLoss,
+  });
+}
+
 /// 1回ぶんの結果。時間はゲームの単位(実時間への換算は呼び出し側)。
 class GameRaceRunResult {
   /// ゴールした時刻。時間切れでゴールしなかった馬は null
@@ -436,11 +471,16 @@ class GameRaceRunResult {
   /// 位置の記録(スタート、一定フレームごと、ゴール)
   final List<List<GameRacePoint>> traces;
 
+  /// [追加] 展開シミュ改良Step5a(案E): 馬ごとの「なぜこの勝率か」の数え上げ(入力の馬の順)。作っていなければ空 (v.2026.10.29+26102902)
+  final List<GameRunHorseStats> stats;
+
   const GameRaceRunResult({
     required this.finishTimes,
     required this.time1000,
     required this.time600,
     required this.traces,
+    // [追加] 展開シミュ改良Step5a (v.2026.10.29+26102902)
+    this.stats = const [],
   });
 }
 
@@ -670,6 +710,14 @@ class GameRaceEngine {
     final targets = <int>[];
     final crowd = <int>[];
     final inCrowd = List<bool>.filled(n, false);
+    // [追加] 展開シミュ改良Step5a(案E): なぜこの勝率か の数え上げ(m)。結果は変えない(参照実装 simref2.py の stats と同じ) (v.2026.10.29+26102902)
+    final stCorner = List<double>.filled(n, 0.0);
+    final stBlock = List<double>.filled(n, 0.0);
+    final stStamina = List<double>.filled(n, 0.0);
+    final stOutAt = List<double?>.filled(n, null);
+    final stInner = List<double>.filled(n, 0.0);
+    final stWear = List<double>.filled(n, 0.0);
+    final stKick = List<double>.filled(n, 0.0);
 
     // [追加] 展開シミュ改良Step1(案C): 内の馬場の傷み。避けるときの境目(内柵からの距離。コース幅の割合)。
     // 傷みが [GameRaceConfig.wearAvoid] 以下になるのは、大きい方から数えて (wearAvoid÷wearUnit) 番目のしきい値より外 (v.2026.10.28+26102801)
@@ -1103,9 +1151,15 @@ class GameRaceEngine {
         if (config.slopes && downMode[i]) {
           tgt += 0.3 + slope[i].abs() / 10.0;
         }
+        // [修正] 展開シミュ改良Step5a(案E): 前が詰まって目標速度が下がった分を数える (v.2026.10.29+26102902)
+        final tgtPre = tgt;
         tgt = math.min(tgt, cap[i]);
+        if (tgt < tgtPre && hp[i] > 0) stBlock[i] += (tgtPre - tgt) * dt;
         lastTgt[i] = tgt;
         final out = hp[i] <= 0;
+        // [追加] 展開シミュ改良Step5a(案E): HPが尽きる前の目標速度と、尽きた所(ゴールまでの距離) (v.2026.10.29+26102902)
+        final tgtNoOut = tgt;
+        if (out && stOutAt[i] == null) stOutAt[i] = d - pos[i];
         if (out) tgt = minSpeed[i];
         if (!dash[i]) tgt = math.max(tgt, minSpeed[i]);
         final acc = (uphill ? 0.0004 : 0.0006) * powerRoot[i] * ac[i][p] +
@@ -1123,6 +1177,8 @@ class GameRaceEngine {
           nv = math.min(nv, 0.85 * vb);
           if (nv >= 0.85 * vb - 1e-9) dash[i] = false;
         }
+        // [追加] 展開シミュ改良Step5a(案E): HPが尽きた後に遅くなった分 (v.2026.10.29+26102902)
+        if (out) stStamina[i] += math.max(0.0, tgtNoOut - nv) * dt;
         final stat = (rushing[i] ? 1.6 : 1.0) *
             (mode[i] == 2 ? 0.6 : 1.0) *
             ((config.slopes && downMode[i]) ? 0.4 : 1.0);
@@ -1135,9 +1191,12 @@ class GameRaceEngine {
         double adv = nv * dt;
         // [追加] 展開シミュ改良Step1(案C): 内ラチ付近の進みにくさ → 内の馬場の傷み → 砂かぶり の順に進みを直す(参照実装 simref2.py と同じ順) (v.2026.10.28+26102801)
         if (config.innerBias != 0.0 && config.lanes) {
-          adv -= config.innerBias *
+          // [修正] 展開シミュ改良Step5a(案E): 得した分を数える (v.2026.10.29+26102902)
+          final ib = config.innerBias *
               math.max(0.0, 1.0 - lane[i] / config.innerBand) *
               dt;
+          adv -= ib;
+          stInner[i] -= ib;
         }
         if (hasWear && config.lanes) {
           final m = lane[i] * courseWidthMeters;
@@ -1147,8 +1206,11 @@ class GameRaceEngine {
             if (th > m) c++;
           }
           if (c > 0) {
+            // [修正] 展開シミュ改良Step5a(案E): 損した分を数える (v.2026.10.29+26102902)
+            final a0 = adv;
             adv = adv /
                 (1.0 + c * config.wearUnit * nv / (200.0 * config.wearTimeScale));
+            stWear[i] += a0 - adv;
           }
         }
         if (config.kickback != 0.0 && config.lanes) {
@@ -1160,12 +1222,17 @@ class GameRaceEngine {
                 pos[j] - prev < config.kickDistance &&
                 (lane[j] - lane[i]).abs() < config.kickLanes * hl) {
               adv -= config.kickback * dt;
+              // [追加] 展開シミュ改良Step5a(案E) (v.2026.10.29+26102902)
+              stKick[i] += config.kickback * dt;
               break;
             }
           }
         }
         if (radius > 0) {
+          // [修正] 展開シミュ改良Step5a(案E): 外を回って損した分を数える (v.2026.10.29+26102902)
+          final a0 = adv;
           adv = adv * radius / (radius + lane[i] * courseWidthMeters);
+          stCorner[i] += a0 - adv;
         }
         pos[i] = prev + adv;
         v[i] = nv;
@@ -1245,6 +1312,19 @@ class GameRaceEngine {
       time1000: t1000,
       time600: t600,
       traces: traces,
+      // [追加] 展開シミュ改良Step5a(案E) (v.2026.10.29+26102902)
+      stats: [
+        for (int i = 0; i < n; i++)
+          GameRunHorseStats(
+            cornerLoss: stCorner[i],
+            blockLoss: stBlock[i],
+            staminaLoss: stStamina[i],
+            staminaOutAt: stOutAt[i],
+            innerGain: stInner[i],
+            wearLoss: stWear[i],
+            kickLoss: stKick[i],
+          ),
+      ],
     );
   }
 }
