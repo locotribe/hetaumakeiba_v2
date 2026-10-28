@@ -15,6 +15,8 @@ import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart'
 import 'package:hetaumakeiba_v2/logic/analysis/cross_analyzer.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/early_position_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_ability_builder.dart';
+// [追加] 展開シミュ改良Step2 (v.2026.10.28+26102802)
+import 'package:hetaumakeiba_v2/logic/analysis/game_aptitude.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_display.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_inputs.dart';
@@ -657,9 +659,28 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     final speedIndexByHorseId = await _speedIndexRepo.getByHorseIds(horseIds);
     final asOf = parseRaceDateForSpeedIndex(race.raceDate);
 
+    // [追加] 展開シミュ改良Step2(案B): 適性の点数の材料(過去走の距離・芝ダ・着順、休み、年齢・性別、今回の馬体重)と、斤量 (v.2026.10.28+26102802)
+    final aptitudeRaws = [
+      for (final h in horses)
+        GameAptitude.rawOf(
+          records[h.horseId] ?? const <HorseRaceRecord>[],
+          raceDay: asOf,
+          distance: distance,
+          isDirt: isDirt,
+          sexAndAge: h.sexAndAge,
+          horseWeight: h.horseWeight,
+        ),
+    ];
+    final aptitudeScores = GameAptitude.scoresOf(
+      GameAptitude.termsOf(aptitudeRaws, distance),
+      GameAptitude.weightsOf(isDirt: isDirt),
+    );
+
     final sources = <GameAbilitySource>[];
     final staminaIndexes = <double?>[];
-    for (final h in horses) {
+    // [修正] 展開シミュ改良Step2: 馬の番号が要るので、for の形を変えた (v.2026.10.28+26102802)
+    for (int i = 0; i < horses.length; i++) {
+      final h = horses[i];
       final rec = records[h.horseId] ?? const <HorseRaceRecord>[];
       final params = paramsByHorseId[h.horseId] ??
           SimulationParamsCalculator.calculate(h.horseId, rec);
@@ -681,10 +702,19 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         kickSeconds: kick.kickSeconds,
         staminaIndex: params.staminaIndex,
         jockeyShowRate: GameRaceInputs.jockeyShowRateOf(jockey?.overallStats),
+        // [追加] 展開シミュ改良Step2: 適性の点数と斤量(斤量が0以下は分からない扱い) (v.2026.10.28+26102802)
+        aptitudeScore: aptitudeScores[i],
+        carriedWeight: h.carriedWeight > 0 ? h.carriedWeight : null,
+        pastCarriedWeight: aptitudeRaws[i].pastCarriedWeight,
       ));
       staminaIndexes.add(params.staminaIndex);
     }
-    final abilities = GameAbilityBuilder.build(sources);
+    // [修正] 展開シミュ改良Step2: 能力値の調整を渡す。改良Step2〜3 は GameAbilityTuning.of が off なので、結果は今までと同じ (v.2026.10.28+26102802)
+    final abilities = GameAbilityBuilder.build(
+      sources,
+      tuning: GameAbilityTuning.of(isDirt: isDirt),
+      distance: distance.toDouble(),
+    );
 
     // 同じレース名の過去レースの時計(失敗しても過去の時計なしで続ける)
     final pastRaces = <GamePastRaceTime>[];
