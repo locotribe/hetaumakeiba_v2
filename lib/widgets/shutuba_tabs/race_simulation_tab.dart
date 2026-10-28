@@ -22,6 +22,8 @@ import 'package:hetaumakeiba_v2/logic/analysis/game_course_rail.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_display.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_inputs.dart';
+// [追加] 展開シミュ改良Step5b (v.2026.10.29+26102903)
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_reasons.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_reference.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_simulator.dart';
 // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
@@ -89,6 +91,11 @@ class _GameSimInputs {
   /// [修正] 展開シミュ改良Step4: GameRaceTuning.of の決め直した値(勝率・3着以内率の補正も含む) (v.2026.10.29+26102901)
   final GameRaceTuning tuning;
 
+  /// [追加] 展開シミュ改良Step5b(案E): なぜこの勝率か の材料。終盤の速度加算の内訳・適性の項・適性の重み (v.2026.10.29+26102903)
+  final List<GameSpeedParts> speedParts;
+  final List<Map<String, double>> aptitudeTerms;
+  final Map<String, double> aptitudeWeights;
+
   /// 同じレース名・同じ競馬場・芝ダ・距離の過去レース(新しい順)
   final List<GamePastRaceTime> pastRaces;
 
@@ -117,6 +124,10 @@ class _GameSimInputs {
     required this.railInfo,
     required this.paceDeviation,
     required this.tuning,
+    // [追加] 展開シミュ改良Step5b (v.2026.10.29+26102903)
+    required this.speedParts,
+    required this.aptitudeTerms,
+    required this.aptitudeWeights,
     required this.pastRaces,
     required this.officialGoing,
     required this.hasActualToday,
@@ -195,6 +206,12 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
   bool _isRunning = false;
   String? _runError;
 
+  /// [追加] 展開シミュ改良Step5b(案E): 計算中の途中の結果(終わった組の分)。計算中でなければ null (v.2026.10.29+26102903)
+  GameRaceProgress? _progress;
+
+  /// [追加] 展開シミュ改良Step5b: 計算の番号。古い計算の途中の結果を出さないために使う (v.2026.10.29+26102903)
+  int _runToken = 0;
+
   /// 再生に出している1回
   RaceSimulationData? _playData;
 
@@ -240,6 +257,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         _cushion = null;
         _runError = null;
         _isRunning = false;
+        // [追加] 展開シミュ改良Step5b (v.2026.10.29+26102903)
+        _progress = null;
+        _runToken++;
         _startLoad();
       });
     }
@@ -353,10 +373,13 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       );
 
   // [修正] 展開シミュ改良Step3(案D): 回ごとにペースを散らす幅 [paceScatterSd] を渡せるようにした(既定は散らさない) (v.2026.10.28+26102803)
+  // [修正] 展開シミュ改良Step5b(案E): 20回ずつの組に分けて別スレッドで同時に走らせ、終わった組から途中の結果を出す(GameRaceSimulator.runParallel)。
+  // 組ごとに乱数の種を変えるので、同じレースでも勝率の数字は改良Step4 までと少し変わる (v.2026.10.29+26102903)
   Future<GameRaceSummary> _simulate(
       _GameSimInputs inputs, GameRaceConfig config, int seed, int runs,
       {double paceScatterSd = 0.0}) {
-    return GameRaceSimulator.runInBackground(
+    final token = _runToken;
+    return GameRaceSimulator.runParallel(
       distance: inputs.distance.toDouble(),
       abilities: inputs.abilities,
       config: config,
@@ -374,6 +397,11 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       runs: runs,
       // [追加] 展開シミュ改良Step3(案D) (v.2026.10.28+26102803)
       paceScatterSd: paceScatterSd,
+      // [追加] 展開シミュ改良Step5b: 途中の結果 (v.2026.10.29+26102903)
+      onProgress: (p) {
+        if (!mounted || token != _runToken) return;
+        setState(() => _progress = p);
+      },
     );
   }
 
@@ -387,6 +415,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     setState(() {
       _isRunning = true;
       _runError = null;
+      // [追加] 展開シミュ改良Step5b (v.2026.10.29+26102903)
+      _progress = null;
+      _runToken++;
     });
     try {
       final base = _baseConfigOf(inputs);
@@ -436,6 +467,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         _winnerSeconds ??= (baselineWinner * 10).round() / 10.0;
         if (_first1000Target == target) _first1000Target = null;
         _isRunning = false;
+        // [追加] 展開シミュ改良Step5b (v.2026.10.29+26102903)
+        _progress = null;
         _isAltRun = false;
         if (showResult) _section = 0;
         // [修正] 展開シミュゲーム式移植Step4c: 再生の既定を、代表の1回から平均の走りに替えた (v.2026.10.27+26102706)
@@ -446,6 +479,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       if (!mounted) return;
       setState(() {
         _isRunning = false;
+        // [追加] 展開シミュ改良Step5b (v.2026.10.29+26102903)
+        _progress = null;
         _runError = 'シミュレーションに失敗しました';
       });
     }
@@ -703,8 +738,10 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
           horseWeight: h.horseWeight,
         ),
     ];
+    // [修正] 展開シミュ改良Step5b: 適性の項は、なぜこの勝率か にも使うので残す (v.2026.10.29+26102903)
+    final aptitudeTerms = GameAptitude.termsOf(aptitudeRaws, distance);
     final aptitudeScores = GameAptitude.scoresOf(
-      GameAptitude.termsOf(aptitudeRaws, distance),
+      aptitudeTerms,
       GameAptitude.weightsOf(isDirt: isDirt),
     );
 
@@ -812,6 +849,14 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       railInfo: GameCourseRail.infoOf(race.raceId),
       paceDeviation: GamePacePredictor.deviationOf(sources, isDirt: isDirt),
       tuning: GameRaceTuning.of(isDirt: isDirt),
+      // [追加] 展開シミュ改良Step5b (v.2026.10.29+26102903)
+      speedParts: GameAbilityBuilder.speedPartsOf(
+        sources,
+        tuning: GameAbilityTuning.of(isDirt: isDirt),
+        distance: distance.toDouble(),
+      ),
+      aptitudeTerms: aptitudeTerms,
+      aptitudeWeights: GameAptitude.weightsOf(isDirt: isDirt),
       pastRaces: pastRaces,
       officialGoing: GameRaceReference.normalizeGoing(race.trackCondition),
       hasActualToday: hasActualToday,
@@ -854,21 +899,17 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
               ),
             );
           }
+          // [修正] 展開シミュ改良Step5b(案E): 最初の計算中は、途中の結果があれば表だけ先に出す (v.2026.10.29+26102903)
+          final progress = _progress;
+          if (progress != null) return _buildProgressOnly(inputs, progress);
           return _buildLoading();
         }
         final scale = _timeScale ?? 1.0;
         final playRun = _playRun;
-        final views = <GameSimHorseView>[
-          for (int i = 0; i < inputs.horses.length; i++)
-            GameSimHorseView(
-              horseNumber: inputs.horses[i].horseNumber,
-              gateNumber: _gateOf(inputs, i),
-              horseName: inputs.horses[i].horseName,
-              ability: inputs.abilities[i],
-              staminaIndex: inputs.staminaIndexes[i],
-              summary: shown.summary.horses[i],
-            ),
-        ];
+        // [修正] 展開シミュ改良Step5b: 馬ごとの値を作る所を _viewsOf に分けた (v.2026.10.29+26102903)
+        final views = _viewsOf(inputs, shown.summary.horses);
+        // [追加] 展開シミュ改良Step5b(案E): 計算し直している間は、結果の表に途中の結果を出す (v.2026.10.29+26102903)
+        final progress = _isRunning ? _progress : null;
         return Container(
           color: const Color(0xFFF1F6EF),
           child: Column(
@@ -906,14 +947,31 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
                               inputs.course.corners.length),
                           cornerCount: inputs.course.corners.length,
                         ),
-                      GameSimResultCard(
-                        horses: views,
-                        runs: shown.summary.runs,
-                        timesText: _timesTextOf(shown),
-                        checkpointHeader: GameRaceInputs.checkpointHeaderOf(
-                            inputs.course.corners.length),
-                        cornerCount: inputs.course.corners.length,
-                      ),
+                      // [修正] 展開シミュ改良Step5b(案E): 計算し直している間は途中の結果。散らしたペースの幅の1行を足した (v.2026.10.29+26102903)
+                      progress != null
+                          ? _progressCard(inputs, progress)
+                          : GameSimResultCard(
+                              horses: views,
+                              runs: shown.summary.runs,
+                              timesText: _timesTextOf(shown),
+                              paceText: _paceTextOf(shown),
+                              checkpointHeader: GameRaceInputs.checkpointHeaderOf(
+                                  inputs.course.corners.length),
+                              cornerCount: inputs.course.corners.length,
+                            ),
+                      // [追加] 展開シミュ改良Step5b(案E): なぜこの勝率か (v.2026.10.29+26102903)
+                      if (progress == null)
+                        GameSimReasonCard(
+                          horses: views,
+                          reasons: GameRaceReasons.of(
+                            parts: inputs.speedParts,
+                            aptitudeTerms: inputs.aptitudeTerms,
+                            aptitudeWeights: inputs.aptitudeWeights,
+                            horses: shown.summary.horses,
+                            distance: inputs.distance.toDouble(),
+                            isDirt: inputs.isDirt,
+                          ),
+                        ),
                     ]),
                     _sectionScroll(1, [_buildConditionCard(inputs, shown)]),
                     _sectionScroll(2, [GameSimStatusCard(horses: views)]),
@@ -925,6 +983,70 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         );
       },
     );
+  }
+
+  /// [追加] 展開シミュ改良Step5b: 馬ごとの画面の値 (v.2026.10.29+26102903)
+  List<GameSimHorseView> _viewsOf(
+      _GameSimInputs inputs, List<GameHorseSummary> summaries) {
+    return [
+      for (int i = 0; i < inputs.horses.length; i++)
+        GameSimHorseView(
+          horseNumber: inputs.horses[i].horseNumber,
+          gateNumber: _gateOf(inputs, i),
+          horseName: inputs.horses[i].horseName,
+          ability: inputs.abilities[i],
+          staminaIndex: inputs.staminaIndexes[i],
+          summary: i < summaries.length ? summaries[i] : null,
+        ),
+    ];
+  }
+
+  /// [追加] 展開シミュ改良Step5b(案E): 途中の結果の表(時計は計算が終わってから) (v.2026.10.29+26102903)
+  Widget _progressCard(_GameSimInputs inputs, GameRaceProgress progress) {
+    return GameSimResultCard(
+      horses: _viewsOf(inputs, progress.horses),
+      runs: progress.runsDone,
+      timesText: '計算しています… 時計・再生・なぜこの勝率か は${progress.runsTotal}回の計算が終わってから出る。',
+      note: '途中の結果 ${progress.runsDone}/${progress.runsTotal}回',
+      checkpointHeader:
+          GameRaceInputs.checkpointHeaderOf(inputs.course.corners.length),
+      cornerCount: inputs.course.corners.length,
+    );
+  }
+
+  /// [追加] 展開シミュ改良Step5b(案E): 最初の計算中に、途中の結果の表だけを出す (v.2026.10.29+26102903)
+  Widget _buildProgressOnly(_GameSimInputs inputs, GameRaceProgress progress) {
+    return Container(
+      color: const Color(0xFFF1F6EF),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LinearProgressIndicator(
+              minHeight: 2, value: progress.runsDone / progress.runsTotal),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: _progressCard(inputs, progress),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// [追加] 展開シミュ改良Step5b(案E): 回ごとに散らしたペースの幅(先頭の1000m通過の、中央の8割の回の範囲)。散らしていなければ null (v.2026.10.29+26102903)
+  String? _paceTextOf(_ShownResult shown) {
+    final s = shown.summary;
+    if (s.paceOffsets.isEmpty) return null;
+    final scale = _timeScale ?? 1.0;
+    final xs = <double>[
+      for (final x in s.runLeader1000)
+        if (x != null) x * scale
+    ]..sort();
+    if (xs.length < 2) return null;
+    final lo = xs[((xs.length - 1) * 0.1).round()];
+    final hi = xs[((xs.length - 1) * 0.9).round()];
+    return 'ペースは回ごとに散らした: 1000m ${lo.toStringAsFixed(1)}〜${hi.toStringAsFixed(1)}(8割の回)';
   }
 
   /// [追加] 展開シミュゲーム式移植Step4c: 読み込み中とシミュレーション中(結果がまだ無いとき)の表示 (v.2026.10.27+26102706)

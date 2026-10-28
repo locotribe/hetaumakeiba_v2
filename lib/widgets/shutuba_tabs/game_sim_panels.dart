@@ -7,6 +7,7 @@ import 'package:hetaumakeiba_v2/logic/analysis/game_ability_builder.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_display.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_inputs.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_race_reasons.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_reference.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_simulator.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_number_badge.dart';
@@ -242,6 +243,12 @@ class GameSimResultCard extends StatelessWidget {
   final String checkpointHeader;
   final int cornerCount;
 
+  /// [追加] 展開シミュ改良Step5b: 見出しの右の補足(既定「全回の平均」。計算中は「途中の結果 40/100回」) (v.2026.10.29+26102903)
+  final String note;
+
+  /// [追加] 展開シミュ改良Step5b: 時計の下に出す、回ごとに散らしたペースの幅の1行。無ければ出さない (v.2026.10.29+26102903)
+  final String? paceText;
+
   const GameSimResultCard({
     super.key,
     required this.horses,
@@ -249,6 +256,9 @@ class GameSimResultCard extends StatelessWidget {
     required this.timesText,
     required this.checkpointHeader,
     required this.cornerCount,
+    // [追加] 展開シミュ改良Step5b (v.2026.10.29+26102903)
+    this.note = '全回の平均',
+    this.paceText,
   });
 
   @override
@@ -265,13 +275,21 @@ class GameSimResultCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // [修正] 展開シミュゲーム式移植Step4c: 見出しに回数と「走らせた」を使わない (v.2026.10.27+26102706)
-          const _CardTitle('シミュレーションの結果', '全回の平均'),
+          // [修正] 展開シミュ改良Step5b: 補足を [note] に(計算中は途中の結果と出す) (v.2026.10.29+26102903)
+          _CardTitle('シミュレーションの結果', note),
           const SizedBox(height: 2),
           Text(timesText,
               style: const TextStyle(
                   fontSize: 12,
                   color: GameSimColors.subText,
                   fontFeatures: [FontFeature.tabularFigures()])),
+          // [追加] 展開シミュ改良Step5b: 回ごとに散らしたペースの幅 (v.2026.10.29+26102903)
+          if (paceText != null)
+            Text(paceText!,
+                style: const TextStyle(
+                    fontSize: 12,
+                    color: GameSimColors.subText,
+                    fontFeatures: [FontFeature.tabularFigures()])),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2.0),
@@ -354,6 +372,101 @@ class GameSimResultCard extends StatelessWidget {
                   s.meanCheckpointRanks, cornerCount),
               textAlign: TextAlign.right,
               style: num.copyWith(fontSize: 12, color: GameSimColors.subText),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// [追加] 展開シミュ改良Step5b(案E): なぜこの勝率か。各馬の、全馬の平均より得した(+)・損した(−)距離の上位2つ。
+/// 並びは結果の表と同じ(補正した勝率の高い順) (v.2026.10.29+26102903)
+class GameSimReasonCard extends StatelessWidget {
+  /// 入力の馬の順
+  final List<GameSimHorseView> horses;
+
+  /// 入力の馬の順(GameRaceReasons.of の結果)
+  final List<List<GameReason>> reasons;
+
+  const GameSimReasonCard({
+    super.key,
+    required this.horses,
+    required this.reasons,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final order = List<int>.generate(horses.length, (i) => i)
+      ..sort((a, b) {
+        final sa = horses[a].summary;
+        final sb = horses[b].summary;
+        if (sa == null || sb == null) return a.compareTo(b);
+        final c = sb.winProb.compareTo(sa.winProb);
+        if (c != 0) return c;
+        return sa.meanRank.compareTo(sb.meanRank);
+      });
+    return GameSimCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _CardTitle('なぜこの勝率か', '全馬の平均との差'),
+          const SizedBox(height: 4),
+          for (final i in order) _row(horses[i], i < reasons.length ? reasons[i] : const []),
+          const SizedBox(height: 6),
+          const Text(
+            '全回の平均で、ゴールまでに得した(+)・損した(−)距離の目安(1馬身=2.4m)。'
+            'スピード指数・適性・斤量は能力の差、ほかは展開(スタミナ切れ・前が詰まる・外を回る・砂をかぶる・傷んだ内)で数えたもの。',
+            style: TextStyle(fontSize: 11, color: GameSimColors.subText, height: 1.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(GameSimHorseView h, List<GameReason> rs) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 5.0, horizontal: 2.0),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: GameSimColors.rowLine)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 30,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: HorseNumberBadge(
+                  horseNumber: h.horseNumber,
+                  gateNumber: h.gateNumber,
+                  size: 22),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(h.horseName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w500)),
+                if (rs.isEmpty)
+                  const Text('大きな差なし',
+                      style: TextStyle(fontSize: 12, color: GameSimColors.subText)),
+                for (final r in rs)
+                  Text(
+                    r.text,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: r.lengths >= 0
+                          ? GameSimColors.primary
+                          : GameSimColors.accent,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
