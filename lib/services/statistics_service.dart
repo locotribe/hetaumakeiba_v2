@@ -8,6 +8,8 @@ import 'package:hetaumakeiba_v2/models/race_statistics_model.dart';
 import 'dart:convert';
 import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/leg_style_classifier.dart';
+// [追加] 年齢別成績: 年齢の区分と性齢から年齢を読む関数 (v.2026.10.30+26103002)
+import 'package:hetaumakeiba_v2/logic/analysis/age_category.dart';
 import 'package:hetaumakeiba_v2/services/race_result_scraper_service.dart';
 import 'package:hetaumakeiba_v2/utils/url_generator.dart';
 
@@ -117,6 +119,28 @@ class StatisticsService {
         final weightChange = int.tryParse(weightMatch.group(2)!);
         if (weightChange == null) continue;
         final category = weightChangeCategoryOf(weightChange);
+        stats.putIfAbsent(category, () => {'total': 0, 'win': 0, 'place': 0, 'show': 0});
+        stats[category]!['total'] = (stats[category]!['total'] ?? 0) + 1;
+        if (rank == 1) stats[category]!['win'] = (stats[category]!['win'] ?? 0) + 1;
+        if (rank <= 2) stats[category]!['place'] = (stats[category]!['place'] ?? 0) + 1;
+        if (rank <= 3) stats[category]!['show'] = (stats[category]!['show'] ?? 0) + 1;
+      }
+    }
+    return stats;
+  }
+
+  // [追加] 年齢別（3歳〜7歳以上の5区分）の成績を集計する。出走馬に2つ以上の年齢がいるレース（年齢混合戦）だけを対象にし、2歳戦・3歳限定戦など同世代戦は除く。保存用の集計（_calculateStatistics）と、保存済みの統計に年齢別が無いときの画面側の集計し直しの両方で使う (v.2026.10.30+26103002)
+  static Map<String, Map<String, dynamic>> recalcAgeStats(List<RaceResult> results) {
+    final Map<String, Map<String, dynamic>> stats = {};
+    for (final result in results) {
+      if (!hasMixedAges(result.horseResults.map((h) => h.sexAndAge))) continue;
+      for (final horse in result.horseResults) {
+        final rank = int.tryParse(horse.rank);
+        if (rank == null) continue;
+        final age = ageOfSexAndAge(horse.sexAndAge);
+        if (age == null) continue;
+        final category = ageCategoryOf(age);
+        if (category == null) continue;
         stats.putIfAbsent(category, () => {'total': 0, 'win': 0, 'place': 0, 'show': 0});
         stats[category]!['total'] = (stats[category]!['total'] ?? 0) + 1;
         if (rank == 1) stats[category]!['win'] = (stats[category]!['win'] ?? 0) + 1;
@@ -299,6 +323,8 @@ class StatisticsService {
       'legStyleStats': legStyleStats,
       // [追加] 性別別成績（混合戦のみ） (v.2026.9.9+26090904)
       'genderStats': genderStats,
+      // [追加] 年齢別成績（年齢混合戦のみ） (v.2026.10.30+26103002)
+      'ageStats': recalcAgeStats(results),
       'payoutStats': finalPayoutStats,
       'horseWeightChangeStats': horseWeightChangeStats,
       'avgWinningHorseWeight': avgWinningHorseWeight,

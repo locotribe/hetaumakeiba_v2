@@ -49,6 +49,9 @@ import 'package:hetaumakeiba_v2/widgets/volatility_components/leg_style_chart_ca
 import 'package:hetaumakeiba_v2/widgets/volatility_components/horse_weight_card.dart';
 // [追加] 性別（牡・牝・セ）別の入線分布カード (v.2026.9.9+26090904)
 import 'package:hetaumakeiba_v2/widgets/volatility_components/gender_chart_card.dart';
+// [追加] 年齢（3歳〜7歳以上）別の入線分布カードと、性齢から年齢を読む関数 (v.2026.10.30+26103002)
+import 'package:hetaumakeiba_v2/widgets/volatility_components/age_chart_card.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/age_category.dart';
 
 class RaceStatisticsPage extends StatefulWidget {
   final String raceId;
@@ -254,6 +257,14 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     data['horseWeightChangeStats'] = StatisticsService.recalcHorseWeightChangeStats(_pastRaces);
   }
 
+  // [追加] 年齢別成績（ageStats）が無い保存済みの統計は、読み込み済みの過去レース結果から集計し直して差し込む（DBの保存分は書き換えない。過去レースを選び直すと保存分にも年齢別が入る）。キーがあれば（空でも）触らない (v.2026.10.30+26103002)
+  void _fillMissingAgeStats(dynamic data) {
+    if (data is! Map) return;
+    if (data.containsKey('ageStats')) return;
+    if (_pastRaces.isEmpty) return;
+    data['ageStats'] = StatisticsService.recalcAgeStats(_pastRaces);
+  }
+
   // 統計データの読み込みと、グラフ描画に必要な過去レース詳細の取得
   void _checkAndLoadStatistics() {
     setState(() {
@@ -377,8 +388,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       // [修正] 結果分析タブの廃止 Step1: タブの数は結果の有無によらず16にした（結果の有無でタブを作り直すための key も外した） (v.2026.10.19+26101901)
-      // [修正] 性別タブを追加 (v.2026.9.9+26090904)
-      length: 16,
+      // [修正] 年齢タブを追加し、タブの数を17にした (v.2026.10.30+26103002)
+      length: 17,
       child: Scaffold(
         body: Column(
           children: [
@@ -398,6 +409,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   const Tab(text: '馬体重'),
                   // [追加] 性別（牡・牝・セ）傾向タブ (v.2026.9.9+26090904)
                   const Tab(text: '性別'),
+                  // [追加] 年齢（3〜7歳以上）傾向タブ (v.2026.10.30+26103002)
+                  const Tab(text: '年齢'),
                   const Tab(text: '騎手'),
                   const Tab(text: '調教師'),
                   // [追加] 傾向分析タブから切り出した5ファクター (v.2026.9.5+26090506)
@@ -426,14 +439,16 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   final stats = snapshot.data;
                   if (stats == null) {
                     return TabBarView(
-                      // [修正] 性別タブを追加 (v.2026.9.9+26090904)
-                      children: List.generate(16, (index) => _buildInitialView()),
+                      // [修正] 年齢タブを追加し、タブの数を17にした (v.2026.10.30+26103002)
+                      children: List.generate(17, (index) => _buildInitialView()),
                     );
                   }
 
                   final data = json.decode(stats.statisticsJson);
                   // [追加] 保存済みの旧区分（5区分）の馬体重増減別を7区分に差し替える (v.2026.10.30+26103001)
                   _replaceStaleWeightChangeStats(data);
+                  // [追加] 年齢別成績が無い保存済みの統計に、年齢別を集計して足す（該当馬の選出より前に行う） (v.2026.10.30+26103002)
+                  _fillMissingAgeStats(data);
 
                   // [追加] 過去傾向と今回の出走メンバーを突き合わせて各ファクターの該当馬を選出 (v.2026.9.5+26090506)
                   final Map<String, FactorCandidateResult> factorCandidates =
@@ -561,6 +576,43 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                         ),
                         const SizedBox(height: 16),
                         _buildGenderStatsCard(data['genderStats'] ?? const {}),
+                      ])),
+                      // [追加] 7. 年齢（3〜7歳以上） (v.2026.10.30+26103002)
+                      _buildTabContent(child: Column(children: [
+                        // 同世代戦（出走馬がすべて同じ年齢）の警告
+                        if (_isSameAgeRace()) ...[
+                          Card(
+                            color: Colors.orange.shade50,
+                            child: const Padding(
+                              padding: EdgeInsets.all(12.0),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.info_outline, size: 18, color: Colors.orange),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '※当レースは出走馬がすべて同じ年齢（同世代戦）のため、年齢による有利不利の判定は適用されません。',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        // このタブの傾向に合う今回の出走馬
+                        if (factorCandidates['age'] != null) ...[
+                          FactorCandidatesCard(result: factorCandidates['age']!),
+                          const SizedBox(height: 16),
+                        ],
+                        AgeChartCard(
+                          ageStats: Map<String, dynamic>.from(
+                              (data['ageStats'] ?? const {}) as Map),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildAgeStatsCard(data['ageStats'] ?? const {}),
                       ])),
                       // 6. 騎手
                       _buildTabContent(
@@ -909,6 +961,17 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     });
   }
 
+  // [追加] 今回の出走馬（取消を除く）の年齢が1種類だけの同世代戦か (v.2026.10.30+26103002)
+  bool _isSameAgeRace() {
+    final active = _horses.where((h) => !h.isScratched);
+    final Set<int> ages = {};
+    for (final h in active) {
+      final age = ageOfSexAndAge(h.sexAndAge);
+      if (age != null) ages.add(age);
+    }
+    return ages.length == 1;
+  }
+
   Widget _buildTabContent({required Widget child}) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -1119,6 +1182,48 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
             const Text(
               '※牝と牡・セが両方出走した混合戦のみを集計対象としています（牝馬限定戦などは除外）。\n'
               '※夏開催の牝馬は斤量減の恩恵も含まれるため、馬体重タブや各馬の斤量と合わせて判断してください。',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // [追加] 年齢別成績カード（年齢混合戦のみ集計） (v.2026.10.30+26103002)
+  Widget _buildAgeStatsCard(Map<String, dynamic> stats) {
+    final keys = kAgeCategories.where((k) {
+      final data = stats[k];
+      if (data is! Map) return false;
+      final total = data['total'];
+      return total is num && total > 0;
+    }).toList();
+
+    if (keys.isEmpty) return const Text('データがありません（年齢混合戦の過去データが見つかりません）');
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('年齢別成績 (年齢混合戦のみ)', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            ...keys.map((key) {
+              final data = stats[key] as Map;
+              final total = (data['total'] as num).toInt();
+              final winRate = ((data['win'] as num) / total * 100);
+              final placeRate = ((data['place'] as num) / total * 100);
+              final showRate = ((data['show'] as num) / total * 100);
+              return ListTile(
+                title: Text(key, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('勝率 ${winRate.toStringAsFixed(1)}% / 連対率 ${placeRate.toStringAsFixed(1)}% / 複勝率 ${showRate.toStringAsFixed(1)}%\n($total頭)'),
+              );
+            }),
+            const SizedBox(height: 8),
+            const Text(
+              '※出走馬に複数の年齢が含まれる過去レースのみを集計対象としています（2歳戦・3歳限定戦など同世代戦は除外）。\n'
+              '※3歳馬は古馬との斤量差（馬齢による斤量減）の恩恵も含まれた成績です。各馬の斤量と合わせて判断してください。',
               style: TextStyle(fontSize: 11, color: Colors.grey),
             ),
           ],

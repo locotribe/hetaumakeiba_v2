@@ -1,6 +1,8 @@
 // lib/logic/analysis/factor_candidate_selector.dart
 
 import 'package:hetaumakeiba_v2/models/race_data.dart';
+// [追加] 年齢ファクター: 年齢の区分と性齢から年齢を読む関数 (v.2026.10.30+26103002)
+import 'package:hetaumakeiba_v2/logic/analysis/age_category.dart';
 
 // [追加] 指標キー（勝率 / 連対率 / 複勝率） (v.2026.9.5+26090506)
 class FactorMetric {
@@ -251,6 +253,8 @@ class FactorCandidateSelector {
     'horseWeight',
     // [追加] 性別（牡・牝・セ） (v.2026.9.9+26090904)
     'gender',
+    // [追加] 年齢（3〜7歳以上） (v.2026.10.30+26103002)
+    'age',
     'jockey',
     'trainer',
   ];
@@ -264,6 +268,8 @@ class FactorCandidateSelector {
     'horseWeight': '馬体重',
     // [追加] 性別（牡・牝・セ） (v.2026.9.9+26090904)
     'gender': '性別',
+    // [追加] 年齢（3〜7歳以上） (v.2026.10.30+26103002)
+    'age': '年齢',
     'jockey': '騎手',
     'trainer': '調教師',
   };
@@ -1010,6 +1016,101 @@ class FactorCandidateSelector {
   }
 
   // ---------------------------------------------------------------------------
+  // [追加] 年齢 : 年齢混合戦での年齢傾向に合致する馬を抽出 (v.2026.10.30+26103002)
+  // ---------------------------------------------------------------------------
+
+  /// 3歳〜7歳以上の年齢別の過去成績（年齢混合戦のみ集計）と今回のメンバーを突き合わせる。
+  ///
+  /// 今回の出走馬がすべて同じ年齢（同世代戦）のときは選出しない。
+  /// 8歳以上の馬は「7歳以上」の区分の成績で判定する。
+  static FactorCandidateResult selectByAge(
+    Map<String, dynamic> ageStats,
+    List<PredictionHorseDetail> horses,
+  ) {
+    const label = '年齢';
+    const criteria =
+        '過去の年齢混合戦における年齢別の複勝率が全体平均を上回る年齢の馬を上位$maxCandidates頭まで選出'
+        '（7歳以上は1つの区分にまとめて判定）';
+
+    const List<String> notes = [
+      '※3歳馬は古馬との斤量差（馬齢による斤量減）の恩恵も含まれた成績です。'
+          '各馬の斤量と合わせて判断してください。',
+      'このファクターは出走馬に複数の年齢が含まれる過去レースのみを集計しています。'
+          '2歳戦・3歳限定戦など同世代戦の過去レースは母集団から除外されています。',
+      '7歳以上は母数が小さいため1つの区分にまとめています。',
+      ..._commonNotes,
+    ];
+
+    final baseline = _baselineOf(ageStats);
+
+    final summary = ageStats.isEmpty
+        ? '年齢混合戦の年齢別成績の集計データがありません。'
+        : '複勝率の高い年齢: ${_topCategoriesText(ageStats, baseline, suffix: '')}';
+
+    final active = _activeHorses(horses);
+
+    // 同世代戦ガード: 今回の出走馬の年齢が1種類だけなら選出しない
+    final Set<int> entryAges = {};
+    for (final horse in active) {
+      final age = ageOfSexAndAge(horse.sexAndAge);
+      if (age != null) entryAges.add(age);
+    }
+    if (entryAges.length == 1) {
+      return FactorCandidateResult(
+        factorKey: 'age',
+        factorLabel: label,
+        trendSummary: summary,
+        criteria: criteria,
+        candidatesByMetric: const {},
+        emptyMessage:
+            '当レースは出走馬がすべて同じ年齢（同世代戦）のため、年齢による有利不利の判定は適用されません。',
+        notes: notes,
+        baseline: baseline,
+      );
+    }
+
+    final List<FactorCandidate> list = [];
+    for (final horse in active) {
+      final age = ageOfSexAndAge(horse.sexAndAge);
+      if (age == null) continue;
+      final category = ageCategoryOf(age);
+      if (category == null) continue;
+
+      final stat = ageStats[category];
+      if (stat is! Map) continue;
+      final data = Map<String, dynamic>.from(stat);
+      if (_statInt(data, 'total') <= 0) continue;
+
+      final rates = _ratesOf(data);
+      final reason = age >= 8 ? '$age歳（$categoryの区分で判定）' : category;
+
+      list.add(FactorCandidate(
+        horseId: horse.horseId,
+        horseNumber: horse.horseNumber,
+        gateNumber: horse.gateNumber,
+        horseName: horse.horseName,
+        reason: reason,
+        recordText: '${_statInt(data, 'show')}/${_statInt(data, 'total')}',
+        rates: rates,
+        lifts: _liftsOf(rates, baseline),
+      ));
+    }
+
+    return FactorCandidateResult(
+      factorKey: 'age',
+      factorLabel: label,
+      trendSummary: summary,
+      criteria: criteria,
+      candidatesByMetric: _buildByMetric(list),
+      emptyMessage: list.isEmpty
+          ? '年齢混合戦の年齢別成績が集計されていないため選出できません。'
+          : null,
+      notes: notes,
+      baseline: baseline,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // 6. 騎手 : 過去にこのレースで好成績の騎手が騎乗する馬を抽出
   // ---------------------------------------------------------------------------
 
@@ -1238,6 +1339,8 @@ class FactorCandidateSelector {
           pick('horseWeightChangeStats'), avgWeight, horses),
       // [追加] 性別（牡・牝・セ） (v.2026.9.9+26090904)
       'gender': selectByGender(pick('genderStats'), horses),
+      // [追加] 年齢（3〜7歳以上） (v.2026.10.30+26103002)
+      'age': selectByAge(pick('ageStats'), horses),
       'jockey': selectByJockey(pick('jockeyStats'), horses),
       'trainer': selectByTrainer(pick('trainerStats'), horses),
     };
