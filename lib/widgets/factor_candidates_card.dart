@@ -143,6 +143,78 @@ class _NotesSection extends StatelessWidget {
   }
 }
 
+// [追加] 年齢タブ Step2: 安全圏・足切りの区分と、性に当たる今回の出走馬の枠。安全圏は緑、足切りは赤 (v.2026.10.30+26103003)
+class _ZoneSection extends StatelessWidget {
+  final FactorCandidateResult result;
+
+  const _ZoneSection({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8.0),
+      padding: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(6.0),
+        border: Border.all(color: Colors.teal.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            result.zoneSummary ?? '',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.teal.shade900,
+            ),
+          ),
+          if (result.safeZone.isNotEmpty)
+            ..._rows('安全圏', Colors.green.shade700, result.safeZone),
+          if (result.cutZone.isNotEmpty)
+            ..._rows('足切り', Colors.red.shade700, result.cutZone),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _rows(
+      String title, Color color, List<FactorZoneCandidate> list) {
+    return [
+      const SizedBox(height: 6),
+      Text(
+        '$title の年齢の馬（${list.length}頭）',
+        style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.bold, color: color),
+      ),
+      ...list.map(
+        (c) => Padding(
+          padding: const EdgeInsets.only(top: 3.0),
+          child: Row(
+            children: [
+              HorseNumberBadge(
+                horseNumber: c.horseNumber,
+                gateNumber: c.gateNumber,
+                size: 20.0,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${c.horseName}  ${c.categoryText}  '
+                  '複勝 ${c.showRate.toStringAsFixed(1)}%(${c.lift.toStringAsFixed(2)}倍) [${c.recordText}]',
+                  style: TextStyle(fontSize: 11.5, color: color),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+}
+
 // [追加] 1ファクター分の「今回の該当馬」を表示するカード (v.2026.9.5+26090506)
 class FactorCandidatesCard extends StatefulWidget {
   final FactorCandidateResult result;
@@ -212,6 +284,8 @@ class _FactorCandidatesCardState extends State<FactorCandidatesCard> {
               style: TextStyle(fontSize: 12, color: Colors.teal.shade900),
             ),
             const SizedBox(height: 8),
+            // [追加] 年齢タブ Step2: 安全圏・足切りの枠（判定するファクターだけ） (v.2026.10.30+26103003)
+            if (result.zoneSummary != null) _ZoneSection(result: result),
 
             // 指標の切替（単一スコアのファクターでは表示しない）
             if (result.showMetricSelector)
@@ -636,11 +710,13 @@ class _FactorHitMatrixCardState extends State<FactorHitMatrixCard> {
                           ),
                         ],
                       )),
-                      DataCell(_buildHitCountChip(summary.hitCount)),
+                      // [修正] 年齢タブ Step2: 「該当」の数は、足切りの数を引いた値 (v.2026.10.30+26103003)
+                      DataCell(_buildHitCountChip(summary.netCount)),
                       ..._order.map(
                         (key) => DataCell(_buildRankCell(
                           summary.factorRanks[key],
                           summary.factorLifts[key],
+                          isCut: summary.cutFactors.contains(key),
                         )),
                       ),
                     ]);
@@ -666,6 +742,10 @@ class _FactorHitMatrixCardState extends State<FactorHitMatrixCard> {
                   '各ファクターの重要度は等しくありません。'
                   'どのファクターを重視するかは、各タブの倍率と注意書きを読んだうえでご自身で決めてください。'
                   'この一覧は過去データの整理であって、今回の結果を予想したものではありません。',
+              // [追加] 年齢タブ Step2: 「×」と該当数の説明 (v.2026.10.30+26103003)
+              '赤い「×」は、そのファクターで「足切り」の区分（母数が十分あり、過去に馬券に絡みにくかった区分）に当たることを表します。'
+                  '「該当」の数は、該当したファクターの数から「×」の数を引いた値で、並びもこの値の順です。'
+                  '足切りは目安であり、今回の馬が来ないと決めるものではありません。',
             ]),
           ],
         ),
@@ -683,6 +763,9 @@ class _FactorHitMatrixCardState extends State<FactorHitMatrixCard> {
       color = Colors.orange;
     } else if (count >= 2) {
       color = Colors.blue;
+    } else if (count < 0) {
+      // [追加] 年齢タブ Step2: 足切りの数が該当数を上回るときは赤系 (v.2026.10.30+26103003)
+      color = Colors.red.shade300;
     } else {
       color = Colors.grey;
     }
@@ -701,7 +784,27 @@ class _FactorHitMatrixCardState extends State<FactorHitMatrixCard> {
     );
   }
 
-  Widget _buildRankCell(int? rank, double? lift) {
+  Widget _buildRankCell(int? rank, double? lift, {bool isCut = false}) {
+    // [追加] 年齢タブ Step2: 足切りの区分に当たる馬は赤い「×」で示す (v.2026.10.30+26103003)
+    if (isCut) {
+      return Container(
+        width: 22,
+        height: 22,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.red.shade700, width: 1.5),
+        ),
+        child: Text(
+          '×',
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.red.shade700),
+        ),
+      );
+    }
+
     if (rank == null) {
       return const Text('-', style: TextStyle(fontSize: 12, color: Colors.grey));
     }

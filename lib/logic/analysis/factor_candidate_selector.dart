@@ -107,6 +107,37 @@ class FactorCandidate {
       metric == FactorMetric.win ? winReturn : showReturn;
 }
 
+// [追加] 年齢タブ Step2: 安全圏・足切りの区分に当たる今回の出走馬1頭分 (v.2026.10.30+26103003)
+class FactorZoneCandidate {
+  final String horseId;
+  final int horseNumber;
+  final int gateNumber;
+  final String horseName;
+
+  /// 当たった区分の説明（例:「6歳」「9歳（7歳以上の区分）」）
+  final String categoryText;
+
+  /// 区分の複勝の度数表示（例:「1/24」）
+  final String recordText;
+
+  /// 区分の複勝率(%)
+  final double showRate;
+
+  /// 区分の複勝率 ÷ 全体平均
+  final double lift;
+
+  const FactorZoneCandidate({
+    required this.horseId,
+    required this.horseNumber,
+    required this.gateNumber,
+    required this.horseName,
+    required this.categoryText,
+    required this.recordText,
+    required this.showRate,
+    required this.lift,
+  });
+}
+
 // [追加] 1ファクター分の該当馬選出結果 (v.2026.9.5+26090506)
 class FactorCandidateResult {
   /// 内部識別子（'payout' / 'popularity' / 'frame' / 'legStyle' / 'horseWeight' / 'jockey' / 'trainer'）
@@ -164,6 +195,16 @@ class FactorCandidateResult {
   /// 過去の出走馬全体の複勝回収率(%)。回数で選ぶファクター以外や、計算できないときは null。
   final double? overallShowReturn;
 
+  // [追加] 年齢タブ Step2: 安全圏・足切りの区分に当たる今回の出走馬（年齢以外のファクターは空） (v.2026.10.30+26103003)
+  /// 安全圏の区分（複勝率が全体平均の1.5倍以上）に当たる馬。
+  final List<FactorZoneCandidate> safeZone;
+
+  /// 足切りの区分（複勝率が全体平均の0.5倍以下）に当たる馬。総合タブで「×」として減点する。
+  final List<FactorZoneCandidate> cutZone;
+
+  /// 安全圏・足切りの区分の要約（カードの枠の1行目）。判定しないファクターは null。
+  final String? zoneSummary;
+
   FactorCandidateResult({
     required this.factorKey,
     required this.factorLabel,
@@ -180,6 +221,9 @@ class FactorCandidateResult {
     this.isCountBased = false,
     this.overallWinReturn,
     this.overallShowReturn,
+    this.safeZone = const [],
+    this.cutZone = const [],
+    this.zoneSummary,
   });
 
   /// 横断集計で実際に参照する区分を返す。
@@ -219,9 +263,16 @@ class FactorHitSummary {
     required this.horseName,
     required this.factorRanks,
     required this.factorLifts,
-  });
+    Set<String>? cutFactors,
+  }) : cutFactors = cutFactors ?? <String>{};
+
+  // [追加] 年齢タブ Step2: 足切りの区分に当たったファクターのキー（総合タブで「×」にして減点する） (v.2026.10.30+26103003)
+  final Set<String> cutFactors;
 
   int get hitCount => factorRanks.length;
+
+  /// 該当数から足切りの数を引いた値。総合タブの「該当」の数と並びに使う。
+  int get netCount => hitCount - cutFactors.length;
 
   /// 該当したファクターのリフト合計。同該当数の並べ替えに使用する。
   double get liftTotal {
@@ -243,6 +294,16 @@ class FactorHitSummary {
 class FactorCandidateSelector {
   /// 1ファクター・1指標あたりの選出上限頭数
   static const int maxCandidates = 5;
+
+  // [追加] 年齢タブ Step2: 安全圏・足切りの判定 (v.2026.10.30+26103003)
+  /// 判定に必要な母数の下限（頭数）。これ未満の区分は、偶然で率が大きくぶれるので判定しない。
+  static const int zoneMinTotal = 12;
+
+  /// 複勝率が全体平均のこの倍率以上の区分を「安全圏」とする。
+  static const double safeLiftMin = 1.5;
+
+  /// 複勝率が全体平均のこの倍率以下の区分を「足切り」とする。
+  static const double cutLiftMax = 0.5;
 
   /// 表示順を固定するためのファクターキー一覧
   static const List<String> factorKeys = [
@@ -1038,6 +1099,11 @@ class FactorCandidateSelector {
       'このファクターは出走馬に複数の年齢が含まれる過去レースのみを集計しています。'
           '2歳戦・3歳限定戦など同世代戦の過去レースは母集団から除外されています。',
       '7歳以上は母数が小さいため1つの区分にまとめています。',
+      // [追加] 年齢タブ Step2: 安全圏・足切りの説明 (v.2026.10.30+26103003)
+      '安全圏・足切りは、母数が$zoneMinTotal頭以上の年齢のうち、複勝率が全体平均の$safeLiftMin倍以上（安全圏）・$cutLiftMax倍以下（足切り）のものです。'
+          '母数が少ない区分は偶然で率が大きくぶれるため判定していません。'
+          '足切りは「その年齢は過去に馬券に絡みにくかった」という目安で、今回の馬が来ないと決めるものではありません。'
+          '年齢の5区分を同時に見ているため、偶然で偏る区分が出ることもあります。',
       ..._commonNotes,
     ];
 
@@ -1069,6 +1135,32 @@ class FactorCandidateSelector {
       );
     }
 
+    // [追加] 年齢タブ Step2: 区分ごとの安全圏・足切りの判定。母数が下限以上の区分だけを、複勝率の倍率で判定する (v.2026.10.30+26103003)
+    final Map<String, String> zoneOfCategory = {};
+    final List<String> safeCategoryTexts = [];
+    final List<String> cutCategoryTexts = [];
+    final double baseShowRate = baseline.rate(FactorMetric.show);
+    for (final category in kAgeCategories) {
+      final categoryStat = ageStats[category];
+      if (categoryStat is! Map) continue;
+      final categoryData = Map<String, dynamic>.from(categoryStat);
+      final categoryTotal = _statInt(categoryData, 'total');
+      if (categoryTotal < zoneMinTotal || baseShowRate <= 0) continue;
+      final categoryLift =
+          (_ratesOf(categoryData)[FactorMetric.show] ?? 0.0) / baseShowRate;
+      final categoryText =
+          '$category ${_statInt(categoryData, 'show')}/$categoryTotal';
+      if (categoryLift >= safeLiftMin) {
+        zoneOfCategory[category] = 'safe';
+        safeCategoryTexts.add(categoryText);
+      } else if (categoryLift <= cutLiftMax) {
+        zoneOfCategory[category] = 'cut';
+        cutCategoryTexts.add(categoryText);
+      }
+    }
+    final List<FactorZoneCandidate> safeZone = [];
+    final List<FactorZoneCandidate> cutZone = [];
+
     final List<FactorCandidate> list = [];
     for (final horse in active) {
       final age = ageOfSexAndAge(horse.sexAndAge);
@@ -1082,7 +1174,33 @@ class FactorCandidateSelector {
       if (_statInt(data, 'total') <= 0) continue;
 
       final rates = _ratesOf(data);
-      final reason = age >= 8 ? '$age歳（$categoryの区分で判定）' : category;
+
+      // [追加] 年齢タブ Step2: 安全圏・足切りの区分の馬は、それぞれの一覧に入れる。足切りの馬は、倍率の並びには入れない（総合タブで該当に数えず「×」で減点するため） (v.2026.10.30+26103003)
+      final String? zone = zoneOfCategory[category];
+      if (zone != null) {
+        final zoneCandidate = FactorZoneCandidate(
+          horseId: horse.horseId,
+          horseNumber: horse.horseNumber,
+          gateNumber: horse.gateNumber,
+          horseName: horse.horseName,
+          categoryText: age >= 8 ? '$age歳（$categoryの区分）' : category,
+          recordText: '${_statInt(data, 'show')}/${_statInt(data, 'total')}',
+          showRate: rates[FactorMetric.show] ?? 0.0,
+          lift: _liftsOf(rates, baseline)[FactorMetric.show] ?? 0.0,
+        );
+        if (zone == 'safe') {
+          safeZone.add(zoneCandidate);
+        } else {
+          cutZone.add(zoneCandidate);
+        }
+      }
+      if (zone == 'cut') continue;
+
+      // [追加] 年齢タブ Step2: 母数が判定の下限に満たない区分は、参考値の印を付ける (v.2026.10.30+26103003)
+      final String lowSampleText =
+          _statInt(data, 'total') < zoneMinTotal ? '（参考値: 母数少）' : '';
+      final reason =
+          (age >= 8 ? '$age歳（$categoryの区分で判定）' : category) + lowSampleText;
 
       list.add(FactorCandidate(
         horseId: horse.horseId,
@@ -1096,14 +1214,37 @@ class FactorCandidateSelector {
       ));
     }
 
+    // [追加] 年齢タブ Step2: 安全圏・足切りの馬を馬番の順に並べ、区分の要約を作る (v.2026.10.30+26103003)
+    int zoneOrder(FactorZoneCandidate a, FactorZoneCandidate b) {
+      if (a.horseNumber > 0 && b.horseNumber > 0) {
+        return a.horseNumber.compareTo(b.horseNumber);
+      }
+      if (a.horseNumber > 0) return -1;
+      if (b.horseNumber > 0) return 1;
+      return a.horseName.compareTo(b.horseName);
+    }
+
+    safeZone.sort(zoneOrder);
+    cutZone.sort(zoneOrder);
+    final String? zoneSummary = ageStats.isEmpty
+        ? null
+        : '安全圏: ${safeCategoryTexts.isEmpty ? '該当なし' : safeCategoryTexts.join('・')}'
+            ' / 足切り: ${cutCategoryTexts.isEmpty ? '該当なし' : cutCategoryTexts.join('・')}'
+            '（複勝・$zoneMinTotal頭以上の年齢で判定）';
+
     return FactorCandidateResult(
       factorKey: 'age',
       factorLabel: label,
       trendSummary: summary,
       criteria: criteria,
+      safeZone: safeZone,
+      cutZone: cutZone,
+      zoneSummary: zoneSummary,
       candidatesByMetric: _buildByMetric(list),
       emptyMessage: list.isEmpty
-          ? '年齢混合戦の年齢別成績が集計されていないため選出できません。'
+          ? (cutZone.isNotEmpty
+              ? '倍率の並びに入る馬はいません（足切りの年齢の馬は上の枠に出しています）。'
+              : '年齢混合戦の年齢別成績が集計されていないため選出できません。')
           : null,
       notes: notes,
       baseline: baseline,
@@ -1374,11 +1515,27 @@ class FactorCandidateSelector {
         summary.factorRanks[key] = i + 1;
         summary.factorLifts[key] = candidate.liftFor(result.resolveMetric(metric));
       }
+      // [追加] 年齢タブ Step2: 足切りの区分に当たる馬は、そのファクターを「×」として記録する（まだ表に無い馬は行を作る） (v.2026.10.30+26103003)
+      for (final cut in result.cutZone) {
+        final summary = summaryMap.putIfAbsent(
+          cut.horseId,
+          () => FactorHitSummary(
+            horseId: cut.horseId,
+            horseNumber: cut.horseNumber,
+            gateNumber: cut.gateNumber,
+            horseName: cut.horseName,
+            factorRanks: {},
+            factorLifts: {},
+          ),
+        );
+        summary.cutFactors.add(key);
+      }
     }
 
     final list = summaryMap.values.toList()
       ..sort((a, b) {
-        final cmp = b.hitCount.compareTo(a.hitCount);
+        // [修正] 年齢タブ Step2: 足切りの数を引いた値の順に並べる（足切りが無ければ従来どおり hitCount の順） (v.2026.10.30+26103003)
+        final cmp = b.netCount.compareTo(a.netCount);
         if (cmp != 0) return cmp;
         final liftCmp = b.liftTotal.compareTo(a.liftTotal);
         if (liftCmp != 0) return liftCmp;
