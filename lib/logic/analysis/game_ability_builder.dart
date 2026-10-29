@@ -35,6 +35,10 @@ class GameAbilitySource {
   /// [追加] 展開シミュ改良Step2(斤量): 直近5走(芝・ダートだけ)の斤量の平均(kg。GameAptitudeRaw.pastCarriedWeight) (v.2026.10.28+26102802)
   final double? pastCarriedWeight;
 
+  /// [追加] 展開シミュ改良Step7a: 調子(やる気)の倍率(GameForm.multiplierOf。1.0 = 普通)。
+  /// null は 1.0 と同じ扱い (v.2026.10.30+26103005)
+  final double? formMultiplier;
+
   const GameAbilitySource({
     this.speedIndex,
     this.speedIndexConfidence,
@@ -46,6 +50,8 @@ class GameAbilitySource {
     this.aptitudeScore,
     this.carriedWeight,
     this.pastCarriedWeight,
+    // [追加] 展開シミュ改良Step7a: 調子(やる気)の倍率 (v.2026.10.30+26103005)
+    this.formMultiplier,
   });
 }
 
@@ -67,12 +73,18 @@ class GameAbilityTuning {
   /// 当日の出来の、終盤の速度加算の揺らぎの標準偏差(m/s。原型の speed_sd)
   final double speedNoiseSd;
 
+  /// [追加] 展開シミュ改良Step7a: 調子(やる気)の効き。0 = 効かせない、1 = ゲームの値のまま。
+  /// 実際にかける倍率は 1 + これ × (調子の倍率 − 1) (v.2026.10.30+26103005)
+  final double formStrength;
+
   const GameAbilityTuning({
     this.aptitudeStrength = 0.0,
     this.weightSecondsPerKg = 0.0,
     this.weightPastNormalize = false,
     this.staminaAdd = 0.0,
     this.speedNoiseSd = GameAbilityBuilder.speedNoiseSd,
+    // [追加] 展開シミュ改良Step7a: 既定は効かせない (v.2026.10.30+26103005)
+    this.formStrength = 0.0,
   });
 
   /// 今までと同じ(どれも効かせない)
@@ -131,10 +143,16 @@ class GameSpeedParts {
   /// 斤量のスキルと過去走の斤量の補正の分
   final double weight;
 
+  /// [追加] 展開シミュ改良Step7a: 調子(やる気)の分。
+  /// (speedBase + ほかの3つの和) × (√倍率 − 1)。4つを speedBase に足すと揺らぎの前の speedAdd になる (v.2026.10.30+26103005)
+  final double form;
+
   const GameSpeedParts({
     required this.speedIndex,
     required this.aptitude,
     required this.weight,
+    // [追加] 展開シミュ改良Step7a: 調子の分(既定は0) (v.2026.10.30+26103005)
+    this.form = 0.0,
   });
 }
 
@@ -166,6 +184,12 @@ class GameAbilityBuilder {
 
   /// [追加] 展開シミュ改良Step2(斤量): 実際の秒 ÷ エンジンの秒(斤量の秒をエンジンの時間に直すのに使う) (v.2026.10.28+26102802)
   static const double weightTimeScale = 1.2;
+
+  /// [追加] 展開シミュ改良Step7a: 実際にかける調子の倍率。[GameAbilityTuning.formStrength] が0なら1.0 (v.2026.10.30+26103005)
+  static double formMultiplierOf(GameAbilityTuning tuning, double? multiplier) {
+    if (tuning.formStrength == 0.0) return 1.0;
+    return 1.0 + tuning.formStrength * ((multiplier ?? 1.0) - 1.0);
+  }
 
   /// 出走馬全員の元の値から能力値を作る(馬の順は入力と同じ)。
   /// [修正] 展開シミュ改良Step2: [tuning] で適性の点数・斤量のスキル・スタミナ・揺らぎを調整する。斤量のスキルには [distance](m)が要る。
@@ -251,13 +275,28 @@ class GameAbilityBuilder {
       if (tuning.speedNoiseSd != speedNoiseSd) {
         noiseScale = noiseScale * (tuning.speedNoiseSd / speedNoiseSd);
       }
+      double power = (800.0 + 800.0 * (0.5 - rate)).clamp(200.0, 1600.0).toDouble();
+      double guts = (600.0 + 600.0 * kick).clamp(100.0, 2000.0).toDouble();
+      double wit = (600.0 + 4000.0 * (jt - 0.2)).clamp(150.0, 1600.0).toDouble();
+      // [追加] 展開シミュ改良Step7a: 調子(やる気)の倍率。スピードは √倍率(エンジンが √(500×スピード) で
+      // 使うため)、ほかはそのまま掛ける。当日の出来の揺らぎより先に掛ける (v.2026.10.30+26103005)
+      final formMult = formMultiplierOf(tuning, s.formMultiplier);
+      if (formMult != 1.0) {
+        final root = math.sqrt(formMult);
+        speedAdd = speedAdd * root;
+        stamina = stamina * formMult;
+        power = power * formMult;
+        guts = guts * formMult;
+        wit = wit * formMult;
+      }
       out.add(GameHorseAbility(
         // [修正] 展開シミュ改良Step2: speedAdd・stamina・noiseScale は上で作った値 (v.2026.10.28+26102802)
         speedAdd: speedAdd,
         stamina: stamina,
-        power: (800.0 + 800.0 * (0.5 - rate)).clamp(200.0, 1600.0).toDouble(),
-        guts: (600.0 + 600.0 * kick).clamp(100.0, 2000.0).toDouble(),
-        wit: (600.0 + 4000.0 * (jt - 0.2)).clamp(150.0, 1600.0).toDouble(),
+        // [修正] 展開シミュ改良Step7a: power・guts・wit も上で作った値(調子の倍率をかけるため) (v.2026.10.30+26103005)
+        power: power,
+        guts: guts,
+        wit: wit,
         style: styleOfRate(rate),
         noiseScale: noiseScale,
         speedDisplay: 800.0 + speedDisplayPerPoint * (siEff - mean),
@@ -324,12 +363,20 @@ class GameAbilityBuilder {
         final vb = 22.0 - distance / 1000.0;
         weight = vb * vb * (weightGains[i] / weightTimeScale) / (distance / 3.0);
       }
+      // [修正] 展開シミュ改良Step7a: 調子(やる気)の分を足す。4つを speedBase に足すと揺らぎの前の speedAdd になる (v.2026.10.30+26103005)
+      final speedIndexPart = speedPerIndexPoint * (siEff - mean);
+      final aptitudePart = tuning.aptitudeStrength != 0.0
+          ? tuning.aptitudeStrength * (s.aptitudeScore ?? 0.0)
+          : 0.0;
+      final formMult = formMultiplierOf(tuning, s.formMultiplier);
       out.add(GameSpeedParts(
-        speedIndex: speedPerIndexPoint * (siEff - mean),
-        aptitude: tuning.aptitudeStrength != 0.0
-            ? tuning.aptitudeStrength * (s.aptitudeScore ?? 0.0)
-            : 0.0,
+        speedIndex: speedIndexPart,
+        aptitude: aptitudePart,
         weight: weight,
+        form: formMult != 1.0
+            ? (speedBase + speedIndexPart + aptitudePart + weight) *
+                (math.sqrt(formMult) - 1.0)
+            : 0.0,
       ));
     }
     return out;
