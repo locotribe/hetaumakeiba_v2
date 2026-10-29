@@ -244,6 +244,16 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
     }).toList();
   }
 
+  // [追加] 馬体重増減別を7区分にしたため、保存済みの旧区分（5区分）の統計は、読み込み済みの過去レース結果から7区分で集計し直して差し替える（DBの保存分は書き換えない。過去レースを選び直すと保存分も7区分になる） (v.2026.10.30+26103001)
+  void _replaceStaleWeightChangeStats(dynamic data) {
+    if (data is! Map) return;
+    final current = data['horseWeightChangeStats'];
+    if (current is! Map || current.isEmpty) return;
+    if (current.keys.every((k) => StatisticsService.weightChangeCategories.contains(k))) return;
+    if (_pastRaces.isEmpty) return;
+    data['horseWeightChangeStats'] = StatisticsService.recalcHorseWeightChangeStats(_pastRaces);
+  }
+
   // 統計データの読み込みと、グラフ描画に必要な過去レース詳細の取得
   void _checkAndLoadStatistics() {
     setState(() {
@@ -422,6 +432,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
                   }
 
                   final data = json.decode(stats.statisticsJson);
+                  // [追加] 保存済みの旧区分（5区分）の馬体重増減別を7区分に差し替える (v.2026.10.30+26103001)
+                  _replaceStaleWeightChangeStats(data);
 
                   // [追加] 過去傾向と今回の出走メンバーを突き合わせて各ファクターの該当馬を選出 (v.2026.9.5+26090506)
                   final Map<String, FactorCandidateResult> factorCandidates =
@@ -1116,7 +1128,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
   }
 
   Widget _buildHorseWeightStatsCard(Map<String, dynamic> stats, double avgWeight) {
-    final categories = ['-10kg以下', '-4~-8kg', '-2~+2kg', '+4~+8kg', '+10kg以上'];
+    // [修正] 馬体重増減別を7区分に変更 (v.2026.10.30+26103001)
+    final categories = StatisticsService.weightChangeCategories;
 
     return Card(
       child: Padding(
@@ -1124,11 +1137,8 @@ class _RaceStatisticsPageState extends State<RaceStatisticsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('馬体重別成績', style: Theme.of(context).textTheme.titleMedium),
-            ListTile(
-              leading: const Icon(Icons.scale),
-              title: Text('勝ち馬の平均馬体重: ${avgWeight.toStringAsFixed(1)} kg'),
-            ),
+            // [修正] 見出しを「馬体重増減別成績」に変更し、勝ち馬の平均馬体重の行を削除（平均・中央値は上の「勝ち馬の馬体重傾向」カードにある） (v.2026.10.30+26103001)
+            Text('馬体重増減別成績', style: Theme.of(context).textTheme.titleMedium),
             const Divider(),
             ...categories.where((cat) => stats.containsKey(cat) && (stats[cat]['total'] as int) > 0).map((key) {
               final data = stats[key];

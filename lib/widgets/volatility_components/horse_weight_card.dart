@@ -20,7 +20,8 @@ class HorseWeightCard extends StatelessWidget {
 
     // [修正] 増減別のグラフデータ生成ロジックをリファクタリング (v.1.1)
     List<BarChartGroupData> changeBarGroups = [];
-    final changeCategories = ['-10kg以下', '-4~-8kg', '-2~+2kg', '+4~+8kg', '+10kg以上'];
+    // [修正] 馬体重増減別を7区分に変更（volatility_analyzer.dart の changeStats のキーと同じ並び） (v.2026.10.30+26103001)
+    final changeCategories = ['-10kg以下', '-9~-5kg', '-4~-1kg', '0kg', '+1~+4kg', '+5~+9kg', '+10kg以上'];
     int changeXIndex = 0;
     for (String cat in changeCategories) {
       final stats = result.changeStats[cat];

@@ -286,11 +286,14 @@ class HorseWeightAnalysisResult {
 class HorseWeightAnalyzer {
   HorseWeightAnalysisResult analyze(List<RaceResult> pastRaces) {
     final List<double> winningWeights = [];
+    // [修正] 馬体重増減別を7区分（-10以下/-9〜-5/-4〜-1/0/+1〜+4/+5〜+9/+10以上）に変更 (v.2026.10.30+26103001)
     final Map<String, WeightStats> changeStats = {
       '-10kg以下': WeightStats(),
-      '-4~-8kg': WeightStats(),
-      '-2~+2kg': WeightStats(),
-      '+4~+8kg': WeightStats(),
+      '-9~-5kg': WeightStats(),
+      '-4~-1kg': WeightStats(),
+      '0kg': WeightStats(),
+      '+1~+4kg': WeightStats(),
+      '+5~+9kg': WeightStats(),
       '+10kg以上': WeightStats(),
     };
 
@@ -314,7 +317,8 @@ class HorseWeightAnalyzer {
         bool isShow = rank >= 1 && rank <= 3;
 
         // statistics_service.dart と同一の正規表現・抽出ロジックを使用
-        final weightMatch = RegExp(r'(\d+)\(([\+\-]\d+)\)').firstMatch(weightStr);
+        // [修正] 実データの増減0は符号なしの (0) なので、符号を省略可にした（旧: 増減0の馬が集計から漏れていた） (v.2026.10.30+26103001)
+        final weightMatch = RegExp(r'(\d+)\(([\+\-]?\d+)\)').firstMatch(weightStr);
         if (weightMatch != null) {
           final weight = double.tryParse(weightMatch.group(1)!);
           final weightChange = int.tryParse(weightMatch.group(2)!);
@@ -323,15 +327,20 @@ class HorseWeightAnalyzer {
             if (isWin) winningWeights.add(weight);
 
             // --- 増減別の集計 ---
+            // [修正] 馬体重増減別を7区分に変更（statistics_service.dart の weightChangeCategoryOf と同一区分） (v.2026.10.30+26103001)
             String category;
             if (weightChange <= -10) {
               category = '-10kg以下';
-            } else if (weightChange <= -4) {
-              category = '-4~-8kg';
-            } else if (weightChange <= 2) {
-              category = '-2~+2kg';
-            } else if (weightChange <= 8) {
-              category = '+4~+8kg';
+            } else if (weightChange <= -5) {
+              category = '-9~-5kg';
+            } else if (weightChange <= -1) {
+              category = '-4~-1kg';
+            } else if (weightChange == 0) {
+              category = '0kg';
+            } else if (weightChange <= 4) {
+              category = '+1~+4kg';
+            } else if (weightChange <= 9) {
+              category = '+5~+9kg';
             } else {
               category = '+10kg以上';
             }

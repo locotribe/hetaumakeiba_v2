@@ -82,6 +82,51 @@ class StatisticsService {
   // [削除] 結果分析タブの廃止 Step4: レース名検索で過去レースを集める fetchPastRacesForAnalysis と、それを使う古い統計の作成 processAndSaveRaceStatistics を削除した（過去分析は processAndSaveRaceStatisticsByIds を使う。レース結果ページのペースの予想だけが使っていた） (v.2026.10.19+26101904)
 
 
+  // [追加] 馬体重増減別の7区分（表示順）。保存用の集計・過去分析の画面・好走馬の選出が同じ区分を使う (v.2026.10.30+26103001)
+  static const List<String> weightChangeCategories = [
+    '-10kg以下',
+    '-9~-5kg',
+    '-4~-1kg',
+    '0kg',
+    '+1~+4kg',
+    '+5~+9kg',
+    '+10kg以上',
+  ];
+
+  // [追加] 馬体重の増減(kg)を7区分のラベルへ変換する (v.2026.10.30+26103001)
+  static String weightChangeCategoryOf(int change) {
+    if (change <= -10) return '-10kg以下';
+    if (change <= -5) return '-9~-5kg';
+    if (change <= -1) return '-4~-1kg';
+    if (change == 0) return '0kg';
+    if (change <= 4) return '+1~+4kg';
+    if (change <= 9) return '+5~+9kg';
+    return '+10kg以上';
+  }
+
+  // [追加] 過去レース結果から馬体重増減別の成績だけを7区分で集計し直す。保存済みの旧区分（5区分）の統計を画面側で差し替えるために使う。集計の条件は _calculateStatistics と同じ (v.2026.10.30+26103001)
+  static Map<String, Map<String, dynamic>> recalcHorseWeightChangeStats(List<RaceResult> results) {
+    final Map<String, Map<String, dynamic>> stats = {};
+    for (final result in results) {
+      for (final horse in result.horseResults) {
+        final rank = int.tryParse(horse.rank);
+        if (rank == null) continue;
+        // [修正] 実データの増減0は符号なしの (0) なので、符号を省略可にした (v.2026.10.30+26103001)
+        final weightMatch = RegExp(r'(\d+)\(([\+\-]?\d+)\)').firstMatch(horse.horseWeight);
+        if (weightMatch == null) continue;
+        final weightChange = int.tryParse(weightMatch.group(2)!);
+        if (weightChange == null) continue;
+        final category = weightChangeCategoryOf(weightChange);
+        stats.putIfAbsent(category, () => {'total': 0, 'win': 0, 'place': 0, 'show': 0});
+        stats[category]!['total'] = (stats[category]!['total'] ?? 0) + 1;
+        if (rank == 1) stats[category]!['win'] = (stats[category]!['win'] ?? 0) + 1;
+        if (rank <= 2) stats[category]!['place'] = (stats[category]!['place'] ?? 0) + 1;
+        if (rank <= 3) stats[category]!['show'] = (stats[category]!['show'] ?? 0) + 1;
+      }
+    }
+    return stats;
+  }
+
   // 取得したレース結果リストから統計を計算する
   Map<String, dynamic> _calculateStatistics(List<RaceResult> results) {
     // 各分析項目用のMapを初期化
@@ -210,19 +255,15 @@ class StatisticsService {
         }
 
         // 馬体重別成績
-        final weightMatch = RegExp(r'(\d+)\(([\+\-]\d+)\)').firstMatch(horse.horseWeight);
+        // [修正] 実データの増減0は符号なしの (0) なので、符号を省略可にした（旧: 増減0の馬が集計から漏れていた。勝ち馬の平均体重にも増減0の勝ち馬が入る） (v.2026.10.30+26103001)
+        final weightMatch = RegExp(r'(\d+)\(([\+\-]?\d+)\)').firstMatch(horse.horseWeight);
         if (weightMatch != null) {
           final weight = int.tryParse(weightMatch.group(1)!);
           final weightChange = int.tryParse(weightMatch.group(2)!);
           if (weight != null && weightChange != null) {
             if(isWin) winningHorseWeights.add(weight);
-            String category;
-            if (weightChange <= -10) {
-              category = '-10kg以下';
-            } else if (weightChange <= -4) category = '-4~-8kg';
-            else if (weightChange <= 2) category = '-2~+2kg';
-            else if (weightChange <= 8) category = '+4~+8kg';
-            else category = '+10kg以上';
+            // [修正] 馬体重増減別を7区分に変更。区分けは weightChangeCategoryOf にまとめた (v.2026.10.30+26103001)
+            final String category = weightChangeCategoryOf(weightChange);
 
             horseWeightChangeStats.putIfAbsent(category, () => {'total': 0, 'win': 0, 'place': 0, 'show': 0});
             horseWeightChangeStats[category]!['total'] = (horseWeightChangeStats[category]!['total'] ?? 0) + 1;

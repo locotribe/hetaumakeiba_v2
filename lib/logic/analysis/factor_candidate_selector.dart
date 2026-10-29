@@ -435,10 +435,13 @@ class FactorCandidateSelector {
 
   /// 増減(kg)を statistics_service.dart と同一区分のカテゴリ名へ変換する。
   static String _weightChangeCategory(int change) {
+    // [修正] 馬体重増減別を7区分に変更（statistics_service.dart の weightChangeCategoryOf と同一区分） (v.2026.10.30+26103001)
     if (change <= -10) return '-10kg以下';
-    if (change <= -4) return '-4~-8kg';
-    if (change <= 2) return '-2~+2kg';
-    if (change <= 8) return '+4~+8kg';
+    if (change <= -5) return '-9~-5kg';
+    if (change <= -1) return '-4~-1kg';
+    if (change == 0) return '0kg';
+    if (change <= 4) return '+1~+4kg';
+    if (change <= 9) return '+5~+9kg';
     return '+10kg以上';
   }
 
