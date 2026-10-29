@@ -180,6 +180,10 @@ class GameRaceConfig {
   /// null は [wearThresholds] と同じ (v.2026.10.28+26102803)
   final List<double>? wearThresholdsCurve;
 
+  /// [追加] 展開シミュ改良Step6(最後の1F): HPが尽きた後の落ち方。尽きたときの速さから、尽きてから100m進むごとにこの値(m/s)ずつ下げる(最低速度まで)。
+  /// null はゲームのまま(すぐ最低速度へ) (v.2026.10.30+26103004)
+  final double? outFade;
+
   const GameRaceConfig({
     required this.paceMult,
     required this.lateAdj,
@@ -207,6 +211,8 @@ class GameRaceConfig {
     this.wearAvoidOut = false,
     // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
     this.wearThresholdsCurve,
+    // [追加] 展開シミュ改良Step6 (v.2026.10.30+26103004)
+    this.outFade,
   });
 
   /// 芝の校正値(設計書4章)
@@ -251,6 +257,8 @@ class GameRaceConfig {
     bool? wearAvoidOut,
     // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
     List<double>? wearThresholdsCurve,
+    // [追加] 展開シミュ改良Step6 (v.2026.10.30+26103004)
+    double? outFade,
   }) {
     return GameRaceConfig(
       paceMult: paceMult ?? this.paceMult,
@@ -279,6 +287,8 @@ class GameRaceConfig {
       wearAvoidOut: wearAvoidOut ?? this.wearAvoidOut,
       // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
       wearThresholdsCurve: wearThresholdsCurve ?? this.wearThresholdsCurve,
+      // [追加] 展開シミュ改良Step6 (v.2026.10.30+26103004)
+      outFade: outFade ?? this.outFade,
     );
   }
 }
@@ -718,6 +728,8 @@ class GameRaceEngine {
     final stInner = List<double>.filled(n, 0.0);
     final stWear = List<double>.filled(n, 0.0);
     final stKick = List<double>.filled(n, 0.0);
+    // [追加] 展開シミュ改良Step6: HPが尽きたときの速さ (v.2026.10.30+26103004)
+    final vOut = List<double?>.filled(n, null);
 
     // [追加] 展開シミュ改良Step1(案C): 内の馬場の傷み。避けるときの境目(内柵からの距離。コース幅の割合)。
     // 傷みが [GameRaceConfig.wearAvoid] 以下になるのは、大きい方から数えて (wearAvoid÷wearUnit) 番目のしきい値より外 (v.2026.10.28+26102801)
@@ -1160,7 +1172,16 @@ class GameRaceEngine {
         // [追加] 展開シミュ改良Step5a(案E): HPが尽きる前の目標速度と、尽きた所(ゴールまでの距離) (v.2026.10.29+26102902)
         final tgtNoOut = tgt;
         if (out && stOutAt[i] == null) stOutAt[i] = d - pos[i];
-        if (out) tgt = minSpeed[i];
+        // [修正] 展開シミュ改良Step6: 落ち方の指定があれば、尽きたときの速さから100mごとに下げる(参照実装 simref2.py の out_fade) (v.2026.10.30+26103004)
+        if (out) {
+          vOut[i] ??= v[i];
+          tgt = minSpeed[i];
+          final fade = config.outFade;
+          if (fade != null) {
+            final since = pos[i] - (d - stOutAt[i]!);
+            tgt = math.max(minSpeed[i], vOut[i]! - fade * since / 100.0);
+          }
+        }
         if (!dash[i]) tgt = math.max(tgt, minSpeed[i]);
         final acc = (uphill ? 0.0004 : 0.0006) * powerRoot[i] * ac[i][p] +
             (dash[i] ? 24.0 : 0.0);

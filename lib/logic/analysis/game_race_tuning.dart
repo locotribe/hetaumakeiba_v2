@@ -145,6 +145,9 @@ class GameRaceTuning {
   final double? winCalibration;
   final double? top3Calibration;
 
+  /// [追加] 展開シミュ改良Step6(最後の1F): HPが尽きた後の落ち方(100m あたり m/s)。GameRaceConfig.outFade。null はゲームのまま (v.2026.10.30+26103004)
+  final double? outFade;
+
   const GameRaceTuning({
     this.innerBias = 0.0,
     this.kickback = 0.0,
@@ -157,6 +160,8 @@ class GameRaceTuning {
     this.paceMult,
     this.winCalibration,
     this.top3Calibration,
+    // [追加] 展開シミュ改良Step6 (v.2026.10.30+26103004)
+    this.outFade,
   });
 
   /// 今までと同じ(どれも効かせない)
@@ -200,10 +205,35 @@ class GameRaceTuning {
     top3Calibration: 0.5,
   );
 
+  /// [追加] 展開シミュ改良Step6(最後の1F): [tunedTurf] に、HPが尽きた後の落ち方(100mごとに 2 m/s)を足し、ペース倍率を1.07に決め直した (v.2026.10.30+26103004)
+  static const GameRaceTuning tuned6Turf = GameRaceTuning(
+    innerBias: -0.05,
+    useWear: true,
+    wearAvoid: 0.04,
+    pacePredictStrength: 1.0,
+    paceScatterSd: 1.0,
+    paceMult: 1.07,
+    winCalibration: 0.35,
+    top3Calibration: 0.35,
+    outFade: 2.0,
+  );
+
+  /// [追加] 展開シミュ改良Step6(最後の1F): [tunedDirt] に、HPが尽きた後の落ち方(100mごとに 1.5 m/s)を足し、ペース倍率を1.13に決め直した (v.2026.10.30+26103004)
+  static const GameRaceTuning tuned6Dirt = GameRaceTuning(
+    kickback: 0.3,
+    pacePredictStrength: 1.0,
+    paceScatterSd: 1.0,
+    paceMult: 1.13,
+    winCalibration: 0.5,
+    top3Calibration: 0.5,
+    outFade: 1.5,
+  );
+
   /// アプリで使う値。改良Step3 は off だった。
   /// [修正] 展開シミュ改良Step4: 芝は [tunedTurf]、ダートは [tunedDirt] を効かせる (v.2026.10.29+26102901)
+  /// [修正] 展開シミュ改良Step6: 芝は [tuned6Turf]、ダートは [tuned6Dirt] にした (v.2026.10.30+26103004)
   static GameRaceTuning of({required bool isDirt}) =>
-      isDirt ? tunedDirt : tunedTurf;
+      isDirt ? tuned6Dirt : tuned6Turf;
 
   /// [base] に、このレースの調整を入れた設定。[rail] は使用コースと傷み、[paceDeviation] は当てたペースのずれ(秒)
   GameRaceConfig apply(
@@ -216,6 +246,8 @@ class GameRaceTuning {
     if (paceMult != null) c = c.copyWith(paceMult: paceMult);
     if (innerBias != 0.0) c = c.copyWith(innerBias: innerBias);
     if (kickback != 0.0) c = c.copyWith(kickback: kickback);
+    // [追加] 展開シミュ改良Step6 (v.2026.10.30+26103004)
+    if (outFade != null) c = c.copyWith(outFade: outFade);
     if (useWear && rail != null) {
       c = c.copyWith(
         wearThresholds: rail.wearThresholds,
