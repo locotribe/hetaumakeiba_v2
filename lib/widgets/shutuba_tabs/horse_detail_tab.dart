@@ -23,6 +23,8 @@ import 'package:hetaumakeiba_v2/widgets/memo/horse_memo_parts.dart';
 // [追加] 好走条件 馬詳細移植 StepA-2: 好走条件ビュー用 (v.2026.9.25+26092506)
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/condition_section.dart';
+// [追加] 得意条件まとめ Step1: まとめカード用の誕生日の読み取りと今回の条件 (v.2026.10.31+26103101)
+import 'package:hetaumakeiba_v2/logic/analysis/horse_strength_summary.dart';
 // [追加] 好走条件の改良 Step4: 好走条件の並べ替えの種類（AptitudeSort） (v.2026.10.18+26101802)
 import 'package:hetaumakeiba_v2/logic/analysis/condition_aptitude_analyzer.dart';
 // [追加] 好走条件 馬詳細移植 StepA-3: 馬場データ取得（クッション値/含水率） (v.2026.9.25+26092507)
@@ -225,6 +227,22 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   Future<HorseProfile?> _profileFor(String horseId) {
     return _profileFutures.putIfAbsent(
         horseId, () => _horseRepo.getHorseProfile(horseId));
+  }
+
+  // [追加] 得意条件まとめ Step1: 出走馬全頭の馬プロフィール（好走条件のまとめカードの誕生日の順位に使う）。出走馬の顔ぶれが同じなら1回だけ読む (v.2026.10.31+26103101)
+  Future<Map<String, HorseProfile?>>? _entrantProfilesFuture;
+  String? _entrantProfilesKey;
+
+  Future<Map<String, HorseProfile?>> _entrantProfiles() {
+    final ids = [for (final h in _horses) h.horseId];
+    final key = ids.join(',');
+    if (_entrantProfilesFuture == null || _entrantProfilesKey != key) {
+      _entrantProfilesKey = key;
+      _entrantProfilesFuture = Future.wait(ids.map(_profileFor)).then((list) => {
+            for (int i = 0; i < ids.length; i++) ids[i]: list[i],
+          });
+    }
+    return _entrantProfilesFuture!;
   }
 
   Future<List<PastMemoDetail>> _pastMemosFor(String horseId) {
@@ -1059,20 +1077,47 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
                       );
                     }
                     // [修正] 好走条件・個別成績・相対評価の移動 Step3: 回収率を渡す。通算成績の計算を待たずに出し、計算が終わったら回収率の行が出る (v.2026.10.17+26101708)
+                    // [修正] 得意条件まとめ Step1: 出走馬全頭の馬プロフィールも読み（待たずに出し、読めたら誕生日・血統の行が出る）、
+                    // まとめカード用に この馬の馬プロフィール・出走馬（取消を除く）の誕生日・今回のレースの日付と条件を渡す (v.2026.10.31+26103101)
                     return FutureBuilder<Map<String, HorseRecordStats>>(
                       future: _recordStats(),
-                      builder: (context, statsSnapshot) => ConditionSection(
-                        horse: horse,
-                        allPastRecords: all,
-                        currentRaceHorses: _horses,
-                        trackConditions: tcSnapshot.data ?? const {},
-                        currentSurface:
-                            ConditionRankingBuilder.conditionsOf(widget.predictionRaceData).surface,
-                        currentTrackCondition: currentSnapshot.data,
-                        recordStats: statsSnapshot.data?[horse.horseId],
-                        // [追加] 好走条件の改良 Step4 (v.2026.10.18+26101802)
-                        sort: _conditionSort,
-                        onSortChanged: (s) => setState(() => _conditionSort = s),
+                      builder: (context, statsSnapshot) => FutureBuilder<Map<String, HorseProfile?>>(
+                        future: _entrantProfiles(),
+                        builder: (context, profileSnapshot) {
+                          final profiles = profileSnapshot.data ?? const <String, HorseProfile?>{};
+                          final conds = ConditionRankingBuilder.conditionsOf(widget.predictionRaceData);
+                          final entrantBirthdays = <DateTime>[
+                            for (final h in _horses)
+                              if (!h.isScratched)
+                                if (HorseStrengthSummary.parseBirthday(profiles[h.horseId]?.birthday)
+                                    case final DateTime d)
+                                  d,
+                          ];
+                          return ConditionSection(
+                            horse: horse,
+                            allPastRecords: all,
+                            currentRaceHorses: _horses,
+                            trackConditions: tcSnapshot.data ?? const {},
+                            currentSurface: conds.surface,
+                            currentTrackCondition: currentSnapshot.data,
+                            recordStats: statsSnapshot.data?[horse.horseId],
+                            // [追加] 好走条件の改良 Step4 (v.2026.10.18+26101802)
+                            sort: _conditionSort,
+                            onSortChanged: (s) => setState(() => _conditionSort = s),
+                            // [追加] 得意条件まとめ Step1 (v.2026.10.31+26103101)
+                            profile: profiles[horse.horseId],
+                            entrantBirthdays: entrantBirthdays,
+                            raceDate: parseRaceDateForSpeedIndex(widget.predictionRaceData.raceDate),
+                            strengthCurrent: StrengthCurrent(
+                              venue: conds.venue,
+                              distanceLabel: conds.distanceLabel,
+                              trackCondition: widget.predictionRaceData.trackCondition,
+                              direction: conds.direction,
+                              cushionValue: currentSnapshot.data?.cushionValue,
+                              moistureDirtGoal: currentSnapshot.data?.moistureDirtGoal,
+                            ),
+                          );
+                        },
                       ),
                     );
                   },

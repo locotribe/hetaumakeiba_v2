@@ -13,6 +13,9 @@ import 'package:hetaumakeiba_v2/logic/analysis/leg_style_analyzer.dart';
 import 'package:hetaumakeiba_v2/widgets/condition_race_tile.dart';
 // [追加] 好走条件・個別成績・相対評価の移動 Step3: 総成績の下の回収率 (v.2026.10.17+26101708)
 import 'package:hetaumakeiba_v2/logic/analysis/horse_record_stats.dart';
+// [追加] 得意条件まとめ Step1: まとめカード（個体差・得意条件）の計算と、誕生日・血統の馬プロフィール (v.2026.10.31+26103101)
+import 'package:hetaumakeiba_v2/logic/analysis/horse_strength_summary.dart';
+import 'package:hetaumakeiba_v2/models/horse_profile_model.dart';
 
 // [追加] 好走条件 馬詳細移植 StepA-2: 馬詳細タブ「好走条件」ビュー。条件カテゴリ主軸（得意条件）で1頭ぶんを縦に表示 (v.2026.9.25+26092506)
 class ConditionSection extends StatelessWidget {
@@ -32,6 +35,13 @@ class ConditionSection extends StatelessWidget {
   final AptitudeSort sort;
   final ValueChanged<AptitudeSort>? onSortChanged;
 
+  // [追加] 得意条件まとめ Step1: まとめカードに使う。この馬の馬プロフィール（誕生日・血統。読み込み前・無ければ null）、
+  // 今回の出走馬（取消を除く。この馬を含む）の誕生日、今回のレースの日付と条件 (v.2026.10.31+26103101)
+  final HorseProfile? profile;
+  final List<DateTime> entrantBirthdays;
+  final DateTime? raceDate;
+  final StrengthCurrent strengthCurrent;
+
   const ConditionSection({
     super.key,
     required this.horse,
@@ -45,6 +55,11 @@ class ConditionSection extends StatelessWidget {
     // [追加] 好走条件の改良 Step4 (v.2026.10.18+26101802)
     this.sort = AptitudeSort.standard,
     this.onSortChanged,
+    // [追加] 得意条件まとめ Step1 (v.2026.10.31+26103101)
+    this.profile,
+    this.entrantBirthdays = const [],
+    this.raceDate,
+    this.strengthCurrent = const StrengthCurrent(),
   });
 
   // 1着=赤 / 2着=青 / 3着=橙 / 着外=灰
@@ -67,10 +82,18 @@ class ConditionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final records = allPastRecords[horse.horseId] ?? const <HorseRaceRecord>[];
+    // [修正] 得意条件まとめ Step1: 過去成績が無い馬（新馬）でも、まとめカード（個体差）を上に出す (v.2026.10.31+26103101)
     if (records.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Text('過去成績がありません', style: TextStyle(fontSize: 12, color: Colors.black54)),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 2),
+          _buildSummaryCard(records),
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text('過去成績がありません', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          ),
+        ],
       );
     }
 
@@ -127,6 +150,9 @@ class ConditionSection extends StatelessWidget {
             style: const TextStyle(fontSize: 11, color: Colors.black54),
           ),
         ],
+        // [追加] 得意条件まとめ Step1: 総成績・回収率の下に、まとめカード（個体差・得意条件） (v.2026.10.31+26103101)
+        const SizedBox(height: 6),
+        _buildSummaryCard(records),
         const SizedBox(height: 6),
         // [修正] 馬詳細の表示修正: 見出し「得意条件」を外し、並べ替えのチップ（標準／勝率／複勝率／出走数）だけを左から出す (v.2026.10.26+26102601)
         _buildSortChips(),
@@ -145,6 +171,135 @@ class ConditionSection extends StatelessWidget {
         // 出典レースの明細（対戦成績つき）
         for (final r in sortedRecords) _buildRaceTile(r),
       ],
+    );
+  }
+
+  // [追加] 得意条件まとめ Step1: まとめカード。上の段「個体差」（全馬）、下の段「得意条件」（4戦以上で、当てはまる条件があるとき）。
+  // 苦手な条件は出さない。今回のレースに当たる得意条件には「今回」 (v.2026.10.31+26103101)
+  Widget _buildSummaryCard(List<HorseRaceRecord> records) {
+    String? pick(String? a, String? b) {
+      final s = a?.trim() ?? '';
+      if (s.isNotEmpty) return s;
+      final t = b?.trim() ?? '';
+      return t.isEmpty ? null : t;
+    }
+
+    final traits = HorseStrengthSummary.traitsOf(
+      records: records,
+      raceDate: raceDate,
+      birthdayText: profile?.birthday,
+      entrantBirthdays: entrantBirthdays,
+      currentHorseWeight: horse.horseWeight,
+      currentDistanceLabel: strengthCurrent.distanceLabel,
+      sireName: pick(profile?.fatherName, horse.fatherName),
+      damSireName: pick(profile?.mfName, horse.mfName),
+      damDamName: pick(profile?.mmName, null),
+    );
+    final strength = HorseStrengthSummary.strengthsOf(
+      records,
+      trackConditions: trackConditions,
+      current: strengthCurrent,
+    );
+
+    const titleStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87);
+    const noteStyle = TextStyle(fontSize: 11, color: Colors.black54);
+
+    Widget labeled(String label, Widget child) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 64,
+              child: Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+            ),
+            Expanded(child: child),
+          ],
+        ),
+      );
+    }
+
+    Widget chip(StrengthItem item) {
+      final t = item.tally;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          border: Border.all(
+            color: item.isCurrent ? Colors.blue.shade400 : Colors.green.shade400,
+            width: item.isCurrent ? 1.5 : 1.0,
+          ),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text.rich(
+          TextSpan(
+            children: [
+              if (item.isCurrent)
+                TextSpan(
+                  text: '今回 ',
+                  style: TextStyle(fontSize: 9, color: Colors.blue.shade800, fontWeight: FontWeight.bold),
+                ),
+              TextSpan(text: item.label, style: const TextStyle(fontWeight: FontWeight.bold)),
+              TextSpan(text: ' ${t.first}-${t.second}-${t.third}-${t.out}'),
+            ],
+          ),
+          style: TextStyle(fontSize: 11, color: Colors.green.shade900),
+        ),
+      );
+    }
+
+    final axes = <String>[];
+    for (final i in strength.items) {
+      if (!axes.contains(i.axis)) axes.add(i.axis);
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('個体差', style: titleStyle),
+          if (traits.isEmpty)
+            const Text('誕生日・馬体重・血統のデータがありません', style: noteStyle)
+          else
+            for (final line in traits)
+              labeled(line.label, Text(line.text, style: const TextStyle(fontSize: 11, color: Colors.black87))),
+          const SizedBox(height: 6),
+          const Text('得意条件', style: titleStyle),
+          if (strength.starts == 0)
+            const Text('初出走のため出しません', style: noteStyle)
+          else if (!strength.hasEnoughStarts)
+            Text('${strength.starts}戦のため出しません（${HorseStrengthSummary.minStarts}戦以上で出します）', style: noteStyle)
+          else if (strength.items.isEmpty)
+            const Text('目立って好走している条件はありません', style: noteStyle)
+          else ...[
+            for (final axis in axes)
+              labeled(
+                axis,
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (final i in strength.items)
+                      if (i.axis == axis) chip(i),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 2),
+            const Text(
+              '同じ条件で2走以上・複勝率50%以上・通算の複勝率より15pt以上高い条件。クッション値・含水率は3着以内だった走の幅と、その幅に入る全部の走の成績',
+              style: TextStyle(fontSize: 9.5, color: Colors.black45),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
