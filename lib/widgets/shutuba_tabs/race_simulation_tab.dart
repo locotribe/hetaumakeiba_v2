@@ -897,7 +897,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       displayAbilities: displayAbilities,
       forms: forms,
       // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
-      railInfo: GameCourseRail.infoOf(race.raceId),
+      // [修正] 展開シミュ改良Step8: 使用コースは出馬表のコースの表記(courseInOut。例 '外 B')から読む (v.2026.10.30+26103007)
+      railInfo: GameCourseRail.infoOf(race.raceId, race.courseInOut),
       paceDeviation: GamePacePredictor.deviationOf(sources, isDirt: isDirt),
       tuning: GameRaceTuning.of(isDirt: isDirt),
       // [追加] 展開シミュ改良Step5b (v.2026.10.29+26102903)
