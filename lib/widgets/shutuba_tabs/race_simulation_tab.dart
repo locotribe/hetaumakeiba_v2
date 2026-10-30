@@ -19,6 +19,9 @@ import 'package:hetaumakeiba_v2/logic/analysis/game_ability_builder.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_aptitude.dart';
 // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
 import 'package:hetaumakeiba_v2/logic/analysis/game_course_rail.dart';
+// [追加] 展開シミュ改良Step7b (v.2026.10.30+26103006)
+import 'package:hetaumakeiba_v2/logic/analysis/game_form.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_form_inputs.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_display.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_inputs.dart';
@@ -35,11 +38,15 @@ import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
 import 'package:hetaumakeiba_v2/models/course_diagram_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/models/race_data.dart';
+// [追加] 展開シミュ改良Step7b (v.2026.10.30+26103006)
+import 'package:hetaumakeiba_v2/models/race_result_model.dart';
 import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
 import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
+// [追加] 展開シミュ改良Step7b (v.2026.10.30+26103006)
+import 'package:hetaumakeiba_v2/utils/training_date_utils.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/game_sim_panels.dart';
 import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/race_simulation_view.dart';
 
@@ -81,6 +88,12 @@ class _GameSimInputs {
   final List<GameHorseAbility> abilities;
   final List<double?> staminaIndexes;
 
+  /// [追加] 展開シミュ改良Step7b: ステータスの表示用の能力値(調子を含まない地力。abilities は調子をかけた走らせる値) (v.2026.10.30+26103006)
+  final List<GameHorseAbility> displayAbilities;
+
+  /// [追加] 展開シミュ改良Step7b: 馬ごとの調子(調教から出した5段階) (v.2026.10.30+26103006)
+  final List<GameFormResult> forms;
+
   /// [追加] 展開シミュ改良Step3(案C): 使用コースと内の馬場の傷み。表に無いレースは null (v.2026.10.28+26102803)
   final GameCourseRailInfo? railInfo;
 
@@ -120,6 +133,9 @@ class _GameSimInputs {
     required this.gatesConfirmed,
     required this.abilities,
     required this.staminaIndexes,
+    // [追加] 展開シミュ改良Step7b (v.2026.10.30+26103006)
+    required this.displayAbilities,
+    required this.forms,
     // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
     required this.railInfo,
     required this.paceDeviation,
@@ -623,6 +639,19 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     return 'shiba';
   }
 
+  /// [追加] 展開シミュ改良Step7b: 過去走のレース結果(上がりの順位を作る)。読めなかった分は無いものとして続ける (v.2026.10.30+26103006)
+  Future<Map<String, RaceResult>> _loadPastResults(List<String> raceIds) async {
+    final out = <String, RaceResult>{};
+    try {
+      for (final chunk in GameFormInputs.chunksOf(raceIds)) {
+        out.addAll(await _raceRepo.getMultipleRaceResults(chunk));
+      }
+    } catch (e) {
+      debugPrint('展開シミュ: 調子の過去走のレース結果の読み込みに失敗: $e');
+    }
+    return out;
+  }
+
   /// 重い読み込み(過去成績・コース図・指数・騎手成績・馬場のデータ・同じレースの過去の時計)を1回だけ行う
   Future<_GameSimInputs?> _fetchInputs() async {
     final race = widget.predictionRaceData;
@@ -726,6 +755,17 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     final speedIndexByHorseId = await _speedIndexRepo.getByHorseIds(horseIds);
     final asOf = parseRaceDateForSpeedIndex(race.raceDate);
 
+    // [追加] 展開シミュ改良Step7b: 調子(調教から出す5段階)。過去走のレース結果から、レースの中での上がりの順位を作る (v.2026.10.30+26103006)
+    final pastResults =
+        await _loadPastResults(GameFormInputs.raceIdsOf(records.values));
+    final forms = GameFormInputs.formsOf(
+      horseIds: [for (final h in horses) h.horseId],
+      records: records,
+      trainings: entrantData.pakaraTrainingByHorse,
+      raceYmd: toYyyymmdd(race.raceDate) ?? '',
+      results: pastResults,
+    );
+
     // [追加] 展開シミュ改良Step2(案B): 適性の点数の材料(過去走の距離・芝ダ・着順、休み、年齢・性別、今回の馬体重)と、斤量 (v.2026.10.28+26102802)
     final aptitudeRaws = [
       for (final h in horses)
@@ -775,6 +815,8 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         aptitudeScore: aptitudeScores[i],
         carriedWeight: h.carriedWeight > 0 ? h.carriedWeight : null,
         pastCarriedWeight: aptitudeRaws[i].pastCarriedWeight,
+        // [追加] 展開シミュ改良Step7b: 調子(やる気)の倍率 (v.2026.10.30+26103006)
+        formMultiplier: forms[i].multiplier,
       ));
       staminaIndexes.add(params.staminaIndex);
     }
@@ -783,6 +825,12 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     final abilities = GameAbilityBuilder.build(
       sources,
       tuning: GameAbilityTuning.of(isDirt: isDirt),
+      distance: distance.toDouble(),
+    );
+    // [追加] 展開シミュ改良Step7b: ステータスの表示は、調子を含まない地力の値 (v.2026.10.30+26103006)
+    final displayAbilities = GameAbilityBuilder.build(
+      sources,
+      tuning: GameAbilityTuning.of(isDirt: isDirt).withoutForm(),
       distance: distance.toDouble(),
     );
 
@@ -845,6 +893,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       gatesConfirmed: gatesConfirmed,
       abilities: abilities,
       staminaIndexes: staminaIndexes,
+      // [追加] 展開シミュ改良Step7b (v.2026.10.30+26103006)
+      displayAbilities: displayAbilities,
+      forms: forms,
       // [追加] 展開シミュ改良Step3 (v.2026.10.28+26102803)
       railInfo: GameCourseRail.infoOf(race.raceId),
       paceDeviation: GamePacePredictor.deviationOf(sources, isDirt: isDirt),
@@ -971,6 +1022,12 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
                             distance: inputs.distance.toDouble(),
                             isDirt: inputs.isDirt,
                           ),
+                          // [追加] 展開シミュ改良Step7b: 調子の得・損 (v.2026.10.30+26103006)
+                          formReasons: GameRaceReasons.formOf(
+                            parts: inputs.speedParts,
+                            forms: inputs.forms,
+                            distance: inputs.distance.toDouble(),
+                          ),
                         ),
                     ]),
                     _sectionScroll(1, [_buildConditionCard(inputs, shown)]),
@@ -994,9 +1051,11 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
           horseNumber: inputs.horses[i].horseNumber,
           gateNumber: _gateOf(inputs, i),
           horseName: inputs.horses[i].horseName,
-          ability: inputs.abilities[i],
+          // [修正] 展開シミュ改良Step7b: 表示は調子を含まない地力の値。調子は form で別に出す (v.2026.10.30+26103006)
+          ability: inputs.displayAbilities[i],
           staminaIndex: inputs.staminaIndexes[i],
           summary: i < summaries.length ? summaries[i] : null,
+          form: inputs.forms[i],
         ),
     ];
   }

@@ -5,6 +5,9 @@
 
 import 'package:hetaumakeiba_v2/logic/analysis/game_ability_builder.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_aptitude.dart';
+// [追加] 展開シミュ改良Step7b (v.2026.10.30+26103006)
+import 'package:hetaumakeiba_v2/logic/analysis/game_form.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_form_inputs.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_simulator.dart';
 
 /// 1つの理由。
@@ -141,6 +144,34 @@ class GameRaceReasons {
       out.add(row);
     }
     return out;
+  }
+
+  /// [追加] 展開シミュ改良Step7b: 調子の得・損(馬身)。調子が普通の馬(と、速度加算に調子の分が無い馬)は null。
+  /// 全馬の平均との差ではなく、普通だった場合との差。ほかの能力の3つと同じ作り方で、終盤の速度加算の分だけ数える
+  /// (スタミナ・パワー・根性・賢さへの効きは含まない目安)。上位2つの理由とは別に出す (v.2026.10.30+26103006)
+  static List<GameReason?> formOf({
+    required List<GameSpeedParts> parts,
+    required List<GameFormResult> forms,
+    required double distance,
+  }) {
+    final vb = 22.0 - distance / 1000.0;
+    final late = (distance / 3.0) / vb;
+    return [
+      for (int i = 0; i < parts.length; i++)
+        if (i >= forms.length ||
+            forms[i].level == GameFormLevel.normal ||
+            parts[i].form == 0.0)
+          null
+        else
+          GameReason(
+            key: 'form',
+            lengths: parts[i].form * late / lengthMeters,
+            term: null,
+            staminaOutAt: null,
+            label:
+                '${GameFormText.levelLabel(forms[i].level)}(${forms[i].reason})',
+          ),
+    ];
   }
 
   /// 要素と向きから、画面に出す言葉を作る

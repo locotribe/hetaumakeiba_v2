@@ -4,6 +4,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_ability_builder.dart';
+// [追加] 展開シミュ改良Step7b (v.2026.10.30+26103006)
+import 'package:hetaumakeiba_v2/logic/analysis/game_form.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/game_form_inputs.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_display.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_engine.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/game_race_inputs.dart';
@@ -34,6 +37,15 @@ class GameSimColors {
     'F': (Color(0xFFECECEC), Color(0xFF4F4F4F)),
     'G': (Color(0xFFF3F3F3), Color(0xFF6B6B6B)),
   };
+
+  /// [追加] 展開シミュ改良Step7b: 調子の5段階ごとの(背景, 文字)の色(ゲームの「やる気」の色に寄せた) (v.2026.10.30+26103006)
+  static const Map<GameFormLevel, (Color, Color)> form = {
+    GameFormLevel.best: (Color(0xFFFFE0EA), Color(0xFFB0124F)),
+    GameFormLevel.good: (Color(0xFFFFEBD2), Color(0xFFB45300)),
+    GameFormLevel.normal: (Color(0xFFEEF0E6), Color(0xFF5C6150)),
+    GameFormLevel.poor: (Color(0xFFDCEAFA), Color(0xFF0F4F9E)),
+    GameFormLevel.worst: (Color(0xFFEBDFF5), Color(0xFF5B1D87)),
+  };
 }
 
 /// 画面に出す1頭ぶんの値。
@@ -49,6 +61,9 @@ class GameSimHorseView {
   /// 100回の集計。まだ走らせていなければ null
   final GameHorseSummary? summary;
 
+  /// [追加] 展開シミュ改良Step7b: 調子(調教から出した5段階)。無ければ null (v.2026.10.30+26103006)
+  final GameFormResult? form;
+
   const GameSimHorseView({
     required this.horseNumber,
     required this.gateNumber,
@@ -56,6 +71,8 @@ class GameSimHorseView {
     required this.ability,
     required this.staminaIndex,
     required this.summary,
+    // [追加] 展開シミュ改良Step7b (v.2026.10.30+26103006)
+    this.form,
   });
 
   String get styleLabel => GameRaceDisplay.styleLabelOf(ability.style);
@@ -389,10 +406,15 @@ class GameSimReasonCard extends StatelessWidget {
   /// 入力の馬の順(GameRaceReasons.of の結果)
   final List<List<GameReason>> reasons;
 
+  /// [追加] 展開シミュ改良Step7b: 入力の馬の順の調子の得・損(GameRaceReasons.formOf の結果)。調子が普通の馬は null。無ければ空 (v.2026.10.30+26103006)
+  final List<GameReason?> formReasons;
+
   const GameSimReasonCard({
     super.key,
     required this.horses,
     required this.reasons,
+    // [追加] 展開シミュ改良Step7b (v.2026.10.30+26103006)
+    this.formReasons = const [],
   });
 
   @override
@@ -412,11 +434,18 @@ class GameSimReasonCard extends StatelessWidget {
         children: [
           const _CardTitle('なぜこの勝率か', '全馬の平均との差'),
           const SizedBox(height: 4),
-          for (final i in order) _row(horses[i], i < reasons.length ? reasons[i] : const []),
+          // [修正] 展開シミュ改良Step7b: 調子の得・損を3行目に足す (v.2026.10.30+26103006)
+          for (final i in order)
+            _row(
+              horses[i],
+              i < reasons.length ? reasons[i] : const [],
+              i < formReasons.length ? formReasons[i] : null,
+            ),
           const SizedBox(height: 6),
           const Text(
             '全回の平均で、ゴールまでに得した(+)・損した(−)距離の目安(1馬身=2.4m)。'
-            'スピード指数・適性・斤量は能力の差、ほかは展開(スタミナ切れ・前が詰まる・外を回る・砂をかぶる・傷んだ内)で数えたもの。',
+            'スピード指数・適性・斤量は能力の差、ほかは展開(スタミナ切れ・前が詰まる・外を回る・砂をかぶる・傷んだ内)で数えたもの。'
+            '調子は、普通だった場合との差(終盤の速度の分だけ数えた目安)。',
             style: TextStyle(fontSize: 11, color: GameSimColors.subText, height: 1.5),
           ),
         ],
@@ -424,7 +453,8 @@ class GameSimReasonCard extends StatelessWidget {
     );
   }
 
-  Widget _row(GameSimHorseView h, List<GameReason> rs) {
+  // [修正] 展開シミュ改良Step7b: 調子の得・損([formReason])を足した (v.2026.10.30+26103006)
+  Widget _row(GameSimHorseView h, List<GameReason> rs, GameReason? formReason) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 5.0, horizontal: 2.0),
       decoration: const BoxDecoration(
@@ -466,11 +496,46 @@ class GameSimReasonCard extends StatelessWidget {
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
+                // [追加] 展開シミュ改良Step7b: 調子の得・損。「調子」のラベルは5段階の色 (v.2026.10.30+26103006)
+                if (formReason != null)
+                  Row(
+                    children: [
+                      _formTag(h.form?.level ?? GameFormLevel.normal),
+                      Flexible(
+                        child: Text(
+                          formReason.text,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: formReason.lengths >= 0
+                                ? GameSimColors.primary
+                                : GameSimColors.accent,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// [追加] 展開シミュ改良Step7b: 「調子」のラベル (v.2026.10.30+26103006)
+  Widget _formTag(GameFormLevel level) {
+    final colors = GameSimColors.form[level]!;
+    return Container(
+      margin: const EdgeInsets.only(right: 4.0),
+      padding: const EdgeInsets.symmetric(horizontal: 5.0),
+      decoration: BoxDecoration(
+        color: colors.$1,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text('調子',
+          style: TextStyle(
+              fontSize: 10, fontWeight: FontWeight.bold, color: colors.$2)),
     );
   }
 }
@@ -869,7 +934,10 @@ class GameSimStatusCard extends StatelessWidget {
               SizedBox(height: 6),
               Text(
                 'スピード=スピード指数 ・ スタミナ=スタミナ指数 ・ パワー=テン(前に行く力) ・ 根性=終い(末脚) ・ 賢さ=騎手の3着内率。'
-                'ランクは固定の区切り(S 1000〜 / A 900〜 / B 800〜 / C 700〜 / D 600〜 / E 450〜 / F 300〜 / G)。',
+                'ランクは固定の区切り(S 1000〜 / A 900〜 / B 800〜 / C 700〜 / D 600〜 / E 450〜 / F 300〜 / G)。'
+                // [追加] 展開シミュ改良Step7b: 調子の説明。ステータスの値は調子を含まない地力 (v.2026.10.30+26103006)
+                '調子=調教の時計を、その馬の好調時と比べた5段階(絶好調×1.04 / 好調×1.02 / 普通 / 不調×0.98 / 絶不調×0.96)。'
+                'ステータスの値は調子を含まない地力で、調子は走らせるときに能力へかける。',
                 style: TextStyle(
                     fontSize: 11, color: GameSimColors.subText, height: 1.6),
               ),
@@ -922,6 +990,11 @@ class GameSimStatusCard extends StatelessWidget {
               ),
             ],
           ),
+          // [追加] 展開シミュ改良Step7b: 調子の1行 (v.2026.10.30+26103006)
+          if (h.form != null) ...[
+            const SizedBox(height: 4),
+            _formRow(h.form!),
+          ],
           const SizedBox(height: 6),
           Row(
             children: [
@@ -933,6 +1006,35 @@ class GameSimStatusCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// [追加] 展開シミュ改良Step7b: 調子の1行(「調子 ▲ 好調 時計が良い・参照5走」) (v.2026.10.30+26103006)
+  Widget _formRow(GameFormResult f) {
+    final colors = GameSimColors.form[f.level]!;
+    return Row(
+      children: [
+        const Text('調子',
+            style: TextStyle(fontSize: 11, color: GameSimColors.subText)),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 1.0),
+          decoration: BoxDecoration(
+            color: colors.$1,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(GameFormText.chipOf(f.level),
+              style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.bold, color: colors.$2)),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(GameFormText.detailOf(f),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11.5, color: Color(0xFF3F4B3F))),
+        ),
+      ],
     );
   }
 

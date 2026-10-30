@@ -126,10 +126,40 @@ class GameAbilityTuning {
     speedNoiseSd: 0.25,
   );
 
+  /// [追加] 展開シミュ改良Step7b: [tunedTurf] に、調子(やる気)をゲームの値のまま効かせる(formStrength 1)を足した (v.2026.10.30+26103006)
+  static const GameAbilityTuning tuned7Turf = GameAbilityTuning(
+    aptitudeStrength: 0.8,
+    weightSecondsPerKg: 0.2,
+    weightPastNormalize: true,
+    staminaAdd: 150.0,
+    speedNoiseSd: 0.25,
+    formStrength: 1.0,
+  );
+
+  /// [追加] 展開シミュ改良Step7b: 同じく(ダート) (v.2026.10.30+26103006)
+  static const GameAbilityTuning tuned7Dirt = GameAbilityTuning(
+    aptitudeStrength: 1.6,
+    weightSecondsPerKg: 0.2,
+    weightPastNormalize: true,
+    staminaAdd: 150.0,
+    speedNoiseSd: 0.25,
+    formStrength: 1.0,
+  );
+
   /// アプリで使う値。改良Step2〜3 は off だった。
   /// [修正] 展開シミュ改良Step4: 芝は [tunedTurf]、ダートは [tunedDirt] を効かせる (v.2026.10.29+26102901)
+  /// [修正] 展開シミュ改良Step7b: 芝は [tuned7Turf]、ダートは [tuned7Dirt] にした(調子を効かせる) (v.2026.10.30+26103006)
   static GameAbilityTuning of({required bool isDirt}) =>
-      isDirt ? tunedDirt : tunedTurf;
+      isDirt ? tuned7Dirt : tuned7Turf;
+
+  /// [追加] 展開シミュ改良Step7b: 調子だけ効かせない同じ値(ステータスの表示を、調子の分を含まない地力の値にするのに使う) (v.2026.10.30+26103006)
+  GameAbilityTuning withoutForm() => GameAbilityTuning(
+        aptitudeStrength: aptitudeStrength,
+        weightSecondsPerKg: weightSecondsPerKg,
+        weightPastNormalize: weightPastNormalize,
+        staminaAdd: staminaAdd,
+        speedNoiseSd: speedNoiseSd,
+      );
 }
 
 /// [追加] 展開シミュ改良Step5a(案E): 終盤の速度加算(m/s)の内訳(GameAbilityBuilder.speedPartsOf) (v.2026.10.29+26102902)
