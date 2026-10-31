@@ -390,7 +390,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           ),
           const SizedBox(width: 6),
           Expanded(
-            child: _buildInfoTile(label: '天候', value: _buildAnnouncedValue(normalizeAnnouncedValue(data.weather))),
+            // [修正] 天候のタイル: 発表が無いときは、ピンポイント詳細の発走時刻の予報の天気を「（予報）」つきで出す (v.2026.10.31+26103104)
+            child: _buildWeatherTile(),
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -448,6 +449,28 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           return _buildInfoTile(label: '馬場', value: _buildAnnouncedValue(null));
         }
         return _buildInfoTile(label: '馬場', value: _buildAnnouncedValue(estimated), sub: '（含水率から）');
+      },
+    );
+  }
+
+  // [追加] 天候のタイル。発表があればその値、無ければピンポイント詳細の発走時刻の予報の天気に「（予報）」を添える。どちらも無ければ「当日発表」 (v.2026.10.31+26103104)
+  Widget _buildWeatherTile() {
+    final announced = normalizeAnnouncedValue(widget.predictionRaceData.weather);
+    if (announced != null || widget.pinpointWeatherFuture == null) {
+      return _buildInfoTile(label: '天候', value: _buildAnnouncedValue(announced));
+    }
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: widget.pinpointWeatherFuture,
+      builder: (context, snapshot) {
+        final raceTime = snapshot.data?['raceTime'];
+        if (raceTime == null) {
+          return _buildInfoTile(label: '天候', value: _buildAnnouncedValue(null));
+        }
+        return _buildInfoTile(
+          label: '天候',
+          value: _buildAnnouncedValue(WeatherAnalyzer.getWeatherText(raceTime['weatherCode'] ?? 0)),
+          sub: '（予報）',
+        );
       },
     );
   }
