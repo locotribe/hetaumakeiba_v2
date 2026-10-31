@@ -25,8 +25,6 @@ import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/condition_section.dart';
 // [追加] 得意条件まとめ Step1: まとめカード用の誕生日の読み取りと今回の条件 (v.2026.10.31+26103101)
 import 'package:hetaumakeiba_v2/logic/analysis/horse_strength_summary.dart';
-// [追加] 好走条件の改良 Step4: 好走条件の並べ替えの種類（AptitudeSort） (v.2026.10.18+26101802)
-import 'package:hetaumakeiba_v2/logic/analysis/condition_aptitude_analyzer.dart';
 // [追加] 好走条件 馬詳細移植 StepA-3: 馬場データ取得（クッション値/含水率） (v.2026.9.25+26092507)
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
@@ -118,9 +116,6 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
 
   // [追加] 能力分析を馬詳細へ Step3: 「全」ページで選んでいるチップ（初期は調教。馬を切り替えても保つ） (v.2026.10.17+26101703)
   _AllHorsesView _allView = _AllHorsesView.training;
-
-  // [追加] 好走条件の改良 Step4: 1頭ページの好走条件の並べ替え（初期は標準。馬を切り替えても保つ。保存はしない） (v.2026.10.18+26101802)
-  AptitudeSort _conditionSort = AptitudeSort.standard;
 
   // [追加] 基本情報整理と本賞金照合 Step1: 「情報・血統」の基本情報と血統の開閉（全馬共通・初期は開。馬を切り替えても保つ） (v.2026.10.15+26101504)
   bool _basicInfoExpanded = true;
@@ -1101,9 +1096,6 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
                             currentSurface: conds.surface,
                             currentTrackCondition: currentSnapshot.data,
                             recordStats: statsSnapshot.data?[horse.horseId],
-                            // [追加] 好走条件の改良 Step4 (v.2026.10.18+26101802)
-                            sort: _conditionSort,
-                            onSortChanged: (s) => setState(() => _conditionSort = s),
                             // [追加] 得意条件まとめ Step1 (v.2026.10.31+26103101)
                             profile: profiles[horse.horseId],
                             entrantBirthdays: entrantBirthdays,

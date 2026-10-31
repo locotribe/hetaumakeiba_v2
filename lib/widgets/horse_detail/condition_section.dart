@@ -31,10 +31,6 @@ class ConditionSection extends StatelessWidget {
   // [追加] 好走条件・個別成績・相対評価の移動 Step3: 回収率（出走馬分析の個別成績から移した）。読み込み前・計算できないときは null (v.2026.10.17+26101708)
   final HorseRecordStats? recordStats;
 
-  // [追加] 好走条件の改良 Step4: 好走条件の並べ替え（選んでいるもの）と、チップを押したときの知らせ。知らせが無ければチップは押せない (v.2026.10.18+26101802)
-  final AptitudeSort sort;
-  final ValueChanged<AptitudeSort>? onSortChanged;
-
   // [追加] 得意条件まとめ Step1: まとめカードに使う。この馬の馬プロフィール（誕生日・血統。読み込み前・無ければ null）、
   // 今回の出走馬（取消を除く。この馬を含む）の誕生日、今回のレースの日付と条件 (v.2026.10.31+26103101)
   final HorseProfile? profile;
@@ -52,9 +48,6 @@ class ConditionSection extends StatelessWidget {
     this.currentTrackCondition,
     // [追加] 好走条件・個別成績・相対評価の移動 Step3 (v.2026.10.17+26101708)
     this.recordStats,
-    // [追加] 好走条件の改良 Step4 (v.2026.10.18+26101802)
-    this.sort = AptitudeSort.standard,
-    this.onSortChanged,
     // [追加] 得意条件まとめ Step1 (v.2026.10.31+26103101)
     this.profile,
     this.entrantBirthdays = const [],
@@ -98,18 +91,15 @@ class ConditionSection extends StatelessWidget {
     }
 
     // [修正] 馬詳細タブ 表示項目変更 Step2: 今回レースの芝/ダ・クッション値・含水率・騎手を渡して「今回」印を付ける (v.2026.10.15+26101501)
-    // [修正] 好走条件の改良 Step4: 選んだ並び（sort）で並べ替える。標準なら今までどおり (v.2026.10.18+26101802)
-    final aptitude = ConditionAptitudeAnalyzer.sortedBy(
-      ConditionAptitudeAnalyzer.analyze(
-        records,
-        trackConditions: trackConditions,
-        currentSurface: currentSurface,
-        currentCushionValue: currentTrackCondition?.cushionValue,
-        currentMoistureDirtGoal: currentTrackCondition?.moistureDirtGoal,
-        currentJockeyId: horse.jockeyId,
-        currentJockeyName: horse.jockey,
-      ),
-      sort,
+    // [修正] 勝率・複勝率の併記: 並べ替えのチップを外したので、並べ替えずにそのまま出す (v.2026.10.31+26103105)
+    final aptitude = ConditionAptitudeAnalyzer.analyze(
+      records,
+      trackConditions: trackConditions,
+      currentSurface: currentSurface,
+      currentCushionValue: currentTrackCondition?.cushionValue,
+      currentMoistureDirtGoal: currentTrackCondition?.moistureDirtGoal,
+      currentJockeyId: horse.jockeyId,
+      currentJockeyName: horse.jockey,
     );
     final o = aptitude.overall;
     final debut = ConditionAptitudeAnalyzer.debutRecordOf(records);
@@ -154,8 +144,7 @@ class ConditionSection extends StatelessWidget {
         const SizedBox(height: 6),
         _buildSummaryCard(records),
         const SizedBox(height: 6),
-        // [修正] 馬詳細の表示修正: 見出し「得意条件」を外し、並べ替えのチップ（標準／勝率／複勝率／出走数）だけを左から出す (v.2026.10.26+26102601)
-        _buildSortChips(),
+        // [削除] 勝率・複勝率の併記: 並べ替えのチップ（標準／勝率／複勝率／出走数）を外した (v.2026.10.31+26103105)
         const Divider(height: 8),
 
         // カテゴリ一覧
@@ -332,30 +321,6 @@ class ConditionSection extends StatelessWidget {
     );
   }
 
-  // [追加] 好走条件の改良 Step4: 並べ替えのチップ（標準＝今の並び。標準以外は全カテゴリを選んだ順に並べ、2走未満は下） (v.2026.10.18+26101802)
-  Widget _buildSortChips() {
-    const labels = {
-      AptitudeSort.standard: '標準',
-      AptitudeSort.winRate: '勝率',
-      AptitudeSort.showRate: '複勝率',
-      AptitudeSort.starts: '出走数',
-    };
-    return Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      children: [
-        for (final s in AptitudeSort.values)
-          ChoiceChip(
-            label: Text(labels[s]!, style: const TextStyle(fontSize: 11)),
-            selected: sort == s,
-            visualDensity: VisualDensity.compact,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            onSelected: onSortChanged == null ? null : (_) => onSortChanged!(s),
-          ),
-      ],
-    );
-  }
-
   Widget _buildCategoryBlock(AptitudeCategory cat) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,6 +385,8 @@ class ConditionSection extends StatelessWidget {
   Widget _buildValueRow(AptitudeValue v, {String? extraText}) {
     final t = v.tally;
     final winPct = (t.winRate * 100).round();
+    // [追加] 勝率・複勝率の併記: 勝率の右に出す複勝率 (v.2026.10.31+26103105)
+    final showPct = (t.showRate * 100).round();
 
     final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
@@ -458,12 +425,16 @@ class ConditionSection extends StatelessWidget {
           Text('[${t.first}-${t.second}-${t.third}-${t.out}]',
               style: const TextStyle(fontSize: 10.5, color: Colors.black87)),
           const SizedBox(width: 6),
-          Text('$winPct%',
+          // [修正] 勝率・複勝率の併記: 「勝率◯%」の右に「複勝◯%」を出す。勝率の文字の大きさ・太さ・色（得意は赤）は今までどおり (v.2026.10.31+26103105)
+          Text('勝率$winPct%',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
                 color: v.isBest ? Colors.red.shade700 : Colors.black87,
               )),
+          const SizedBox(width: 6),
+          Text('複勝$showPct%',
+              style: const TextStyle(fontSize: 11, color: Colors.black54)),
           // [追加] 基本情報整理と本賞金照合 Step2: 脚質の割合（マクリは回数）。他のカテゴリは extraText が無いので出ない (v.2026.10.15+26101505)
           if (extraText != null)
             Padding(
