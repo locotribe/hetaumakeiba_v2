@@ -394,7 +394,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           ),
           const SizedBox(width: 6),
           Expanded(
-            child: _buildInfoTile(label: '馬場', value: _buildAnnouncedValue(normalizeAnnouncedValue(data.trackCondition))),
+            // [修正] 馬場のタイル: 発表が無いときは当日の計測の含水率から見込んだ馬場を「（含水率から）」つきで出す (v.2026.10.31+26103103)
+            child: _buildTrackConditionTile(),
           ),
         ],
       ),
@@ -406,6 +407,114 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
       return const Text('当日発表', style: TextStyle(fontSize: 13, color: Colors.black45));
     }
     return Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87));
+  }
+
+  // [追加] レース日を「2026-10-31」の形で返す（馬場計測のdateと照合する）。読めなければ null (v.2026.10.31+26103103)
+  String? _raceDayKey() {
+    final match = RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(widget.predictionRaceData.raceDate);
+    if (match == null) return null;
+    return '${match.group(1)}-${match.group(2)!.padLeft(2, '0')}-${match.group(3)!.padLeft(2, '0')}';
+  }
+
+  // [追加] 発表が無いときの馬場: 当日の計測の含水率（ゴール前と4コーナーの大きい方）から判定する。当日の計測が無い・障害・判定できないときは null (v.2026.10.31+26103103)
+  String? _estimateGoingFromMoisture(TrackConditionRecord record) {
+    if (record.date != _raceDayKey()) return null;
+    final trackType = widget.predictionRaceData.trackType ?? '';
+    if (trackType.contains('障')) return null;
+    final isDirt = trackType.contains('ダ');
+    final goal = (isDirt ? record.moistureDirtGoal : record.moistureTurfGoal) ?? 0.0;
+    final corner4 = (isDirt ? record.moistureDirt4c : record.moistureTurf4c) ?? 0.0;
+    final moisture = goal > corner4 ? goal : corner4;
+    if (moisture <= 0) return null;
+    final venueCode = widget.predictionRaceData.raceId.length >= 6
+        ? widget.predictionRaceData.raceId.substring(4, 6)
+        : '00';
+    final going = TrackConstants.evaluateTrackCondition(venueCode, isDirt ? 'ダ' : '芝', moisture);
+    return going == '不明' ? null : going;
+  }
+
+  // [追加] 馬場のタイル。発表があればその値、無ければ当日の計測の含水率から見込んだ馬場に「（含水率から）」を添える。どちらも無ければ「当日発表」 (v.2026.10.31+26103103)
+  Widget _buildTrackConditionTile() {
+    final announced = normalizeAnnouncedValue(widget.predictionRaceData.trackCondition);
+    if (announced != null || widget.trackConditionFuture == null) {
+      return _buildInfoTile(label: '馬場', value: _buildAnnouncedValue(announced));
+    }
+    return FutureBuilder<TrackConditionRecord?>(
+      future: widget.trackConditionFuture,
+      builder: (context, snapshot) {
+        final record = snapshot.data;
+        final estimated = record == null ? null : _estimateGoingFromMoisture(record);
+        if (estimated == null) {
+          return _buildInfoTile(label: '馬場', value: _buildAnnouncedValue(null));
+        }
+        return _buildInfoTile(label: '馬場', value: _buildAnnouncedValue(estimated), sub: '（含水率から）');
+      },
+    );
+  }
+
+  // [追加] 馬場計測値カードの4項目（馬場回復・悪化予測／馬のスタミナ負荷／展開・波乱要因／馬場の状態）。当日の計測が入ってから出す。計測値なので予測シミュレーションの根拠は出さない (v.2026.10.31+26103103)
+  Widget _buildMeasuredInsights(TrackConditionRecord record) {
+    if (record.date != _raceDayKey() || widget.pinpointWeatherFuture == null) return const SizedBox.shrink();
+    final isDirt = (widget.predictionRaceData.trackType ?? '').contains('ダ');
+    final measuredMoisture = isDirt ? record.moistureDirtGoal : record.moistureTurfGoal;
+
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: widget.pinpointWeatherFuture,
+      builder: (context, snapshot) {
+        final data = snapshot.data;
+        final raceTime = data?['raceTime'];
+        if (data == null || raceTime == null) return const SizedBox.shrink();
+        final List<dynamic> dailyData = data['daily'] ?? [];
+        final analysisResult = _analyzeTrackInsights(record, raceTime, dailyData);
+
+        final insightsList = <WeatherInsight>[
+          WeatherAnalyzer.analyzeTrackRecovery(raceTime['radiation'] ?? 0.0, raceTime['evap'] ?? 0.0),
+          WeatherAnalyzer.analyzeHorseStamina(raceTime['apparentTemp'] ?? 0.0, (raceTime['humidity'] ?? 0).toDouble()),
+          WeatherAnalyzer.analyzeRaceRisk((raceTime['gusts'] ?? 0.0) / 3.6, raceTime['visibility'] ?? 20.0),
+          ...analysisResult.insights.map((insight) => WeatherInsight(
+                label: insight.label,
+                value: measuredMoisture != null ? '計測含水率: G $measuredMoisture%' : insight.value,
+                description: insight.description.split('\n\n【予測シミュレーションの根拠】').first,
+                color: insight.color,
+              )),
+        ];
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 10),
+            ...insightsList.map(_buildMeasuredInsightBox),
+          ],
+        );
+      },
+    );
+  }
+
+  // [追加] 馬場計測値カードの4項目の1つ分の枠（ピンポイント詳細の馬場・展開インサイトと同じ見た目） (v.2026.10.31+26103103)
+  Widget _buildMeasuredInsightBox(WeatherInsight insight) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: insight.color.withOpacity(0.05),
+        border: Border(left: BorderSide(color: insight.color, width: 4)),
+        borderRadius: const BorderRadius.only(topRight: Radius.circular(4), bottomRight: Radius.circular(4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(insight.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: insight.color)),
+              Text(insight.value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(insight.description, style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3)),
+        ],
+      ),
+    );
   }
 
   Widget _buildInfoTile({required String label, required Widget value, String sub = ''}) {
@@ -847,6 +956,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
                   ],
                 ),
               ),
+              // [追加] 当日の計測が入ってから、4項目を計測値の下に出す (v.2026.10.31+26103103)
+              _buildMeasuredInsights(record),
             ],
           ),
         );
