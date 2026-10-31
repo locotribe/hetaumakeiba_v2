@@ -191,6 +191,32 @@ class TrackConditionRepository {
     return maps.map((e) => TrackConditionRecord.fromJson(e)).toList();
   }
 
+  // [追加] 馬場予測の起点: レース当日より前で一番新しい馬場の計測（同じ競馬場）を返す。当日の計測が入っても予測が動かないようにするため (v.2026.10.31+26103102)
+  Future<TrackConditionRecord?> getLatestTrackConditionBeforeRaceDay({
+    required String raceId,
+    required String raceDate,
+  }) async {
+    if (raceId.length < 6) return null;
+    final parsed = parseRaceDateForSpeedIndex(raceDate);
+    if (parsed == null) return null;
+
+    final venueCode = raceId.substring(4, 6);
+    final dateStr = '${parsed.year.toString().padLeft(4, '0')}-'
+        '${parsed.month.toString().padLeft(2, '0')}-'
+        '${parsed.day.toString().padLeft(2, '0')}';
+
+    final db = await _dbProvider.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      DbConstants.tableTrackConditions,
+      where: 'date < ? AND SUBSTR(CAST(track_condition_id AS TEXT), 5, 2) = ?',
+      whereArgs: [dateStr, venueCode],
+      orderBy: 'date DESC, track_condition_id DESC',
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return TrackConditionRecord.fromJson(maps.first);
+  }
+
   // [修正] 同一開催(prefix8=YYYYCCKK)の全馬場状態履歴を取得（トレンドグラフ表示用、古い順。金曜などレースの無い日の測定も含む）。
   // 「下2桁00(前日データ)を除く」条件は、下2桁が01始まりの管理番号で何も除外していなかったため削除 (v.2026.10.6+26100604)
   Future<List<TrackConditionRecord>> getTrackConditionsByMeeting(String prefix8) async {

@@ -38,6 +38,8 @@ class RaceInfoTabWidget extends StatefulWidget {
   final Future<Map<String, String>?>? jmaWeatherFuture;
   final Future<Map<String, dynamic>?>? pinpointWeatherFuture;
   final TrackConditionRecord? cachedPrevRecord;
+  // [追加] 馬場予測の起点（レース当日より前で一番新しい計測）。予測は当日の計測で動かさない (v.2026.10.31+26103102)
+  final Future<TrackConditionRecord?>? predictionBaseFuture;
   final bool isWeatherLocked;
   final VoidCallback onRefreshWeather;
 
@@ -52,6 +54,8 @@ class RaceInfoTabWidget extends StatefulWidget {
     this.jmaWeatherFuture,
     this.pinpointWeatherFuture,
     this.cachedPrevRecord,
+    // [追加] 馬場予測の起点 (v.2026.10.31+26103102)
+    this.predictionBaseFuture,
     this.isWeatherLocked = true,
     required this.onRefreshWeather,
   });
@@ -978,7 +982,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
         children: [
           Icon(Icons.flag, color: prediction.color, size: 20),
           const SizedBox(width: 8),
-          const Text("JRA公式 馬場予測:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
+          // [修正] JRAの公式予測ではなくアプリの計算による予測なので、ラベルを「馬場予測:」にした (v.2026.10.31+26103102)
+          const Text("馬場予測:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
           const SizedBox(width: 8),
           Text(prediction.conditionText, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: prediction.color)),
           if (prediction.leaningText.isNotEmpty)
@@ -1123,7 +1128,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               const SizedBox(height: 8),
 
               FutureBuilder<TrackConditionRecord?>(
-                future: widget.trackConditionFuture,
+                // [修正] 予測の起点は、レース当日より前の計測（無ければ最新の計測）にする。当日の計測が入っても予測が動かない (v.2026.10.31+26103102)
+                future: widget.predictionBaseFuture ?? widget.trackConditionFuture,
                 builder: (context, trackSnapshot) {
                   final trackRecord = trackSnapshot.data;
                   // [修正] レース情報ヘッダー整理 Step3: 計算を _analyzeTrackInsights に移した（たたんだときの要約と同じ結果を使うため。引数は元のまま） (v.2026.10.15+26101511)
@@ -1220,7 +1226,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
       venueCode: venueCode,
       trackType: widget.predictionRaceData.trackType ?? '芝',
       currentRecord: trackRecord,
-      cachedRecord: widget.cachedPrevRecord,
+      // [修正] 起点が動かないので「前回予測」との2本立てはやめ、予測は1本にする (v.2026.10.31+26103102)
+      cachedRecord: null,
       expectedPrecipitation: (raceTime['precipitation'] as num?)?.toDouble() ?? 0.0,
       expectedRadiation: (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,
       expectedSoilMoisture: (raceTime['soilMoisture'] as num?)?.toDouble(),
@@ -1257,7 +1264,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           ),
         ),
         FutureBuilder<TrackConditionRecord?>(
-          future: widget.trackConditionFuture,
+          // [修正] 予測の起点は、レース当日より前の計測（無ければ最新の計測）にする (v.2026.10.31+26103102)
+          future: widget.predictionBaseFuture ?? widget.trackConditionFuture,
           builder: (context, trackSnapshot) {
             final analysisResult = _analyzeTrackInsights(trackSnapshot.data, raceTime, dailyData);
             final moisture = analysisResult.predictedMoisture;

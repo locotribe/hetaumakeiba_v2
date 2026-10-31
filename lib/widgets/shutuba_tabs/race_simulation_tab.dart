@@ -58,6 +58,8 @@ class RaceSimulationTabWidget extends StatefulWidget {
   final Future<TrackConditionRecord?>? trackConditionFuture;
   final Future<Map<String, dynamic>?>? pinpointWeatherFuture;
   final TrackConditionRecord? cachedPrevRecord;
+  // [追加] 馬場予測の起点（レース当日より前で一番新しい計測）。「予測」は当日の計測で動かさない (v.2026.10.31+26103102)
+  final Future<TrackConditionRecord?>? predictionBaseFuture;
 
   const RaceSimulationTabWidget({
     super.key,
@@ -66,6 +68,8 @@ class RaceSimulationTabWidget extends StatefulWidget {
     this.trackConditionFuture,
     this.pinpointWeatherFuture,
     this.cachedPrevRecord,
+    // [追加] 馬場予測の起点 (v.2026.10.31+26103102)
+    this.predictionBaseFuture,
   });
 
   @override
@@ -685,14 +689,16 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
         widget.trackConditionFuture != null) {
       try {
         final pinpointData = await widget.pinpointWeatherFuture;
-        final baselineRecord = await widget.trackConditionFuture;
+        // [修正] 「予測」の起点は、レース当日より前の計測（無ければ最新の計測）にする (v.2026.10.31+26103102)
+        final baselineRecord = await (widget.predictionBaseFuture ?? widget.trackConditionFuture);
         final raceTime = pinpointData?['raceTime'];
         if (raceTime != null && baselineRecord != null) {
           final analysis = WeatherAnalyzer.analyzeTrackConditionInsights(
             venueCode: venueCode,
             trackType: race.trackType ?? '芝',
             currentRecord: baselineRecord,
-            cachedRecord: widget.cachedPrevRecord,
+            // [修正] 起点が動かないので「前回予測」は使わない (v.2026.10.31+26103102)
+            cachedRecord: null,
             expectedPrecipitation:
                 (raceTime['precipitation'] as num?)?.toDouble() ?? 0.0,
             expectedRadiation: (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,

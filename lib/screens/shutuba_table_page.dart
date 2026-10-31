@@ -100,6 +100,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
 
   // [追加] 0-9b-1 天気/馬場データ取得をrace_info_tab.dartから引き上げ（展開シミュタブと共有し二重取得を防ぐ） (v.2026.7.27+26072704)
   Future<TrackConditionRecord?>? _trackConditionFuture;
+  // [追加] 馬場予測の起点（レース当日より前で一番新しい計測）。当日の計測が入っても動かない (v.2026.10.31+26103102)
+  Future<TrackConditionRecord?>? _predictionBaseFuture;
   Future<Map<String, String>?>? _jmaWeatherFuture;
   Future<Map<String, dynamic>?>? _pinpointWeatherFuture;
   TrackConditionRecord? _currentTrackRecord;
@@ -248,6 +250,16 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
         } catch (e) {
           return null;
         }
+      });
+      // [追加] 馬場予測の起点を取る。レース当日より前の計測が無いときだけ最新の計測を使う (v.2026.10.31+26103102)
+      final predictionRaceId = _predictionRaceData!.raceId;
+      final predictionRaceDate = _predictionRaceData!.raceDate;
+      _predictionBaseFuture = _trackConditionFuture!.then((latest) async {
+        final before = await _trackConditionRepo.getLatestTrackConditionBeforeRaceDay(
+          raceId: predictionRaceId,
+          raceDate: predictionRaceDate,
+        );
+        return before ?? latest;
       });
     });
   }
@@ -1067,6 +1079,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             jmaWeatherFuture: _jmaWeatherFuture,
                             pinpointWeatherFuture: _pinpointWeatherFuture,
                             cachedPrevRecord: _cachedPrevRecord,
+                            // [追加] 馬場予測の起点を渡す (v.2026.10.31+26103102)
+                            predictionBaseFuture: _predictionBaseFuture,
                             isWeatherLocked: _isWeatherLocked(),
                             onRefreshWeather: () => _loadWeatherAndTrackData(forceRefresh: true),
                           ),
@@ -1077,6 +1091,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             trackConditionFuture: _trackConditionFuture,
                             pinpointWeatherFuture: _pinpointWeatherFuture,
                             cachedPrevRecord: _cachedPrevRecord,
+                            // [追加] 馬場予測の起点を渡す (v.2026.10.31+26103102)
+                            predictionBaseFuture: _predictionBaseFuture,
                           ),
                           StartersTabWidget(
                             horses: sortedHorses,
