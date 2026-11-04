@@ -35,6 +35,9 @@ import 'package:hetaumakeiba_v2/logic/analysis/condition_ranking_builder.dart';
 import 'package:hetaumakeiba_v2/logic/growth_curve_builder.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/growth_curve_section.dart';
+// [追加] 過去走の取得状況ポップアップ: 「過去走を取り直す」を押したときの取得状況の表示 (v.2026.11.5+26110501)
+import 'package:hetaumakeiba_v2/logic/past_record_status.dart';
+import 'package:hetaumakeiba_v2/widgets/shutuba_tabs/past_records_status_dialog.dart';
 // [追加] 陣営の本気度指数 実施順6: 情報・血統のいちばん下の「出走の意味」 (v.2026.10.3+26100308)
 import 'package:hetaumakeiba_v2/logic/entry_meaning_snapshot.dart';
 import 'package:hetaumakeiba_v2/widgets/horse_detail/entry_meaning_section.dart';
@@ -427,24 +430,19 @@ class _HorseDetailTabWidgetState extends State<HorseDetailTabWidget>
   // [追加] 好走条件・個別成績・相対評価の移動 Step2: 出走馬分析の更新ボタンの代わり。全頭の過去走（競走馬ページ）と、過去走のレース結果を取り直す。
   // レース準備の「出走馬の戦績」「戦績内レースの結果」を強制で流す（出馬表のステップが記録されていない古いレースでも動くよう依存元は見ない）。
   // 戦績のステップが終わると読み込み係が結果を捨てて知らせるので、馬詳細・展開シミュは自動で読み直す (v.2026.10.17+26101707)
+  // [修正] 過去走の取得状況ポップアップ: 確認だけのダイアログをやめ、取得状況（揃っているか・欠けているもの・失敗したもの・ログイン状態）を出すポップアップにした。
+  // 取得はポップアップの「取得する」を押したときに始める（投入する内容は今までと同じ） (v.2026.11.5+26110501)
   Future<void> _refetchPastRecords() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showPastRecordsStatusDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('過去走の取り直し'),
-        content: const Text(
-            '全出走馬の過去走と、過去走のレース結果を取り直します。時間がかかることがあります。よろしいですか？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('キャンセル'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('取り直す'),
-          ),
-        ],
-      ),
+      raceId: widget.raceId,
+      horses: _horses
+          .map((h) => PastRecordHorse(
+                horseId: h.horseId,
+                horseName: h.horseName,
+                horseNumber: h.horseNumber,
+              ))
+          .toList(),
     );
     if (confirmed != true || !mounted) return;
     try {

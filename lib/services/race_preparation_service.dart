@@ -31,6 +31,8 @@ import 'package:hetaumakeiba_v2/logic/pakara_backfill.dart';
 import 'package:hetaumakeiba_v2/logic/training_fetch_policy.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
 import 'package:hetaumakeiba_v2/services/horse_condition_post_service.dart';
+// [追加] 過去走の取得状況ポップアップ: 戦績内レースの結果を取得できなかったレースIDの記録 (v.2026.11.5+26110501)
+import 'package:hetaumakeiba_v2/services/horse_fetch_outcome_store.dart';
 
 /// 1ステップ分の実処理。戻り値は取得できた件数(itemCount)。
 /// テストではネットワークを伴わない差し替え実装を注入する。
@@ -308,9 +310,16 @@ class RacePreparationService {
     for (final horseId in horseIds) {
       final existing = await _horseRepository.getHorsePerformanceRecords(horseId);
       bool scrapedAny = false;
+      // [追加] 過去走の取得状況ポップアップ: 通信エラー・HTTPエラーで取得できなかった馬は、既存の戦績が無くても失敗にする。
+      // ページが正常で戦績が0件の馬（新馬戦など初出走の馬）は失敗にしない (v.2026.11.5+26110501)
+      bool scrapeFailed = false;
       try {
-        final scraped =
-            await HorsePerformanceScraperService.scrapeHorsePerformance(horseId);
+        // [修正] 過去走の取得状況ポップアップ: 取得結果の種類も受け取れる scrapeHorsePerformanceDetailed を使う（取得内容は scrapeHorsePerformance と同じ） (v.2026.11.5+26110501)
+        final result =
+            await HorsePerformanceScraperService.scrapeHorsePerformanceDetailed(
+                horseId);
+        final scraped = result.records;
+        scrapeFailed = result.status == HorsePerformanceFetchStatus.failed;
         scrapedAny = scraped.isNotEmpty;
         for (final record in scraped) {
           await _horseRepository.insertOrUpdateHorsePerformance(record);
@@ -319,7 +328,7 @@ class RacePreparationService {
         debugPrint(
             'RacePreparationService: horsePerformance scrape failed for $horseId: $e');
       }
-      if (!scrapedAny && existing.isNotEmpty) {
+      if (scrapeFailed || (!scrapedAny && existing.isNotEmpty)) {
         failedHorseIds.add(horseId);
       }
       await Future.delayed(const Duration(milliseconds: 500));
@@ -369,17 +378,21 @@ class RacePreparationService {
         .toList();
 
     int fetchedCount = 0;
+    // [追加] 過去走の取得状況ポップアップ: 結果を取得できなかったレースIDを集めて記録する（ステップの成否は今までどおり変えない） (v.2026.11.5+26110501)
+    final failedPastRaceIds = <String>[];
     for (final pastRaceId in toFetch) {
       try {
         await RaceResultScraperService.scrapeRaceDetails(
             generateRaceResultUrl(pastRaceId));
         fetchedCount++;
       } catch (e) {
+        failedPastRaceIds.add(pastRaceId);
         debugPrint(
             'RacePreparationService: pastRaceResults scrape failed for $pastRaceId: $e');
       }
       await Future.delayed(const Duration(milliseconds: 200));
     }
+    await HorseFetchOutcomeStore.saveFailedPastRaceIds(raceId, failedPastRaceIds);
     return fetchedCount;
   }
 
