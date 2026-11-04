@@ -330,6 +330,8 @@ class ConditionSection extends StatelessWidget {
           child: Text(cat.name,
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
         ),
+        // [追加] 好走条件の見出し行: 勝率・複勝の文字は各行に出さず、ここに1行だけ出す (v.2026.11.5+26110502)
+        _buildValueHeader(),
         for (final v in cat.values) _buildValueRow(v),
         const SizedBox(height: 2),
       ],
@@ -352,12 +354,14 @@ class ConditionSection extends StatelessWidget {
           child: Text(cat.name,
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
         ),
+        // [追加] 好走条件の見出し行: 割合の列も見出しに出す。各行の割合は数字だけ（マクリは回数） (v.2026.11.5+26110502)
+        _buildValueHeader(hasExtra: true),
         for (final v in cat.values)
           _buildValueRow(
             v,
             extraText: v.label == 'マクリ'
                 ? '${v.tally.total}回'
-                : '割合${((profile.styleDistribution[v.label] ?? 0.0) * 100).round()}%',
+                : '${((profile.styleDistribution[v.label] ?? 0.0) * 100).round()}%',
           ),
         if (makuriRecords.isNotEmpty)
           Padding(
@@ -381,11 +385,24 @@ class ConditionSection extends StatelessWidget {
     return '${venue.isEmpty ? '--' : venue} $course';
   }
 
-  // [修正] 基本情報整理と本賞金照合 Step2: 右端に出す文字（extraText。脚質の割合・マクリの回数）を任意で受け取る。無ければ今までどおり (v.2026.10.15+26101505)
+  // [追加] 好走条件の見出し行: 各行の列（着順・勝率・複勝・割合）の見出しを1行だけ出す。列の幅は _buildValueRow と同じ (v.2026.11.5+26110502)
+  Widget _buildValueHeader({bool hasExtra = false}) {
+    const style = TextStyle(fontSize: 9, color: Colors.black45);
+    return Row(
+      children: [
+        const SizedBox(width: 92 + 72 + 6),
+        const SizedBox(width: 76, child: Text('着順', style: style)),
+        const SizedBox(width: 36, child: Text('勝率', style: style)),
+        const SizedBox(width: 36, child: Text('複勝', style: style)),
+        if (hasExtra) const SizedBox(width: 40, child: Text('割合', style: style)),
+      ],
+    );
+  }
+
+  // [修正] 好走条件のオーバーフロー対策: 勝率・複勝・割合の文字は見出し行に移し、各行は数字だけを固定幅の列で並べる。extraText は脚質の割合（マクリは回数） (v.2026.11.5+26110502)
   Widget _buildValueRow(AptitudeValue v, {String? extraText}) {
     final t = v.tally;
     final winPct = (t.winRate * 100).round();
-    // [追加] 勝率・複勝率の併記: 勝率の右に出す複勝率 (v.2026.10.31+26103105)
     final showPct = (t.showRate * 100).round();
 
     final row = Padding(
@@ -422,44 +439,57 @@ class ConditionSection extends StatelessWidget {
           ),
           _buildBar(t),
           const SizedBox(width: 6),
-          Text('[${t.first}-${t.second}-${t.third}-${t.out}]',
-              style: const TextStyle(fontSize: 10.5, color: Colors.black87)),
-          const SizedBox(width: 6),
-          // [修正] 勝率・複勝率の併記: 「勝率◯%」の右に「複勝◯%」を出す。勝率の文字の大きさ・太さ・色（得意は赤）は今までどおり (v.2026.10.31+26103105)
-          Text('勝率$winPct%',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: v.isBest ? Colors.red.shade700 : Colors.black87,
-              )),
-          const SizedBox(width: 6),
-          Text('複勝$showPct%',
-              style: const TextStyle(fontSize: 11, color: Colors.black54)),
-          // [追加] 基本情報整理と本賞金照合 Step2: 脚質の割合（マクリは回数）。他のカテゴリは extraText が無いので出ない (v.2026.10.15+26101505)
+          SizedBox(
+            width: 76,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text('[${t.first}-${t.second}-${t.third}-${t.out}]',
+                  style: const TextStyle(fontSize: 10.5, color: Colors.black87)),
+            ),
+          ),
+          SizedBox(
+            width: 36,
+            child: Text('$winPct%',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: v.isBest ? Colors.red.shade700 : Colors.black87,
+                )),
+          ),
+          SizedBox(
+            width: 36,
+            child: Text('$showPct%',
+                style: const TextStyle(fontSize: 11, color: Colors.black54)),
+          ),
           if (extraText != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 6),
+            SizedBox(
+              width: 40,
               child: Text(extraText,
                   style: const TextStyle(fontSize: 10, color: Colors.black54)),
             ),
-          if (v.isReference)
-            const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Text('参考', style: TextStyle(fontSize: 9, color: Colors.black38)),
+          Expanded(
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 2,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (v.isReference)
+                  const Text('参考', style: TextStyle(fontSize: 9, color: Colors.black38)),
+                if (v.isCurrent)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      border: Border.all(color: Colors.blue.shade400),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text('今回',
+                        style: TextStyle(fontSize: 8, color: Colors.blue.shade800, fontWeight: FontWeight.bold)),
+                  ),
+              ],
             ),
-          // [追加] 馬詳細タブ 表示項目変更 Step2: 今回レースの条件に当たる値（クッション値・含水率の段、今回の騎手）に「今回」 (v.2026.10.15+26101501)
-          if (v.isCurrent)
-            Container(
-              margin: const EdgeInsets.only(left: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                border: Border.all(color: Colors.blue.shade400),
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: Text('今回',
-                  style: TextStyle(fontSize: 8, color: Colors.blue.shade800, fontWeight: FontWeight.bold)),
-            ),
+          ),
         ],
       ),
     );
