@@ -30,7 +30,15 @@ class MatchupBrief {
   final String margin;              // 着差 (例: "1/2", "0.1"など)
   final String timeDiff;            // タイム差 (例: "-0.2", "+0.5")
   final String opponentHorseNumber; // 相手の馬番
+  // [修正] 対戦成績の2行化: 向きを「相手がその馬より内か外か」に変更（以前はその馬から見た向き） (v.2026.11.14+26111401)
   final String relativeGate;        // 枠順比較 (例: "内枠", "外枠", "同枠")
+
+  // [追加] 対戦成績の2行化: 相手のそのレースでの馬体重・騎手・斤量・通過順位・上がり (v.2026.11.14+26111401)
+  final String opponentHorseWeight;    // 相手の馬体重 (例: "464(-2)")
+  final String opponentJockey;         // 相手の騎手
+  final String opponentCarriedWeight;  // 相手の斤量
+  final String opponentCornerPassage;  // 相手の通過順位 (例: "13-12-14-14")
+  final String opponentAgari;          // 相手の上がり
 
   MatchupBrief({
     required this.opponentName,
@@ -42,6 +50,11 @@ class MatchupBrief {
     this.timeDiff = '-',
     this.opponentHorseNumber = '-',
     this.relativeGate = '-',
+    this.opponentHorseWeight = '-',
+    this.opponentJockey = '-',
+    this.opponentCarriedWeight = '-',
+    this.opponentCornerPassage = '-',
+    this.opponentAgari = '-',
   });
 }
 
@@ -234,10 +247,11 @@ class ConditionMatchEngine {
           final myFrame = int.tryParse(myRecord.frameNumber);
           final opFrame = int.tryParse(opponentPastRecord.frameNumber);
           if (myFrame != null && opFrame != null) {
+            // [修正] 対戦成績の2行化: 相手の馬番の横に出すので、相手から見た向きにする（相手の枠が外なら「外枠」） (v.2026.11.14+26111401)
             if (myFrame < opFrame) {
-              relativeGateStr = '内枠';
-            } else if (myFrame > opFrame) {
               relativeGateStr = '外枠';
+            } else if (myFrame > opFrame) {
+              relativeGateStr = '内枠';
             } else {
               relativeGateStr = '同枠';
             }
@@ -255,6 +269,12 @@ class ConditionMatchEngine {
           timeDiff: timeDiffStr,
           opponentHorseNumber: opponentPastRecord.horseNumber,
           relativeGate: relativeGateStr,
+          // [追加] 対戦成績の2行化: 相手の過去走からそのまま入れる（空なら「-」） (v.2026.11.14+26111401)
+          opponentHorseWeight: opponentPastRecord.horseWeight.trim().isNotEmpty ? opponentPastRecord.horseWeight.trim() : '-',
+          opponentJockey: opponentPastRecord.jockey.trim().isNotEmpty ? opponentPastRecord.jockey.trim() : '-',
+          opponentCarriedWeight: opponentPastRecord.carriedWeight.trim().isNotEmpty ? opponentPastRecord.carriedWeight.trim() : '-',
+          opponentCornerPassage: opponentPastRecord.cornerPassage.trim().isNotEmpty ? opponentPastRecord.cornerPassage.trim() : '-',
+          opponentAgari: opponentPastRecord.agari.trim().isNotEmpty ? opponentPastRecord.agari.trim() : '-',
         ));
       } catch (_) {
         // 対戦なし
