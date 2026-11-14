@@ -735,6 +735,11 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
       raceCourse =
           CourseElevations.findRaceCourse(venueCode, distance, 'shiba_inner');
     }
+    // [修正] 内外表記なしで内回りにも無い距離(京都芝2200など外回りのみの距離)は外回りで再検索する (v.2026.11.14)
+    if (raceCourse == null && trackTypeKey == 'shiba') {
+      raceCourse =
+          CourseElevations.findRaceCourse(venueCode, distance, 'shiba_outer');
+    }
     final diagram = await CourseDiagramService.instance
         .getCourseDiagram(venueCode, distance, trackTypeKey);
     if (diagram == null) return null;

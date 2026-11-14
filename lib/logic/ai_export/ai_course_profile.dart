@@ -181,6 +181,10 @@ RaceCourseData? findAiRaceCourse({
   if (course == null && key == 'shiba') {
     course = CourseElevations.findRaceCourse(venueCode, distance, 'shiba_inner');
   }
+  // [修正] 内外表記なしで内回りにも無い距離(京都芝2200など外回りのみの距離)は外回りで再検索する (v.2026.11.14)
+  if (course == null && key == 'shiba') {
+    course = CourseElevations.findRaceCourse(venueCode, distance, 'shiba_outer');
+  }
   return course;
 }
 
