@@ -1,4 +1,3 @@
-// [修正] トレンドグラフ表示および馬場状態テキストの追加 (v.2026.7.28+26072810)
 import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -162,7 +161,6 @@ class _TrackConditionCardState extends State<TrackConditionCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildSummaryItem('クッション値', Text('${latestRecord.cushionValue ?? "-"}', style: const TextStyle(color: Colors.greenAccent, fontSize: 26, fontWeight: FontWeight.bold, fontFamily: 'monospace')), cushionEval.isNotEmpty ? Text('($cushionEval)', style: const TextStyle(color: Colors.white70, fontSize: 10)) : null),
-                // [修正] SizedBox(width:20)の固定幅がラベルの不自然な折り返しの原因だったため削除し、Row直接配置+スペーサーに変更 (v.2026.7.28+26072811)
                 _buildSummaryItem('芝含水率', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [const Text('G:', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontFamily: 'monospace')), const SizedBox(width: 4), Text('${latestRecord.moistureTurfGoal ?? "-"}%', style: const TextStyle(color: Colors.greenAccent, fontSize: 14, fontFamily: 'monospace'))]),
                   const SizedBox(height: 4),
@@ -217,6 +215,7 @@ class _TrackConditionCardState extends State<TrackConditionCard> {
     );
   }
 
+  // [修正] グラフの表示を最大6地点に制限し、超過分は横スクロールで確認できるように変更 (v.2026.11.17+26111702)
   Widget _buildChart() {
     List<FlSpot> spots1 = [], spots2 = [];
     double minY = double.infinity, maxY = double.negativeInfinity;
@@ -257,6 +256,40 @@ class _TrackConditionCardState extends State<TrackConditionCard> {
       lineBarsData.add(LineChartBarData(spots: spots2, isCurved: false, color: c2, barWidth: 2, isStrokeCapRound: true, dashArray: [4, 4], dotData: FlDotData(show: true, getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(radius: 3, color: c2, strokeWidth: 0))));
     }
 
+    // [修正] 6地点以下は従来通り全幅表示。7地点以上は6地点分の幅を1画面として横スクロール表示 (v.2026.11.17+26111702)
+    const int maxVisiblePoints = 6;
+    final int count = widget.meetingHistory.length;
+
+    if (count <= maxVisiblePoints) {
+      return _buildLineChart(lineBarsData, minY, maxY, interval, showLeftTitles: true);
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double axisWidth = 36.0; // 固定Y軸の幅(leftTitlesのreservedSizeと同じ)
+        final double visibleWidth = math.max(0.0, constraints.maxWidth - axisWidth);
+        final double chartWidth = visibleWidth / maxVisiblePoints * count;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(width: axisWidth, child: _buildFixedYAxis(minY, maxY, interval)),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                reverse: true, // 初期表示は最新(右端)。左へスクロールすると過去分を確認できる
+                child: SizedBox(
+                  width: chartWidth,
+                  child: _buildLineChart(lineBarsData, minY, maxY, interval, showLeftTitles: false),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  LineChart _buildLineChart(List<LineChartBarData> lineBarsData, double minY, double maxY, double interval, {required bool showLeftTitles}) {
     return LineChart(
       LineChartData(
         minX: 0, maxX: (widget.meetingHistory.length - 1).toDouble(), minY: minY, maxY: maxY,
@@ -265,13 +298,40 @@ class _TrackConditionCardState extends State<TrackConditionCard> {
           show: true,
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 60, interval: 1, getTitlesWidget: _bottomTitleWidgets)),
-          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, interval: interval, reservedSize: 36, getTitlesWidget: (value, meta) => Text(value.toStringAsFixed(1), style: const TextStyle(color: Colors.white54, fontSize: 10), textAlign: TextAlign.center))),
+          // [修正] 横スクロール時はY軸ラベルをチャート外(固定側)に表示するため非表示にする (v.2026.11.17+26111702)
+          leftTitles: showLeftTitles
+              ? AxisTitles(sideTitles: SideTitles(showTitles: true, interval: interval, reservedSize: 36, getTitlesWidget: (value, meta) => Text(value.toStringAsFixed(1), style: const TextStyle(color: Colors.white54, fontSize: 10), textAlign: TextAlign.center)))
+              : const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
         gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: interval, getDrawingHorizontalLine: (value) => const FlLine(color: Colors.white10, strokeWidth: 1)),
-        borderData: FlBorderData(show: true, border: const Border(bottom: BorderSide(color: Colors.white24, width: 1), left: BorderSide(color: Colors.white24, width: 1), right: BorderSide.none, top: BorderSide.none)),
-        // [修正] fl_chart 0.68.0にtooltipBgColorは存在しないため、既存コード(lap_time_chart_card.dart)と同じgetTooltipColor形式に修正 (v.2026.7.28+26072810)
+        borderData: FlBorderData(show: true, border: Border(bottom: const BorderSide(color: Colors.white24, width: 1), left: showLeftTitles ? const BorderSide(color: Colors.white24, width: 1) : BorderSide.none, right: BorderSide.none, top: BorderSide.none)),
         lineTouchData: LineTouchData(touchTooltipData: LineTouchTooltipData(getTooltipColor: (touchedSpot) => Colors.black87, getTooltipItems: (touchedSpots) => touchedSpots.map((spot) => LineTooltipItem(spot.y.toStringAsFixed(1), TextStyle(color: spot.bar.color ?? Colors.white, fontWeight: FontWeight.bold))).toList())),
       ),
+    );
+  }
+
+  // [修正] 横スクロール時に画面左へ固定表示するY軸ラベル (v.2026.11.17+26111702)
+  Widget _buildFixedYAxis(double minY, double maxY, double interval) {
+    const double bottomReserved = 60.0; // bottomTitlesのreservedSizeと一致させてプロット領域の高さを合わせる
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double plotHeight = math.max(0.0, constraints.maxHeight - bottomReserved);
+        final double range = maxY - minY;
+        final List<Widget> children = [
+          Positioned(top: 0, bottom: bottomReserved, right: 0, child: Container(width: 1, color: Colors.white24)),
+        ];
+        if (range > 0 && plotHeight > 0) {
+          for (double v = (minY / interval).ceilToDouble() * interval; v <= maxY + 1e-9; v += interval) {
+            final double top = (maxY - v) / range * plotHeight - 6;
+            children.add(Positioned(
+              top: top.clamp(0.0, math.max(0.0, plotHeight - 12)),
+              right: 4,
+              child: Text(v.toStringAsFixed(1), style: const TextStyle(color: Colors.white54, fontSize: 10)),
+            ));
+          }
+        }
+        return Stack(clipBehavior: Clip.none, children: children);
+      },
     );
   }
 }
