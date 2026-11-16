@@ -34,7 +34,8 @@ class ScraperService {
         return [];
       }
 
-      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
+      // [修正] netkeibaのUTF-8化に合わせ、デコードをEUC-JPからUTF-8へ変更 (v.2026.11.17+26111701)
+      final decodedBody = await CharsetConverter.decode('UTF-8', response.bodyBytes);
       final document = html.parse(decodedBody);
 
       final horseLinks = document.querySelectorAll('table.Shutuba_Table td.HorseInfo a[href*="/horse/"]');

@@ -108,7 +108,8 @@ class _PastRaceSelectionDialogState extends State<PastRaceSelectionDialog> {
       );
 
       if (response.statusCode == 200) {
-        final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
+        // [修正] netkeibaのUTF-8化に合わせ、デコードをEUC-JPからUTF-8へ変更 (v.2026.11.17+26111701)
+        final decodedBody = await CharsetConverter.decode('UTF-8', response.bodyBytes);
         final newItemsRaw = ScraperService.scrapeRaceIdListFromDbPage(decodedBody);
 
         final mappedItems = newItemsRaw.map((e) => PastRaceItem(

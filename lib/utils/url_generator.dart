@@ -45,9 +45,9 @@ String generateNetkeibaHorsePedigreeUrl({
 Future<String> generateNetkeibaRaceSearchUrl({
   required String raceName,
 }) async {
-  final eucJpBytes = await CharsetConverter.encode("EUC-JP", raceName);
-  final encodedWord = eucJpBytes.map((byte) => '%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}').join('');
-  // [修正] netkeibaの検索仕様変更に合わせてエンドポイントを/race/list.htmlへ変更し、部分一致(match=p)パラメータを追加 (v.1.0)
+  // [修正] netkeibaのUTF-8化に合わせ、検索語のエンコードをEUC-JPからUTF-8へ変更 (v.2026.11.17+26111701)
+  final utf8Bytes = await CharsetConverter.encode("UTF-8", raceName);
+  final encodedWord = utf8Bytes.map((byte) => '%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}').join('');
   return 'https://db.netkeiba.com/race/list.html?word=$encodedWord&match=p';
 }
 
@@ -216,8 +216,9 @@ Future<String> generateNetkeibaRaceSearchUrlFromQuery({
   if (raceNameQuery.isEmpty) {
     encodedWord = '';
   } else {
-    final eucJpBytes = await CharsetConverter.encode("EUC-JP", raceNameQuery);
-    encodedWord = eucJpBytes.map((byte) => '%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}').join('');
+    // [修正] netkeibaのUTF-8化に合わせ、検索語のエンコードをEUC-JPからUTF-8へ変更 (v.2026.11.17+26111701)
+    final utf8Bytes = await CharsetConverter.encode("UTF-8", raceNameQuery);
+    encodedWord = utf8Bytes.map((byte) => '%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}').join('');
   }
 
   final buffer = StringBuffer('https://db.netkeiba.com/race/list.html?word=$encodedWord&match=p');

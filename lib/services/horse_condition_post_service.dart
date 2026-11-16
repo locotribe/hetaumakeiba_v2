@@ -66,7 +66,8 @@ class HorseConditionPostService {
         debugPrint('HorseConditionPostService: HTTP ${response.statusCode} ($url)');
         return null;
       }
-      final html = await CharsetConverter.decode('euc-jp', response.bodyBytes);
+      // [修正] netkeibaのUTF-8化に合わせ、デコードをEUC-JPからUTF-8へ変更 (v.2026.11.17+26111701)
+      final html = await CharsetConverter.decode('UTF-8', response.bodyBytes);
       final fetchedAt = DateTime.now().toIso8601String();
       final posts =
           HorseConditionPostParser.parse(html, horseId, fetchedAt: fetchedAt);

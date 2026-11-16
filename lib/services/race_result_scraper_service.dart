@@ -37,7 +37,8 @@ class RaceResultScraperService {
         return false;
       }
 
-      final decodedBody = await CharsetConverter.decode('EUC-JP', response.bodyBytes);
+      // [修正] netkeibaのUTF-8化に合わせ、デコードをEUC-JPからUTF-8へ変更 (v.2026.11.17+26111701)
+      final decodedBody = await CharsetConverter.decode('UTF-8', response.bodyBytes);
       final document = html.parse(decodedBody);
 
       final resultTable = document.querySelector('#All_Result_Table');
@@ -62,8 +63,9 @@ class RaceResultScraperService {
         throw Exception('HTTPリクエストに失敗しました: Status code ${response.statusCode}');
       }
 
+      // [修正] netkeibaのUTF-8化に合わせ、デコードをEUC-JPからUTF-8へ変更 (v.2026.11.17+26111701)
       final decodedBody =
-      await CharsetConverter.decode('EUC-JP', response.bodyBytes);
+      await CharsetConverter.decode('UTF-8', response.bodyBytes);
       final document = html.parse(decodedBody);
 
       final resultTable = document.querySelector('table.race_table_01');

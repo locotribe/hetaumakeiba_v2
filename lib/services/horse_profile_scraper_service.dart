@@ -37,8 +37,9 @@ class HorseProfileScraperService {
         return null;
       }
 
-      final profileDoc = html.parse(await CharsetConverter.decode('EUC-JP', profileResponse.bodyBytes));
-      final pedigreeDoc = html.parse(await CharsetConverter.decode('EUC-JP', pedigreeResponse.bodyBytes));
+      // [修正] netkeibaのUTF-8化に合わせ、デコードをEUC-JPからUTF-8へ変更 (v.2026.11.17+26111701)
+      final profileDoc = html.parse(await CharsetConverter.decode('UTF-8', profileResponse.bodyBytes));
+      final pedigreeDoc = html.parse(await CharsetConverter.decode('UTF-8', pedigreeResponse.bodyBytes));
 
       // 3. 基本情報の解析 (プロフィールTOPのHTMLを渡す)
       final profileData = await _parseBasicInfo(horseId, profileDoc);
@@ -91,7 +92,8 @@ class HorseProfileScraperService {
         return null;
       }
 
-      final pedigreeDoc = html.parse(await CharsetConverter.decode('EUC-JP', pedigreeResponse.bodyBytes));
+      // [修正] netkeibaのUTF-8化に合わせ、デコードをEUC-JPからUTF-8へ変更 (v.2026.11.17+26111701)
+      final pedigreeDoc = html.parse(await CharsetConverter.decode('UTF-8', pedigreeResponse.bodyBytes));
       final pedigreeData = _parsePedigree(pedigreeDoc);
       if ((pedigreeData['fatherName'] ?? '').isEmpty) {
         debugPrint('DEBUG: [ERROR] Pedigree not found ($horseId)');

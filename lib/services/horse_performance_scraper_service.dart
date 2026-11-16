@@ -62,7 +62,8 @@ class HorsePerformanceScraperService {
       final response = await http.get(Uri.parse(url), headers: requestHeaders);
 
       if (response.statusCode == 200) {
-        final document = html.parse(await CharsetConverter.decode('euc-jp', response.bodyBytes));
+        // [修正] netkeibaのUTF-8化に合わせ、デコードをEUC-JPからUTF-8へ変更 (v.2026.11.17+26111701)
+        final document = html.parse(await CharsetConverter.decode('UTF-8', response.bodyBytes));
         final rows = document.querySelectorAll('.db_h_race_results tbody tr');
         final List<HorseRaceRecord> records = [];
         // [追加] 成績タブ拡充: 馬場指数・タイム指数・備考の保存用 (v.2026.9.22+26092205)
