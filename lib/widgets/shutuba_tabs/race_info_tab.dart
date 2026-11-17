@@ -1163,18 +1163,25 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: Colors.grey.shade400),
             ),
-            child: Row(
+            // [修正] 馬場予測の天気材料の見直し Step4: 再試行の行の下に、実測の雨からの馬場予測を出す (v.2026.11.18+26111804)
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.cloud_off, size: 18, color: Colors.grey.shade600),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text('ピンポイント天気を取得できませんでした', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                Row(
+                  children: [
+                    Icon(Icons.cloud_off, size: 18, color: Colors.grey.shade600),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text('ピンポイント天気を取得できませんでした', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                    ),
+                    TextButton.icon(
+                      onPressed: widget.onRefreshWeather,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('再試行', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
                 ),
-                TextButton.icon(
-                  onPressed: widget.onRefreshWeather,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('再試行', style: TextStyle(fontSize: 12)),
-                ),
+                _buildRainOnlyPrediction(),
               ],
             ),
           );
@@ -1500,6 +1507,79 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
           },
         ),
       ],
+    );
+  }
+
+  // [追加] 馬場予測の天気材料の見直し Step4: ピンポイント天気が取れないときの馬場予測。起点の測定と実測の雨だけで計算する（発走までの予報の雨は数えない）。雨の材料が無ければ出さない (v.2026.11.18+26111804)
+  Widget _buildRainOnlyPrediction() {
+    return FutureBuilder<TrackPredictionInputs>(
+      future: widget.trackPredictionFuture,
+      builder: (context, snapshot) {
+        final inputs = snapshot.data;
+        final rain = inputs?.rain;
+        if (inputs == null || inputs.baseline == null || rain == null || rain.hours.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final isDirt = (widget.predictionRaceData.trackType ?? '').contains('ダ');
+        final analysisResult = _analyzeTrackInsights(inputs.baseline, null, rain);
+        final moisture = analysisResult.predictedMoisture;
+        if (moisture == null) return const SizedBox.shrink();
+        final cushion = analysisResult.predictedCushion;
+        WeatherInsight? current;
+        for (final insight in analysisResult.insights) {
+          if (!insight.label.startsWith('[前回予測]')) current = insight;
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 10),
+            const Text('馬場予測（実測の雨から）', style: TextStyle(fontSize: 11, color: Colors.black54)),
+            const SizedBox(height: 4),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!isDirt && cushion != null) ...[
+                    Expanded(child: _buildMeasureTile(label: '予測クッション値', lines: [cushion.toStringAsFixed(1)], big: true)),
+                    const SizedBox(width: 6),
+                  ],
+                  Expanded(child: _buildMeasureTile(label: '予測含水率', lines: ['${moisture.toStringAsFixed(1)}%'], big: true)),
+                  if (isDirt || cushion == null) ...[
+                    const SizedBox(width: 6),
+                    const Expanded(child: SizedBox.shrink()),
+                  ],
+                ],
+              ),
+            ),
+            if (current != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: current.color.withValues(alpha: 0.05),
+                  border: Border(left: BorderSide(color: current.color, width: 4)),
+                  borderRadius: const BorderRadius.only(topRight: Radius.circular(4), bottomRight: Radius.circular(4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      current.label.replaceFirst('[今回確定] ', ''),
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: current.color),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      current.description,
+                      style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 
