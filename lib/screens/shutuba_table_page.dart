@@ -14,6 +14,8 @@ import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/services/jma_weather_service.dart';
 import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
+// [追加] 馬場予測の天気材料の見直し Step3: 起点の測定から発走までの雨（アメダスの実測＋予報）を用意する (v.2026.11.18+26111803)
+import 'package:hetaumakeiba_v2/services/track_rain_service.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/horse_record_asof_filter.dart';
 // [追加] 前走と路線の部品 Step2: 前走騎手・前走馬体重の前走を共通の部品で決める (v.2026.10.16+26101606)
 import 'package:hetaumakeiba_v2/logic/previous_race.dart';
@@ -104,6 +106,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
   Future<TrackConditionRecord?>? _predictionBaseFuture;
   Future<Map<String, String>?>? _jmaWeatherFuture;
   Future<Map<String, dynamic>?>? _pinpointWeatherFuture;
+  // [追加] 馬場予測の天気材料の見直し Step3: 馬場予測の材料（起点の測定と雨）。レース情報タブと展開シミュで共有する (v.2026.11.18+26111803)
+  Future<TrackPredictionInputs>? _trackPredictionFuture;
   TrackConditionRecord? _currentTrackRecord;
   TrackConditionRecord? _cachedPrevRecord;
 
@@ -223,7 +227,49 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
           forceRefresh: forceRefresh,
           isPastRace: isLocked
       );
+
+      // [追加] 馬場予測の天気材料の見直し Step3: 起点の測定とピンポイント天気がそろったら、起点から発走までの雨を用意する (v.2026.11.18+26111803)
+      _trackPredictionFuture = _loadTrackPrediction(
+        baseFuture: _predictionBaseFuture ?? _trackConditionFuture,
+        pinpointFuture: _pinpointWeatherFuture,
+        raceId: raceId,
+        raceDate: _predictionRaceData!.raceDate,
+        startTime: _predictionRaceData!.startTime,
+        isLocked: isLocked,
+      );
     });
+  }
+
+  // [追加] 馬場予測の天気材料の見直し Step3: 馬場予測の材料を用意する。起点やピンポイント天気が取れなくても、例外にせず取れた分で返す (v.2026.11.18+26111803)
+  Future<TrackPredictionInputs> _loadTrackPrediction({
+    required Future<TrackConditionRecord?>? baseFuture,
+    required Future<Map<String, dynamic>?>? pinpointFuture,
+    required String raceId,
+    required String raceDate,
+    required String? startTime,
+    required bool isLocked,
+  }) async {
+    TrackConditionRecord? baseline;
+    try {
+      baseline = baseFuture == null ? null : await baseFuture;
+    } catch (_) {
+      baseline = null;
+    }
+    Map<String, dynamic>? pinpoint;
+    try {
+      pinpoint = pinpointFuture == null ? null : await pinpointFuture;
+    } catch (_) {
+      pinpoint = null;
+    }
+    final rain = await TrackRainService.load(
+      raceId: raceId,
+      baseline: baseline,
+      raceDate: raceDate,
+      startTime: startTime,
+      pinpoint: pinpoint,
+      isLocked: isLocked,
+    );
+    return TrackPredictionInputs(baseline: baseline, rain: rain);
   }
 
   // [追加] 0-9b-1 race_info_tab.dartから引き上げ (v.2026.7.27+26072704)
@@ -1081,6 +1127,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             cachedPrevRecord: _cachedPrevRecord,
                             // [追加] 馬場予測の起点を渡す (v.2026.10.31+26103102)
                             predictionBaseFuture: _predictionBaseFuture,
+                            // [追加] 馬場予測の天気材料の見直し Step3 (v.2026.11.18+26111803)
+                            trackPredictionFuture: _trackPredictionFuture,
                             isWeatherLocked: _isWeatherLocked(),
                             onRefreshWeather: () => _loadWeatherAndTrackData(forceRefresh: true),
                           ),
@@ -1093,6 +1141,8 @@ class _ShutubaTablePageState extends State<ShutubaTablePage> with SingleTickerPr
                             cachedPrevRecord: _cachedPrevRecord,
                             // [追加] 馬場予測の起点を渡す (v.2026.10.31+26103102)
                             predictionBaseFuture: _predictionBaseFuture,
+                            // [追加] 馬場予測の天気材料の見直し Step3 (v.2026.11.18+26111803)
+                            trackPredictionFuture: _trackPredictionFuture,
                           ),
                           StartersTabWidget(
                             horses: sortedHorses,

@@ -2,6 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:hetaumakeiba_v2/utils/track_constants.dart';
+// [追加] 馬場予測の天気材料の見直し Step3: 新しい予測の式と、雨の材料 (v.2026.11.18+26111803)
+import 'package:hetaumakeiba_v2/logic/analysis/track_moisture_model.dart';
+import 'package:hetaumakeiba_v2/logic/analysis/track_rain_timeline.dart';
 
 class WeatherInsight {
   final String label;
@@ -214,6 +217,7 @@ class WeatherAnalyzer {
     );
   }
 
+  // [修正] 馬場予測の天気材料の見直し Step3: 予測の式を TrackMoistureModel（実測で決めた係数）に替えた。雨は「起点の測定時刻から発走まで」の1時間ごとの値（[rain]。今まではアメダスの実測・先は Open-Meteo の予報）を数える。日射量・蒸発散量・土壌水分は予測に使わない（実測で効き目が無かった）。予測クッション値も同じ形の式にした。[expectedPrecipitation]・[expectedRadiation]（発走時刻の予報）は見出しの区分と JRA 基準の傾向にだけ使う (v.2026.11.18+26111803)
   static WeatherAnalysisResult analyzeTrackConditionInsights({
     required String venueCode,
     required String trackType,
@@ -221,10 +225,7 @@ class WeatherAnalyzer {
     dynamic cachedRecord,
     required double expectedPrecipitation,
     required double expectedRadiation,
-    double? expectedTemp,
-    double? expectedSoilMoisture,
-    List<dynamic> dailyWeather = const [],
-    String? raceDateStr,
+    TrackRainInput? rain,
   }) {
     if (currentRecord == null) {
       return WeatherAnalysisResult([
@@ -240,73 +241,52 @@ class WeatherAnalyzer {
     final bool isDirt = trackType.contains('ダ') || trackType.contains('ダート');
     List<WeatherInsight> results = [];
 
+    String two(int v) => v.toString().padLeft(2, '0');
+    String timeText(DateTime t) => "${t.month}/${t.day} ${two(t.hour)}:${two(t.minute)}";
+    String signed(double v) => "${v >= 0 ? '+' : ''}${v.toStringAsFixed(1)}";
+
     _SimulationResult? buildInsight(dynamic record, String labelPrefix, String timeLabel) {
       final double? baseMoisture = isDirt ? record.moistureDirtGoal : record.moistureTurfGoal;
       final double? baseCushion = record.cushionValue;
 
       if (baseMoisture == null) return null;
 
-      double currentMoisture = baseMoisture;
-      double intermediatePrecip = 0.0;
-      int simulatedDays = 0;
-
-      // [修正] ダート専用の低い加水係数 (v.5.0)
-      double cWet = isDirt ? 0.25 : (baseMoisture > 15.0 ? 1.2 : 0.8);
-      double cDry = 0.005;
       double goodLimit = TrackConstants.getGoodMoistureLimit(venueCode, trackType);
 
-      if (dailyWeather.isNotEmpty && raceDateStr != null && record.date != null) {
-        try {
-          DateTime recordDate = DateTime.parse(record.date);
-          final rMatch = RegExp(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(raceDateStr);
-          DateTime rDate = recordDate;
-          if (rMatch != null) {
-            rDate = DateTime(int.parse(rMatch.group(1)!), int.parse(rMatch.group(2)!), int.parse(rMatch.group(3)!));
-          }
+      final bool isRaceDay = TrackMoistureModel.isRaceDayRecord(record.trackConditionId as int);
+      final DateTime? moistureTime = TrackMoistureModel.measurementTime(
+          venueCode: venueCode, date: record.date as String, isRaceDay: isRaceDay);
+      final DateTime? cushionTime = TrackMoistureModel.measurementTime(
+          venueCode: venueCode, date: record.date as String, isRaceDay: isRaceDay, cushion: true);
+      final DateTime? target = rain?.target;
+      final List<HourlyRain> rains = rain?.hours ?? const <HourlyRain>[];
 
-          for (var day in dailyWeather) {
-            DateTime dDate = DateTime.parse(day['date']);
-            if (dDate.isAfter(recordDate) && dDate.isBefore(rDate)) {
-              double p = (day['precipitationSum'] as num?)?.toDouble() ?? 0.0;
-              double e = (day['evapoTranspiration'] as num?)?.toDouble() ?? 0.0;
-
-              intermediatePrecip += p;
-              currentMoisture += (p * cWet) - (e * 0.1);
-
-              double lowerBound = goodLimit * 0.85;
-              if (currentMoisture < lowerBound) {
-                currentMoisture = lowerBound;
-              }
-              simulatedDays++;
-            }
-          }
-        } catch (e) {}
+      double predictedMoisture = baseMoisture;
+      TrackPrediction? moisturePrediction;
+      if (moistureTime != null && target != null) {
+        moisturePrediction = TrackMoistureModel.predict(
+          kind: isDirt ? TrackMeasureKind.dirtMoisture : TrackMeasureKind.turfMoisture,
+          venueCode: venueCode,
+          base: baseMoisture,
+          baseTime: moistureTime,
+          target: target,
+          rains: rains,
+        );
+        predictedMoisture = moisturePrediction.value;
       }
-
-      double addedMoisture = expectedPrecipitation * cWet;
-      double reducedMoisture = expectedRadiation * cDry;
-      double soilPercent = (expectedSoilMoisture ?? 0.15) * 100;
-      double soilAdjustment = (soilPercent - 15.0) * 0.05;
-
-      double predictedMoisture = currentMoisture + addedMoisture - reducedMoisture + soilAdjustment;
-
-      double minLimit = isDirt ? 2.0 : 8.0;
-      // [修正] ダートの現実的な上限値を設定 (v.5.0)
-      double maxLimit = isDirt ? 18.0 : 25.0;
-      bool hitLimit = false;
-
-      if (predictedMoisture < minLimit) { predictedMoisture = minLimit; hitLimit = true; }
-      if (predictedMoisture > maxLimit) { predictedMoisture = maxLimit; hitLimit = true; }
 
       double moistureIndex = predictedMoisture / goodLimit;
 
       double? predictedCushion = baseCushion;
-      if (!isDirt && baseCushion != null) {
-        if (predictedMoisture > baseMoisture + 2.0) {
-          predictedCushion = baseCushion - 0.4;
-        } else if (expectedRadiation > 300 && (expectedTemp ?? 15.0) > 20.0 && expectedPrecipitation == 0) {
-          predictedCushion = baseCushion + 0.3;
-        }
+      if (!isDirt && baseCushion != null && cushionTime != null && target != null) {
+        predictedCushion = TrackMoistureModel.predict(
+          kind: TrackMeasureKind.cushion,
+          venueCode: venueCode,
+          base: baseCushion,
+          baseTime: cushionTime,
+          target: target,
+          rains: rains,
+        ).value;
       }
 
       String insightLabel = "";
@@ -326,23 +306,43 @@ class WeatherAnalyzer {
         else { insightLabel = "標準 (乾いた良)"; insightDesc = "JRA基準通りの良好なコンディション。実力通りの決着になりやすい。"; insightColor = Colors.green; }
       }
 
-      // [修正] ダートの場合は限界値補正アラートを非表示にする (v.5.0)
-      String limitNote = hitLimit && !isDirt ? " (※限界値補正あり)" : "";
-      String cushionText = !isDirt && predictedCushion != null ? "・予測クッション値: ${predictedCushion.toStringAsFixed(1)}\n" : "";
-      String soilAdjSign = soilAdjustment >= 0 ? "+" : "";
-
-      String intermediateText = simulatedDays > 0
-          ? "・中間推移 ($simulatedDays日間): 降水 ${intermediatePrecip.toStringAsFixed(1)}mm / 自然乾燥・標準下限維持\n"
+      final String baseTimeText = moistureTime != null ? " ${timeText(moistureTime)}" : "";
+      String rainText;
+      if (moisturePrediction == null || moistureTime == null || target == null) {
+        rainText = "・雨のデータが無いため、起点の値のまま\n";
+      } else {
+        final used = TrackMoistureModel.rainsInWindow(rains, moistureTime, target);
+        double observedMm = 0;
+        double forecastMm = 0;
+        for (final r in used) {
+          if (r.observed) {
+            observedMm += r.mm;
+          } else {
+            forecastMm += r.mm;
+          }
+        }
+        final observedUntil = rain?.observedUntil;
+        final untilText = observedUntil != null && observedUntil.isBefore(target)
+            ? "（${timeText(observedUntil)}まで）"
+            : "";
+        rainText = "・起点から発走までの雨: 実測 ${observedMm.toStringAsFixed(1)}mm$untilText＋予報 ${forecastMm.toStringAsFixed(1)}mm\n";
+        if (rain != null && !rain.forecastAvailable && (observedUntil == null || observedUntil.isBefore(target))) {
+          rainText += "・予報が取れないため、この先の雨は数えていない\n";
+        } else if (rain != null && rain.missingHours > 0) {
+          rainText += "・雨のデータが無い時間: ${rain.missingHours}時間（0mmとして計算）\n";
+        }
+        rainText += "・雨による変化: ${signed(moisturePrediction.rainEffect)}%\n"
+            "・時間による変化（乾き・ふだんの値へ戻る分）: ${signed(moisturePrediction.timeEffect)}%\n";
+      }
+      String cushionText = !isDirt && predictedCushion != null
+          ? "・予測クッション値: ${predictedCushion.toStringAsFixed(1)}${baseCushion != null ? '（起点 $baseCushion）' : ''}\n"
           : "";
 
       String formulaText = "【予測シミュレーションの根拠】\n"
-          "・起点 ($timeLabel公式): ${baseMoisture}%\n"
-          "$intermediateText"
-          "・当日加水 (降水予報 ${expectedPrecipitation}mm): +${addedMoisture.toStringAsFixed(1)}%\n"
-          "・当日乾燥 (日射・風予報): -${reducedMoisture.toStringAsFixed(1)}%\n"
-          "・地盤補正 (気象API ${soilPercent.toStringAsFixed(1)}%): $soilAdjSign${soilAdjustment.toStringAsFixed(1)}%\n"
+          "・起点 ($timeLabel公式$baseTimeText): ${baseMoisture}%\n"
+          "$rainText"
           // [修正] レース情報ヘッダー整理 Step1: 行頭の記号を矢印から「・」にして、ほかの行とそろえた (v.2026.10.15+26101509)
-          "・予測含水率: ${predictedMoisture.toStringAsFixed(1)}%$limitNote\n"
+          "・予測含水率: ${predictedMoisture.toStringAsFixed(1)}%\n"
           "$cushionText";
 
       return _SimulationResult(

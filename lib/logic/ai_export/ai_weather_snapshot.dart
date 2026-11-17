@@ -3,6 +3,8 @@
 // [追加] AI分析データ 天気・コース追加 Step2: ピンポイント天気（OpenMeteoService.fetchDetailedWeather の戻り値）と馬場の測定から、AI分析用データに書く天気・馬場予測の要約を作る純粋ロジック。馬場予測はレース情報タブと同じ WeatherAnalyzer の計算を同じ引数で呼ぶ（前回予測との比較は使わない）。風速・突風は Open-Meteo の既定単位 km/h のまま持ち、m/s に換算した値も出す。DB・画面・通信には触れない (v.2026.10.11+26101102)
 
 import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
+// [追加] 馬場予測の天気材料の見直し Step3: 馬場予測に渡す雨の材料 (v.2026.11.18+26111803)
+import 'package:hetaumakeiba_v2/logic/analysis/track_rain_timeline.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 
 /// 発走から1時間を過ぎたか（天気を取り直さない時刻か）。
@@ -237,12 +239,15 @@ AiWeatherInsight _toAiInsight(WeatherInsight insight) {
 /// [pinpoint] が null、または発走時刻の予報（raceTime）が無いときは null。
 /// [baseline] は馬場予測の起点（レース情報タブと同じく、その競馬場の最新の測定）。
 /// [trackType] は出馬表の表記（'芝' / 'ダ'）。null なら芝として扱う（レース情報タブと同じ）。
+/// [rain] は起点から発走までの雨（TrackRainService で用意したもの。無ければ起点の値のまま）。
+// [修正] 馬場予測の天気材料の見直し Step3: 馬場予測に雨の材料 [rain] を渡す。[raceDate] は今は使わないが呼び出し側を変えないため残す (v.2026.11.18+26111803)
 AiWeatherSnapshot? buildAiWeatherSnapshot({
   required Map<String, dynamic>? pinpoint,
   required TrackConditionRecord? baseline,
   required String venueCode,
   required String? trackType,
   required String raceDate,
+  TrackRainInput? rain,
 }) {
   if (pinpoint == null) return null;
   final raceTimeRaw = pinpoint['raceTime'];
@@ -306,9 +311,7 @@ AiWeatherSnapshot? buildAiWeatherSnapshot({
     cachedRecord: null,
     expectedPrecipitation: raceTime.precipitation ?? 0.0,
     expectedRadiation: raceTime.radiation ?? 0.0,
-    expectedSoilMoisture: raceTime.soilMoisture,
-    dailyWeather: dailyList,
-    raceDateStr: raceDate,
+    rain: rain,
   );
 
   final rawInsights = <WeatherInsight>[

@@ -44,6 +44,8 @@ import 'package:hetaumakeiba_v2/models/race_simulation_model.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/services/course_diagram_service.dart';
 import 'package:hetaumakeiba_v2/services/race_entrant_data_service.dart';
+// [追加] 馬場予測の天気材料の見直し Step3: 馬場予測の材料（起点の測定と雨） (v.2026.11.18+26111803)
+import 'package:hetaumakeiba_v2/services/track_rain_service.dart';
 import 'package:hetaumakeiba_v2/utils/speed_index_date_parser.dart';
 // [追加] 展開シミュ改良Step7b (v.2026.10.30+26103006)
 import 'package:hetaumakeiba_v2/utils/training_date_utils.dart';
@@ -60,6 +62,8 @@ class RaceSimulationTabWidget extends StatefulWidget {
   final TrackConditionRecord? cachedPrevRecord;
   // [追加] 馬場予測の起点（レース当日より前で一番新しい計測）。「予測」は当日の計測で動かさない (v.2026.10.31+26103102)
   final Future<TrackConditionRecord?>? predictionBaseFuture;
+  // [追加] 馬場予測の天気材料の見直し Step3: 馬場予測の材料（出馬表ページで1回だけ用意する） (v.2026.11.18+26111803)
+  final Future<TrackPredictionInputs>? trackPredictionFuture;
 
   const RaceSimulationTabWidget({
     super.key,
@@ -70,6 +74,8 @@ class RaceSimulationTabWidget extends StatefulWidget {
     this.cachedPrevRecord,
     // [追加] 馬場予測の起点 (v.2026.10.31+26103102)
     this.predictionBaseFuture,
+    // [追加] 馬場予測の天気材料の見直し Step3 (v.2026.11.18+26111803)
+    this.trackPredictionFuture,
   });
 
   @override
@@ -685,14 +691,16 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
     // 馬場のデータ: 予測(天気の取得は shutuba_table_page.dart で1回だけ)
     double? predictedCushion;
     double? predictedMoisture;
-    if (widget.pinpointWeatherFuture != null &&
-        widget.trackConditionFuture != null) {
+    // [修正] 馬場予測の天気材料の見直し Step3: 起点の測定と雨の材料は出馬表ページで用意したものを使う。ピンポイント天気が取れなくても、起点と実測の雨があれば予測する (v.2026.11.18+26111803)
+    if (widget.trackPredictionFuture != null) {
       try {
-        final pinpointData = await widget.pinpointWeatherFuture;
-        // [修正] 「予測」の起点は、レース当日より前の計測（無ければ最新の計測）にする (v.2026.10.31+26103102)
-        final baselineRecord = await (widget.predictionBaseFuture ?? widget.trackConditionFuture);
+        final pinpointData = widget.pinpointWeatherFuture == null
+            ? null
+            : await widget.pinpointWeatherFuture;
+        final inputs = await widget.trackPredictionFuture;
+        final baselineRecord = inputs?.baseline;
         final raceTime = pinpointData?['raceTime'];
-        if (raceTime != null && baselineRecord != null) {
+        if (baselineRecord != null) {
           final analysis = WeatherAnalyzer.analyzeTrackConditionInsights(
             venueCode: venueCode,
             trackType: race.trackType ?? '芝',
@@ -700,11 +708,9 @@ class _RaceSimulationTabWidgetState extends State<RaceSimulationTabWidget>
             // [修正] 起点が動かないので「前回予測」は使わない (v.2026.10.31+26103102)
             cachedRecord: null,
             expectedPrecipitation:
-                (raceTime['precipitation'] as num?)?.toDouble() ?? 0.0,
-            expectedRadiation: (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,
-            expectedSoilMoisture: (raceTime['soilMoisture'] as num?)?.toDouble(),
-            dailyWeather: pinpointData?['daily'] ?? const [],
-            raceDateStr: race.raceDate,
+                (raceTime?['precipitation'] as num?)?.toDouble() ?? 0.0,
+            expectedRadiation: (raceTime?['radiation'] as num?)?.toDouble() ?? 0.0,
+            rain: inputs?.rain,
           );
           predictedCushion = isDirt
               ? null

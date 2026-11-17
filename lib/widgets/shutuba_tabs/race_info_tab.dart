@@ -7,6 +7,9 @@ import 'package:hetaumakeiba_v2/models/race_data.dart';
 import 'package:hetaumakeiba_v2/utils/grade_utils.dart';
 import 'package:hetaumakeiba_v2/models/track_conditions_model.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/weather_analyzer.dart';
+// [追加] 馬場予測の天気材料の見直し Step3: 馬場予測の材料（起点の測定と、起点から発走までの雨） (v.2026.11.18+26111803)
+import 'package:hetaumakeiba_v2/logic/analysis/track_rain_timeline.dart';
+import 'package:hetaumakeiba_v2/services/track_rain_service.dart';
 import 'package:hetaumakeiba_v2/db/course_elevations.dart';
 import 'package:hetaumakeiba_v2/logic/elevation_logic.dart';
 // [追加] コース平面図表示 (v.1.0)
@@ -40,6 +43,8 @@ class RaceInfoTabWidget extends StatefulWidget {
   final TrackConditionRecord? cachedPrevRecord;
   // [追加] 馬場予測の起点（レース当日より前で一番新しい計測）。予測は当日の計測で動かさない (v.2026.10.31+26103102)
   final Future<TrackConditionRecord?>? predictionBaseFuture;
+  // [追加] 馬場予測の天気材料の見直し Step3: 馬場予測の材料（起点の測定と雨。出馬表ページで1回だけ用意する） (v.2026.11.18+26111803)
+  final Future<TrackPredictionInputs>? trackPredictionFuture;
   final bool isWeatherLocked;
   final VoidCallback onRefreshWeather;
 
@@ -56,6 +61,8 @@ class RaceInfoTabWidget extends StatefulWidget {
     this.cachedPrevRecord,
     // [追加] 馬場予測の起点 (v.2026.10.31+26103102)
     this.predictionBaseFuture,
+    // [追加] 馬場予測の天気材料の見直し Step3 (v.2026.11.18+26111803)
+    this.trackPredictionFuture,
     this.isWeatherLocked = true,
     required this.onRefreshWeather,
   });
@@ -487,8 +494,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
         final data = snapshot.data;
         final raceTime = data?['raceTime'];
         if (data == null || raceTime == null) return const SizedBox.shrink();
-        final List<dynamic> dailyData = data['daily'] ?? [];
-        final analysisResult = _analyzeTrackInsights(record, raceTime, dailyData);
+        // [修正] 馬場予測の天気材料の見直し Step3: 計測値のカードは雨の材料を渡さない（当日の計測の値そのものから見出しを決める） (v.2026.11.18+26111803)
+        final analysisResult = _analyzeTrackInsights(record, raceTime, null);
 
         final insightsList = <WeatherInsight>[
           WeatherAnalyzer.analyzeTrackRecovery(raceTime['radiation'] ?? 0.0, raceTime['evap'] ?? 0.0),
@@ -1295,13 +1302,12 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
               ),
               const SizedBox(height: 8),
 
-              FutureBuilder<TrackConditionRecord?>(
-                // [修正] 予測の起点は、レース当日より前の計測（無ければ最新の計測）にする。当日の計測が入っても予測が動かない (v.2026.10.31+26103102)
-                future: widget.predictionBaseFuture ?? widget.trackConditionFuture,
+              // [修正] 馬場予測の天気材料の見直し Step3: 起点の測定（レース当日より前の最新の計測。無ければ最新）と雨の材料を、出馬表ページで用意したものから読む (v.2026.11.18+26111803)
+              FutureBuilder<TrackPredictionInputs>(
+                future: widget.trackPredictionFuture,
                 builder: (context, trackSnapshot) {
-                  final trackRecord = trackSnapshot.data;
-                  // [修正] レース情報ヘッダー整理 Step3: 計算を _analyzeTrackInsights に移した（たたんだときの要約と同じ結果を使うため。引数は元のまま） (v.2026.10.15+26101511)
-                  final analysisResult = _analyzeTrackInsights(trackRecord, raceTime, dailyData);
+                  final trackRecord = trackSnapshot.data?.baseline;
+                  final analysisResult = _analyzeTrackInsights(trackRecord, raceTime, trackSnapshot.data?.rain);
 
                   final insightsList = [
                     WeatherAnalyzer.analyzeTrackRecovery(raceTime['radiation'] ?? 0.0, raceTime['evap'] ?? 0.0),
@@ -1384,7 +1390,8 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
   }
 
   // [追加] レース情報ヘッダー整理 Step3: 馬場・展開インサイトの計算（開いたときの一覧と、たたんだときの要約で同じ結果を使う） (v.2026.10.15+26101511)
-  WeatherAnalysisResult _analyzeTrackInsights(TrackConditionRecord? trackRecord, dynamic raceTime, List<dynamic> dailyData) {
+  // [修正] 馬場予測の天気材料の見直し Step3: 日別の天気の代わりに雨の材料 [rain] を受け取る。発走時刻の予報 [raceTime] は無くてもよい（降水量・日射量を0として扱う） (v.2026.11.18+26111803)
+  WeatherAnalysisResult _analyzeTrackInsights(TrackConditionRecord? trackRecord, dynamic raceTime, TrackRainInput? rain) {
     final String venueCode = widget.predictionRaceData.raceId.length >= 6
         ? widget.predictionRaceData.raceId.substring(4, 6)
         : '00';
@@ -1396,18 +1403,15 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
       currentRecord: trackRecord,
       // [修正] 起点が動かないので「前回予測」との2本立てはやめ、予測は1本にする (v.2026.10.31+26103102)
       cachedRecord: null,
-      expectedPrecipitation: (raceTime['precipitation'] as num?)?.toDouble() ?? 0.0,
-      expectedRadiation: (raceTime['radiation'] as num?)?.toDouble() ?? 0.0,
-      expectedSoilMoisture: (raceTime['soilMoisture'] as num?)?.toDouble(),
-      dailyWeather: dailyData,
-      raceDateStr: widget.predictionRaceData.raceDate,
+      expectedPrecipitation: (raceTime?['precipitation'] as num?)?.toDouble() ?? 0.0,
+      expectedRadiation: (raceTime?['radiation'] as num?)?.toDouble() ?? 0.0,
+      rain: rain,
     );
   }
 
   // [追加] レース情報ヘッダー整理 Step3: ピンポイント詳細をたたんだときの要約。発走時刻の予報（天気・気温・降水確率・風）、馬場予測（芝は予測クッション値→予測含水率、ダートは予測含水率だけ）、今回の馬場予測の見出しと説明（根拠より前の部分）を出す (v.2026.10.15+26101511)
   Widget _buildPinpointSummary(Map<String, dynamic> data) {
     final raceTime = data['raceTime'];
-    final List<dynamic> dailyData = data['daily'] ?? [];
     final isDirt = (widget.predictionRaceData.trackType ?? '').contains('ダ');
     final windMs = (((raceTime['windSpeed'] as num?)?.toDouble() ?? 0.0) / 3.6).toStringAsFixed(1);
 
@@ -1431,11 +1435,11 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
             ],
           ),
         ),
-        FutureBuilder<TrackConditionRecord?>(
-          // [修正] 予測の起点は、レース当日より前の計測（無ければ最新の計測）にする (v.2026.10.31+26103102)
-          future: widget.predictionBaseFuture ?? widget.trackConditionFuture,
+        // [修正] 馬場予測の天気材料の見直し Step3: 起点の測定と雨の材料を、出馬表ページで用意したものから読む (v.2026.11.18+26111803)
+        FutureBuilder<TrackPredictionInputs>(
+          future: widget.trackPredictionFuture,
           builder: (context, trackSnapshot) {
-            final analysisResult = _analyzeTrackInsights(trackSnapshot.data, raceTime, dailyData);
+            final analysisResult = _analyzeTrackInsights(trackSnapshot.data?.baseline, raceTime, trackSnapshot.data?.rain);
             final moisture = analysisResult.predictedMoisture;
             if (moisture == null) return const SizedBox.shrink();
             final cushion = analysisResult.predictedCushion;

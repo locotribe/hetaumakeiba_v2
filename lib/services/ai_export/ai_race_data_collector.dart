@@ -17,6 +17,9 @@ import 'package:hetaumakeiba_v2/logic/ai_export/ai_course_profile.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_weather_snapshot.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/course_preset_id_resolver.dart';
 import 'package:hetaumakeiba_v2/services/open_meteo_service.dart';
+// [追加] 馬場予測の天気材料の見直し Step3: 馬場予測に使う雨の材料 (v.2026.11.18+26111803)
+import 'package:hetaumakeiba_v2/logic/analysis/track_rain_timeline.dart';
+import 'package:hetaumakeiba_v2/services/track_rain_service.dart';
 import 'package:hetaumakeiba_v2/models/ai_export/ai_race_export_bundle.dart';
 import 'package:hetaumakeiba_v2/models/course_preset_model.dart';
 import 'package:hetaumakeiba_v2/models/horse_performance_model.dart';
@@ -55,6 +58,36 @@ Future<Map<String, dynamic>?> _defaultPinpointWeatherFetcher({
   );
 }
 
+/// 馬場予測に使う雨の材料を用意する関数（テストで差し替える）。
+/// 既定は [TrackRainService.load]（[isLocked] が true なら保存分のみ）。
+// [追加] 馬場予測の天気材料の見直し Step3 (v.2026.11.18+26111803)
+typedef AiTrackRainLoader = Future<TrackRainInput?> Function({
+  required String raceId,
+  required TrackConditionRecord? baseline,
+  required String raceDate,
+  required String? startTime,
+  required Map<String, dynamic>? pinpoint,
+  required bool isLocked,
+});
+
+Future<TrackRainInput?> _defaultTrackRainLoader({
+  required String raceId,
+  required TrackConditionRecord? baseline,
+  required String raceDate,
+  required String? startTime,
+  required Map<String, dynamic>? pinpoint,
+  required bool isLocked,
+}) {
+  return TrackRainService.load(
+    raceId: raceId,
+    baseline: baseline,
+    raceDate: raceDate,
+    startTime: startTime,
+    pinpoint: pinpoint,
+    isLocked: isLocked,
+  );
+}
+
 /// 取得済みDBから、レース1本ぶんのAI分析用データを収集するサービス。
 ///
 /// - 新規スクレイピングはしない（すでに保存済みのデータのみを読む）。
@@ -75,6 +108,8 @@ class AiRaceDataCollector {
   final TrackConditionRepository _trackConditionRepository;
   final CoursePresetRepository _coursePresetRepository;
   final AiPinpointWeatherFetcher _weatherFetcher;
+  // [追加] 馬場予測の天気材料の見直し Step3 (v.2026.11.18+26111803)
+  final AiTrackRainLoader _trackRainLoader;
   final DateTime Function() _now;
 
   AiRaceDataCollector({
@@ -90,6 +125,8 @@ class AiRaceDataCollector {
     TrackConditionRepository? trackConditionRepository,
     CoursePresetRepository? coursePresetRepository,
     AiPinpointWeatherFetcher? weatherFetcher,
+    // [追加] 馬場予測の天気材料の見直し Step3 (v.2026.11.18+26111803)
+    AiTrackRainLoader? trackRainLoader,
     DateTime Function()? now,
   })  : _horseRepository = horseRepository ?? HorseRepository(),
         _extraRepository = extraRepository ?? HorsePastRaceExtraRepository(),
@@ -110,6 +147,7 @@ class AiRaceDataCollector {
         _coursePresetRepository =
             coursePresetRepository ?? CoursePresetRepository(),
         _weatherFetcher = weatherFetcher ?? _defaultPinpointWeatherFetcher,
+        _trackRainLoader = trackRainLoader ?? _defaultTrackRainLoader,
         _now = now ?? (() => DateTime.now());
 
   /// 取得済みDBからレース1本ぶんのデータを収集して束ねる。新規スクレイピングはしない。
@@ -269,12 +307,35 @@ class AiRaceDataCollector {
       } catch (_) {
         pinpoint = null;
       }
+      // [修正] 馬場予測の天気材料の見直し Step3: 馬場予測の起点をレース情報タブと同じ（レース当日より前の最新の測定。無ければ最新の測定）にし、起点から発走までの雨の材料を渡す (v.2026.11.18+26111803)
+      TrackConditionRecord? predictionBase;
+      try {
+        predictionBase = await _trackConditionRepository
+            .getLatestTrackConditionBeforeRaceDay(raceId: raceId, raceDate: raceDate);
+      } catch (_) {
+        predictionBase = null;
+      }
+      predictionBase ??= latestVenueTrackCondition;
+      TrackRainInput? rain;
+      try {
+        rain = await _trackRainLoader(
+          raceId: raceId,
+          baseline: predictionBase,
+          raceDate: raceDate,
+          startTime: startTime,
+          pinpoint: pinpoint,
+          isLocked: locked,
+        );
+      } catch (_) {
+        rain = null;
+      }
       weatherSnapshot = buildAiWeatherSnapshot(
         pinpoint: pinpoint,
-        baseline: latestVenueTrackCondition,
+        baseline: predictionBase,
         venueCode: raceId.substring(4, 6),
         trackType: trackType,
         raceDate: raceDate,
+        rain: rain,
       );
       if (weatherSnapshot == null) {
         weatherUnavailableReason = locked
