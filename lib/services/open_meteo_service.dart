@@ -64,6 +64,8 @@ class OpenMeteoService {
   // [追加] 通常のホストで失敗したら、この間は予備のホストを先に試す（毎回8秒待たないように） (v.2026.11.17+26111703)
   static const Duration _preferFallbackDuration = Duration(minutes: 30);
   static DateTime? _preferFallbackUntil;
+  // [追加] 馬場予測の天気材料の見直し Step2: 保存したピンポイント天気の有効期限（発走から1時間を過ぎていないレースだけ）。過ぎたら取り直し、取り直せなければ保存分を返す (v.2026.11.18+26111802)
+  static const Duration _cacheTtl = Duration(hours: 1);
 
   // [追加] 通常→予備（または予備→通常）の順に取得し、最初に200が返ったものを使う。どちらもだめなら null (v.2026.11.17+26111703)
   static Future<http.Response?> _getWithFallback(double lat, double lon) async {
@@ -92,14 +94,24 @@ class OpenMeteoService {
     final prefs = await SharedPreferences.getInstance();
     final cacheKey = 'open_meteo_$raceId';
 
+    // [修正] 馬場予測の天気材料の見直し Step2: 保存分は、発走から1時間を過ぎたレースならそのまま、そうでなければ取得から1時間以内のときだけ使う。古い保存分（取得時刻なし）は取り直す。取り直せなかったときは古い保存分を返す (v.2026.11.18+26111802)
+    Map<String, dynamic>? staleCache;
     if (!forceRefresh) {
       final cachedData = prefs.getString(cacheKey);
-      if (cachedData != null) return json.decode(cachedData);
+      if (cachedData != null) {
+        final decoded = Map<String, dynamic>.from(json.decode(cachedData) as Map);
+        if (isPastRace) return decoded;
+        final fetchedAtMs = decoded['fetchedAtMs'];
+        final isFresh = fetchedAtMs is int &&
+            DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(fetchedAtMs)) < _cacheTtl;
+        if (isFresh) return decoded;
+        staleCache = decoded;
+      }
     }
     if (isPastRace) return null;
 
     final coords = _venueCoords[venue];
-    if (coords == null) return null;
+    if (coords == null) return staleCache;
 
     final lat = coords['lat']!;
     final lon = coords['lon']!;
@@ -149,11 +161,18 @@ class OpenMeteoService {
 
         List<Map<String, dynamic>> timeline = [];
         Map<String, dynamic>? raceTimeData;
+        // [追加] 馬場予測の天気材料の見直し Step2: 馬場予測に使う1時間ごとの雨（取得した全部の時間。時刻はその1時間の終わり） (v.2026.11.18+26111802)
+        List<Map<String, dynamic>> hourlyPrecip = [];
 
         for (int i = 0; i < times.length; i++) {
           final timeStr = times[i];
           final dt = DateTime.parse(timeStr);
           final hour = dt.hour;
+          // [追加] 馬場予測の天気材料の見直し Step2: 1時間ごとの雨を全部の時間ぶん持つ (v.2026.11.18+26111802)
+          final precipValue = hourly['precipitation'][i];
+          if (precipValue is num) {
+            hourlyPrecip.add({'time': timeStr, 'mm': precipValue.toDouble()});
+          }
 
           if (dt.year == raceDate.year && dt.month == raceDate.month && dt.day == raceDate.day) {
             if (hour == targetHour && raceTimeData == null) {
@@ -187,7 +206,8 @@ class OpenMeteoService {
           }
         }
 
-        if (raceTimeData == null) return null;
+        // [修正] 馬場予測の天気材料の見直し Step2: 取れなかったときは古い保存分を返す（無ければ null） (v.2026.11.18+26111802)
+        if (raceTimeData == null) return staleCache;
 
         // [追加] 日次(週間)データのパース (v.3.0)
         final daily = data['daily'];
@@ -213,6 +233,9 @@ class OpenMeteoService {
           'daily': dailyData,
           'windAnalysis': _analyzeWindEffect(venue, raceTimeData['windDir']),
           'windDirText': _getWindDirectionText(raceTimeData['windDir']),
+          // [追加] 馬場予測の天気材料の見直し Step2: 1時間ごとの雨と取得時刻（保存の有効期限に使う） (v.2026.11.18+26111802)
+          'hourlyPrecip': hourlyPrecip,
+          'fetchedAtMs': DateTime.now().millisecondsSinceEpoch,
         };
 
         await prefs.setString(cacheKey, json.encode(result));
@@ -221,6 +244,7 @@ class OpenMeteoService {
     } catch (e) {
       debugPrint('Open-Meteo取得エラー: $e');
     }
-    return null;
+    // [修正] 馬場予測の天気材料の見直し Step2: 取れなかったときは古い保存分を返す（無ければ null） (v.2026.11.18+26111802)
+    return staleCache;
   }
 }
