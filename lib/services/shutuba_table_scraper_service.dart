@@ -76,7 +76,6 @@ class ShutubaTableScraperService {
         }
       },
       onReceivedError: (controller, request, error) {
-        // [修正] メインフレーム（ページ本体）のエラーのみをキャッチし、サブリソース（動画や広告など）のエラーは無視する (v.1.0)
         if (request.isForMainFrame == true) {
           if (!completer.isCompleted) {
             completer.completeError(
@@ -160,7 +159,6 @@ class ShutubaTableScraperService {
         }
       },
       onReceivedError: (controller, request, error) {
-        // [修正] メインフレーム（ページ本体）のエラーのみをキャッチし、サブリソース（動画や広告など）のエラーは無視する (v.1.0)
         if (request.isForMainFrame == true) {
           if (!completer.isCompleted) {
             completer.completeError(
@@ -230,6 +228,13 @@ class ShutubaTableScraperService {
     if (dirMatch != null) {
       direction = dirMatch.group(1);
       if (dirMatch.group(2) != null) courseInOut = dirMatch.group(2)!.trim();
+    } else {
+      // [修正] 枠順確定前の出馬表は「芝1600m 右 外 C」と括弧なしで書かれるため、括弧なしの書き方も読む。「直線」は「直」にそろえる (v.2026.11.18+26111805)
+      final plainDirMatch = RegExp(r'(?:芝|ダ|障)\d+m\s*(右|左|直線|直)(?:\s+([^/]+?))?\s*(?:/|$)').firstMatch(raceData01);
+      if (plainDirMatch != null) {
+        direction = plainDirMatch.group(1) == '直線' ? '直' : plainDirMatch.group(1);
+        if (plainDirMatch.group(2) != null) courseInOut = plainDirMatch.group(2)!.trim();
+      }
     }
 
     final weatherMatch = RegExp(r'天候:(\S+)').firstMatch(raceData01);
@@ -346,7 +351,6 @@ class ShutubaTableScraperService {
     if (className.contains('Icon_GradeType17')) return '2勝';
     if (className.contains('Icon_GradeType16')) return '3勝';
     if (className.contains('Icon_GradeType15')) return 'L';
-    // [修正] クラス判定の共通化 Step4: 障害重賞（Icon_GradeType10〜12）が下の Icon_GradeType1 に当たって G1 になっていたため、先に判定する。並びは race_schedule_scraper_service.dart と同じ (v.2026.10.16+26101604)
     if (className.contains('Icon_GradeType12')) return 'J.G3';
     if (className.contains('Icon_GradeType11')) return 'J.G2';
     if (className.contains('Icon_GradeType10')) return 'J.G1';
