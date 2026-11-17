@@ -56,6 +56,38 @@ class OpenMeteoService {
     }
   }
 
+  // [追加] 取得先の予備とタイムアウト。通常のホストが応答しないとき（2026-11 日本向けサーバーの障害）は予備のホストに切り替える (v.2026.11.17+26111703)
+  static const String _primaryHost = 'api.open-meteo.com';
+  static const String _fallbackHost = 'previous-runs-api.open-meteo.com';
+  static const Duration _primaryTimeout = Duration(seconds: 8);
+  static const Duration _fallbackTimeout = Duration(seconds: 20);
+  // [追加] 通常のホストで失敗したら、この間は予備のホストを先に試す（毎回8秒待たないように） (v.2026.11.17+26111703)
+  static const Duration _preferFallbackDuration = Duration(minutes: 30);
+  static DateTime? _preferFallbackUntil;
+
+  // [追加] 通常→予備（または予備→通常）の順に取得し、最初に200が返ったものを使う。どちらもだめなら null (v.2026.11.17+26111703)
+  static Future<http.Response?> _getWithFallback(double lat, double lon) async {
+    final preferFallback = _preferFallbackUntil != null && DateTime.now().isBefore(_preferFallbackUntil!);
+    final hosts = preferFallback ? [_fallbackHost, _primaryHost] : [_primaryHost, _fallbackHost];
+
+    for (final host in hosts) {
+      final isPrimary = host == _primaryHost;
+      final url = Uri.parse(generateOpenMeteoUrl(latitude: lat, longitude: lon, host: host));
+      try {
+        final response = await http.get(url).timeout(isPrimary ? _primaryTimeout : _fallbackTimeout);
+        if (response.statusCode == 200) {
+          if (isPrimary) _preferFallbackUntil = null;
+          return response;
+        }
+        debugPrint('Open-Meteo($host) 応答エラー: ${response.statusCode}');
+      } catch (e) {
+        debugPrint('Open-Meteo($host) 取得エラー: $e');
+      }
+      if (isPrimary) _preferFallbackUntil = DateTime.now().add(_preferFallbackDuration);
+    }
+    return null;
+  }
+
   static Future<Map<String, dynamic>?> fetchDetailedWeather(String venue, String targetDateStr, String startTimeStr, String raceId, {bool forceRefresh = false, bool isPastRace = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final cacheKey = 'open_meteo_$raceId';
@@ -72,11 +104,10 @@ class OpenMeteoService {
     final lat = coords['lat']!;
     final lon = coords['lon']!;
 
-    final url = Uri.parse(generateOpenMeteoUrl(latitude: lat, longitude: lon));
-
     try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
+      // [修正] 通常のホストが応答しないときは予備のホストから取る（タイムアウトつき） (v.2026.11.17+26111703)
+      final response = await _getWithFallback(lat, lon);
+      if (response != null && response.statusCode == 200) {
         final data = json.decode(response.body);
 
         final current = data['current'];

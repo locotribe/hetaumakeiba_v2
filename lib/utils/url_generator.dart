@@ -111,11 +111,13 @@ String getPakaraWoodApiUrl() {
   return 'https://pakara-keiba.com/ajax/race/get_cyoukyou_wc.php';
 }
 
+// [修正] 取得先のホストを指定できるようにした（通常は api.open-meteo.com、予備は previous-runs-api.open-meteo.com） (v.2026.11.17+26111703)
 String generateOpenMeteoUrl({
   required double latitude,
   required double longitude,
+  String host = 'api.open-meteo.com',
 }) {
-  return 'https://api.open-meteo.com/v1/forecast?'
+  return 'https://$host/v1/forecast?'
       'latitude=$latitude&'
       'longitude=$longitude&'
       'current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,weather_code&'

@@ -1145,7 +1145,33 @@ class _RaceInfoTabWidgetState extends State<RaceInfoTabWidget> with AutomaticKee
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()));
         }
-        if (!snapshot.hasData) return const SizedBox.shrink();
+        // [修正] 取得できなかったとき（通常・予備の両方が失敗）は、何も出さずに消すのではなく再試行ボタンを出す。過去のレース（当時のデータ）は従来どおり出さない (v.2026.11.17+26111703)
+        if (!snapshot.hasData) {
+          if (widget.isWeatherLocked) return const SizedBox.shrink();
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.grey.shade400),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.cloud_off, size: 18, color: Colors.grey.shade600),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('ピンポイント天気を取得できませんでした', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                ),
+                TextButton.icon(
+                  onPressed: widget.onRefreshWeather,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('再試行', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          );
+        }
 
         final data = snapshot.data!;
         final current = data['current'];
