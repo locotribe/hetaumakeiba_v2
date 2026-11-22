@@ -3,6 +3,7 @@
 // [修正] AI分析データ 過去データ馬場・読み方: 各年にレース当日のJRA発表の馬場（クッション値・含水率）を足し、先頭に「この資料の読み方」（列・記号・用語）を出す (v.2026.10.14+26101406)
 // [追加] 過去データに血統と前走: 全着順の表に血統6列（父・母・父父・父母・母父・母母）を足し、表のすぐ下に各馬の前走（その年のレースより前に実際に出走した一番新しい走）の表を出す (v.2026.10.18+26101804)
 // [追加] 過去データに父・母父別の成績: 全レースのあとに、過去の出走馬を父・母父ごとに数えた表（過去分析「ローテ・血統」タブの血統の表と同じ buildPedigreeLiftTable）を出す (v.2026.10.25+26102502)
+// [修正] AI分析データ 馬柱4列 Step3: 払戻の馬単・3連単で「5-14-7」の形で保存されている組み合わせを、全着順と合うときだけ「5→14→7」にして出す（保存データは変えない） (v.2026.11.22+26112203)
 
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_race_full_markdown_builder.dart';
 // [追加] 過去データに父・母父別の成績 (v.2026.10.25+26102502)
@@ -166,12 +167,43 @@ void _renderPastRace(
     for (final refund in r.refunds) {
       final type = bettingDict[refund.ticketTypeId] ?? '-';
       for (final p in refund.payouts) {
+        // [修正] AI分析データ 馬柱4列 Step3: 馬単・3連単は着順どおりの「→」にそろえる (v.2026.11.22+26112203)
+        final combination = _orderedCombinationText(type, p, r);
         buf.writeln(
-            '| ${_pcell(type)} | ${_pcell(_pt(p.combination))} | ${_pcell(_pt(p.amount))} | ${_pcell(_pt(p.popularity))} |');
+            '| ${_pcell(type)} | ${_pcell(_pt(combination))} | ${_pcell(_pt(p.amount))} | ${_pcell(_pt(p.popularity))} |');
       }
     }
   }
   buf.writeln();
+}
+
+// [追加] AI分析データ 馬柱4列 Step3: 馬単・3連単の組み合わせの書き方をそろえる (v.2026.11.22+26112203)
+
+/// 払戻の組み合わせの文字（[p] の combination）。馬単・3連単で「→」が無いとき（古い年の「5-14-7」の形）は、
+/// 保存してある馬番の並び（combinationNumbers。取得元の順のまま）がその年の全着順と合えば「5→14→7」にする。
+/// 合う＝並びの馬がすべて全着順にいて、着順が前から順に1着・2着以内・3着以内で、後ろの馬ほど着順が同じか下（同着を認める）。
+/// 合わないとき、ほかの券種、すでに「→」があるときは保存してある文字のまま。
+String _orderedCombinationText(String type, Payout p, RaceResult r) {
+  final needed = type == '馬単' ? 2 : (type == '3連単' ? 3 : 0);
+  if (needed == 0 || p.combination.contains('→')) return p.combination;
+  final numbers = p.combinationNumbers;
+  if (numbers.length != needed || numbers.toSet().length != needed) {
+    return p.combination;
+  }
+  final rankByNumber = <int, int>{};
+  for (final h in r.horseResults) {
+    final number = int.tryParse(h.horseNumber.trim());
+    final rank = int.tryParse(
+        RegExp(r'^\s*(\d+)').firstMatch(h.rank)?.group(1) ?? '');
+    if (number != null && rank != null) rankByNumber[number] = rank;
+  }
+  var previous = 0;
+  for (var i = 0; i < numbers.length; i++) {
+    final rank = rankByNumber[numbers[i]];
+    if (rank == null || rank > i + 1 || rank < previous) return p.combination;
+    previous = rank;
+  }
+  return numbers.join('→');
 }
 
 // [追加] 過去データに血統と前走: 各馬の前走の表 (v.2026.10.18+26101804)
