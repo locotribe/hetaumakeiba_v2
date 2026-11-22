@@ -66,6 +66,7 @@ String formatAiExportedAt(DateTime t) {
 // [修正] AI分析データ デビュー: 資料の読み方にデビューの行の説明を足した (v.2026.10.25+26102503)
 // [修正] AI分析データ 馬柱4列: 資料の読み方の「馬柱の各列」を今の17列に合わせて書き直した (v.2026.11.22+26112201)
 // [修正] AI分析データ 馬柱4列 Step2: コースの「外」の無い表記が内回りであることと、含水率の桁、調教の行末の「→ 次走」の説明を足した (v.2026.11.22+26112202)
+// [修正] AI分析データ 馬柱の小さな修正: ペースの「(-)」、「(含○%)」が芝のゴール前の値であること、pakara にも「→ 次走」が付くこと、取消・除外の注記の説明を足した (v.2026.11.22+26112204)
 String _aiInstructionHeader() {
   return '''# この資料の使い方（AIへの依頼）
 
@@ -77,8 +78,8 @@ String _aiInstructionHeader() {
 - スピード指数: ベスト/近走平均/トレンド(正=上昇,負=下降)/信頼度(0-1)(サンプル走数)。
 - 展開指数: テン加速/末脚/スタミナ(各0-1)/脚質(逃げ・先行・差し・追込・自在 等)。
 - 脚質の内訳: 過去走の脚質ごとの割合（逃げ・先行・差し・追込の4つで100%）・着度数(1着-2着-3着-着外)・勝率。マクリは割合に含めず、回数と着度数・勝率を末尾の括弧に別に書く（マクリの無い馬は省略）。
-- 馬柱の各列: 左から 日付 / レース（レース名(格)。長い名前は途中で切れていることがある） / 距離馬場（芝・ダ・障と距離(m)と馬場状態。例「芝1600良(ク9.80)」。芝の走の括弧はその日のJRA発表のクッション値で、クッション値の無い日は含水率を「(含○%)」で付ける。ダートの走には付けない） / 頭数 / 枠馬番（枠-馬番。枠の無い外国の走は「--馬番」） / 人気着（例「3人1着」＝3番人気で1着） / 馬体重（kg。括弧は前走からの増減。計不=計量不能） / 騎手 / タイム(着差) / 通過/上り（コーナー通過順/上り3F） / ペース（そのレースの前半3F-後半3F と [S/M/H]=スロー/ミドル/ハイ） / 指数/馬場（タイム指数/馬場指数。どちらもnetkeibaの値。タイム指数は大きいほど優秀。馬場指数はその日の馬場の速さで、プラス=時計の掛かる馬場、マイナス=時計の出やすい馬場、0に近いほど水準の馬場。レース後の水曜に出るので、直近の走は「-」のことがある） / 賞金（万円。netkeibaの賞金列で重賞は付加賞込み、外国のレースは空） / 開催（例「5京都6」＝5回京都6日目。地方・外国は競馬場名で、netkeibaの表記のまま。長い名前は途中で切れていることがあり、国名のこともある） / コース（例「芝右 外1600m」＝芝・右回り・外回り・1600m、「ダ左1600m」＝ダート・左回り・1600m。過去データの「コース・天候・馬場」と同じ形（netkeibaの書き方）で、外回りだけ「外」を付け、内回りと内外の区別の無いコースは何も付けない。内回り・外回りのある競馬場（京都・阪神・中山・新潟など）で「外」の無い表記（例 京都の「芝右1600m」）は内回り。新潟の直線は「芝直線1000m」。障害の走と、分からない走は「-」） / 斤量（kg） / 含水率（その日のJRA発表の含水率(%)を「ゴール前/4角」で、小数2桁。芝の走は芝、ダートの走はダートの値。発表の無い古い走・地方・外国・障害の走は「-」）。
-- 調教: 日付(YYYYMMDD) 追切場所 計測時刻(HHmm) 馬場 時計(6F-5F-4F-3F-2F-1Fの順・空欄は-。6F〜2F はその地点からゴールまでの時計、1F は最後の200mの時計。単位は秒) 脚色 評価 併せ馬。調教タイム(pakara) は「日付 コース@トレセン」と同じ並びの時計。行の末尾の「→ 次走 日付 レース名」は、その調教の日より後で、いちばん早く出走した走（取消・除外は飛ばす。馬柱の日付・レース名と同じ）。前走より後の調教は「→ 次走 今回」（今回のレースに向けた調教）。戦績に直近の走が取り込まれていないと、次走を取り違えることがある。
+- 馬柱の各列: 左から 日付 / レース（レース名(格)。長い名前は途中で切れていることがある） / 距離馬場（芝・ダ・障と距離(m)と馬場状態。例「芝1600良(ク9.80)」。芝の走の括弧はその日のJRA発表のクッション値で、クッション値の無い日（2020年9月より前）は芝のゴール前の含水率を「(含○%)」（小数2桁）で付ける。ダートの走には付けない） / 頭数 / 枠馬番（枠-馬番。枠の無い外国の走は「--馬番」） / 人気着（例「3人1着」＝3番人気で1着） / 馬体重（kg。括弧は前走からの増減。計不=計量不能） / 騎手 / タイム(着差) / 通過/上り（コーナー通過順/上り3F） / ペース（そのレースの前半3F-後半3F と [S/M/H]=スロー/ミドル/ハイ。元データに前半（または後半）3Fの無い走は、その側を「(-)」（例「(-)-36.0」）、両方無ければ「-」） / 指数/馬場（タイム指数/馬場指数。どちらもnetkeibaの値。タイム指数は大きいほど優秀。馬場指数はその日の馬場の速さで、プラス=時計の掛かる馬場、マイナス=時計の出やすい馬場、0に近いほど水準の馬場。レース後の水曜に出るので、直近の走は「-」のことがある） / 賞金（万円。netkeibaの賞金列で重賞は付加賞込み、外国のレースは空） / 開催（例「5京都6」＝5回京都6日目。地方・外国は競馬場名で、netkeibaの表記のまま。長い名前は途中で切れていることがあり、国名のこともある） / コース（例「芝右 外1600m」＝芝・右回り・外回り・1600m、「ダ左1600m」＝ダート・左回り・1600m。過去データの「コース・天候・馬場」と同じ形（netkeibaの書き方）で、外回りだけ「外」を付け、内回りと内外の区別の無いコースは何も付けない。内回り・外回りのある競馬場（京都・阪神・中山・新潟など）で「外」の無い表記（例 京都の「芝右1600m」）は内回り。新潟の直線は「芝直線1000m」。障害の走と、分からない走は「-」） / 斤量（kg） / 含水率（その日のJRA発表の含水率(%)を「ゴール前/4角」で、小数2桁。芝の走は芝、ダートの走はダートの値。発表の無い古い走・地方・外国・障害の走は「-」）。
+- 調教: 日付(YYYYMMDD) 追切場所 計測時刻(HHmm) 馬場 時計(6F-5F-4F-3F-2F-1Fの順・空欄は-。6F〜2F はその地点からゴールまでの時計、1F は最後の200mの時計。単位は秒) 脚色 評価 併せ馬。調教タイム(pakara) は「日付 コース@トレセン」と同じ並びの時計。調教・調教タイム(pakara) の行の末尾の「→ 次走 日付 レース名」は、その調教の日より後で、いちばん早く出走した走（取消・除外は飛ばす。馬柱の日付・レース名と同じ）。前走より後の調教は「→ 次走 今回」（今回のレースに向けた調教）。その調教の日と次走の間に取消・除外の走があれば「（その前に除外：日付 レース名）」（取消は「その前に取消：…」。2走以上は「、」でつなぐ）を付ける。この調教の後に出走を予定していたが、取消・除外になった走（本来はその走に向けた調教）。戦績に直近の走が取り込まれていないと、次走を取り違えることがある。
 - 馬柱の用語: 性齢の セ=せん馬。着順に数字以外が入ることがある（取=取消、除=除外、中=競走中止、失=失格）。タイム(着差) の着差は勝ち馬との秒差で、1着は2着との差をマイナスで書く。通過は各コーナーの順位を-で区切ったもの（左が最初のコーナー）。上り3F は最後の600mの時計。
 - 調教の用語: 追切場所は 栗坂/美坂=栗東/美浦の坂路、ＣＷ=栗東のウッドチップコース、南Ｗ=美浦の南ウッドチップコース、芝=芝コース、ダ=ダートコース、Ｐ=ポリトラック。脚色は 馬也=馬なり（追わずに走らせる）、強め=少し追う、一杯=目一杯に追う、仕掛=ゴール前などで追い出す。評価は A＞B＞C＞D。併せ馬の「先着」「併入」「遅れ」は一緒に走った馬との比較で、秒数はその差。「一番時計」はその日その場所でいちばん速い時計。
 - 馬場の用語: 馬場状態は 良＜稍重＜重＜不良 の順に水分が多い。クッション値は芝の反発の強さで、JRAの目安は 7未満=軟らかめ、7〜8=やや軟らかめ、8〜10=標準、10〜12=やや硬め、12以上=硬め。含水率(%)はゴール前(G)と4コーナー(4C)の値で、高いほど湿っている（芝とダートで値の幅が違う）。
@@ -392,19 +393,21 @@ void _renderHorse(
     buf.writeln('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (final r in _take(perf, pastLimit)) {
       final ex = d?.extrasByRaceId[r.raceId];
+      // [修正] AI分析データ 馬柱の小さな修正: 元データで前半・後半3Fが「0.0」の側は「(-)」にする (v.2026.11.22+26112204)
       final pace =
-          '${_cell(_t(r.pace))}${ex?.paceMark != null ? '[${ex!.paceMark}]' : ''}';
+          '${_cell(_pastPaceLabel(r.pace))}${ex?.paceMark != null ? '[${ex!.paceMark}]' : ''}';
       final index = '${_i(ex?.timeIndex)}/${_i(ex?.trackIndex)}';
       // [追加] T4a: 過去走の馬場(クッション値/含水率)を距離馬場セルに付記
       final tc = d?.pastTrackByRaceId[r.raceId];
-      final moist = tc?.moistureTurfGoal ?? tc?.moistureDirtGoal;
+      // [修正] AI分析データ 馬柱の小さな修正: 「(含○%)」は芝のゴール前の含水率だけ（ダートの値に入れ替えない）。小数2桁 (v.2026.11.22+26112204)
+      final moist = tc?.moistureTurfGoal;
       // [修正] AI分析データ 馬柱4列: ダートの走には括弧（その日の芝のクッション値・含水率）を付けない。ダートの含水率は含水率の列に出す (v.2026.11.22+26112201)
       final isDirtRun = r.distance.trim().startsWith('ダ');
       final trackTag = (tc == null || isDirtRun)
           ? ''
           : (tc.cushionValue != null
               ? '(ク${_d(tc.cushionValue)})'
-              : (moist != null ? '(含${_d(moist)}%)' : ''));
+              : (moist != null ? '(含${_f(moist, 2)}%)' : ''));
       final track =
           '${_cell(_t(r.distance))}${_cell(_t(r.trackCondition))}$trackTag';
       // [追加] AI分析データ 馬柱4列: 開催・コース・斤量・含水率 (v.2026.11.22+26112201)
@@ -491,8 +494,11 @@ void _renderHorse(
       buf.writeln();
       buf.writeln('#### 調教タイム(pakara)');
       for (final t in tt) {
+        // [追加] AI分析データ 馬柱の小さな修正: 調教と同じ「→ 次走」を行の末尾に付ける (v.2026.11.22+26112204)
+        final nextRun = _trainingNextRunText(
+            t.trainingDate, perf, currentRaceId, currentRaceDay);
         buf.writeln(
-            '- ${_cell(_t(t.trainingDate))} ${_cell(_t(t.trackType))}@${_cell(_t(t.location))} 6F-1F: ${_d(t.f6)}-${_d(t.f5)}-${_d(t.f4)}-${_d(t.f3)}-${_d(t.f2)}-${_d(t.f1)}');
+            '- ${_cell(_t(t.trainingDate))} ${_cell(_t(t.trackType))}@${_cell(_t(t.location))} 6F-1F: ${_d(t.f6)}-${_d(t.f5)}-${_d(t.f4)}-${_d(t.f3)}-${_d(t.f2)}-${_d(t.f1)}$nextRun');
       }
     }
   }
@@ -811,10 +817,12 @@ String? _ymdDigits(String? date) {
   return '${m.group(1)}${m.group(2)!.padLeft(2, '0')}${m.group(3)!.padLeft(2, '0')}';
 }
 
+// [修正] AI分析データ 馬柱の小さな修正: 調教の日と次走の間に取消・除外の走があれば「（その前に除外：日付 レース名）」を付ける (v.2026.11.22+26112204)
 /// 調教の行の末尾に付ける「 → 次走 日付 レース名」。
 /// 次走＝調教の日（[trainingDate]）より後の日付で、いちばん早く出走した走（取消・除外・着順が空欄の走は飛ばす）。
 /// その走が今回のレース、または後に出走した走が無く調教の日が今回のレースの日以前なら「 → 次走 今回」。
 /// 調教の日が読めないときと、今回のレースより後の調教で次走が無いときは何も付けない。
+/// 調教の日より後で次走（次走が今回なら今回のレースの日）より前に取消・除外の走があれば、末尾に「（その前に除外：日付 レース名）」を付ける（取消は「取消」。複数は古い順に「、」でつなぐ）。
 String _trainingNextRunText(String trainingDate, List<HorseRaceRecord> perf,
     String currentRaceId, String? currentRaceDay) {
   final trainingDay = _ymdDigits(trainingDate);
@@ -830,14 +838,58 @@ String _trainingNextRunText(String trainingDate, List<HorseRaceRecord> perf,
       nextDay = day;
     }
   }
-  if (next != null && next.raceId != currentRaceId) {
-    return ' → 次走 ${_cell(_t(next.date))} ${_cell(_t(next.raceName))}';
-  }
   final raceDay = _ymdDigits(currentRaceDay);
-  if (next != null || (raceDay != null && trainingDay.compareTo(raceDay) <= 0)) {
-    return ' → 次走 今回';
+  final String base;
+  final String? untilDay;
+  if (next != null && next.raceId != currentRaceId) {
+    base = ' → 次走 ${_cell(_t(next.date))} ${_cell(_t(next.raceName))}';
+    untilDay = nextDay;
+  } else if (next != null ||
+      (raceDay != null && trainingDay.compareTo(raceDay) <= 0)) {
+    base = ' → 次走 今回';
+    untilDay = raceDay;
+  } else {
+    return '';
   }
-  return '';
+  return '$base${_scratchedBetweenText(perf, trainingDay, untilDay, currentRaceId)}';
+}
+
+/// [fromDay] より後で [untilDay] より前（[untilDay] が null なら上限なし）の取消・除外の走を「（その前に除外：日付 レース名）」の形にする。無ければ空文字。
+String _scratchedBetweenText(List<HorseRaceRecord> perf, String fromDay,
+    String? untilDay, String currentRaceId) {
+  final found = <MapEntry<String, String>>[];
+  for (final r in perf) {
+    if (r.raceId == currentRaceId) continue;
+    final rank = r.rank.trim();
+    final String label;
+    if (rank.contains('除')) {
+      label = '除外';
+    } else if (rank.contains('取')) {
+      label = '取消';
+    } else {
+      continue;
+    }
+    final day = _ymdDigits(r.date);
+    if (day == null || day.compareTo(fromDay) <= 0) continue;
+    if (untilDay != null && day.compareTo(untilDay) >= 0) continue;
+    found.add(MapEntry(
+        day, '$label：${_cell(_t(r.date))} ${_cell(_t(r.raceName))}'));
+  }
+  if (found.isEmpty) return '';
+  found.sort((a, b) => a.key.compareTo(b.key));
+  return '（その前に${found.map((e) => e.value).join('、')}）';
+}
+
+// [追加] AI分析データ 馬柱の小さな修正: 馬柱のペース（例「34.1-36.3」）。元データで前半・後半3Fが0（「0.0」）の側は「(-)」、両方0なら「-」。形が読めないときは元の文字のまま (v.2026.11.22+26112204)
+String _pastPaceLabel(String? pace) {
+  final text = _t(pace);
+  final m = RegExp(r'^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$').firstMatch(text);
+  if (m == null) return text;
+  bool missing(String v) => (double.tryParse(v) ?? 0) == 0;
+  final front = missing(m.group(1)!);
+  final back = missing(m.group(2)!);
+  if (front && back) return '-';
+  return '${front ? '(-)' : m.group(1)}-${back ? '(-)' : m.group(2)}';
 }
 
 /// 通算獲得賞金の行（過去成績の賞金列の合計）。
