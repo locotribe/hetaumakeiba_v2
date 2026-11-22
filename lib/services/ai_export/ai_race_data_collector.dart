@@ -13,6 +13,8 @@ import 'package:hetaumakeiba_v2/db/repositories/race_memo_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/user_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/track_condition_repository.dart';
 import 'package:hetaumakeiba_v2/db/repositories/course_preset_repository.dart';
+// [追加] AI分析データ 馬柱4列: 過去走のレース結果（コース表記）を読む (v.2026.11.22+26112201)
+import 'package:hetaumakeiba_v2/db/repositories/race_repository.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_course_profile.dart';
 import 'package:hetaumakeiba_v2/logic/ai_export/ai_weather_snapshot.dart';
 import 'package:hetaumakeiba_v2/logic/analysis/course_preset_id_resolver.dart';
@@ -107,6 +109,8 @@ class AiRaceDataCollector {
   final UserRepository _userRepository;
   final TrackConditionRepository _trackConditionRepository;
   final CoursePresetRepository _coursePresetRepository;
+  // [追加] AI分析データ 馬柱4列 (v.2026.11.22+26112201)
+  final RaceRepository _raceRepository;
   final AiPinpointWeatherFetcher _weatherFetcher;
   // [追加] 馬場予測の天気材料の見直し Step3 (v.2026.11.18+26111803)
   final AiTrackRainLoader _trackRainLoader;
@@ -124,6 +128,8 @@ class AiRaceDataCollector {
     UserRepository? userRepository,
     TrackConditionRepository? trackConditionRepository,
     CoursePresetRepository? coursePresetRepository,
+    // [追加] AI分析データ 馬柱4列 (v.2026.11.22+26112201)
+    RaceRepository? raceRepository,
     AiPinpointWeatherFetcher? weatherFetcher,
     // [追加] 馬場予測の天気材料の見直し Step3 (v.2026.11.18+26111803)
     AiTrackRainLoader? trackRainLoader,
@@ -146,6 +152,7 @@ class AiRaceDataCollector {
             trackConditionRepository ?? TrackConditionRepository(),
         _coursePresetRepository =
             coursePresetRepository ?? CoursePresetRepository(),
+        _raceRepository = raceRepository ?? RaceRepository(),
         _weatherFetcher = weatherFetcher ?? _defaultPinpointWeatherFetcher,
         _trackRainLoader = trackRainLoader ?? _defaultTrackRainLoader,
         _now = now ?? (() => DateTime.now());
@@ -173,6 +180,9 @@ class AiRaceDataCollector {
     // [追加] T4a: 過去走ごとの馬場を prefix10 で収集（キャッシュで重複クエリ回避）
     final trackByPrefix10 = <String, TrackConditionRecord?>{};
     final pastTrackByHorse = <String, Map<String, TrackConditionRecord>>{};
+    // [追加] AI分析データ 馬柱4列: 過去走のレース結果のコース表記（取り込んだレースだけ）。同じレースは1回だけ読む (v.2026.11.22+26112201)
+    final raceInfoByRaceId = <String, String?>{};
+    final pastRaceInfoByHorse = <String, Map<String, String>>{};
     // [追加] 過去レースの印・メモ Step1: 過去走ごとの印・メモと、レースごとのAIの予想・レース総評（同じレースは1回だけ読む） (v.2026.10.12+26101203)
     final pastNotesByHorse = <String, Map<String, AiPastRaceNote>>{};
     final pastRaceMemos = <String, AiPastRaceMemo>{};
@@ -204,6 +214,22 @@ class AiRaceDataCollector {
         if (tc != null) pastTrack[rid] = tc;
       }
       pastTrackByHorse[horseId] = pastTrack;
+
+      // [追加] AI分析データ 馬柱4列: 過去走のレース結果からコース表記（raceInfo）を読む。まだ読んでいないレースだけを問い合わせる (v.2026.11.22+26112201)
+      final unreadRaceIds =
+          raceIds.where((rid) => !raceInfoByRaceId.containsKey(rid)).toList();
+      if (unreadRaceIds.isNotEmpty) {
+        final results =
+            await _raceRepository.getMultipleRaceResults(unreadRaceIds);
+        for (final rid in unreadRaceIds) {
+          final info = results[rid]?.raceInfo.trim();
+          raceInfoByRaceId[rid] = (info == null || info.isEmpty) ? null : info;
+        }
+      }
+      pastRaceInfoByHorse[horseId] = {
+        for (final rid in raceIds)
+          if (raceInfoByRaceId[rid] != null) rid: raceInfoByRaceId[rid]!,
+      };
 
       // [追加] 過去レースの印・メモ Step1: 今回のレースを除いた過去走について、印・予想メモ・回顧メモと、レースのAIの予想・レース総評を集める (v.2026.10.12+26101203)
       final pastRaceIds = raceIds.where((rid) => rid != raceId).toList();
@@ -362,6 +388,8 @@ class AiRaceDataCollector {
       // [修正] レースメモ用途分離: エクスポートはAI予想・買い目(aiPredictionMemo)を読む (v.2026.9.28+26092802)
       raceMemoText: raceMemo?.aiPredictionMemo,
       pastTrackByHorse: pastTrackByHorse,
+      // [追加] AI分析データ 馬柱4列 (v.2026.11.22+26112201)
+      pastRaceInfoByHorse: pastRaceInfoByHorse,
       // [追加] 過去レースの印・メモ Step1 (v.2026.10.12+26101203)
       pastNotesByHorse: pastNotesByHorse,
       pastRaceMemos: pastRaceMemos,
@@ -445,6 +473,8 @@ class AiRaceDataCollector {
     // [追加] 過去レースの印・メモ Step1: 今回のレース（[raceId]）のものと中身の無いものは、ここで取り除く (v.2026.10.12+26101203)
     Map<String, Map<String, AiPastRaceNote>> pastNotesByHorse = const {},
     Map<String, AiPastRaceMemo> pastRaceMemos = const {},
+    // [追加] AI分析データ 馬柱4列: 過去走のレース結果のコース表記（キー: 馬ID → 過去走のraceId） (v.2026.11.22+26112201)
+    Map<String, Map<String, String>> pastRaceInfoByHorse = const {},
   }) {
     final horses = <AiHorseData>[];
     for (final horseId in horseIds) {
@@ -466,6 +496,7 @@ class AiRaceDataCollector {
             if (entry.key != raceId && !entry.value.isEmpty)
               entry.key: entry.value,
         },
+        pastRaceInfoByRaceId: pastRaceInfoByHorse[horseId] ?? const {},
       ));
     }
     return AiRaceExportBundle(

@@ -62,6 +62,7 @@ String formatAiExportedAt(DateTime t) {
 // [修正] AI分析データ 過去データ馬場・読み方: 資料の読み方に馬柱・調教・馬場の用語の説明を足し、過去データの説明に当日の馬場と読み方を足す (v.2026.10.14+26101406)
 // [修正] 過去データに父・母父別の成績: 過去データの説明に、末尾の父・母父別の表を足した (v.2026.10.25+26102502)
 // [修正] AI分析データ デビュー: 資料の読み方にデビューの行の説明を足した (v.2026.10.25+26102503)
+// [修正] AI分析データ 馬柱4列: 資料の読み方の「馬柱の各列」を今の17列に合わせて書き直した (v.2026.11.22+26112201)
 String _aiInstructionHeader() {
   return '''# この資料の使い方（AIへの依頼）
 
@@ -73,7 +74,7 @@ String _aiInstructionHeader() {
 - スピード指数: ベスト/近走平均/トレンド(正=上昇,負=下降)/信頼度(0-1)(サンプル走数)。
 - 展開指数: テン加速/末脚/スタミナ(各0-1)/脚質(逃げ・先行・差し・追込・自在 等)。
 - 脚質の内訳: 過去走の脚質ごとの割合（逃げ・先行・差し・追込の4つで100%）・着度数(1着-2着-3着-着外)・勝率。マクリは割合に含めず、回数と着度数・勝率を末尾の括弧に別に書く（マクリの無い馬は省略）。
-- 馬柱の各列: 日付 / レース(格) / 距離馬場 / 枠-馬番 / 人気-着順 / タイム(着差) / 通過(コーナー順)-上り3F / ペース(前半-後半 と [S/M/H]=スロー/ミドル/ハイ) / 指数(タイム指数, 大きいほど優秀) / 賞金(万円。netkeibaの賞金列で重賞は付加賞込み、外国のレースは空)。
+- 馬柱の各列: 左から 日付 / レース（レース名(格)。長い名前は途中で切れていることがある） / 距離馬場（芝・ダ・障と距離(m)と馬場状態。例「芝1600良(ク9.80)」。芝の走の括弧はその日のJRA発表のクッション値で、クッション値の無い日は含水率を「(含○%)」で付ける。ダートの走には付けない） / 頭数 / 枠馬番（枠-馬番。枠の無い外国の走は「--馬番」） / 人気着（例「3人1着」＝3番人気で1着） / 馬体重（kg。括弧は前走からの増減。計不=計量不能） / 騎手 / タイム(着差) / 通過/上り（コーナー通過順/上り3F） / ペース（そのレースの前半3F-後半3F と [S/M/H]=スロー/ミドル/ハイ） / 指数/馬場（タイム指数/馬場指数。どちらもnetkeibaの値。タイム指数は大きいほど優秀。馬場指数はその日の馬場の速さで、プラス=時計の掛かる馬場、マイナス=時計の出やすい馬場、0に近いほど水準の馬場。レース後の水曜に出るので、直近の走は「-」のことがある） / 賞金（万円。netkeibaの賞金列で重賞は付加賞込み、外国のレースは空） / 開催（例「5京都6」＝5回京都6日目。地方・外国は競馬場名で、netkeibaの表記のまま。長い名前は途中で切れていることがあり、国名のこともある） / コース（例「芝右 外1600m」＝芝・右回り・外回り・1600m、「ダ左1600m」＝ダート・左回り・1600m。過去データの「コース・天候・馬場」と同じ形で、内回り・外回りの区別の無いコースは書かない。障害の走と、分からない走は「-」） / 斤量（kg） / 含水率（その日のJRA発表の含水率(%)を「ゴール前/4角」で。芝の走は芝、ダートの走はダートの値。発表の無い古い走・地方・外国・障害の走は「-」）。
 - 調教: 日付(YYYYMMDD) 追切場所 計測時刻(HHmm) 馬場 時計(6F-5F-4F-3F-2F-1Fの順・空欄は-。6F〜2F はその地点からゴールまでの時計、1F は最後の200mの時計。単位は秒) 脚色 評価 併せ馬。調教タイム(pakara) は「日付 コース@トレセン」と同じ並びの時計。
 - 馬柱の用語: 性齢の セ=せん馬。着順に数字以外が入ることがある（取=取消、除=除外、中=競走中止、失=失格）。タイム(着差) の着差は勝ち馬との秒差で、1着は2着との差をマイナスで書く。通過は各コーナーの順位を-で区切ったもの（左が最初のコーナー）。上り3F は最後の600mの時計。
 - 調教の用語: 追切場所は 栗坂/美坂=栗東/美浦の坂路、ＣＷ=栗東のウッドチップコース、南Ｗ=美浦の南ウッドチップコース、芝=芝コース、ダ=ダートコース、Ｐ=ポリトラック。脚色は 馬也=馬なり（追わずに走らせる）、強め=少し追う、一杯=目一杯に追う、仕掛=ゴール前などで追い出す。評価は A＞B＞C＞D。併せ馬の「先着」「併入」「遅れ」は一緒に走った馬との比較で、秒数はその差。「一番時計」はその日その場所でいちばん速い時計。
@@ -377,9 +378,10 @@ void _renderHorse(
     buf.writeln('（過去成績データなし）');
   } else {
     // [修正] AI分析データ 天気・コース追加 Step4: 末尾に賞金(万円)の列を追加 (v.2026.10.11+26101104)
+    // [修正] AI分析データ 馬柱4列: 右端に 開催・コース・斤量・含水率 の4列を足した（既存の13列の位置と書き方は変えない） (v.2026.11.22+26112201)
     buf.writeln(
-        '| 日付 | レース | 距離馬場 | 頭数 | 枠馬番 | 人気着 | 馬体重 | 騎手 | タイム(着差) | 通過/上り | ペース | 指数/馬場 | 賞金(万円) |');
-    buf.writeln('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+        '| 日付 | レース | 距離馬場 | 頭数 | 枠馬番 | 人気着 | 馬体重 | 騎手 | タイム(着差) | 通過/上り | ペース | 指数/馬場 | 賞金(万円) | 開催 | コース | 斤量 | 含水率 |');
+    buf.writeln('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (final r in _take(perf, pastLimit)) {
       final ex = d?.extrasByRaceId[r.raceId];
       final pace =
@@ -388,15 +390,21 @@ void _renderHorse(
       // [追加] T4a: 過去走の馬場(クッション値/含水率)を距離馬場セルに付記
       final tc = d?.pastTrackByRaceId[r.raceId];
       final moist = tc?.moistureTurfGoal ?? tc?.moistureDirtGoal;
-      final trackTag = tc == null
+      // [修正] AI分析データ 馬柱4列: ダートの走には括弧（その日の芝のクッション値・含水率）を付けない。ダートの含水率は含水率の列に出す (v.2026.11.22+26112201)
+      final isDirtRun = r.distance.trim().startsWith('ダ');
+      final trackTag = (tc == null || isDirtRun)
           ? ''
           : (tc.cushionValue != null
               ? '(ク${_d(tc.cushionValue)})'
               : (moist != null ? '(含${_d(moist)}%)' : ''));
       final track =
           '${_cell(_t(r.distance))}${_cell(_t(r.trackCondition))}$trackTag';
+      // [追加] AI分析データ 馬柱4列: 開催・コース・斤量・含水率 (v.2026.11.22+26112201)
+      final pastCourse = _pastCourseLabel(
+          r.distance, d?.pastRaceInfoByRaceId[r.raceId], ex?.courseSection);
+      final pastMoisture = _pastMoistureLabel(r.distance, tc);
       buf.writeln(
-          '| ${_cell(_t(r.date))} | ${_cell(_t(r.raceName))} | $track | ${_cell(_t(r.numberOfHorses))} | ${_cell(_t(r.frameNumber))}-${_cell(_t(r.horseNumber))} | ${_cell(_t(r.popularity))}人${_cell(_t(r.rank))}着 | ${_cell(_t(r.horseWeight))} | ${_cell(_t(r.jockey))} | ${_cell(_t(r.time))}(${_cell(_t(r.margin))}) | ${_cell(_t(r.cornerPassage))}/${_cell(_t(r.agari))} | $pace | $index | ${formatAiPrizeMan(parsePrizeInThousandYen(r.prizeMoney))} |');
+          '| ${_cell(_t(r.date))} | ${_cell(_t(r.raceName))} | $track | ${_cell(_t(r.numberOfHorses))} | ${_cell(_t(r.frameNumber))}-${_cell(_t(r.horseNumber))} | ${_cell(_t(r.popularity))}人${_cell(_t(r.rank))}着 | ${_cell(_t(r.horseWeight))} | ${_cell(_t(r.jockey))} | ${_cell(_t(r.time))}(${_cell(_t(r.margin))}) | ${_cell(_t(r.cornerPassage))}/${_cell(_t(r.agari))} | $pace | $index | ${formatAiPrizeMan(parsePrizeInThousandYen(r.prizeMoney))} | ${_cell(_t(r.venue))} | ${_cell(pastCourse)} | ${_cell(_t(r.carriedWeight))} | $pastMoisture |');
     }
   }
 
@@ -717,6 +725,67 @@ void _renderWeatherSection(StringBuffer buf, PredictionRaceData raceData,
     }
   }
   buf.writeln();
+}
+
+// [追加] AI分析データ 馬柱4列: 馬柱のコース・含水率の列を作る純粋関数 (v.2026.11.22+26112201)
+
+/// 過去走の距離（例「芝1600」「ダ1800」「障3000」）から、芝・ダ・障と距離(m)の数字を読む。読めなければ null。
+({String surface, String meters})? _pastSurfaceAndMeters(String distance) {
+  final m = RegExp(r'^\s*(芝|ダ|障)\s*(\d+)').firstMatch(distance);
+  if (m == null) return null;
+  return (surface: m.group(1)!, meters: m.group(2)!);
+}
+
+/// 馬柱のコースの列（例「芝右 外1600m」「ダ左1600m」「芝直線1000m」）。
+/// 1) レース結果のコース表記（[raceInfo] を「/」で区切った中の1つ）の芝・ダと距離が戦績と合えば、それを使う。
+///    「芝右 外1600m」の形（db.netkeiba）はそのまま、「芝1600m (右 外 C)」の形（race.netkeiba）は「芝右 外1600m」の形に直す。
+/// 2) 無ければ、新聞ページの回り・区分（[courseSection]。例「右 外C」「右B」）と戦績の芝・ダ・距離から作る。
+/// どちらも柵の位置（A〜D）は書かない。どちらも無い・読めない走と、障害の走は「-」。
+String _pastCourseLabel(
+    String distance, String? raceInfo, String? courseSection) {
+  final sm = _pastSurfaceAndMeters(distance);
+  if (sm == null || sm.surface == '障') return '-';
+  String build(String direction, String? inOut) {
+    final dir = direction == '直' ? '直線' : direction;
+    return '${sm.surface}$dir${inOut == null ? '' : ' $inOut'}${sm.meters}m';
+  }
+
+  for (final part in (raceInfo ?? '').split('/')) {
+    final seg = part.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final dbForm =
+        RegExp(r'^(芝|ダ)(右|左|直線)(?: ?(内|外))?(\d+)m$').firstMatch(seg);
+    if (dbForm != null &&
+        dbForm.group(1) == sm.surface &&
+        dbForm.group(4) == sm.meters) {
+      return build(dbForm.group(2)!, dbForm.group(3));
+    }
+    final raceForm = RegExp(
+            r'^(芝|ダ)(\d+)m ?\( ?(右|左|直線|直)(?: ?(内|外))?(?: ?[A-DＡ-Ｄ])? ?\)$')
+        .firstMatch(seg);
+    if (raceForm != null &&
+        raceForm.group(1) == sm.surface &&
+        raceForm.group(2) == sm.meters) {
+      return build(raceForm.group(3)!, raceForm.group(4));
+    }
+  }
+  final section =
+      (courseSection ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
+  final cm = RegExp(r'^(右|左|直線|直)(?: ?(内|外))? ?[A-DＡ-Ｄ]?$')
+      .firstMatch(section);
+  if (cm == null) return '-';
+  return build(cm.group(1)!, cm.group(2));
+}
+
+/// 馬柱の含水率の列（例「9.30/8.90」＝ゴール前/4角）。芝の走は芝、ダートの走はダートの値。
+/// その日の測定が無い走・障害の走・距離が読めない走は「-」。片方だけ無ければ、その側を「-」にする。
+String _pastMoistureLabel(String distance, TrackConditionRecord? tc) {
+  final sm = _pastSurfaceAndMeters(distance);
+  if (sm == null || sm.surface == '障' || tc == null) return '-';
+  final isTurf = sm.surface == '芝';
+  final goal = isTurf ? tc.moistureTurfGoal : tc.moistureDirtGoal;
+  final corner4 = isTurf ? tc.moistureTurf4c : tc.moistureDirt4c;
+  if (goal == null && corner4 == null) return '-';
+  return '${_d(goal)}/${_d(corner4)}';
 }
 
 /// 通算獲得賞金の行（過去成績の賞金列の合計）。

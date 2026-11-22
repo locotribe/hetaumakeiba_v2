@@ -84,6 +84,9 @@ class AiHorseData {
   // [追加] 過去レースの印・メモ Step1: 過去走ごとの印・予想メモ・回顧メモ。キー=過去走のraceId。今回のレースと中身の無いものは入れない (v.2026.10.12+26101203)
   final Map<String, AiPastRaceNote> pastNotesByRaceId;
 
+  // [追加] AI分析データ 馬柱4列: 過去走ごとのレース結果のコース表記（例「芝右 外1600m / 天候 : 晴 / …」。レース結果をアプリに取り込んだ走だけ）。キー=過去走のraceId (v.2026.11.22+26112201)
+  final Map<String, String> pastRaceInfoByRaceId;
+
   const AiHorseData({
     required this.horseId,
     required this.performance,
@@ -96,6 +99,7 @@ class AiHorseData {
     required this.trainingTimes,
     this.pastTrackByRaceId = const {},
     this.pastNotesByRaceId = const {},
+    this.pastRaceInfoByRaceId = const {},
   });
 }
 
