@@ -10,6 +10,8 @@ import 'package:hetaumakeiba_v2/logic/ticket_aggregator.dart';
 import 'package:hetaumakeiba_v2/logic/ticket_data_logic.dart';
 import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
 import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
+import 'package:hetaumakeiba_v2/logic/combination_calculator.dart';
+import 'package:hetaumakeiba_v2/widgets/ticket/util/ticket_format.dart';
 
 class SavedTicketsListPage extends StatefulWidget {
   const SavedTicketsListPage({super.key});
@@ -1072,36 +1074,254 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
         shape: isGroupChild ? const RoundedRectangleBorder(borderRadius: BorderRadius.zero) : null,
         clipBehavior: Clip.antiAlias, // [追加] 右端の帯を角丸の内側に収める (v.2026.11.23+26112301)
         // [修正] 1枚だけのレースのカードは複数枚のレースと同じ形（右端の帯は枚数だけ）。グループ内の馬券の行は従来どおり (v.2026.11.23+26112301)
-        child: isGroupChild ? ListTile(
-          contentPadding: isGroupChild ? const EdgeInsets.fromLTRB(0, 8, 16, 8) : null,
-          isThreeLine: true,
-          title: isGroupChild ? null : Text(item.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)), // グループ内ならタイトル非表示
-          subtitle: Text(item.displaySubtitle),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('$totalAmount円', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54, height: 1.2)),
-              if (item.raceResult != null) ...[
-                RichText(
-                  text: TextSpan(
-                    style: TextStyle(fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily),
-                    children: <TextSpan>[
-                      TextSpan(text: '${payout + refund}円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isHit ? Colors.green.shade700 : Colors.black, height: 1.2)),
-                      if (refund > 0)
-                        TextSpan(text: ' (返$refund)', style: const TextStyle(fontSize: 11, color: Colors.black54, height: 1.1)),
-                    ],
-                  ),
-                ),
-                Text('${balance >= 0 ? '+' : ''}$balance円', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: balance > 0 ? Colors.blue.shade700 : (balance < 0 ? Colors.red.shade700 : Colors.black), height: 1.2)),
-              ] else
-                const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
-            ],
-          ),
+        // [修正] グループ内の馬券の行を、1行目＝馬券の種類／2行目＝購入・払戻・収支／3行目〜＝買い目の数字（馬券と同じ記号）にした (v.2026.11.24+26112401)
+        child: isGroupChild ? InkWell(
           onTap: openRacePage,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+            child: _buildTicketDetailContent(
+              item,
+              totalAmount: totalAmount,
+              payout: payout,
+              refund: refund,
+              balance: balance,
+              isHit: isHit,
+            ),
+          ),
         ) : InkWell(
           onTap: openRacePage,
           child: _buildGroupHeader([item], isConfirmed: item.raceResult != null, showArrow: false),
+        ),
+      ),
+    );
+  }
+
+  // [追加] 展開した中の馬券の行の中身（馬券の種類・金額・買い目） (v.2026.11.24+26112401)
+  Widget _buildTicketDetailContent(
+    TicketListItem item, {
+    required int totalAmount,
+    required int payout,
+    required int refund,
+    required int balance,
+    required bool isHit,
+  }) {
+    String formatMoney(int amount) {
+      return amount.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    }
+
+    final bool isConfirmed = item.raceResult != null;
+    final Color balanceColor = balance > 0 ? Colors.blue.shade700 : (balance < 0 ? Colors.red.shade700 : Colors.black);
+    final String payoutText = refund > 0
+        ? '${formatMoney(payout + refund)}（返${formatMoney(refund)}）'
+        : formatMoney(payout + refund);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _ticketTypeLabel(item),
+          style: const TextStyle(fontSize: 13, color: Color(0xFF333333)),
+        ),
+        const SizedBox(height: 3),
+        Row(
+          children: [
+            _buildAmountField(
+              '購入',
+              formatMoney(totalAmount),
+              const TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+            _buildAmountField(
+              '払戻',
+              isConfirmed ? payoutText : '未確定',
+              isConfirmed
+                  ? TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isHit ? Colors.green.shade700 : Colors.black87)
+                  : const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            _buildAmountField(
+              '収支',
+              isConfirmed ? '${balance >= 0 ? '+' : ''}${formatMoney(balance)}円' : '-',
+              isConfirmed
+                  ? TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: balanceColor)
+                  : const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 3,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: _buildBetTokens(item),
+        ),
+      ],
+    );
+  }
+
+  // [追加] 「ラベル 金額」の1項目（レースのカードの2行目と同じ形） (v.2026.11.24+26112401)
+  Widget _buildAmountField(String label, String value, TextStyle valueStyle) {
+    return Expanded(
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 11, color: Colors.black45)),
+              const SizedBox(width: 4),
+              Text(value, style: valueStyle),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // [追加] 馬券の種類の表示（応援馬券は「応援馬券」、それ以外は券種を「・」でつなぎ、通常以外は買い方を付ける。マルチは買い目の札で示す） (v.2026.11.24+26112401)
+  String _ticketTypeLabel(TicketListItem item) {
+    final String method = item.parsedTicket['方式'] as String? ?? '';
+    final List<dynamic> purchases = item.parsedTicket['購入内容'] as List<dynamic>? ?? [];
+
+    String label;
+    if (method == '応援馬券') {
+      label = '応援馬券';
+    } else {
+      final types = purchases
+          .map((p) => bettingDict[(p as Map<String, dynamic>)['式別']] ?? '')
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .join('・');
+      String methodText = method;
+      if (method == 'ながし' && purchases.isNotEmpty) {
+        final first = purchases.first as Map<String, dynamic>;
+        methodText = first['ながし種別'] as String? ?? method;
+      }
+      label = (methodText.isEmpty || methodText == '通常') ? types : '$types $methodText';
+    }
+
+    // 同じ馬券が複数あるときの「(2)」などの番号は、従来の表示（displaySubtitle の1行目の末尾）から引き継ぐ
+    final firstLine = item.displaySubtitle.split('\n').first;
+    final duplicateMatch = RegExp(r' \((\d+)\)$').firstMatch(firstLine);
+    if (duplicateMatch != null) {
+      label += ' (${duplicateMatch.group(1)})';
+    }
+    return label;
+  }
+
+  // [追加] 買い目の数字・記号・マルチの札・応援馬券の馬名を並べる (v.2026.11.24+26112401)
+  List<Widget> _buildBetTokens(TicketListItem item) {
+    final String method = item.parsedTicket['方式'] as String? ?? '';
+    final List<dynamic> purchases = item.parsedTicket['購入内容'] as List<dynamic>? ?? [];
+    final List<Widget> tokens = [];
+
+    List<int> toIntList(dynamic value) {
+      if (value is List) return value.whereType<int>().toList();
+      if (value is int) return [value];
+      return [];
+    }
+
+    // 応援馬券：馬番と馬名（馬名はレース結果があるときだけ）
+    if (method == '応援馬券') {
+      if (purchases.isEmpty) return tokens;
+      final numbers = toIntList((purchases.first as Map<String, dynamic>)['馬番']);
+      if (numbers.isEmpty) return tokens;
+      final horseNumber = numbers.first;
+      tokens.add(_buildHorseNumberBox(horseNumber));
+      final raceResult = item.raceResult;
+      if (raceResult != null) {
+        for (final horse in raceResult.horseResults) {
+          if (horse.horseNumber.trim() == horseNumber.toString()) {
+            tokens.add(Padding(
+              padding: const EdgeInsets.only(left: 3),
+              child: Text(
+                horse.horseName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF333333)),
+              ),
+            ));
+            break;
+          }
+        }
+      }
+      return tokens;
+    }
+
+    for (int index = 0; index < purchases.length; index++) {
+      final purchase = purchases[index] as Map<String, dynamic>;
+      final String shikibetsu = bettingDict[purchase['式別']] ?? '';
+      List<List<int>> groups = [];
+      String symbol = '';
+
+      if (purchase.containsKey('軸')) {
+        // ながし（3連単以外）：軸と相手。馬単の2着ながしは相手が先
+        final axis = toIntList(purchase['軸']);
+        final opponents = toIntList(purchase['相手']);
+        groups = purchase['ながし'] == '2着ながし' ? [opponents, axis] : [axis, opponents];
+        symbol = getHorseNumberSymbol(shikibetsu, 'ながし');
+      } else {
+        final horseNumbers = purchase['馬番'];
+        if (horseNumbers is List && horseNumbers.isNotEmpty && horseNumbers.first is List) {
+          // フォーメーション・3連単のながし：着順ごとの組
+          groups = horseNumbers.map((g) => toIntList(g)).where((g) => g.isNotEmpty).toList();
+          symbol = getHorseNumberSymbol(shikibetsu, method == 'フォーメーション' ? 'フォーメーション' : 'ながし');
+        } else if (method == 'ボックス') {
+          // ボックス：記号なしで並べる
+          groups = [toIntList(horseNumbers)];
+        } else {
+          // 通常：1頭ずつ記号でつなぐ
+          groups = toIntList(horseNumbers).map((n) => [n]).toList();
+          symbol = getHorseNumberSymbol(shikibetsu, '通常', uraStatus: purchase['ウラ'] as String?);
+        }
+      }
+
+      if (index > 0 && groups.isNotEmpty) {
+        tokens.add(const SizedBox(width: 8));
+      }
+      for (int g = 0; g < groups.length; g++) {
+        if (g > 0 && symbol.isNotEmpty) {
+          tokens.add(Text(symbol, style: const TextStyle(fontSize: 12, color: Color(0xFF333333))));
+        }
+        for (final number in groups[g]) {
+          tokens.add(_buildHorseNumberBox(number));
+        }
+      }
+      if (purchase['マルチ'] == 'あり') {
+        tokens.add(Container(
+          margin: const EdgeInsets.only(left: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFF222222),
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: const Text('マルチ', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+        ));
+      }
+    }
+    return tokens;
+  }
+
+  // [追加] 四角で囲んだ馬番 (v.2026.11.24+26112401)
+  Widget _buildHorseNumberBox(int number) {
+    // 幅は数字に合わせる（最小22）。alignment を付けると横幅いっぱいに広がるため、widthFactor: 1 の Align で中央に置く
+    return Container(
+      constraints: const BoxConstraints(minWidth: 22),
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFF333333), width: 1.5),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Align(
+        widthFactor: 1.0,
+        child: Text(
+          '$number',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, height: 1),
         ),
       ),
     );
