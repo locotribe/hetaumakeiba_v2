@@ -8,6 +8,8 @@ import 'package:hetaumakeiba_v2/screens/race_page.dart';
 import 'package:hetaumakeiba_v2/models/ticket_list_item.dart';
 import 'package:hetaumakeiba_v2/logic/ticket_aggregator.dart';
 import 'package:hetaumakeiba_v2/logic/ticket_data_logic.dart';
+import 'package:hetaumakeiba_v2/screens/qr_scanner_page.dart';
+import 'package:hetaumakeiba_v2/screens/gallery_qr_scanner_page.dart';
 
 class SavedTicketsListPage extends StatefulWidget {
   const SavedTicketsListPage({super.key});
@@ -22,6 +24,15 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
   bool _isYearSummaryExpanded = false;
   bool _isMonthTypeStatsExpanded = false;
+
+  // [追加] 1つにまとめたスクロールの制御と、縮んだ月サマリーを出すかの判定 (v.2026.11.23+26112301)
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _scrollAreaKey = GlobalKey();
+  final GlobalKey _monthBannerKey = GlobalKey();
+  bool _showCompactMonthSummary = false;
+  final Set<String> _expandedRaceIds = {}; // [追加] 展開しているレース（複数枚のレースのカード） (v.2026.11.23+26112301)
+  static const double _monthHeaderHeight = 48.0;
+  static const Color _pageBackgroundColor = Color.fromRGBO(231, 234, 234, 1.0);
 
   int? _selectedYear;
   int? _selectedMonth;
@@ -47,12 +58,57 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       initialPage: _initialPage,
       viewportFraction: 0.33,
     );
+    _scrollController.addListener(_onScroll); // [追加] 縮んだ月サマリーの表示判定 (v.2026.11.23+26112301)
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _scrollController.removeListener(_onScroll); // [追加] (v.2026.11.23+26112301)
+    _scrollController.dispose(); // [追加] (v.2026.11.23+26112301)
     super.dispose();
+  }
+
+  // [追加] 月バナーの下端が固定した月セレクタの下まで流れたら、縮んだ月サマリーを出す (v.2026.11.23+26112301)
+  void _onScroll() {
+    bool show = false;
+    final bannerObject = _monthBannerKey.currentContext?.findRenderObject();
+    final areaObject = _scrollAreaKey.currentContext?.findRenderObject();
+    if (bannerObject is RenderBox && areaObject is RenderBox && bannerObject.attached && bannerObject.hasSize) {
+      final bannerBottom = bannerObject
+          .localToGlobal(Offset(0, bannerObject.size.height), ancestor: areaObject)
+          .dy;
+      show = bannerBottom <= _monthHeaderHeight;
+    }
+    if (show != _showCompactMonthSummary) {
+      setState(() {
+        _showCompactMonthSummary = show;
+      });
+    }
+  }
+
+  // [追加] 年・月を切り替えたら一番上へ戻す (v.2026.11.23+26112301)
+  void _resetScrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    setState(() {
+      _showCompactMonthSummary = false;
+      _expandedRaceIds.clear();
+    });
+  }
+
+  // [追加] 月バナーのカメラ・画像ボタンから、ニュースページのボタンと同じ取り込み画面を開く (v.2026.11.23+26112301)
+  void _openTicketImport({required bool fromGallery}) {
+    final key = widget.key;
+    if (key is! GlobalKey<SavedTicketsListPageState>) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => fromGallery
+            ? GalleryQrScannerPage(savedListKey: key)
+            : QRScannerPage(savedListKey: key),
+      ),
+    );
   }
 
   Future<void> reloadData() async {
@@ -167,32 +223,61 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
           child: Column(
             children: [
               _buildYearSelector(),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildYearlySummaryPanel(),
-                      const SizedBox(height: 16),
-                      _buildMonthSelector(),
-                      const SizedBox(height: 16),
-                      _buildMonthBanner(),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                ),
-              ),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : (_filteredTicketItems.isEmpty
-                    ? const Center(child: Text('この月の購入履歴はありません。', style: TextStyle(color: Colors.black54)))
-                    : _buildTicketList()
-                ),
-              ),
+              // [修正] 年間サマリー・月セレクタ・月バナー・レース一覧を1つのスクロールにまとめた (v.2026.11.23+26112301)
+              Expanded(child: _buildScrollBody()),
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  // [追加] 1つにまとめたスクロール。月セレクタは上に固定し、月バナーが流れたら縮んだ月サマリーを重ねて出す (v.2026.11.23+26112301)
+  Widget _buildScrollBody() {
+    return Stack(
+      key: _scrollAreaKey,
+      fit: StackFit.expand,
+      children: [
+        CustomScrollView(
+          controller: _scrollController,
+          slivers: [
+            SliverToBoxAdapter(child: _buildYearlySummaryPanel()),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _MonthSelectorHeaderDelegate(
+                height: _monthHeaderHeight,
+                backgroundColor: _pageBackgroundColor,
+                child: _buildMonthSelector(),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Container(
+                key: _monthBannerKey,
+                child: _buildMonthBanner(),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+            if (_isLoading)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_filteredTicketItems.isEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: Text('この月の購入履歴はありません。', style: TextStyle(color: Colors.black54))),
+              )
+            else
+              _buildTicketList(),
+          ],
+        ),
+        if (_showCompactMonthSummary)
+          Positioned(
+            top: _monthHeaderHeight,
+            left: 0,
+            right: 0,
+            child: _buildCompactMonthSummary(),
+          ),
       ],
     );
   }
@@ -267,6 +352,7 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
               _isYearSummaryExpanded = false;
               _filterTickets();
             });
+            _resetScrollToTop(); // [追加] (v.2026.11.23+26112301)
           }
         },
         itemBuilder: (context, index) {
@@ -280,6 +366,14 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 setState(() {
                   _isYearSummaryExpanded = !_isYearSummaryExpanded;
                 });
+                // [追加] 年間サマリーを開いたときは一番上へ戻して見えるようにする (v.2026.11.23+26112301)
+                if (_isYearSummaryExpanded && _scrollController.hasClients) {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                }
               } else {
                 // 選択されていない年をタップした場合はその年に移動
                 _pageController.animateToPage(
@@ -331,64 +425,70 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     );
   }
 
+  // [修正] 月セレクタを12か月の1行に変更（色分けは従来どおり） (v.2026.11.23+26112301)
   Widget _buildMonthSelector() {
-    return GridView.count(
-      crossAxisCount: 6,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 0,
-      crossAxisSpacing: 0,
-      childAspectRatio: 2.0,
-      children: List.generate(12, (index) {
-        final month = index + 1;
-        final isSelected = month == _selectedMonth;
-        final hasData = _monthsWithData[_selectedYear]?.contains(month) ?? false;
+    return Container(
+      height: 36,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
+        children: List.generate(12, (index) {
+          final month = index + 1;
+          final isSelected = month == _selectedMonth;
+          final hasData = _monthsWithData[_selectedYear]?.contains(month) ?? false;
 
-        Color backgroundColor;
-        Color textColor;
-        FontWeight fontWeight;
+          Color backgroundColor;
+          Color textColor;
+          FontWeight fontWeight;
 
-        if (isSelected) {
-          backgroundColor = Colors.grey.shade700;
-          textColor = Colors.white;
-          fontWeight = FontWeight.bold;
-        } else if (hasData) {
-          backgroundColor = Colors.green.shade100;
-          textColor = Colors.green.shade900;
-          fontWeight = FontWeight.w600;
-        } else {
-          backgroundColor = Colors.white;
-          textColor = Colors.black87;
-          fontWeight = FontWeight.normal;
-        }
+          if (isSelected) {
+            backgroundColor = Colors.grey.shade700;
+            textColor = Colors.white;
+            fontWeight = FontWeight.bold;
+          } else if (hasData) {
+            backgroundColor = Colors.green.shade100;
+            textColor = Colors.green.shade900;
+            fontWeight = FontWeight.w600;
+          } else {
+            backgroundColor = Colors.white;
+            textColor = Colors.black87;
+            fontWeight = FontWeight.normal;
+          }
 
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              _selectedMonth = month;
-              _filterTickets();
-            });
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              border: Border.all(
-                color: Colors.grey.shade300,
-                width: 0.5,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                '$month月',
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: fontWeight,
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedMonth = month;
+                  _filterTickets();
+                });
+                _resetScrollToTop();
+              },
+              child: Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  border: index == 0
+                      ? null
+                      : Border(left: BorderSide(color: Colors.grey.shade300, width: 0.5)),
+                ),
+                child: Text(
+                  '$month',
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: fontWeight,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      }),
+          );
+        }),
+      ),
     );
   }
 
@@ -419,25 +519,8 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
 
     final englishMonth = _englishMonths[_selectedMonth! - 1];
 
-    final bannerContainer = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A4314),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1A4314), Color(0xFF2E6331)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
+    // [修正] 月の集計の行（従来のバナーの中身そのまま） (v.2026.11.23+26112301)
+    final summaryRow = Row(
         children: [
           // 左カラム：月表示
           Column(
@@ -513,41 +596,198 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
             ],
           ),
         ],
-      ),
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        bannerContainer,
-        if (typeStats.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          GestureDetector(
-            onTap: () => setState(() => _isMonthTypeStatsExpanded = !_isMonthTypeStatsExpanded),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text('券種別', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                Icon(
-                  _isMonthTypeStatsExpanded ? Icons.expand_less : Icons.expand_more,
-                  size: 16,
-                  color: Colors.grey.shade600,
-                ),
-              ],
-            ),
+    // [修正] 馬券取り込みボタンと券種別の開閉ボタンを月バナーの中の下の行へ入れ、券種別の表もバナーの中に出す (v.2026.11.23+26112301)
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A4314),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1A4314), Color(0xFF2E6331)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
-          if (_isMonthTypeStatsExpanded)
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          summaryRow,
+          _buildBannerActionRow(typeStats.isNotEmpty),
+          if (_isMonthTypeStatsExpanded && typeStats.isNotEmpty)
             Container(
-              margin: const EdgeInsets.only(top: 4),
+              margin: const EdgeInsets.only(top: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
               ),
               child: _buildTypeStatsTable(typeStats),
             ),
         ],
-      ],
+      ),
+    );
+  }
+
+  // [追加] 月バナーの下の行：馬券アイコン・カメラ・画像のボタン（左）と券種別の開閉（右） (v.2026.11.23+26112301)
+  Widget _buildBannerActionRow(bool hasTypeStats) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 6),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.2))),
+      ),
+      child: Row(
+        children: [
+          Image.asset(
+            'assets/images/icon_baken.png',
+            width: 34,
+            height: 28,
+            fit: BoxFit.contain,
+          ),
+          const SizedBox(width: 12),
+          _buildImportIconButton(
+            icon: Icons.camera_alt,
+            semanticLabel: 'カメラで読み取る',
+            onTap: () => _openTicketImport(fromGallery: false),
+          ),
+          const SizedBox(width: 12),
+          _buildImportIconButton(
+            icon: Icons.image,
+            semanticLabel: '画像から読み取る',
+            onTap: () => _openTicketImport(fromGallery: true),
+          ),
+          const Spacer(),
+          if (hasTypeStats)
+            GestureDetector(
+              onTap: () => setState(() => _isMonthTypeStatsExpanded = !_isMonthTypeStatsExpanded),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(10, 3, 6, 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('券種別', style: TextStyle(fontSize: 11, color: Colors.white)),
+                    Icon(
+                      _isMonthTypeStatsExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // [追加] 線で囲んだアイコンだけの取り込みボタン (v.2026.11.23+26112301)
+  Widget _buildImportIconButton({
+    required IconData icon,
+    required String semanticLabel,
+    required VoidCallback onTap,
+  }) {
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.08),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.6)),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            width: 38,
+            height: 28,
+            child: Icon(icon, size: 18, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // [追加] 月バナーが流れた後に月セレクタの下へ重ねる、1行の月サマリー (v.2026.11.23+26112301)
+  Widget _buildCompactMonthSummary() {
+    if (_selectedMonth == null) return const SizedBox.shrink();
+
+    final stats = TicketAggregator.calculateMonthlyStats(_filteredTicketItems);
+
+    String formatMoney(int amount) {
+      return amount.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    }
+
+    return Container(
+      color: _pageBackgroundColor,
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A4314),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Text(
+              '$_selectedMonth月',
+              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '購入 ¥${formatMoney(stats.totalPurchase)}',
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '払戻 ¥${formatMoney(stats.totalPayout)}',
+              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: stats.balance >= 0 ? Colors.white.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+                border: Border.all(
+                    color: stats.balance >= 0 ? Colors.yellowAccent : Colors.white30,
+                    width: 0.5
+                ),
+              ),
+              child: Text(
+                '${stats.balance >= 0 ? '+' : ''}¥${formatMoney(stats.balance)}',
+                style: TextStyle(
+                  color: stats.balance >= 0 ? Colors.yellowAccent : Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -566,46 +806,81 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     // グループ（レース）のリストを作成
     final List<List<TicketListItem>> groups = groupedItems.values.toList();
 
-    return ListView.builder(
-      itemCount: groups.length,
-      itemBuilder: (context, index) {
-        final group = groups[index];
+    // [修正] 1つにまとめたスクロールの中に入れるため ListView から SliverList に変更 (v.2026.11.23+26112301)
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final group = groups[index];
 
-        // グループ内のアイテム数が1つの場合は、そのままカードを表示
-        if (group.length == 1) {
-          // ★修正: グループ情報を渡す
-          return _buildSingleTicketCard(group.first, groupItems: group, indexInGroup: 0);
-        }
+          // グループ内のアイテム数が1つの場合は、そのままカードを表示
+          if (group.length == 1) {
+            // ★修正: グループ情報を渡す
+            return _buildSingleTicketCard(group.first, groupItems: group, indexInGroup: 0);
+          }
 
-        // 複数枚ある場合はフォルダ（ExpansionTile）表示
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 4.0),
-          elevation: 2.0,
-          child: ExpansionTile(
-            tilePadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 0),
-            childrenPadding: EdgeInsets.zero,
-            title: _buildGroupHeader(group),
-            // ★修正: mapのindexを使ってグループ内位置を特定
-            children: group.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final item = entry.value;
-              return Container(
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                  color: Colors.grey.shade50, // 階層を深く見せるための背景色
+          // 複数枚ある場合はフォルダ（ExpansionTile）表示
+          // [修正] 右端に枚数と▼の帯を出すため、ExpansionTile をやめて同じ開閉を自前で行う (v.2026.11.23+26112301)
+          final raceId = group.first.raceId;
+          final isExpanded = _expandedRaceIds.contains(raceId);
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 4.0),
+            elevation: 2.0,
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (isExpanded) {
+                        _expandedRaceIds.remove(raceId);
+                      } else {
+                        _expandedRaceIds.add(raceId);
+                      }
+                    });
+                  },
+                  child: _buildGroupHeader(group, isExpanded: isExpanded),
                 ),
-                padding: const EdgeInsets.only(left: 16.0), // インデント
-                // ★修正: グループ情報とインデックスを渡す
-                child: _buildSingleTicketCard(item, isGroupChild: true, groupItems: group, indexInGroup: idx),
-              );
-            }).toList(),
-          ),
-        );
-      },
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  alignment: Alignment.topCenter,
+                  child: isExpanded
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          // ★修正: mapのindexを使ってグループ内位置を特定
+                          children: group.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final item = entry.value;
+                            return Container(
+                              decoration: BoxDecoration(
+                                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                                color: Colors.grey.shade50, // 階層を深く見せるための背景色
+                              ),
+                              padding: const EdgeInsets.only(left: 16.0), // インデント
+                              // ★修正: グループ情報とインデックスを渡す
+                              child: _buildSingleTicketCard(item, isGroupChild: true, groupItems: group, indexInGroup: idx),
+                            );
+                          }).toList(),
+                        )
+                      : const SizedBox(width: double.infinity),
+                ),
+              ],
+            ),
+          );
+        },
+        childCount: groups.length,
+      ),
     );
   }
 
-  Widget _buildGroupHeader(List<TicketListItem> groupItems) {
+  // [修正] レースのカード：左に2行（1行目＝レース名だけ／2行目＝購入・払戻・収支をそろえて左寄せ）、右端にうすい緑の帯（枚数と▼）。1枚だけのレースのカードでも使う (v.2026.11.23+26112301)
+  Widget _buildGroupHeader(
+    List<TicketListItem> groupItems, {
+    bool isConfirmed = true,
+    bool showArrow = true,
+    bool isExpanded = false,
+  }) {
     final firstItem = groupItems.first;
     final stats = TicketAggregator.calculateMonthlyStats(groupItems);
 
@@ -618,37 +893,95 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     Color balanceColor = stats.balance > 0 ? Colors.blue.shade700 : (stats.balance < 0 ? Colors.red.shade700 : Colors.black);
     if (stats.totalPayout == 0 && stats.balance < 0) balanceColor = Colors.red.shade700;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          firstItem.displayTitle, // レース名
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('${stats.totalCount}枚購入', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-            Row(
+    // 「ラベル 金額」の1項目。3項目を同じ幅に並べ、それぞれ左寄せにする
+    Widget buildAmountField(String label, String value, TextStyle valueStyle) {
+      return Expanded(
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('購入: ${formatMoney(stats.totalPurchase)}円', style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                    Text('払戻: ${formatMoney(stats.totalPayout)}円', style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${stats.balance >= 0 ? '+' : ''}${formatMoney(stats.balance)}円',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: balanceColor),
-                ),
+                Text(label, style: const TextStyle(fontSize: 11, color: Colors.black45)),
+                const SizedBox(width: 4),
+                Text(value, style: valueStyle),
               ],
             ),
-          ],
+          ),
         ),
-      ],
+      );
+    }
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    firstItem.displayTitle, // レース名
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      buildAmountField(
+                        '購入',
+                        formatMoney(stats.totalPurchase),
+                        const TextStyle(fontSize: 13, color: Colors.black87),
+                      ),
+                      buildAmountField(
+                        '払戻',
+                        isConfirmed ? formatMoney(stats.totalPayout) : '未確定',
+                        isConfirmed
+                            ? const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.bold)
+                            : const TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                      buildAmountField(
+                        '収支',
+                        isConfirmed ? '${stats.balance >= 0 ? '+' : ''}${formatMoney(stats.balance)}円' : '-',
+                        isConfirmed
+                            ? TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: balanceColor)
+                            : const TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            width: 40,
+            color: Colors.green.shade100.withValues(alpha: 0.7),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${stats.totalCount}枚',
+                  style: TextStyle(fontSize: 11, color: Colors.green.shade900, fontWeight: FontWeight.w600),
+                ),
+                if (showArrow)
+                  AnimatedRotation(
+                    turns: isExpanded ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(Icons.expand_more, size: 22, color: Colors.green.shade900),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -659,6 +992,36 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
     final payout = item.hitResult?.totalPayout ?? 0;
     final refund = item.hitResult?.totalRefund ?? 0;
     final balance = (payout + refund) - totalAmount;
+
+    // [修正] レース画面へ移る処理（従来の ListTile の onTap の中身）を、1枚だけのレースのカードと共用するため関数にした (v.2026.11.23+26112301)
+    Future<void> openRacePage() async {
+      if (item.raceDate.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('レースの日付情報がありません。')),
+        );
+        return;
+      }
+
+      // ★修正: 遷移時に兄弟チケット情報をRouteSettings経由で渡す
+      // RacePageのコンストラクタを変更せずにデータを渡すためのテクニック
+      final siblingQrData = groupItems?.map((e) => e.qrData).toList() ?? [item.qrData];
+      final args = {
+        'siblingTickets': siblingQrData,
+        'initialIndex': indexInGroup,
+      };
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RacePage(
+            raceId: item.raceId,
+            raceDate: item.raceDate,
+            qrData: item.qrData,
+          ),
+          settings: RouteSettings(arguments: args), // 引数として渡す
+        ),
+      );
+      reloadData();
+    }
 
     return Dismissible(
       key: ValueKey(item.qrData.id),
@@ -704,10 +1067,12 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       child: Card(
         // グループ内アイテムの場合はCardの影やマージンを消してリストっぽくする
         elevation: isGroupChild ? 0 : 2.0,
-        margin: isGroupChild ? EdgeInsets.zero : const EdgeInsets.symmetric(vertical: 8.0),
+        margin: isGroupChild ? EdgeInsets.zero : const EdgeInsets.symmetric(vertical: 4.0), // [修正] グループのカードと同じ間隔に (v.2026.11.23+26112301)
         color: isHit ? Colors.red.shade50 : (isGroupChild ? Colors.transparent : null),
         shape: isGroupChild ? const RoundedRectangleBorder(borderRadius: BorderRadius.zero) : null,
-        child: ListTile(
+        clipBehavior: Clip.antiAlias, // [追加] 右端の帯を角丸の内側に収める (v.2026.11.23+26112301)
+        // [修正] 1枚だけのレースのカードは複数枚のレースと同じ形（右端の帯は枚数だけ）。グループ内の馬券の行は従来どおり (v.2026.11.23+26112301)
+        child: isGroupChild ? ListTile(
           contentPadding: isGroupChild ? const EdgeInsets.fromLTRB(0, 8, 16, 8) : null,
           isThreeLine: true,
           title: isGroupChild ? null : Text(item.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)), // グループ内ならタイトル非表示
@@ -733,34 +1098,10 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
                 const Text(' (未確定)', style: TextStyle(fontSize: 12, color: Colors.grey)),
             ],
           ),
-          onTap: () async {
-            if (item.raceDate.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('レースの日付情報がありません。')),
-              );
-              return;
-            }
-
-            // ★修正: 遷移時に兄弟チケット情報をRouteSettings経由で渡す
-            // RacePageのコンストラクタを変更せずにデータを渡すためのテクニック
-            final siblingQrData = groupItems?.map((e) => e.qrData).toList() ?? [item.qrData];
-            final args = {
-              'siblingTickets': siblingQrData,
-              'initialIndex': indexInGroup,
-            };
-
-            await Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => RacePage(
-                  raceId: item.raceId,
-                  raceDate: item.raceDate,
-                  qrData: item.qrData,
-                ),
-                settings: RouteSettings(arguments: args), // 引数として渡す
-              ),
-            );
-            reloadData();
-          },
+          onTap: openRacePage,
+        ) : InkWell(
+          onTap: openRacePage,
+          child: _buildGroupHeader([item], isConfirmed: item.raceResult != null, showArrow: false),
         ),
       ),
     );
@@ -1059,4 +1400,35 @@ class SavedTicketsListPageState extends State<SavedTicketsListPage> {
       ],
     );
   }
+}
+
+// [追加] 月セレクタを上に固定するためのヘッダー (v.2026.11.23+26112301)
+class _MonthSelectorHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _MonthSelectorHeaderDelegate({
+    required this.height,
+    required this.backgroundColor,
+    required this.child,
+  });
+
+  final double height;
+  final Color backgroundColor;
+  final Widget child;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: backgroundColor,
+      alignment: Alignment.center,
+      child: child,
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _MonthSelectorHeaderDelegate oldDelegate) => true;
 }
